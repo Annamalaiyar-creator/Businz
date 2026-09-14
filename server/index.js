@@ -3417,42 +3417,35 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
   try {
     const accessToken = await getZohoAccessToken();
 
-    // If we already have a verified Zoho estimate ID, verify it exists in Zoho Books
-    if (verifiedZohoId) {
-      try {
-        const verifyRes = await new Promise((resolve) => {
-          const opt = {
-            hostname: 'www.zohoapis.in',
-            port: 443,
-            path: `/books/v3/estimates/${verifiedZohoId}?organization_id=${zohoSession.orgId}`,
-            method: 'GET',
-            headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-          };
-          const r = https.request(opt, (resp) => {
-            let d = '';
-            resp.on('data', c => d += c);
-            resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
+    // Helper to send HTTPS requests to Zoho Books Estimates API
+    const callZohoEstimateApi = (method, apiPath, bodyObj) => {
+      return new Promise((resolve) => {
+        const postData = bodyObj ? JSON.stringify(bodyObj) : '';
+        const hasQuery = apiPath.includes('?');
+        const reqPath = `${apiPath}${hasQuery ? '&' : '?'}organization_id=${zohoSession.orgId}`;
+        const opt = {
+          hostname: 'www.zohoapis.in',
+          port: 443,
+          path: reqPath,
+          method: method,
+          headers: {
+            'Authorization': `Zoho-oauthtoken ${accessToken}`,
+            'Content-Type': 'application/json',
+            ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
+          }
+        };
+        const r = https.request(opt, (resp) => {
+          let d = '';
+          resp.on('data', c => d += c);
+          resp.on('end', () => {
+            try { resolve(JSON.parse(d)); } catch (_) { resolve(null); }
           });
-          r.on('error', () => resolve(null));
-          r.end();
         });
-
-        if (verifyRes && (verifyRes.code === 0 || verifyRes.estimate)) {
-          newPI.zohoSynced = true;
-          newPI.zohoEstimateId = verifiedZohoId;
-          newPI.zohoSyncError = null;
-          newPI.zohoModule = 'Quotes';
-          return res.json({
-            success: true,
-            estimate: newPI,
-            zohoSynced: true,
-            zohoEstimateId: verifiedZohoId,
-            zohoModule: 'Quotes',
-            zohoError: null
-          });
-        }
-      } catch (_) {}
-    }
+        r.on('error', (e) => resolve({ code: -1, message: e.message }));
+        if (postData) r.write(postData);
+        r.end();
+      });
+    };
 
     // Resolve customer ID from Zoho if name provided
     let customerId = req.body.customerId;
@@ -3460,53 +3453,20 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
     if (!customerId && clientName) {
       try {
         const cName = encodeURIComponent(clientName);
-        const contactRes = await new Promise((resolve) => {
-          const opt = {
-            hostname: 'www.zohoapis.in',
-            port: 443,
-            path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&search_text=${cName}`,
-            method: 'GET',
-            headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-          };
-          const r = https.request(opt, (resp) => {
-            let d = '';
-            resp.on('data', c => d += c);
-            resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-          });
-          r.on('error', () => resolve(null));
-          r.end();
-        });
+        const contactRes = await callZohoEstimateApi('GET', `/books/v3/contacts?search_text=${cName}`, null);
 
         if (contactRes && Array.isArray(contactRes.contacts) && contactRes.contacts.length > 0) {
           customerId = contactRes.contacts[0].contact_id;
         } else {
-          // Dynamic contact provision in Zoho Books so Quote reflects the real customer name
-          const newCustPayload = JSON.stringify({
+          // Dynamic contact provision in Zoho Books so Quote reflects the real customer name & GST
+          const newCustPayload = {
             contact_name: clientName,
             company_name: clientName,
-            contact_type: 'customer'
-          });
-          const createCustRes = await new Promise((resolve) => {
-            const opt = {
-              hostname: 'www.zohoapis.in',
-              port: 443,
-              path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
-              method: 'POST',
-              headers: {
-                'Authorization': `Zoho-oauthtoken ${accessToken}`,
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(newCustPayload)
-              }
-            };
-            const r = https.request(opt, (resp) => {
-              let d = '';
-              resp.on('data', c => d += c);
-              resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-            });
-            r.on('error', () => resolve(null));
-            r.write(newCustPayload);
-            r.end();
-          });
+            contact_type: 'customer',
+            gst_treatment: (req.body.gstNo || req.body.gstNumber) ? 'business_gst' : 'consumer',
+            gst_no: (req.body.gstNo || req.body.gstNumber || '').trim() || undefined
+          };
+          const createCustRes = await callZohoEstimateApi('POST', `/books/v3/contacts`, newCustPayload);
           if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
             customerId = createCustRes.contact.contact_id;
           }
@@ -3515,24 +3475,36 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
     }
     if (!customerId) customerId = '4080449000000033179'; // Fallback to verified Zoho customer
 
-    // Build Zoho line items: Preset Kits appear as single line items with their Set Price,
-    // while custom/separate products appear as distinct separate line items.
+    // Tax ID mapping based on GST rate in Zoho Books India
+    const taxIdMap = {
+      0: '4080449000000341001',   // GST0
+      5: '4080449000000333019',   // GST5
+      12: '4080449000000324002',  // GST12
+      18: '4080449000000055031',  // GST18
+      28: '4080449000000340001'   // GST28
+    };
+
+    // Build Zoho line items with tax_id and tax_percentage so GST calculates properly
     const lineItems = [];
     const pGroups = req.body.presetGroups || {};
     const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
     const hasPresetGroups = groupEntries.length > 0;
 
-    // 1. Add Preset Kits as single consolidated line items with their set price
+    // 1. Add Preset Kits as single consolidated line items with their set price and GST
     if (hasPresetGroups) {
       groupEntries.forEach(grp => {
         if (!grp) return;
         const setCount = parseFloat(grp.setCount) || 1;
         const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
         const name = grp.presetName || grp.name || req.body.presetName || 'Solar Mounting Structure Preset Kit';
+        const itemTaxPct = Number(grp.gstRate ? String(grp.gstRate).replace('%', '') : 18) || 18;
+        const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
         lineItems.push({
           name: name,
           rate: unitPrice,
           quantity: setCount,
+          tax_id: taxId,
+          tax_percentage: itemTaxPct,
           description: `Preset Structure Kit - ${setCount} Set(s) complete assembly`
         });
       });
@@ -3543,24 +3515,29 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
         name: req.body.presetName,
         rate: unitPrice,
         quantity: setCount,
+        tax_id: '4080449000000055031',
+        tax_percentage: 18,
         description: `Preset Structure Kit - ${setCount} Set(s) complete assembly`
       });
     }
 
-    // 2. Add Separate / Custom products (non-preset components)
+    // 2. Add Separate / Custom products (non-preset components) with GST
     (req.body.items || []).forEach(it => {
       const isPreset = Boolean(it.isPresetItem || it.category === 'Preset Component' || it.presetGroupId);
-      // If a preset was added above, skip preset sub-components (screws, clamps, rails)
       if (hasPresetGroups || req.body.presetName) {
         if (isPreset) return;
       }
       const q = parseFloat(it.qty || it.quantity) || 1;
       let r = parseFloat(it.rate != null ? it.rate : it.unitValue);
       if (isNaN(r) || r < 0) r = 0;
+      const itemTaxPct = Number(it.tax != null && it.tax !== '' ? it.tax : (it.gstRate != null && it.gstRate !== '' ? String(it.gstRate).replace('%', '') : 18)) || 18;
+      const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
       lineItems.push({
         name: it.name || it.productName || 'Solar Structure Component',
         rate: r,
         quantity: q,
+        tax_id: taxId,
+        tax_percentage: itemTaxPct,
         description: it.description || it.category || 'Separate Product Scope'
       });
     });
@@ -3571,6 +3548,8 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
         name: req.body.productName || 'Solar Mounting Structure Kit',
         rate: parseFloat(req.body.subtotal) || 1000,
         quantity: 1,
+        tax_id: '4080449000000055031',
+        tax_percentage: 18,
         description: 'Standard Order Scope'
       });
     }
@@ -3599,32 +3578,27 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
       date: formatZohoDate(req.body.piDate),
       expiry_date: (req.body.validUntilDate || req.body.expDate) ? formatZohoDate(req.body.validUntilDate || req.body.expDate) : undefined,
       line_items: lineItems,
-      notes: (req.body.remarks || req.body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100)
+      notes: (req.body.remarks || req.body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100),
+      gst_treatment: (req.body.gstNo || req.body.gstNumber) ? 'business_gst' : 'consumer',
+      gst_no: (req.body.gstNo || req.body.gstNumber || '').trim() || undefined
     };
 
-    const postData = JSON.stringify(payload);
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&ignore_auto_number_generation=true`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
+    let zohoRes = null;
+
+    // If updating an existing estimate with verified ID, send PUT
+    if (verifiedZohoId) {
+      console.log('[ZOHO ESTIMATE UPDATE] Sending PUT to update estimate:', verifiedZohoId);
+      zohoRes = await callZohoEstimateApi('PUT', `/books/v3/estimates/${verifiedZohoId}?ignore_auto_number_generation=true`, payload);
+      if (!zohoRes || (!zohoRes.estimate && zohoRes.code !== 0)) {
+        console.warn('[ZOHO ESTIMATE PUT FAILED, TRYING POST]', zohoRes?.message);
+        zohoRes = null;
       }
-    };
+    }
 
-    const zohoRes = await new Promise((resolve) => {
-      const r = https.request(options, (resp) => {
-        let d = '';
-        resp.on('data', c => d += c);
-        resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-      });
-      r.on('error', (e) => resolve({ code: -1, message: e.message }));
-      r.write(postData);
-      r.end();
-    });
+    // If new or PUT didn't succeed, attempt POST
+    if (!zohoRes) {
+      zohoRes = await callZohoEstimateApi('POST', `/books/v3/estimates?ignore_auto_number_generation=true`, payload);
+    }
 
     if (zohoRes && (zohoRes.estimate || zohoRes.code === 0)) {
       const createdEst = zohoRes.estimate;
@@ -3638,17 +3612,7 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
 
         // Mark as Sent in Zoho Books so it is directly Issued/active
         try {
-          await new Promise((resolve) => {
-            const r = https.request({
-              hostname: 'www.zohoapis.in',
-              port: 443,
-              path: `/books/v3/estimates/${createdEst.estimate_id}/status/sent?organization_id=${zohoSession.orgId}`,
-              method: 'POST',
-              headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-            }, () => resolve());
-            r.on('error', () => resolve());
-            r.end();
-          });
+          await callZohoEstimateApi('POST', `/books/v3/estimates/${createdEst.estimate_id}/status/sent`, null);
         } catch (_) {}
       } else {
         zohoErrorMsg = zohoRes?.message || 'Zoho estimate created but record details unavailable';
@@ -3656,44 +3620,14 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
         newPI.zohoSyncError = zohoErrorMsg;
       }
     } else if (zohoRes && (zohoRes.code === 36015 || zohoRes.code === 1001 || (zohoRes.message && String(zohoRes.message).toLowerCase().includes('already exists')))) {
-      // If estimate already exists in Zoho Books, search and link its existing Quote ID seamlessly
+      // If estimate already exists in Zoho Books, search and UPDATE it via PUT seamlessly
       try {
         const estNum = encodeURIComponent(cleanPiNo);
-        let findRes = await new Promise((resolve) => {
-          const opt = {
-            hostname: 'www.zohoapis.in',
-            port: 443,
-            path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&estimate_number=${estNum}`,
-            method: 'GET',
-            headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-          };
-          const r = https.request(opt, (resp) => {
-            let d = '';
-            resp.on('data', c => d += c);
-            resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-          });
-          r.on('error', () => resolve(null));
-          r.end();
-        });
+        let findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?estimate_number=${estNum}`, null);
 
         // Fallback search by search_text if exact estimate_number param did not return results
         if (!findRes || !Array.isArray(findRes.estimates) || findRes.estimates.length === 0) {
-          findRes = await new Promise((resolve) => {
-            const opt = {
-              hostname: 'www.zohoapis.in',
-              port: 443,
-              path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&search_text=${estNum}`,
-              method: 'GET',
-              headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-            };
-            const r = https.request(opt, (resp) => {
-              let d = '';
-              resp.on('data', c => d += c);
-              resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-            });
-            r.on('error', () => resolve(null));
-            r.end();
-          });
+          findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?search_text=${estNum}`, null);
         }
 
         const found = (findRes && Array.isArray(findRes.estimates))
@@ -3701,15 +3635,20 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
           : null;
 
         if (found && found.estimate_id) {
-          zohoEstimateCreated = found;
-          newPI.zohoEstimateId = String(found.estimate_id).trim();
-          newPI.piNo = found.estimate_number || cleanPiNo;
+          const targetEstId = String(found.estimate_id).trim();
+          console.log('[ZOHO ESTIMATE FOUND - UPDATING VIA PUT]:', targetEstId);
+          const putUpdateRes = await callZohoEstimateApi('PUT', `/books/v3/estimates/${targetEstId}?ignore_auto_number_generation=true`, payload);
+          const activeEst = (putUpdateRes && putUpdateRes.estimate) ? putUpdateRes.estimate : found;
+
+          zohoEstimateCreated = activeEst;
+          newPI.zohoEstimateId = targetEstId;
+          newPI.piNo = activeEst.estimate_number || cleanPiNo;
           newPI.zohoSynced = true;
           newPI.zohoSyncError = null;
           newPI.zohoModule = 'Quotes';
           zohoErrorMsg = null;
         } else {
-          zohoErrorMsg = zohoRes?.message || `Estimate ${cleanPiNo} already exists in Zoho Books but could not be retrieved`;
+          zohoErrorMsg = zohoRes?.message || `Estimate ${cleanPiNo} already exists in Zoho Books but could not be updated`;
           newPI.zohoSynced = false;
           newPI.zohoSyncError = zohoErrorMsg;
         }

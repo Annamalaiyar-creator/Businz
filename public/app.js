@@ -966,7 +966,9 @@ const server = http.createServer(async (req, res) => {
                   const createCustRes = await callZoho('POST', '/books/v3/contacts', {
                     contact_name: clientName,
                     company_name: clientName,
-                    contact_type: 'customer'
+                    contact_type: 'customer',
+                    gst_treatment: (body.gstNo || body.gstNumber) ? 'business_gst' : 'consumer',
+                    gst_no: (body.gstNo || body.gstNumber || '').trim() || undefined
                   }, token);
                   if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
                     customerId = createCustRes.contact.contact_id;
@@ -975,6 +977,14 @@ const server = http.createServer(async (req, res) => {
               } catch (_) {}
             }
             if (!customerId) customerId = '4080449000000033179';
+
+            const taxIdMap = {
+              0: '4080449000000341001',
+              5: '4080449000000333019',
+              12: '4080449000000324002',
+              18: '4080449000000055031',
+              28: '4080449000000340001'
+            };
 
             const pGroups = body.presetGroups || {};
             const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
@@ -986,10 +996,14 @@ const server = http.createServer(async (req, res) => {
                 if (!grp) return;
                 const setCount = parseFloat(grp.setCount) || 1;
                 const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
+                const itemTaxPct = Number(grp.gstRate ? String(grp.gstRate).replace('%', '') : 18) || 18;
+                const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
                 line_items.push({
                   name: grp.presetName || grp.name || body.presetName || 'Solar Mounting Structure Preset Kit',
                   rate: unitPrice,
                   quantity: setCount,
+                  tax_id: taxId,
+                  tax_percentage: itemTaxPct,
                   description: `Preset Structure Kit - ${setCount} Set(s)`
                 });
               });
@@ -1000,6 +1014,8 @@ const server = http.createServer(async (req, res) => {
                 name: body.presetName,
                 rate: unitPrice,
                 quantity: setCount,
+                tax_id: '4080449000000055031',
+                tax_percentage: 18,
                 description: `Preset Structure Kit - ${setCount} Set(s)`
               });
             }
@@ -1009,10 +1025,14 @@ const server = http.createServer(async (req, res) => {
               if (hasPresetGroups || body.presetName) {
                 if (isPreset) return;
               }
+              const itemTaxPct = Number(it.tax != null && it.tax !== '' ? it.tax : (it.gstRate != null && it.gstRate !== '' ? String(it.gstRate).replace('%', '') : 18)) || 18;
+              const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
               line_items.push({
                 name: it.name || it.productName || 'Solar Structure Component',
                 rate: Number(it.rate != null ? it.rate : (it.unitValue || 0)),
                 quantity: Number(it.qty || it.quantity || 1),
+                tax_id: taxId,
+                tax_percentage: itemTaxPct,
                 description: it.description || it.category || 'Separate Product Scope'
               });
             });
@@ -1021,7 +1041,9 @@ const server = http.createServer(async (req, res) => {
               line_items.push({
                 name: body.productName || 'Solar Mounting Structure Kit',
                 rate: Number(body.subtotal || 1000),
-                quantity: 1
+                quantity: 1,
+                tax_id: '4080449000000055031',
+                tax_percentage: 18
               });
             }
 
@@ -1031,10 +1053,22 @@ const server = http.createServer(async (req, res) => {
               date: formatZohoDate(body.piDate),
               expiry_date: (body.validUntilDate || body.expDate) ? formatZohoDate(body.validUntilDate || body.expDate) : undefined,
               line_items,
-              notes: (body.remarks || body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100)
+              notes: (body.remarks || body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100),
+              gst_treatment: (body.gstNo || body.gstNumber) ? 'business_gst' : 'consumer',
+              gst_no: (body.gstNo || body.gstNumber || '').trim() || undefined
             };
 
-            const zohoRes = await callZoho('POST', '/books/v3/estimates?ignore_auto_number_generation=true', zohoPayload, token);
+            let zohoRes = null;
+            if (verifiedZohoId) {
+              zohoRes = await callZoho('PUT', `/books/v3/estimates/${verifiedZohoId}?ignore_auto_number_generation=true`, zohoPayload, token);
+              if (!zohoRes || (!zohoRes.estimate && zohoRes.code !== 0)) {
+                zohoRes = null;
+              }
+            }
+
+            if (!zohoRes) {
+              zohoRes = await callZoho('POST', '/books/v3/estimates?ignore_auto_number_generation=true', zohoPayload, token);
+            }
 
             if (zohoRes && (zohoRes.estimate || zohoRes.code === 0)) {
               const createdEst = zohoRes.estimate;
@@ -1049,7 +1083,7 @@ const server = http.createServer(async (req, res) => {
                 } catch (_) {}
               }
             } else if (zohoRes && (zohoRes.code === 36015 || zohoRes.code === 1001 || (zohoRes.message && String(zohoRes.message).toLowerCase().includes('already exists')))) {
-              // Quote already exists in Zoho Books, search and link its existing Quote ID
+              // Quote already exists in Zoho Books, search and update it via PUT
               try {
                 const estNum = encodeURIComponent(cleanPiNo);
                 let findRes = await callZoho('GET', `/books/v3/estimates?estimate_number=${estNum}`, null, token);
@@ -1060,13 +1094,17 @@ const server = http.createServer(async (req, res) => {
                   ? (findRes.estimates.find(e => String(e.estimate_number || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) || findRes.estimates[0])
                   : null;
                 if (found && found.estimate_id) {
-                  newPI.zohoEstimateId = String(found.estimate_id).trim();
-                  newPI.piNo = found.estimate_number || cleanPiNo;
+                  const targetEstId = String(found.estimate_id).trim();
+                  const putRes = await callZoho('PUT', `/books/v3/estimates/${targetEstId}?ignore_auto_number_generation=true`, zohoPayload, token);
+                  const activeEst = (putRes && putRes.estimate) ? putRes.estimate : found;
+
+                  newPI.zohoEstimateId = targetEstId;
+                  newPI.piNo = activeEst.estimate_number || cleanPiNo;
                   newPI.zohoSynced = true;
                   newPI.zohoSyncError = null;
                   newPI.zohoModule = 'Quotes';
                 } else {
-                  zohoErrorMsg = zohoRes?.message || 'Quote already exists in Zoho Books';
+                  zohoErrorMsg = zohoRes?.message || 'Quote already exists in Zoho Books but could not be updated';
                 }
               } catch (e) {
                 zohoErrorMsg = e.message;

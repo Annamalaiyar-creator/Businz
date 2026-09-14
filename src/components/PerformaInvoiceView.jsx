@@ -1119,11 +1119,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const validatePiForm = (isDraft = false) => {
     const missingList = [];
 
-    // 1. Customer Name
+    // 1. Company Name
     if (!vendorName || !vendorName.trim()) {
       missingList.push({
-        field: 'Customer / Company Name',
-        message: 'Please enter or select the Customer / Company Name.',
+        field: 'Company Name',
+        message: 'Please enter or select the Company Name.',
         targetId: 'pi-field-vendorName'
       });
     }
@@ -1245,7 +1245,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (e) e.preventDefault();
     if (!vendorName || !vendorName.trim()) {
       setValidationAlert({
-        fields: ['Customer / Company Name'],
+        fields: ['Company Name'],
         firstTargetId: 'pi-field-vendorName'
       });
       return;
@@ -1818,7 +1818,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         />
                       </th>
                       <th style={{ width: '150px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
-                      <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Customer / Company</th>
+                      <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
                       <th style={{ width: '160px', minWidth: '150px', padding: '12px 14px', boxSizing: 'border-box' }}>GST No.</th>
                       <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', boxSizing: 'border-box' }}>PI Date</th>
                       <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Total Amount</th>
@@ -2592,7 +2592,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       type="text"
                       readOnly
                       disabled
-                      value={viewMode === 'edit' ? (piNumber || 'N/A') : '⚡ Auto-Generated on Creation (Sequential)'}
+                      value={viewMode === 'edit' ? (piNumber || 'N/A') : 'Auto Generated'}
                       style={{
                         width: '100%',
                         height: '42px',
@@ -2609,11 +2609,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       }}
                     />
                   </div>
-                  {viewMode === 'create' && (
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                      Sequential PI number will be generated automatically upon saving (same as BOM).
-                    </div>
-                  )}
                 </div>
 
                 <div>
@@ -2709,13 +2704,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Customer / Company Name <span style={{ color: '#EF4444' }}>*</span>
+                    Company Name <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     id="pi-field-vendorName"
                     type="text"
                     list="pi-customers-datalist"
-                    placeholder="Search or enter customer..."
+                    placeholder="Search or enter company..."
                     value={vendorName}
                     onChange={(e) => handleSelectCustomer(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
@@ -2744,7 +2739,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Contact Person
+                    Customer Name
                   </label>
                   <input
                     type="text"
@@ -3946,32 +3941,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       ↻ Sync to Zoho
                     </button>
                   )}
-                  {!(selectedPi?.status === 'Converted to BOM' || selectedPi?.convertedToBom || selectedPi?.convertedBomCode) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
-                        handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
-                        setSelectedPi(null);
-                      }}
-                      title="Edit full Proforma Invoice details"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 14px',
-                        backgroundColor: '#0E7490',
-                        color: '#FFFFFF',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Edit3 size={14} /> Edit Info
-                    </button>
-                  )}
+                  {(() => {
+                    const matchedBoms = getConvertedBomsForPi(selectedPi);
+                    const isConverted = (matchedBoms && matchedBoms.length > 0) || Boolean(selectedPi?.status === 'Converted to BOM' || selectedPi?.convertedToBom || selectedPi?.convertedBomCode);
+                    if (isConverted) return null;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
+                          handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
+                          setSelectedPi(null);
+                        }}
+                        title="Edit full Proforma Invoice details"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          backgroundColor: '#0E7490',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Edit3 size={14} /> Edit Info
+                      </button>
+                    );
+                  })()}
                   <button
                     onClick={() => setPrintModalPi(selectedPi)}
                     title="Open Print & PDF Template"
@@ -3980,16 +3981,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       alignItems: 'center',
                       gap: '6px',
                       padding: '8px 14px',
-                      backgroundColor: '#ECFEFF',
-                      color: '#0E7490',
-                      border: '1.5px solid #A5F3FC',
+                      backgroundColor: '#FFFFFF',
+                      color: '#0F172A',
+                      border: '1px solid #CBD5E1',
                       borderRadius: '8px',
                       fontSize: '12px',
-                      fontWeight: '800',
+                      fontWeight: '700',
                       cursor: 'pointer'
                     }}
                   >
-                    <Printer size={14} /> Official Print / PDF
+                    <Printer size={14} style={{ color: '#0E7490' }} /> Export / Print
                   </button>
                   <button
                     onClick={() => setSelectedPi(null)}
@@ -4095,11 +4096,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Customer / Company</span>
+                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Company Name</span>
                       <strong style={{ fontSize: '14px', color: '#0F172A' }}>{selectedPi.vendor || selectedPi.customerName || '—'}</strong>
                     </div>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Contact Person</span>
+                      <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Customer Name</span>
                       <strong style={{ fontSize: '13px', color: '#334155' }}>{selectedPi.contactPerson || '—'}</strong>
                     </div>
                     <div>
@@ -4805,8 +4806,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <span>Save this Proforma Invoice as a <strong>Draft</strong>. It will be stored safely and can be edited, completed, or converted at any time later.</span>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div><strong>Customer:</strong> {vendorName || 'Not specified'}</div>
-                  <div><strong>PI Number:</strong> {editIdx !== null ? (piNumber || 'N/A') : '⚡ Auto-Generated on Creation (Sequential)'}</div>
+                  <div><strong>Company:</strong> {vendorName || 'Not specified'}</div>
+                  <div><strong>PI Number:</strong> {editIdx !== null ? (piNumber || 'N/A') : 'Auto Generated'}</div>
                   <div><strong>Total Value:</strong> ₹{calculatePiTotals().grand.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (incl. GST)</div>
                   <div><strong>Line Items / Scope:</strong> {piItems.length} material lines configured</div>
                 </div>

@@ -141,7 +141,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
-            { label: 'BOM Orders', icon: GitBranch },
             { label: 'Stock Status', icon: Layers }
           ]
         },
