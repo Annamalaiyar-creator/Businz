@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../services/zohoSafeSync';
 import StatusBadge from './StatusBadge';
@@ -135,6 +135,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   // Confirmation and edit states
   const [deleteIdx, setDeleteIdx] = useState(null); // Row index to delete
   const [showSaveConfirm, setShowSaveConfirm] = useState(false); // Save confirmation
+  const [isSubmittingPO, setIsSubmittingPO] = useState(false); // Guard against rapid multi-clicks
   const [showCancelConfirm, setShowCancelConfirm] = useState(false); // Cancel confirmation
   const [editIdx, setEditIdx] = useState(null); // Row index to edit
   const [activeDropdownIdx, setActiveDropdownIdx] = useState(null); // Active 3-dot dropdown index
@@ -159,6 +160,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const isAccounts = userRole.includes('Accounts');
+  const isProcurementHead = !isAccounts && !isExecutiveOrMD;
   const [statusFilter, setStatusFilter] = useState('All');
   const [filterDate, setFilterDate] = useState('');
   const [poTab, setPoTab] = useState(isExecutiveOrMD ? 'Draft' : isAccounts ? 'MD_APPROVED' : 'All');
@@ -256,12 +258,23 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     fetchZohoPOs();
     fetchZohoDropdowns();
 
-    // Auto-poll Zoho Books POs silently in background every 30 seconds to ensure real-time synchronization without flashing the UI
+    // Instant Real-Time Push Listener: Refetches POs the millisecond another user creates, approves, or modifies a PO
+    const handlePoPush = () => {
+      fetchZohoPOs(true);
+    };
+    window.addEventListener('controlroom_po_updated', handlePoPush);
+    window.addEventListener('controlroom_storage_update', handlePoPush);
+
+    // Auto-poll Zoho Books POs silently in background every 30 seconds as fallback
     const pollInterval = setInterval(() => {
       fetchZohoPOs(true);
     }, 30000);
 
-    return () => clearInterval(pollInterval);
+    return () => {
+      window.removeEventListener('controlroom_po_updated', handlePoPush);
+      window.removeEventListener('controlroom_storage_update', handlePoPush);
+      clearInterval(pollInterval);
+    };
   }, []);
 
   useEffect(() => {
@@ -507,6 +520,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   // Proceed PO Confirmation Modal state
   const [proceedingPo, setProceedingPo] = useState(null);
   const [proceedRemarksInput, setProceedRemarksInput] = useState('');
+  const [proceedEmailInput, setProceedEmailInput] = useState('');
 
   const triggerSaveConfirm = (e) => {
     if (e) e.preventDefault();
@@ -515,6 +529,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   const executeCreatePO = (e, targetStatus = 'Draft / Pending Approval') => {
     if (e && e.preventDefault) e.preventDefault();
+    if (isSubmittingPO) return;
+    setIsSubmittingPO(true);
 
     const statusToSave = typeof targetStatus === 'string' ? targetStatus : 'Draft / Pending Approval';
     const isDraft = statusToSave === 'Draft' || statusToSave === 'DRAFT';
@@ -537,6 +553,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
 
     if (missingFields.length > 0) {
+      setIsSubmittingPO(false);
       setValidationErrorModal({ fields: missingFields });
       return;
     }
@@ -628,12 +645,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           }
         } else {
           // Live web server returned HTML (static SPA or 404/502). PO is safely stored in local & cloud.
-          showCustomAlert('Purchase Order saved securely in ControlRoom! (Server sync pending)', 'PO Saved', 'success');
+          showCustomAlert('Purchase Order saved securely in Businz! (Server sync pending)', 'PO Saved', 'success');
         }
       } catch (err) {
         console.warn('Backend sync warning (saved locally):', err);
-        showCustomAlert('Purchase Order saved securely in ControlRoom! (Server sync pending)', 'PO Saved', 'success');
+        showCustomAlert('Purchase Order saved securely in Businz! (Server sync pending)', 'PO Saved', 'success');
       } finally {
+        setIsSubmittingPO(false);
         fetchZohoPOs();
       }
     };
@@ -822,6 +840,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const proceedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const remarks = proceedRemarksInput || 'Authorized for dispatch and GRN creation';
+    const targetVendorEmail = (proceedEmailInput || poTarget.email || email || '').trim();
 
     // 1. Immediately reflect 'Proceed PO' in currently active view and poList
     setViewingPoStatus('Proceed PO');
@@ -831,11 +850,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           ...p,
           status: 'Proceed PO',
           statusType: 'proceed_po',
+          email: targetVendorEmail || p.email,
           proceedDetails: {
             date: proceedDate,
             time: proceedTime,
             remarks,
-            authorizedBy: 'Procurement & Accounts'
+            authorizedBy: 'Procurement Head',
+            vendorEmail: targetVendorEmail,
+            emailDispatched: Boolean(targetVendorEmail),
+            deliveryStatus: targetVendorEmail ? `Dispatched to ${targetVendorEmail}` : 'Authorized (Ready for GRN)'
           }
         };
       }
@@ -844,19 +867,24 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setProceedingPo(null);
     setProceedRemarksInput('');
+    setProceedEmailInput('');
 
     fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/proceed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         remarks,
-        authorizedBy: 'Procurement & Accounts'
+        authorizedBy: 'Procurement Head',
+        vendorEmail: targetVendorEmail
       })
     })
       .then(res => (res.ok && res.headers.get('content-type')?.includes('application/json')) ? res.json() : null)
-      .then(() => {
+      .then((data) => {
         fetchZohoPOs(true);
-        showCustomAlert(`PO ${poId} marked as Proceed PO! It is now active and eligible in GRN Process.`, 'Proceed PO Completed', 'success');
+        const alertMsg = targetVendorEmail
+          ? `PO ${poId} marked as Proceed PO! An official Purchase Order copy has been automatically dispatched to vendor (${targetVendorEmail}). Ready for GRN receiving.`
+          : `PO ${poId} marked as Proceed PO! Ready for GRN receiving.`;
+        showCustomAlert(alertMsg, 'Proceed PO Completed & Dispatched', 'success');
       })
       .catch(() => {
         fetchZohoPOs(true);
@@ -1173,7 +1201,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           'All',
           'Awaiting Accounts Verification',
           'Payment Processed / Credit Verified',
-          'Proceed PO (GRN Ready)',
           'Draft / Pending MD Approval',
           'REJECTED'
         ] : [
@@ -1422,7 +1449,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               ] : isAccounts ? [
                 { id: 'MD_APPROVED', label: 'Awaiting Accounts Verification', count: poList.filter(po => po.status === 'MD Approved' || po.statusType === 'md_approved').length, bg: '#e0e7ff', fg: '#3730a3' },
                 { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => po.status === 'Payment Processed' || po.statusType === 'payment_processed').length, bg: '#fef3c7', fg: '#92400e' },
-                { id: 'PROCEED_PO', label: 'Proceed PO (GRN Ready)', count: poList.filter(po => po.status === 'Proceed PO' || po.statusType === 'proceed_po').length, bg: '#ecfeff', fg: '#0e7490' },
                 { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => po.status === 'Draft' || po.status === 'WAITING FOR APPROVAL' || po.status === 'Pending Approval' || po.statusType === 'draft' || po.statusType === 'pending').length, bg: '#fff7ed', fg: '#c2410c' },
                 { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' }
               ] : [
@@ -1810,9 +1836,30 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       }
 
                       if (st === 'Payment Processed' || target.statusType === 'payment_processed') {
+                        if (!isProcurementHead) {
+                          return (
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 12px',
+                              borderRadius: '8px',
+                              backgroundColor: '#ECFDF5',
+                              color: '#065F46',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              border: '1px solid #A7F3D0'
+                            }}>
+                              <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed
+                            </div>
+                          );
+                        }
                         return (
                           <button
-                            onClick={() => setProceedingPo(target)}
+                            onClick={() => {
+                              setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                              setProceedingPo(target);
+                            }}
                             style={{
                               backgroundColor: '#0E7490',
                               border: 'none',
@@ -2141,9 +2188,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 </h2>
                 {viewMode === 'view' && viewingPoStatus && (
                   renderStatusBadge(
-                    (viewingPoStatus === 'MD Approved' || viewingPoStatus === 'OPEN' || viewingPoStatus === 'Approved') ? 'approved' :
-                    (viewingPoStatus === 'Payment Processed') ? 'payment_processed' :
+                    (viewingPoStatus.includes('CLOSED') || viewingPoStatus.includes('FULLY RECEIVED')) ? 'closed' :
+                    (viewingPoStatus.includes('PARTIALLY')) ? 'partially_received' :
                     (viewingPoStatus === 'Proceed PO') ? 'proceed_po' :
+                    (viewingPoStatus === 'Payment Processed') ? 'payment_processed' :
+                    (viewingPoStatus === 'MD Approved' || viewingPoStatus === 'OPEN' || viewingPoStatus === 'Approved') ? 'approved' :
                     (viewingPoStatus === 'REJECTED') ? 'rejected' : 'pending',
                     viewingPoStatus
                   )
@@ -2176,12 +2225,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   )}
                   {/* Stage-based Workflow Action Buttons */}
                   {(() => {
-                    const st = String(viewingPoStatus || '').trim();
-                    const isDraftOrPending = st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval';
-                    const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved';
-                    const isPaymentProcessed = st === 'Payment Processed';
-                    const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO';
-
                     const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
                       poNo: poNumber,
                       vendor: vendorName,
@@ -2189,55 +2232,123 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       paymentTerms
                     };
 
-                    if (isDraftOrPending) {
+                    let hasLocalGrn = false;
+                    let isLocalGrnClosed = false;
+                    try {
+                      const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+                      if (Array.isArray(localGrns)) {
+                        const matched = localGrns.filter(g => {
+                          const gRef = String(g.poRef || g.poNo || g.poId || '').toLowerCase().trim();
+                          const pRef = String(poNumber || '').toLowerCase().trim();
+                          return gRef && pRef && (gRef === pRef || gRef.includes(pRef) || pRef.includes(gRef));
+                        });
+                        if (matched.length > 0) {
+                          hasLocalGrn = true;
+                          isLocalGrnClosed = matched.some(g => {
+                            const gst = String(g.status || '').toUpperCase();
+                            return gst.includes('CLOSED') || gst.includes('FULLY RECEIVED') || gst.includes('FULLY ACCEPTED');
+                          });
+                        }
+                      }
+                    } catch (_) {}
+
+                    const st = String(viewingPoStatus || currentPoObj?.status || '').trim();
+                    const objStatus = String(currentPoObj?.status || '').trim();
+                    const objStatusType = String(currentPoObj?.statusType || '').toLowerCase();
+                    const totalRec = Number(currentPoObj?.totalReceived || currentPoObj?.totalReceivedQty || 0);
+                    const grnCount = Number(currentPoObj?.grnCount || (currentPoObj?.grnHistory ? currentPoObj.grnHistory.length : 0));
+
+                    const isClosed = st.includes('CLOSED') || st.includes('FULLY RECEIVED') || objStatus.includes('CLOSED') || objStatusType === 'closed' || isLocalGrnClosed;
+                    const isAlreadyInGrnProcessOrPartial = !isClosed && (
+                      st.toUpperCase().includes('PARTIAL') ||
+                      objStatus.toUpperCase().includes('PARTIAL') ||
+                      objStatusType.includes('partial') ||
+                      st.toUpperCase().includes('PACKED') ||
+                      objStatus.toUpperCase().includes('PACKED') ||
+                      objStatusType.includes('packed') ||
+                      st.toUpperCase().includes('GRN PROCESS') ||
+                      objStatus.toUpperCase().includes('GRN PROCESS') ||
+                      totalRec > 0 ||
+                      hasLocalGrn ||
+                      grnCount > 0
+                    );
+                    const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
+                    const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
+                    const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
+                    const isDraftOrPending = (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || objStatusType === 'pending') && !isClosed && !isGrnProcess && !isPaymentProcessed;
+                    const isMdApproved = !isClosed && !isGrnProcess && !isPaymentProcessed && !isDraftOrPending;
+
+                    if (isClosed) {
                       return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setRejectingPo(currentPoObj)}
-                            style={{
-                              backgroundColor: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              borderRadius: '8px',
-                              padding: '8px 18px',
-                              fontSize: '13px',
-                              fontWeight: '700',
-                              color: '#DC2626',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                          >
-                            <XCircle style={{ width: '15px', height: '15px' }} /> Reject PO
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setApprovingPo(currentPoObj)}
-                            style={{
-                              backgroundColor: '#16A34A',
-                              border: 'none',
-                              borderRadius: '8px',
-                              padding: '8px 20px',
-                              fontSize: '13px',
-                              fontWeight: '700',
-                              color: 'white',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                          >
-                            <CheckCircle style={{ width: '15px', height: '15px' }} /> Approve as MD
-                          </button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#166534' }}>
+                          <CheckCircle size={14} style={{ color: '#16A34A' }} /> GRN Completed
                         </div>
+                      );
+                    }
+
+                    if (isAlreadyInGrnProcessOrPartial) {
+                      return (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', border: '1px solid #0E7490', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>
+                          <CheckCircle size={14} style={{ color: '#0E7490' }} /> In GRN Process
+                        </div>
+                      );
+                    }
+
+                    if (isProceedPoOnly) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => handlePushToGrn(currentPoObj)}
+                          style={{
+                            backgroundColor: '#0E7490',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 18px',
+                            fontSize: '13px',
+                            fontWeight: '700',
+                            color: 'white',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+                          }}
+                        >
+                          <Boxes size={15} /> Push to GRN
+                        </button>
+                      );
+                    }
+
+                    if (isPaymentProcessed) {
+                      if (!isProcurementHead) {
+                        return (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: '#ECFDF5',
+                            border: '1px solid #A7F3D0',
+                            borderRadius: '8px',
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            color: '#065F46'
+                          }}>
+                            <CheckCircle size={15} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProceedEmailInput(currentPoObj?.email || email || (currentPoObj?.vendor ? `contact@${currentPoObj.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                            setProceedingPo(currentPoObj);
+                          }}
+                          style={{ backgroundColor: '#0E7490', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '700', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
+                        >
+                          <Send style={{ width: '15px', height: '15px' }} /> Proceed PO (Ready for GRN)
+                        </button>
                       );
                     }
 
@@ -2258,7 +2369,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           }}>
                             <CheckCircle size={14} style={{ color: '#16A34A' }} /> MD Approved
                           </div>
-                          {!isExecutiveOrMD && (
+                          {isAccounts && (
                             <button
                               type="button"
                               onClick={() => handleOpenPaymentProcessModal(currentPoObj)}
@@ -2271,44 +2382,72 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       );
                     }
 
-                    if (isPaymentProcessed) {
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setProceedingPo(currentPoObj)}
-                          style={{ backgroundColor: '#0E7490', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '700', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
-                        >
-                          <Send style={{ width: '15px', height: '15px' }} /> Proceed PO (Ready for GRN)
-                        </button>
-                      );
-                    }
-
-                    if (isProceedPo) {
-                      return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', border: '1px solid #0E7490', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>
-                            <CheckCircle size={14} /> Ready for GRN Process
+                    if (isDraftOrPending) {
+                      if (isExecutiveOrMD) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setRejectingPo(currentPoObj)}
+                              style={{
+                                backgroundColor: '#FEF2F2',
+                                border: '1px solid #FECACA',
+                                borderRadius: '8px',
+                                padding: '8px 18px',
+                                fontSize: '13px',
+                                fontWeight: '700',
+                                color: '#DC2626',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                            >
+                              <XCircle style={{ width: '15px', height: '15px' }} /> Reject PO
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setApprovingPo(currentPoObj)}
+                              style={{
+                                backgroundColor: '#16A34A',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '8px 20px',
+                                fontSize: '13px',
+                                fontWeight: '700',
+                                color: 'white',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                            >
+                              <CheckCircle style={{ width: '15px', height: '15px' }} /> Approve as MD
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handlePushToGrn(currentPoObj)}
-                            style={{
-                              backgroundColor: '#0E7490',
-                              border: 'none',
-                              borderRadius: '8px',
-                              padding: '8px 18px',
-                              fontSize: '13px',
-                              fontWeight: '700',
-                              color: 'white',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                            }}
-                          >
-                            <Boxes size={15} /> Push to GRN
-                          </button>
+                        );
+                      }
+                      return (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          backgroundColor: '#FFFBEB',
+                          border: '1px solid #FDE68A',
+                          borderRadius: '8px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          color: '#B45309'
+                        }}>
+                          <Clock style={{ width: '14px', height: '14px', color: '#D97706' }} /> Awaiting MD / CEO Approval
                         </div>
                       );
                     }
@@ -2341,17 +2480,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   <button
                     type="button"
                     onClick={(e) => executeCreatePO(e, 'Draft')}
-                    style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: '#c2410c', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    disabled={isSubmittingPO}
+                    style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '600', color: '#c2410c', cursor: isSubmittingPO ? 'not-allowed' : 'pointer', opacity: isSubmittingPO ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
                     <FileText style={{ width: '15px', height: '15px' }} />
-                    Save as Draft
+                    {isSubmittingPO ? 'Saving...' : 'Save as Draft'}
                   </button>
                   <button
                     type="button"
                     onClick={triggerSaveConfirm}
-                    style={{ backgroundColor: '#2563eb', border: 'none', borderRadius: '8px', padding: '8px 24px', fontSize: '13px', fontWeight: '600', color: 'white', cursor: 'pointer' }}
+                    disabled={isSubmittingPO}
+                    style={{ backgroundColor: '#2563eb', border: 'none', borderRadius: '8px', padding: '8px 24px', fontSize: '13px', fontWeight: '600', color: 'white', cursor: isSubmittingPO ? 'not-allowed' : 'pointer', opacity: isSubmittingPO ? 0.6 : 1 }}
                   >
-                    Send for Approval
+                    {isSubmittingPO ? 'Processing...' : 'Send for Approval'}
                   </button>
                 </>
               )}
@@ -2419,32 +2560,63 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', padding: '10px 0' }}>
                   {(() => {
-                    const st = String(viewingPoStatus || 'Draft / Pending Approval').trim();
-                    const isClosed = st.includes('CLOSED') || st.includes('FULLY RECEIVED');
-                    const isPartial = st.includes('PARTIALLY');
-                    const isProceed = st === 'Proceed PO' || st === 'PROCEED PO' || isPartial || isClosed;
-                    const isPaymentDone = st === 'Payment Processed' || isProceed;
-                    const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved' || isPaymentDone;
-                    const isDraft = st === 'Draft' || st === 'DRAFT' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval';
+                    const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber);
 
-                    // Strict workflow state determination:
-                    // Stage 1: PO Created (Draft only, not yet sent for approval)
-                    // Stage 2: MD Approval (Draft / Pending Approval)
-                    // Stage 3: Payment Process (MD Approved / OPEN)
-                    // Stage 4: Proceed PO (Payment Processed)
-                    // Stage 5: GRN Process (Proceed PO / Partially Received / Closed)
-                    
-                    let currentStepIndex = 1; // 0: PO Created, 1: MD Approval, 2: Payment Process, 3: Proceed PO, 4: GRN Process
-                    if (st === 'Draft' || st === 'DRAFT') {
-                      currentStepIndex = 0;
-                    } else if (st === 'Draft / Pending Approval' || st.includes('Pending') || st.includes('WAITING')) {
-                      currentStepIndex = 1;
-                    } else if (st === 'MD Approved' || st === 'OPEN' || st === 'Approved') {
-                      currentStepIndex = 2;
-                    } else if (st === 'Payment Processed') {
-                      currentStepIndex = 3;
-                    } else if (isProceed) {
+                    let hasLocalGrn = false;
+                    let isLocalGrnClosed = false;
+                    try {
+                      const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+                      if (Array.isArray(localGrns)) {
+                        const matched = localGrns.filter(g => {
+                          const gRef = String(g.poRef || g.poNo || g.poId || '').toLowerCase().trim();
+                          const pRef = String(poNumber || '').toLowerCase().trim();
+                          return gRef && pRef && (gRef === pRef || gRef.includes(pRef) || pRef.includes(gRef));
+                        });
+                        if (matched.length > 0) {
+                          hasLocalGrn = true;
+                          isLocalGrnClosed = matched.some(g => {
+                            const gst = String(g.status || '').toUpperCase();
+                            return gst.includes('CLOSED') || gst.includes('FULLY RECEIVED') || gst.includes('FULLY ACCEPTED');
+                          });
+                        }
+                      }
+                    } catch (_) {}
+
+                    const st = String(viewingPoStatus || currentPoObj?.status || 'Draft / Pending Approval').trim();
+                    const objStatus = String(currentPoObj?.status || '').trim();
+                    const objStatusType = String(currentPoObj?.statusType || '').toLowerCase();
+                    const totalRec = Number(currentPoObj?.totalReceived || currentPoObj?.totalReceivedQty || 0);
+                    const grnCount = Number(currentPoObj?.grnCount || (currentPoObj?.grnHistory ? currentPoObj.grnHistory.length : 0));
+
+                    const isClosed = st.includes('CLOSED') || st.includes('FULLY RECEIVED') || objStatus.includes('CLOSED') || objStatusType === 'closed' || isLocalGrnClosed;
+                    const isPartial = st.includes('PARTIALLY') || objStatus.includes('PARTIALLY') || objStatusType === 'partially_received' || totalRec > 0 || hasLocalGrn || grnCount > 0;
+                    const isProceed = st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po' || !!currentPoObj?.proceedDetails || isPartial || isClosed;
+                    const isPaymentDone = st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed' || !!currentPoObj?.paymentDetails || isProceed;
+                    const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved' || objStatus === 'MD Approved' || objStatusType === 'approved' || objStatusType === 'md_approved' || isPaymentDone;
+                    const isDraft = (st === 'Draft' || st === 'DRAFT' || objStatus === 'Draft') && !isMdApproved;
+                    const isPending = (st === 'Draft / Pending Approval' || st.includes('Pending') || st.includes('WAITING') || objStatusType === 'pending') && !isMdApproved;
+
+                    // 6-STAGE WORKFLOW HIERARCHY:
+                    // Stage 0: 1. PO Created
+                    // Stage 1: 2. MD Approval
+                    // Stage 2: 3. Payment Process
+                    // Stage 3: 4. Proceed PO
+                    // Stage 4: 5. GRN Process
+                    // Stage 5: 6. GRN Completed
+
+                    let currentStepIndex = 1;
+                    if (isClosed) {
+                      currentStepIndex = 5;
+                    } else if (isPartial || isProceed || hasLocalGrn || grnCount > 0) {
                       currentStepIndex = 4;
+                    } else if (isPaymentDone) {
+                      currentStepIndex = 3;
+                    } else if (isMdApproved) {
+                      currentStepIndex = 2;
+                    } else if (isPending) {
+                      currentStepIndex = 1;
+                    } else if (isDraft) {
+                      currentStepIndex = 0;
                     }
 
                     const steps = [
@@ -2452,13 +2624,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       { label: '2. MD Approval' },
                       { label: '3. Payment Process' },
                       { label: '4. Proceed PO' },
-                      { label: '5. GRN Process' }
+                      { label: '5. GRN Process' },
+                      { label: '6. GRN Completed' }
                     ];
 
                     return steps.map((step, idx) => {
-                      const isDone = idx < currentStepIndex || (idx === 4 && (isClosed || isPartial));
-                      const isCurrent = idx === currentStepIndex && !(idx === 4 && isClosed);
-                      const isFinalDone = idx === 4 && isClosed;
+                      const isDone = idx < currentStepIndex || (currentStepIndex === 5 && idx === 5);
+                      const isCurrent = idx === currentStepIndex && currentStepIndex !== 5;
+                      const isFinalDone = currentStepIndex === 5 && idx === 5;
 
                       return {
                         ...step,
@@ -2829,8 +3002,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                         </div>
                         <div>
                           <span style={{ color: '#64748B', display: 'block', fontSize: '11px' }}>Authorized By</span>
-                          <strong style={{ color: '#1E293B' }}>{prd?.authorizedBy || 'Procurement & Accounts'}</strong>
+                          <strong style={{ color: '#1E293B' }}>{prd?.authorizedBy || 'Procurement Head'}</strong>
                         </div>
+                        {(prd?.vendorEmail || currentPoObj?.email) && (
+                          <div>
+                            <span style={{ color: '#64748B', display: 'block', fontSize: '11px' }}>Vendor PO Dispatch</span>
+                            <span style={{ color: '#0E7490', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Mail size={12} /> Dispatched to {prd?.vendorEmail || currentPoObj?.email}
+                            </span>
+                          </div>
+                        )}
                         {prd?.remarks && (
                           <div style={{ gridColumn: '1 / -1' }}>
                             <span style={{ color: '#64748B', display: 'block', fontSize: '11px' }}>Proceed Remarks</span>
@@ -2854,15 +3035,50 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   const objStatus = String(currentPoObj?.status || '').trim();
                   const objStatusType = String(currentPoObj?.statusType || '').toLowerCase();
                   
-                  const isAlreadyApproved = st === 'MD Approved' || objStatus === 'MD Approved' || 
-                                           st === 'Payment Processed' || objStatus === 'Payment Processed' || 
-                                           st === 'Proceed PO' || objStatus === 'Proceed PO' || 
-                                           st.includes('CLOSED') || objStatus.includes('CLOSED') ||
-                                           objStatusType === 'md_approved' || objStatusType === 'payment_processed' || objStatusType === 'proceed_po' || objStatusType === 'closed';
+                  let hasLocalGrn = false;
+                  let isLocalGrnClosed = false;
+                  try {
+                    const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+                    if (Array.isArray(localGrns)) {
+                      const matched = localGrns.filter(g => {
+                        const gRef = String(g.poRef || g.poNo || g.poId || '').toLowerCase().trim();
+                        const pRef = String(poNumber || '').toLowerCase().trim();
+                        return gRef && pRef && (gRef === pRef || gRef.includes(pRef) || pRef.includes(gRef));
+                      });
+                      if (matched.length > 0) {
+                        hasLocalGrn = true;
+                        isLocalGrnClosed = matched.some(g => {
+                          const gst = String(g.status || '').toUpperCase();
+                          return gst.includes('CLOSED') || gst.includes('FULLY RECEIVED') || gst.includes('FULLY ACCEPTED');
+                        });
+                      }
+                    }
+                  } catch (_) {}
+
+                  const totalRec = Number(currentPoObj?.totalReceived || currentPoObj?.totalReceivedQty || 0);
+                  const grnCount = Number(currentPoObj?.grnCount || (currentPoObj?.grnHistory ? currentPoObj.grnHistory.length : 0));
+                  const isClosed = st.includes('CLOSED') || st.includes('FULLY RECEIVED') || objStatus.includes('CLOSED') || objStatusType === 'closed' || isLocalGrnClosed;
+                  const isAlreadyInGrnProcessOrPartial = !isClosed && (
+                    st.toUpperCase().includes('PARTIAL') ||
+                    objStatus.toUpperCase().includes('PARTIAL') ||
+                    objStatusType.includes('partial') ||
+                    st.toUpperCase().includes('PACKED') ||
+                    objStatus.toUpperCase().includes('PACKED') ||
+                    objStatusType.includes('packed') ||
+                    st.toUpperCase().includes('GRN PROCESS') ||
+                    objStatus.toUpperCase().includes('GRN PROCESS') ||
+                    totalRec > 0 ||
+                    hasLocalGrn ||
+                    grnCount > 0
+                  );
+                  const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
+                  const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
+                  const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
+                  const isAlreadyApproved = isClosed || isGrnProcess || isPaymentProcessed || st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || st === 'OPEN' || objStatus === 'OPEN' || objStatusType === 'approved';
 
                   const isDraftOrPending = isExecutiveOrMD 
                     ? (!isAlreadyApproved && st !== 'REJECTED' && objStatus !== 'REJECTED')
-                    : (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval');
+                    : (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval') && !isAlreadyApproved;
 
                   return (
                     <div style={{
@@ -2915,90 +3131,110 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       </div>
 
                       {isDraftOrPending ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                            Decision for PO <strong>{poNumber}</strong>:
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setRejectingPo(currentPoObj)}
-                            style={{
-                              backgroundColor: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              borderRadius: '8px',
-                              padding: '8px 18px',
-                              fontSize: '13px',
-                              fontWeight: '700',
-                              color: '#DC2626',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px'
-                            }}
-                          >
-                            <XCircle size={15} style={{ color: '#DC2626' }} /> Reject PO
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setApprovingPo(currentPoObj)}
-                            style={{
-                              backgroundColor: '#16A34A',
-                              border: 'none',
-                              borderRadius: '8px',
-                              padding: '8px 22px',
-                              fontSize: '13px',
-                              fontWeight: '700',
-                              color: 'white',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)'
-                            }}
-                          >
-                            <CheckCircle size={15} /> Approve as MD
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {(st === 'Proceed PO' || currentPoObj?.status === 'Proceed PO') ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{
+                        isExecutiveOrMD ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
+                              Decision for PO <strong>{poNumber}</strong>:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setRejectingPo(currentPoObj)}
+                              style={{
+                                backgroundColor: '#FEF2F2',
+                                border: '1px solid #FECACA',
+                                borderRadius: '8px',
+                                padding: '8px 18px',
+                                fontSize: '13px',
+                                fontWeight: '700',
+                                color: '#DC2626',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <XCircle size={15} style={{ color: '#DC2626' }} /> Reject PO
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setApprovingPo(currentPoObj)}
+                              style={{
+                                backgroundColor: '#16A34A',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '8px 22px',
+                                fontSize: '13px',
+                                fontWeight: '700',
+                                color: 'white',
+                                cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                backgroundColor: '#ECFEFF',
-                                border: '1px solid #0E7490',
-                                borderRadius: '8px',
-                                padding: '6px 14px',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                color: '#0E7490'
-                              }}>
-                                <CheckCircle size={14} style={{ color: '#0E7490' }} /> Ready for GRN Process
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handlePushToGrn(currentPoObj)}
-                                style={{
-                                  backgroundColor: '#0E7490',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  padding: '7px 18px',
-                                  fontSize: '13px',
-                                  fontWeight: '700',
-                                  color: 'white',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                                }}
-                              >
-                                <Boxes size={15} /> Push to GRN
-                              </button>
+                                boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)'
+                              }}
+                            >
+                              <CheckCircle size={15} /> Approve as MD
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: '#FFFBEB',
+                            border: '1px solid #FDE68A',
+                            borderRadius: '8px',
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            color: '#B45309'
+                          }}>
+                            <Clock size={14} style={{ color: '#D97706' }} /> Awaiting MD / CEO Approval
+                          </div>
+                        )
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {isClosed ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#166534' }}>
+                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> GRN Completed
                             </div>
-                          ) : (st === 'Payment Processed' || currentPoObj?.status === 'Payment Processed') ? (
+                          ) : isAlreadyInGrnProcessOrPartial ? (
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: '#ECFEFF',
+                              border: '1px solid #0E7490',
+                              borderRadius: '8px',
+                              padding: '6px 14px',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              color: '#0E7490'
+                            }}>
+                              <CheckCircle size={14} style={{ color: '#0E7490' }} /> In GRN Process
+                            </div>
+                          ) : isProceedPoOnly ? (
+                            <button
+                              type="button"
+                              onClick={() => handlePushToGrn(currentPoObj)}
+                              style={{
+                                backgroundColor: '#0E7490',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '7px 18px',
+                                fontSize: '13px',
+                                fontWeight: '700',
+                                color: 'white',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+                              }}
+                            >
+                              <Boxes size={15} /> Push to GRN
+                            </button>
+                          ) : isPaymentProcessed ? (
                             <>
                               <div style={{
                                 display: 'inline-flex',
@@ -3014,26 +3250,31 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                               }}>
                                 <CheckCircle size={14} style={{ color: '#16A34A' }} /> Payment Processed / Credit Verified
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setProceedingPo(currentPoObj)}
-                                style={{
-                                  backgroundColor: '#0E7490',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  padding: '7px 18px',
-                                  fontSize: '13px',
-                                  fontWeight: '700',
-                                  color: 'white',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                                }}
-                              >
-                                <Send size={15} /> Proceed PO (Ready for GRN)
-                              </button>
+                              {isProcurementHead && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setProceedEmailInput(currentPoObj?.email || email || (currentPoObj?.vendor ? `contact@${currentPoObj.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                                    setProceedingPo(currentPoObj);
+                                  }}
+                                  style={{
+                                    backgroundColor: '#0E7490',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '7px 18px',
+                                    fontSize: '13px',
+                                    fontWeight: '700',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+                                  }}
+                                >
+                                  <Send size={15} /> Proceed PO (Ready for GRN)
+                                </button>
+                              )}
                             </>
                           ) : (
                             <>
@@ -3897,9 +4138,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       {/* PROCEED PO CONFIRMATION MODAL */}
       {proceedingPo && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', width: '480px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', width: '500px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ backgroundColor: '#0E7490', color: 'white', fontSize: '12px', fontWeight: '800', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.15em' }}>
-              AUTHORIZE PROCEED PO (READY FOR GRN)
+              AUTHORIZE PROCEED PO (PROCUREMENT HEAD)
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -3908,16 +4149,34 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 <span style={{ fontSize: '12px', color: '#64748b' }}>Vendor: <strong>{proceedingPo.vendor}</strong> | Amount: <strong>{proceedingPo.amount}</strong></span>
               </div>
 
+              {/* Automated Vendor Dispatch & Checklist Card */}
               <div style={{ backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                 <CheckCircle size={18} style={{ color: '#0E7490', flexShrink: 0, marginTop: '2px' }} />
                 <div style={{ fontSize: '12px', color: '#155E75', lineHeight: '1.4' }}>
-                  <strong>Final Authorization Checklist:</strong>
+                  <strong>Procurement Head Final Authorization:</strong>
                   <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '11px' }}>
-                    <li>MD Approval has been successfully granted.</li>
-                    <li>Accounts team has confirmed payment or verified credit terms.</li>
-                    <li>Once Proceed PO is authorized, this PO will immediately become available in the <strong>GRN Process</strong> for warehouse receiving.</li>
+                    <li>MD Approval has been granted and Accounts has verified payment/credit.</li>
+                    <li><strong>Automatic Vendor Dispatch:</strong> The purchase order details will be automatically sent to the vendor upon authorization.</li>
+                    <li>This PO will immediately become available in the <strong>GRN Process</strong> for warehouse receiving.</li>
                   </ul>
                 </div>
+              </div>
+
+              {/* Vendor Email Recipient Field */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Mail size={13} style={{ color: '#0E7490' }} /> Vendor Recipient Email (Auto Dispatched on Authorization)
+                </label>
+                <input
+                  type="email"
+                  value={proceedEmailInput}
+                  onChange={(e) => setProceedEmailInput(e.target.value)}
+                  placeholder="vendor@company.com"
+                  style={{ height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', color: '#1E293B', backgroundColor: '#F8FAFC' }}
+                />
+                <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                  The PO schedule and line item specifications will be automatically delivered to this address.
+                </span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -3932,16 +4191,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '6px' }}>
                 <button
-                  onClick={() => { setProceedingPo(null); setProceedRemarksInput(''); }}
+                  onClick={() => { setProceedingPo(null); setProceedRemarksInput(''); setProceedEmailInput(''); }}
                   style={{ border: 'none', backgroundColor: 'transparent', color: '#64748b', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleProceedPoSubmit(proceedingPo)}
-                  style={{ backgroundColor: '#0E7490', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ backgroundColor: '#0E7490', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
                 >
-                  <Send size={14} /> Authorize & Proceed PO
+                  <Send size={14} /> Authorize & Send PO to Vendor
                 </button>
               </div>
             </div>
@@ -3971,16 +4230,26 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               PO <strong>{creditAlertPopup.poNo}</strong> ({creditAlertPopup.vendor}) is confirmed under <strong>{creditAlertPopup.terms}</strong>. MD approval was verified, and accounts team has authorized credit terms.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
-              <button
-                onClick={() => {
-                  const targetPo = poList.find(p => p.poNo === creditAlertPopup.poNo) || { poNo: creditAlertPopup.poNo, vendor: creditAlertPopup.vendor, amount: creditAlertPopup.amount };
-                  setCreditAlertPopup(null);
-                  setProceedingPo(targetPo);
-                }}
-                style={{ backgroundColor: '#0E7490', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                Proceed PO Now <ArrowRight size={12} />
-              </button>
+              {isProcurementHead ? (
+                <button
+                  onClick={() => {
+                    const targetPo = poList.find(p => p.poNo === creditAlertPopup.poNo) || { poNo: creditAlertPopup.poNo, vendor: creditAlertPopup.vendor, amount: creditAlertPopup.amount };
+                    setCreditAlertPopup(null);
+                    setProceedEmailInput(targetPo.email || email || (targetPo.vendor ? `contact@${targetPo.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                    setProceedingPo(targetPo);
+                  }}
+                  style={{ backgroundColor: '#0E7490', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  Proceed PO Now <ArrowRight size={12} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setCreditAlertPopup(null)}
+                  style={{ backgroundColor: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '6px 12px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Dismiss
+                </button>
+              )}
             </div>
           </div>
         </div>

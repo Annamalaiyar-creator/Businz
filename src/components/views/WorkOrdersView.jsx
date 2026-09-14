@@ -23,7 +23,11 @@ export default function WorkOrdersView({
   const [actualRejectedOutputVal, setActualRejectedOutputVal] = useState('0');
   const [operatorRemarksVal, setOperatorRemarksVal] = useState('');
 
-  const isFloorEmployee = String(userRole || '').toLowerCase().includes('employee') || String(userRole || '').toLowerCase().includes('floor') || String(userRole || '').toLowerCase().includes('operator');
+  const isFloorEmployee = String(userRole || '').toLowerCase().includes('employee') || 
+    String(userRole || '').toLowerCase().includes('floor') || 
+    String(userRole || '').toLowerCase().includes('operator') || 
+    String(userRole || '').toLowerCase().includes('supervisor') || 
+    String(userRole || '').toLowerCase().includes('dispatch');
   const isExecutiveOrMD = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director';
 
   useEffect(() => {
@@ -93,10 +97,29 @@ export default function WorkOrdersView({
         });
       });
 
+    // Instant Real-Time Push Listener: Refetches Work Orders the millisecond a new Work Order is created or updated
+    const handleWorkOrderPush = () => {
+      fetch('/api/workorders')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.workOrders) {
+            applyWorkOrders(data.workOrders);
+          }
+        })
+        .catch(() => {});
+    };
+
+    window.addEventListener('controlroom_workorder_updated', handleWorkOrderPush);
+    window.addEventListener('controlroom_storage_update', handleWorkOrderPush);
+
     const unsubscribe = prodModuleEngine.subscribe(() => {
       setEngineTick(t => t + 1);
     });
-    return () => unsubscribe();
+    return () => {
+      window.removeEventListener('controlroom_workorder_updated', handleWorkOrderPush);
+      window.removeEventListener('controlroom_storage_update', handleWorkOrderPush);
+      unsubscribe();
+    };
   }, []);
 
   // Helper to toggle single row selection
@@ -213,11 +236,17 @@ export default function WorkOrdersView({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0F172A', margin: 0 }}>
-            {isFloorEmployee ? 'My Production Floor Work Orders' : 'Work Orders Management'}
+            {userRole === 'Floor Supervisor'
+              ? 'Floor Supervisor - Work Orders'
+              : userRole === 'Dispatch Head'
+                ? 'Dispatch Head - Production Work Orders'
+                : isFloorEmployee
+                  ? 'My Production Floor Work Orders'
+                  : 'Work Orders Management'}
           </h2>
           <span style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
             {isFloorEmployee
-              ? 'Select a work order checkbox to open floating actions (Accept WO, Update Status).'
+              ? 'Select a work order checkbox to open floating actions (Accept WO, Update Status, Submit Output).'
               : 'View and manage all work orders across the production floor.'}
           </span>
         </div>

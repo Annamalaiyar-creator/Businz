@@ -139,6 +139,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'MAIN MENU',
           items: [
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
+            { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
             { label: 'Stock Status', icon: Layers }
           ]
@@ -218,7 +219,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'BOM Orders', icon: GitBranch },
             { label: 'Proforma Invoice', icon: Receipt },
-            { label: 'Stock Status', icon: Warehouse }
+            { label: 'Inventory Stores', icon: Warehouse },
+            { label: 'Raw Material Directory', icon: Layers }
           ]
         },
         {
@@ -457,16 +459,16 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             letterSpacing: '-0.5px',
             boxShadow: '0 4px 12px rgba(15, 23, 42, 0.25)'
           }}>
-            w.
+            B.
           </div>
 
           {!collapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ fontSize: '14.5px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.2', letterSpacing: '-0.3px' }}>
-                ControlRoom Inc.
+              <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.2', letterSpacing: '-0.3px' }}>
+                Businz
               </span>
-              <span style={{ fontSize: '11.5px', fontWeight: '500', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
-                Enterprise Edition
+              <span style={{ fontSize: '11px', fontWeight: '600', color: '#0E7490', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                CRM & Operations
               </span>
             </div>
           )}

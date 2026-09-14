@@ -511,7 +511,7 @@ export default function CrmCustomersView({
       console.warn('Zoho Customer Sync warning:', err);
       setZohoSyncMessage({
         type: 'info',
-        text: 'Customer created locally in Control Room. Zoho Books sync will retry automatically.'
+        text: 'Customer created locally in Businz. Zoho Books sync will retry automatically.'
       });
     }
 

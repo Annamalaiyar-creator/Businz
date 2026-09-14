@@ -5,8 +5,10 @@ import {
   Package, Info, Upload, Receipt, Image, Pause, Save
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
+import { prodModuleEngine } from '../../utils/productionModuleEngine';
 
 const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
+  const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
   const [internalShowAddStockForm, setInternalShowAddStockForm] = useState(false);
   const isAddStockActive = externalShowForm !== undefined ? externalShowForm : internalShowAddStockForm;
   const setAddStockActive = externalSetShowForm || setInternalShowAddStockForm;
@@ -49,15 +51,44 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const grnMap = new Map();
       grns.forEach(grn => {
         const status = (grn.status || '').toLowerCase();
-        if (status === 'verified' || status === 'completed' || status === 'received' || status === 'posted to inventory' || status === 'approved') {
+        const isReceived = status.includes('received') || 
+                           status.includes('approved') || 
+                           status.includes('verified') || 
+                           status.includes('completed') || 
+                           status.includes('posted') ||
+                           status.includes('open');
+        if (isReceived) {
           if (Array.isArray(grn.items) && grn.items.length > 0) {
             grn.items.forEach(it => {
-              const code = it.materialCode || it.itemCode || it.code || it.itemId;
-              if (code) grnMap.set(String(code).toUpperCase(), { ...it, grnNo: grn.grnNo, receivedQty: Number(it.receivedQty || it.qty || 0) });
+              const code = it.materialCode || it.itemCode || it.code || it.sku || it.itemId || it.id || it.name;
+              const recQty = Number(it.accepted !== undefined ? it.accepted : (it.now !== undefined ? it.now : (it.receivedQty || it.qty || 0)));
+              if (code && recQty > 0) {
+                const upperCode = String(code).toUpperCase();
+                const existing = grnMap.get(upperCode);
+                const prevQty = existing ? existing.receivedQty : 0;
+                const grnEntry = { 
+                  ...it, 
+                  code,
+                  materialCode: code,
+                  materialName: it.materialName || it.name || it.itemName || code,
+                  name: it.materialName || it.name || it.itemName || code,
+                  category: it.category || 'Aluminium',
+                  unit: it.unit || it.uom || 'Nos',
+                  grnNo: grn.grnNo || grn.id, 
+                  receivedQty: prevQty + recQty 
+                };
+                grnMap.set(upperCode, grnEntry);
+                if (it.name) {
+                  grnMap.set(String(it.name).toUpperCase(), grnEntry);
+                }
+              }
             });
-          } else if (grn.materialCode || grn.itemCode) {
-            const code = grn.materialCode || grn.itemCode;
-            grnMap.set(String(code).toUpperCase(), { ...grn, receivedQty: Number(grn.receivedQty || grn.qty || 0) });
+          } else if (grn.materialCode || grn.itemCode || grn.code) {
+            const code = grn.materialCode || grn.itemCode || grn.code;
+            const recQty = Number(grn.receivedQty || grn.acceptedQty || grn.qty || 0);
+            if (recQty > 0) {
+              grnMap.set(String(code).toUpperCase(), { ...grn, code, receivedQty: recQty });
+            }
           }
         }
       });
@@ -72,11 +103,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Aluminium', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 150, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 220, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 180, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR100O', name: 'Mini Rail 100mm (MR100O)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 260, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR100N', name: 'Mini Rail 100mm New (MR100N)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: getEngineAluStock(), minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MR100O', name: 'MINI RAIL 100mm (300mm) OLD', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 260, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MR100N', name: 'MINI RAIL 100mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: getEngineAluStock(), minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MR125', name: 'MINI RAIL 125mm (300mm)', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 180, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'LC', name: 'Locking Nut (LC)', cat: 'Aluminium', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 140, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'MR60', name: 'Mini Rail 60mm (MR60)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '60 mm', stock: 190, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MR60N', name: 'MINI RAIL 60mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 190, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'MR40', name: 'Mini Rail 40mm (MR40)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '40 mm', stock: 210, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MR40N', name: 'MINI RAIL 40mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 210, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 175, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 160, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
     { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Aluminium', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 130, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'In Stock' },
@@ -127,17 +161,36 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     if (itemsList && itemsList.length > 0) {
       itemsList.forEach(it => {
         const key = it.code || it.sku || it.itemId || 'RM-VRM';
-        if (matMap.has(key)) return;
         const upperKey = String(key).toUpperCase();
+        const upperName = it.name ? String(it.name).toUpperCase() : '';
+        const grnReceived = completedGrnMapInitial.get(upperKey) || (upperName ? completedGrnMapInitial.get(upperName) : null);
+        const recQty = grnReceived ? Number(grnReceived.receivedQty || 0) : 0;
+
+        if (matMap.has(key)) {
+          const existing = matMap.get(key);
+          const liveStock = Number(it.stock !== undefined && it.stock !== null && it.stock !== 0 ? it.stock : (existing.stock || 0));
+          const totalStock = recQty > 0 ? (existing.openingStock !== undefined ? existing.openingStock : liveStock) + recQty : liveStock;
+          matMap.set(key, {
+            ...existing,
+            name: it.name || existing.name,
+            stock: totalStock,
+            goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
+            status: totalStock > 0 ? 'In Stock' : 'Out of Stock',
+            lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
+            grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
+          });
+          return;
+        }
+
         const isAluItem = (it.category || '').toLowerCase().includes('alu') || 
                           (it.material || '').toLowerCase().includes('alu') ||
-                          (it.name || '').toLowerCase().includes('alu');
-        const grnReceived = completedGrnMapInitial.get(upperKey);
-
-        // STRICT REQUIREMENT: Only show Aluminum by default, or other raw materials if received via GRN
+                          (it.name || '').toLowerCase().includes('alu') ||
+                          (it.name || '').toLowerCase().includes('rail') ||
+                          (it.name || '').toLowerCase().includes('clamp');
         if (!isAluItem && !grnReceived) return;
 
-        const stockVal = grnReceived ? Number(grnReceived.receivedQty || 0) : Number(it.stock !== undefined && it.stock !== null && it.stock !== 0 ? it.stock : (it.openingStock !== undefined && it.openingStock !== 0 ? it.openingStock : 5000));
+        const baseStock = Number(it.stock !== undefined && it.stock !== null && it.stock !== 0 ? it.stock : (it.openingStock !== undefined && it.openingStock !== 0 ? it.openingStock : 5000));
+        const stockVal = recQty > 0 ? baseStock + recQty : baseStock;
         const minLvl = Number(it.reorderLevel || it.minLevel || 50);
         let statusText = 'In Stock';
         if (stockVal === 0) statusText = 'Out of Stock';
@@ -153,10 +206,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           status: statusText,
           store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
           hsn: '7604',
-          lastUpdated: grnReceived ? 'Received via GRN' : 'Live Store',
+          lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
           reserved: 0,
-          openingStock: stockVal,
-          goodsReceived: grnReceived ? Number(grnReceived.receivedQty || 0) : 0,
+          openingStock: baseStock,
+          goodsReceived: recQty,
           issuedProd: 0,
           matReturn: 0,
           stockAdj: 0,
@@ -167,20 +220,53 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     // Also include any raw material items from completed GRNs even if not in itemsList
     completedGrnMapInitial.forEach((grnItem, gCode) => {
-      if (!matMap.has(gCode) && !matMap.has(grnItem.materialCode || grnItem.itemCode)) {
-        const itemKey = grnItem.materialCode || grnItem.itemCode || gCode;
-        const recQty = Number(grnItem.receivedQty || 0);
+      const itemKey = grnItem.materialCode || grnItem.itemCode || grnItem.code || grnItem.sku || gCode;
+      const recQty = Number(grnItem.receivedQty || 0);
+      if (recQty <= 0) return;
+
+      let matchedKey = null;
+      if (matMap.has(itemKey)) matchedKey = itemKey;
+      else if (matMap.has(gCode)) matchedKey = gCode;
+      else if (grnItem.code && matMap.has(grnItem.code)) matchedKey = grnItem.code;
+      else if (grnItem.sku && matMap.has(grnItem.sku)) matchedKey = grnItem.sku;
+      else {
+        for (const [k, v] of matMap.entries()) {
+          const vName = String(v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const gName = String(grnItem.name || grnItem.materialName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (vName && gName && (vName === gName || vName.includes(gName) || gName.includes(vName))) {
+            matchedKey = k;
+            break;
+          }
+        }
+      }
+
+      if (matchedKey) {
+        const existing = matMap.get(matchedKey);
+        if (!existing.grnNo || existing.grnNo !== grnItem.grnNo) {
+          const newGoodsRec = (existing.goodsReceived || 0) + recQty;
+          const newStock = (existing.openingStock !== undefined ? existing.openingStock : (existing.stock || 0)) + recQty;
+          matMap.set(matchedKey, {
+            ...existing,
+            stock: newStock,
+            goodsReceived: newGoodsRec,
+            status: newStock > 0 ? 'In Stock' : 'Out of Stock',
+            lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
+            grnNo: grnItem.grnNo,
+            name: (grnItem.name && grnItem.name.includes('300mm')) ? grnItem.name : existing.name
+          });
+        }
+      } else {
         matMap.set(itemKey, {
           code: itemKey,
-          name: grnItem.materialName || grnItem.itemName || itemKey,
-          cat: grnItem.category || 'Raw Materials',
-          unit: grnItem.unit || 'Nos',
+          name: grnItem.materialName || grnItem.itemName || grnItem.name || itemKey,
+          cat: grnItem.category || 'Aluminium',
+          unit: grnItem.unit || grnItem.uom || 'Nos',
           stock: recQty,
           minLevel: 50,
-          status: recQty > 0 ? 'In Stock' : 'Out of Stock',
+          status: 'In Stock',
           store: 'Main Store',
           hsn: '7604',
-          lastUpdated: 'Received via GRN',
+          lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
           reserved: 0,
           openingStock: 0,
           goodsReceived: recQty,
@@ -256,17 +342,36 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       if (itemsList && itemsList.length > 0) {
         itemsList.forEach(it => {
           const key = it.code || it.sku || it.itemId || 'RM-VRM';
-          if (matMap.has(key)) return;
           const upperKey = String(key).toUpperCase();
+          const upperName = it.name ? String(it.name).toUpperCase() : '';
+          const grnReceived = completedGrnMapSync.get(upperKey) || (upperName ? completedGrnMapSync.get(upperName) : null);
+          const recQty = grnReceived ? Number(grnReceived.receivedQty || 0) : 0;
+
+          if (matMap.has(key)) {
+            const existing = matMap.get(key);
+            const liveStock = Number(it.stock !== undefined && it.stock !== null && it.stock !== 0 ? it.stock : (existing.stock || 0));
+            const totalStock = recQty > 0 ? (existing.openingStock !== undefined ? existing.openingStock : liveStock) + recQty : liveStock;
+            matMap.set(key, {
+              ...existing,
+              name: it.name || existing.name,
+              stock: totalStock,
+              goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
+              status: totalStock > 0 ? 'In Stock' : 'Out of Stock',
+              lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
+              grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
+            });
+            return;
+          }
+
           const isAluItem = (it.category || '').toLowerCase().includes('alu') || 
                             (it.material || '').toLowerCase().includes('alu') ||
-                            (it.name || '').toLowerCase().includes('alu');
-          const grnReceived = completedGrnMapSync.get(upperKey);
-
-          // STRICT REQUIREMENT: Only show Aluminum by default, or other raw materials if received via GRN
+                            (it.name || '').toLowerCase().includes('alu') ||
+                            (it.name || '').toLowerCase().includes('rail') ||
+                            (it.name || '').toLowerCase().includes('clamp');
           if (!isAluItem && !grnReceived) return;
 
-          const stockVal = grnReceived ? Number(grnReceived.receivedQty || 0) : Number(it.stock !== undefined && it.stock !== 0 ? it.stock : (it.openingStock || 0));
+          const baseStock = Number(it.stock !== undefined && it.stock !== 0 ? it.stock : (it.openingStock || 0));
+          const stockVal = recQty > 0 ? baseStock + recQty : baseStock;
           const minLvl = Number(it.reorderLevel || it.minLevel || 50);
           let statusText = 'In Stock';
           if (stockVal === 0) statusText = 'Out of Stock';
@@ -282,8 +387,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             status: statusText,
             store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
             hsn: '7604',
-            lastUpdated: grnReceived ? 'Received via GRN' : 'Live Store',
-            goodsReceived: grnReceived ? Number(grnReceived.receivedQty || 0) : 0,
+            lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
+            reserved: 0,
+            openingStock: baseStock,
+            goodsReceived: recQty,
+            issuedProd: 0,
+            matReturn: 0,
+            stockAdj: 0,
             grnNo: grnReceived ? grnReceived.grnNo : undefined
           });
         });
@@ -291,20 +401,53 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
       // Also include any raw material items from completed GRNs even if not in itemsList
       completedGrnMapSync.forEach((grnItem, gCode) => {
-        if (!matMap.has(gCode) && !matMap.has(grnItem.materialCode || grnItem.itemCode)) {
-          const itemKey = grnItem.materialCode || grnItem.itemCode || gCode;
-          const recQty = Number(grnItem.receivedQty || 0);
+        const itemKey = grnItem.materialCode || grnItem.itemCode || grnItem.code || grnItem.sku || gCode;
+        const recQty = Number(grnItem.receivedQty || 0);
+        if (recQty <= 0) return;
+
+        let matchedKey = null;
+        if (matMap.has(itemKey)) matchedKey = itemKey;
+        else if (matMap.has(gCode)) matchedKey = gCode;
+        else if (grnItem.code && matMap.has(grnItem.code)) matchedKey = grnItem.code;
+        else if (grnItem.sku && matMap.has(grnItem.sku)) matchedKey = grnItem.sku;
+        else {
+          for (const [k, v] of matMap.entries()) {
+            const vName = String(v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const gName = String(grnItem.name || grnItem.materialName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (vName && gName && (vName === gName || vName.includes(gName) || gName.includes(vName))) {
+              matchedKey = k;
+              break;
+            }
+          }
+        }
+
+        if (matchedKey) {
+          const existing = matMap.get(matchedKey);
+          if (!existing.grnNo || existing.grnNo !== grnItem.grnNo) {
+            const newGoodsRec = (existing.goodsReceived || 0) + recQty;
+            const newStock = (existing.openingStock !== undefined ? existing.openingStock : (existing.stock || 0)) + recQty;
+            matMap.set(matchedKey, {
+              ...existing,
+              stock: newStock,
+              goodsReceived: newGoodsRec,
+              status: newStock > 0 ? 'In Stock' : 'Out of Stock',
+              lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
+              grnNo: grnItem.grnNo,
+              name: (grnItem.name && grnItem.name.includes('300mm')) ? grnItem.name : existing.name
+            });
+          }
+        } else {
           matMap.set(itemKey, {
             code: itemKey,
-            name: grnItem.materialName || grnItem.itemName || itemKey,
-            cat: grnItem.category || 'Raw Materials',
-            unit: grnItem.unit || 'Nos',
+            name: grnItem.materialName || grnItem.itemName || grnItem.name || itemKey,
+            cat: grnItem.category || 'Aluminium',
+            unit: grnItem.unit || grnItem.uom || 'Nos',
             stock: recQty,
             minLevel: 50,
-            status: recQty > 0 ? 'In Stock' : 'Out of Stock',
+            status: 'In Stock',
             store: 'Main Store',
             hsn: '7604',
-            lastUpdated: 'Received via GRN',
+            lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
             reserved: 0,
             openingStock: 0,
             goodsReceived: recQty,
@@ -323,6 +466,40 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     };
 
     syncEngineInventory();
+
+    // Fetch live GRNs from server API on mount and update store
+    fetch('/api/grns')
+      .then(res => res.json())
+      .then(grns => {
+        if (Array.isArray(grns) && grns.length > 0) {
+          try {
+            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
+            localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
+          } catch (_) {}
+          syncEngineInventory();
+        }
+      })
+      .catch(() => {});
+
+    // Authoritative Cloud Database Inventory Sync: Ensures all 10+ sales users see identical live stock
+    const fetchDatabaseInventory = () => {
+      fetch('/api/store/raw_materials_store')
+        .then(res => res.json())
+        .then(resData => {
+          const cloudMats = resData?.data;
+          if (Array.isArray(cloudMats) && cloudMats.length > 0) {
+            try {
+              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(cloudMats));
+            } catch (_) {}
+            syncEngineInventory();
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchDatabaseInventory();
+    const pollDbInterval = setInterval(fetchDatabaseInventory, 6000);
+
     const unsubscribe = prodModuleEngine.subscribe(() => {
       syncEngineInventory();
     });
@@ -330,6 +507,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     window.addEventListener('controlroom_grn_completed', syncEngineInventory);
     window.addEventListener('storage', syncEngineInventory);
     return () => {
+      clearInterval(pollDbInterval);
       unsubscribe();
       window.removeEventListener('controlroom_raw_materials_update', syncEngineInventory);
       window.removeEventListener('controlroom_grn_completed', syncEngineInventory);
@@ -508,7 +686,19 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const mCode = (m.code || '').toLowerCase();
       const mCat = (m.cat || m.category || '').toLowerCase();
       
-      const isRawMat = mCat.includes('raw') || 
+      const isProfileOrRail = mName.includes('rail') || 
+                              mName.includes('clamp') || 
+                              mName.includes('nut') || 
+                              mName.includes('bracket') || 
+                              mCode.startsWith('mr') || 
+                              mCode.startsWith('cc') || 
+                              mCode.startsWith('sr') ||
+                              mCode.startsWith('ar') ||
+                              mCode.startsWith('mc') ||
+                              mCode.startsWith('ec');
+
+      const isRawMat = !isProfileOrRail && (
+                       mCat.includes('raw') || 
                        mCat.includes('coil') || 
                        mCat.includes('extrusion') || 
                        mCat.includes('steel stock') || 
@@ -518,7 +708,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                        mName.includes('stock') || 
                        mCode.includes('alu-len') || 
                        mCode.includes('rm-') ||
-                       mCode.includes('coil');
+                       mCode.includes('coil'));
 
       // Exclude any materials where the code contains 'ITEM' or is a generic placeholder
       if (mCode.includes('item')) return false;
@@ -536,11 +726,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
         if (!isAluLength) return false;
       } else {
-        // Inventory Stores strictly shows ONLY Finished Goods (hides raw materials)
+        // Inventory Stores strictly shows Finished Goods, Profiles & Rails (hides pure raw materials)
         if (isRawMat) return false;
       }
 
-      const matchesSearch = !searchQuery || m.code.toLowerCase().includes(searchQuery.toLowerCase()) || m.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const q = (searchQuery || '').toLowerCase().trim();
+      const matchesSearch = !q || 
+        m.code.toLowerCase().includes(q) || 
+        m.name.toLowerCase().includes(q) ||
+        (m.sku && m.sku.toLowerCase().includes(q)) ||
+        (q.includes('300') && (m.name.toLowerCase().includes('300') || (m.cutLength && m.cutLength.includes('300')) || (m.lengthMm && String(m.lengthMm).includes('300'))));
       const matchesCat = selectedCat === 'All Categories' || m.cat === selectedCat;
       const matchesStore = selectedStore === 'All Stores' || m.store === selectedStore;
       const matchesStatus = selectedStatus === 'All Status' || m.status === selectedStatus;
@@ -940,12 +1135,20 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   };
 
   const handleOpenAddStock = () => {
+    if (isSalesUser) return;
     setReceiptForm(getFreshReceiptForm());
     setReceiptItems(getFreshReceiptItems());
     setAddStockActive(true);
   };
 
   const handleOpenStockAdj = (mat) => {
+    if (isSalesUser) {
+      if (mat && mat.code) {
+        setSelectedCode(mat.code);
+        setShowTxModal(true);
+      }
+      return;
+    }
     if (mat && mat.code) {
       setSelectedCode(mat.code);
     }
@@ -1103,7 +1306,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     setAddStockActive(false);
   };
 
-  if (isAddStockActive) {
+  if (isAddStockActive && !isSalesUser) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif" }}>
 
@@ -1496,8 +1699,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     }
   };
 
-  // FULL PAGE VIEW 1: Stock Adjustment & Edit (Matching Create Work Order Page Layout)
-  if (showAdjModal && selectedMat) {
+  if (showAdjModal && selectedMat && !isSalesUser) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
         {/* Top Header Card matching Create Work Order Page */}
@@ -1708,7 +1910,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               marginLeft: 'auto'
             }}
           >
-            ← Back to Inventory Stores
+            ← Back to {isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}
           </button>
         </div>
 
@@ -1890,92 +2092,94 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Hidden file input for Excel / CSV */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            accept=".xlsx, .xls, .csv"
-            style={{ display: 'none' }}
-          />
+        {!isSalesUser && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Hidden file input for Excel / CSV */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".xlsx, .xls, .csv"
+              style={{ display: 'none' }}
+            />
 
-          {/* Upload File Button (Modern Sleek Enterprise Design) */}
-          <button
-            onClick={() => setShowUploadModal(true)}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              color: '#0F172A',
-              height: '38px',
-              padding: '0 14px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: '600',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#F8FAFC';
-              e.currentTarget.style.borderColor = '#0E7490';
-              e.currentTarget.style.color = '#0E7490';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#FFFFFF';
-              e.currentTarget.style.borderColor = '#CBD5E1';
-              e.currentTarget.style.color = '#0F172A';
-            }}
-          >
-            <div style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '6px',
-              backgroundColor: '#ECFEFF',
-              color: '#0E7490',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Upload size={14} strokeWidth={2.2} />
-            </div>
-            <span>Upload Files</span>
-          </button>
+            {/* Upload File Button (Modern Sleek Enterprise Design) */}
+            <button
+              onClick={() => setShowUploadModal(true)}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                color: '#0F172A',
+                height: '38px',
+                padding: '0 14px',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#F8FAFC';
+                e.currentTarget.style.borderColor = '#0E7490';
+                e.currentTarget.style.color = '#0E7490';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#FFFFFF';
+                e.currentTarget.style.borderColor = '#CBD5E1';
+                e.currentTarget.style.color = '#0F172A';
+              }}
+            >
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '6px',
+                backgroundColor: '#ECFEFF',
+                color: '#0E7490',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Upload size={14} strokeWidth={2.2} />
+              </div>
+              <span>Upload Files</span>
+            </button>
 
-          <button
-            onClick={handleOpenAddStock}
-            style={{
-              backgroundColor: '#0E7490',
-              border: '1px solid #0E7490',
-              color: '#FFFFFF',
-              height: '38px',
-              padding: '0 16px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: '700',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#085D75';
-              e.currentTarget.style.borderColor = '#085D75';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#0E7490';
-              e.currentTarget.style.borderColor = '#0E7490';
-            }}
-          >
-            <Plus size={15} strokeWidth={2.5} />
-            <span>{pageConfig.actionText}</span>
-          </button>
-        </div>
+            <button
+              onClick={handleOpenAddStock}
+              style={{
+                backgroundColor: '#0E7490',
+                border: '1px solid #0E7490',
+                color: '#FFFFFF',
+                height: '38px',
+                padding: '0 16px',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#085D75';
+                e.currentTarget.style.borderColor = '#085D75';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#0E7490';
+                e.currentTarget.style.borderColor = '#0E7490';
+              }}
+            >
+              <Plus size={15} strokeWidth={2.5} />
+              <span>{pageConfig.actionText}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. FILTERS & SEARCH ROW CARD (EXACT MATCH FOR BOM & PO DESIGN) */}
@@ -2141,8 +2345,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       />
                     </td>
                     <td
-                      onClick={() => handleOpenStockAdj(m)}
-                      title={m.code}
+                      onClick={() => {
+                        if (isSalesUser) {
+                          setSelectedCode(m.code);
+                          setShowTxModal(true);
+                        } else {
+                          handleOpenStockAdj(m);
+                        }
+                      }}
+                      title={isSalesUser ? `View ${m.code} Stock Details & Traceability` : `Edit / Adjust ${m.code}`}
                       style={{
                         padding: '12px 14px',
                         fontWeight: 'bold',
@@ -2166,7 +2377,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                         textOverflow: 'ellipsis'
                       }}
                     >
-                      <strong style={{ color: '#0F172A' }}>{String(m.name || '').replace(/\s*\(\d+\s*mm\)/i, '')}</strong> 
+                      <strong style={{ color: '#0F172A' }}>{m.name}</strong> 
                     </td>
                     <td
                       title={m.cat}
@@ -2363,63 +2574,67 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             <Info size={14} /> Info
           </button>
 
-          <button
-            onClick={() => {
-              if (selectedRows.length > 1) {
-                alert('You cannot edit multiple items at once.');
-              } else if (selectedRows.length === 1) {
-                const targetCode = selectedRows[0];
-                const targetMat = materials.find(m => m.code === targetCode) || { code: targetCode, name: targetCode };
-                handleOpenStockAdj(targetMat);
-              }
-            }}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <Edit3 size={14} style={{ color: '#64748B' }} /> Edit / Adjust
-          </button>
+          {!isSalesUser && (
+            <>
+              <button
+                onClick={() => {
+                  if (selectedRows.length > 1) {
+                    alert('You cannot edit multiple items at once.');
+                  } else if (selectedRows.length === 1) {
+                    const targetCode = selectedRows[0];
+                    const targetMat = materials.find(m => m.code === targetCode) || { code: targetCode, name: targetCode };
+                    handleOpenStockAdj(targetMat);
+                  }
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#1E293B',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+              >
+                <Edit3 size={14} style={{ color: '#64748B' }} /> Edit / Adjust
+              </button>
 
-          <button
-            onClick={() => {
-              const items = materials.filter(m => selectedRows.includes(m.code));
-              setItemsPendingDelete(items.length > 0 ? items : selectedRows.map(c => ({ code: c, name: c })));
-              setShowDeleteModal(true);
-            }}
-            style={{
-              backgroundColor: '#FEF2F2',
-              border: '1px solid #FCA5A5',
-              color: '#EF4444',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-          >
-            <Trash2 size={14} style={{ color: '#EF4444' }} /> Delete
-          </button>
+              <button
+                onClick={() => {
+                  const items = materials.filter(m => selectedRows.includes(m.code));
+                  setItemsPendingDelete(items.length > 0 ? items : selectedRows.map(c => ({ code: c, name: c })));
+                  setShowDeleteModal(true);
+                }}
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  color: '#EF4444',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+              >
+                <Trash2 size={14} style={{ color: '#EF4444' }} /> Delete
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => setSelectedRows([])}

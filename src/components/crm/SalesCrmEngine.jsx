@@ -108,7 +108,58 @@ export default function SalesCrmEngine({
       }
     };
     syncCloudCrm();
-    return () => { isMounted = false; };
+
+    // Instant Real-Time Push Listener for WhatsApp messages & CRM updates
+    const handleCrmPush = (e) => {
+      syncCloudCrm();
+      if (e?.detail?.from && e?.detail?.text) {
+        const { from, text, timestamp, formattedPhone } = e.detail;
+        setConversations(prev => {
+          const list = Array.isArray(prev) ? [...prev] : [];
+          const phoneToMatch = (formattedPhone || from).replace(/[^0-9]/g, '');
+          let convIdx = list.findIndex(c => (c.phone || '').replace(/[^0-9]/g, '') === phoneToMatch);
+          const newMsg = {
+            id: `MSG-${Date.now()}`,
+            sender: 'customer',
+            text,
+            timestamp: timestamp || new Date().toISOString(),
+            status: 'received'
+          };
+          if (convIdx !== -1) {
+            const conv = { ...list[convIdx] };
+            conv.messages = [...(conv.messages || []), newMsg];
+            conv.lastMessage = text;
+            conv.timestamp = timestamp || new Date().toISOString();
+            list[convIdx] = conv;
+          } else {
+            list.unshift({
+              id: `CONV-${Date.now()}`,
+              customerName: `+${from}`,
+              phone: `+${from}`,
+              companyName: 'New WhatsApp Contact',
+              lastMessage: text,
+              timestamp: timestamp || new Date().toISOString(),
+              unreadCount: 1,
+              status: 'active',
+              messages: [newMsg]
+            });
+          }
+          saveCrmStore('whatsapp_conversations', list);
+          return list;
+        });
+      }
+    };
+
+    window.addEventListener('controlroom_whatsapp_message', handleCrmPush);
+    window.addEventListener('controlroom_crm_updated', syncCloudCrm);
+    window.addEventListener('controlroom_storage_update', syncCloudCrm);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('controlroom_whatsapp_message', handleCrmPush);
+      window.removeEventListener('controlroom_crm_updated', syncCloudCrm);
+      window.removeEventListener('controlroom_storage_update', syncCloudCrm);
+    };
   }, []);
 
   // Save Handlers

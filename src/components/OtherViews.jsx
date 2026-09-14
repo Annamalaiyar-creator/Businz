@@ -106,7 +106,16 @@ export default function OtherViews(props) {
         {activeTab === 'Vendor Performance' && <VendorPerformanceView {...props} />}
         {activeTab === 'Spend Analytics' && <SpendAnalyticsView {...props} />}
         {activeTab === 'Material Reorder' && <MaterialReorderView {...props} />}
-        {activeTab === 'Stock Status' && <StockStatusView {...props} />}
+        {activeTab === 'Stock Status' && (
+          (userRole === 'Sales Head' || userRole === 'Sales Executive') ? (
+            <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
+              <p style={{ fontSize: '13px', color: '#64748B' }}>Please use Inventory Stores or Raw Material Directory.</p>
+            </div>
+          ) : (
+            <StockStatusView {...props} />
+          )
+        )}
         {activeTab === 'Price Comparison' && <PriceComparisonView {...props} />}
         {activeTab === 'Items Directory' && (
           (userRole === 'Sales Head' || userRole === 'Sales Executive') ? (

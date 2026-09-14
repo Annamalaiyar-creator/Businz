@@ -1247,7 +1247,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                   {isDispatchView ? 'Top 5 Delayed Dispatch Orders' : 'Top 5 Delayed Production Orders'}
                 </span>
                 <span style={{ fontSize: '9.5px', color: isDispatchView ? '#2563EB' : '#0E7490', fontWeight: '700', backgroundColor: isDispatchView ? '#EFF6FF' : '#ECFEFF', padding: '2px 8px', borderRadius: '8px' }}>
-                  {isDispatchView ? 'Synced with Zoho' : 'Internal ControlRoom'}
+                  {isDispatchView ? 'Synced with Zoho' : 'Internal Businz'}
                 </span>
               </div>
             </div>

@@ -652,7 +652,7 @@ export default function DispatchPackingModal({
               </h4>
             </div>
             <span style={{ fontSize: '11px', color: '#64748B' }}>
-              Stored securely in ControlRoom Media Cache & Cloud Sync
+              Stored securely in Businz Media Cache & Cloud Sync
             </span>
           </div>
 

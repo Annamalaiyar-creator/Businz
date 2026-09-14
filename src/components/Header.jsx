@@ -299,7 +299,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
         )}
 
         <div className="header-brand-prefix" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: '#BAE6FD', fontWeight: '600', fontSize: '13.5px' }}>ControlRoom</span>
+          <span style={{ color: '#BAE6FD', fontWeight: '800', fontSize: '13.5px', letterSpacing: '0.5px' }}>BUSINZ</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.35)', fontWeight: '300' }}>|</span>
         </div>
 

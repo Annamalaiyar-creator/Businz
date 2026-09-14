@@ -124,7 +124,7 @@ export default function Customer360PageView({
 
   const currentNotes = customerNotes[custKey] || [
     { id: 'def_n1', author: customer.assignedSalesperson || customer.salesPerson || activeAccountUser, date: '08 Sep, 2026 01:15 PM', text: `Initial customer onboarding completed. Commercial terms set to ${customer.paymentTerms || '50% Advance + 50% Dispatch'}. Ready for sales BOM generation.` },
-    { id: 'def_n2', author: 'System Sync', date: '08 Sep, 2026 12:59 PM', text: customer.source === 'Zoho Books' ? 'Contact details imported and verified via Zoho Books API v2.' : 'Direct customer registration initialized in Control Room.' }
+    { id: 'def_n2', author: 'System Sync', date: '08 Sep, 2026 12:59 PM', text: customer.source === 'Zoho Books' ? 'Contact details imported and verified via Zoho Books API v2.' : 'Direct customer registration initialized in Businz.' }
   ];
 
   const custQuotations = quotations.filter(q =>
@@ -235,7 +235,7 @@ export default function Customer360PageView({
                   alignItems: 'center',
                   gap: '5px'
                 }}>
-                  ✨ CONTROL ROOM ACCOUNT
+                  ✨ BUSINZ ACCOUNT
                 </span>
               )}
             </div>
@@ -691,7 +691,7 @@ export default function Customer360PageView({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Activity & Touchpoint Timeline</h4>
-                    <span style={{ fontSize: '12px', color: '#64748B' }}>Audit stream synchronized with Control Room ERP</span>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>Audit stream synchronized with Businz ERP</span>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', paddingLeft: '16px' }}>
@@ -703,7 +703,7 @@ export default function Customer360PageView({
                       <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#0E7490', border: '3px solid #FFFFFF', boxShadow: '0 0 0 2px #0E7490', zIndex: 1, marginTop: '4px' }} />
                       <div style={{ backgroundColor: '#FFFFFF', padding: '12px 16px', borderRadius: '8px', border: '1px solid #E2E8F0', flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '13px', color: '#0F172A' }}>Account Active in Control Room</strong>
+                          <strong style={{ fontSize: '13px', color: '#0F172A' }}>Account Active in Businz</strong>
                           <span style={{ fontSize: '11px', color: '#94A3B8' }}>Today</span>
                         </div>
                         <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>
@@ -1057,10 +1057,10 @@ export default function Customer360PageView({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
-                        Field-by-Field Breakdown: Zoho Books vs Control Room Add-ons
+                        Field-by-Field Breakdown: Zoho Books vs Businz Add-ons
                       </h4>
                       <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-                        Distinguishes accounting data synchronized with Zoho Books from engineering intelligence in Control Room.
+                        Distinguishes accounting data synchronized with Zoho Books from engineering intelligence in Businz.
                       </p>
                     </div>
                     <button
@@ -1100,11 +1100,11 @@ export default function Customer360PageView({
                       </div>
                     </div>
 
-                    {/* BOX 2: CONTROL ROOM CRM ADD-ONS */}
+                    {/* BOX 2: BUSINZ CRM ADD-ONS */}
                     <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #CFFAFE', padding: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #ECFEFF' }}>
                         <h5 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>✨</span> Control Room CRM Add-ons
+                          <span>✨</span> Businz CRM Add-ons
                         </h5>
                         <span style={{ fontSize: '10px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>
                           Engineering & Sales CRM

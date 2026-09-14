@@ -2071,7 +2071,7 @@ export default function ItemsDirectoryView(props) {
               <div className="section-card" style={{ padding: '28px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '16px' }}>
                   <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0F172A', margin: 0 }}>Add New Product</h2>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Enter new product details to add to Control Room and sync with Zoho Books.</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Enter new product details to add to Businz and sync with Zoho Books.</span>
                 </div>
 
                 {/* Section 1: Basic Information */}

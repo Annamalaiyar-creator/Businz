@@ -155,7 +155,7 @@ return (
         {/* Consignor (From) */}
         <div>
           <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CONSIGNOR (DISPATCH FROM)</span>
-          <h4 style={{ margin: '4px 0 2px 0', fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>ControlRoom Industrial Corp Ltd</h4>
+          <h4 style={{ margin: '4px 0 2px 0', fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Businz Industrial Corp Ltd</h4>
           <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: '1.5' }}>
             Plot 14, Phase II, Industrial Complex<br />
             Nagappa Estate, Puzhal, Chennai - 600066<br />
@@ -291,7 +291,7 @@ return (
           </p>
         </div>
         <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '60px' }}>
-          <strong>For ControlRoom Industrial Corp Ltd</strong>
+          <strong>For Businz Industrial Corp Ltd</strong>
           <span style={{ fontWeight: '700', color: '#0F172A' }}>Authorised Signatory</span>
         </div>
       </div>

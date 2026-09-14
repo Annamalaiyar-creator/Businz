@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
+import StatusBadge from '../StatusBadge';
 import { getSafeZohoVendors, getSafeZohoItems } from '../../services/zohoSafeSync';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
@@ -33,6 +34,31 @@ export default function GoodsReceiptNoteView(props) {
   const [selectedGRNPo, setSelectedGRNPo] = useState('');
   const [selectedGRNVendor, setSelectedGRNVendor] = useState('');
   const [grnChallanNo, setGrnChallanNo] = useState('');
+  const [grnList, setGrnList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(g => ({
+            id: g.grnNo || g.id,
+            poRef: g.poRef || g.poNo || '—',
+            vendor: g.vendor || '—',
+            date: g.date || '—',
+            received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
+            status: g.status || 'Approved',
+            val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
+            challanNo: g.challanNo || '',
+            receivedBy: g.receivedBy || '',
+            inspectorName: g.inspectorName || '',
+            inspectionRemarks: g.inspectionRemarks || '',
+            documents: g.documents || []
+          }));
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
   const [selectedRows, setSelectedRows] = useState([]);
   const [grnDocs, setGrnDocs] = useState([]);
   const [livePOs, setLivePOs] = useState([]);
@@ -49,6 +75,80 @@ export default function GoodsReceiptNoteView(props) {
   const [grnReceivedBy, setGrnReceivedBy] = useState('');
   const [grnInspectorName, setGrnInspectorName] = useState('');
   const [grnInspectionRemarks, setGrnInspectionRemarks] = useState('');
+
+  const [grnPage, setGrnPage] = useState(1);
+  const [grnRowsPerPage, setGrnRowsPerPage] = useState(10);
+  const [selectedGrnRows, setSelectedGrnRows] = useState([]);
+  const [filterDate, setFilterDate] = useState('');
+  const [grnListStatusFilter, setGrnListStatusFilter] = useState('All');
+  const [grnListActiveTab, setGrnListActiveTab] = useState('All');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    fetch('/api/grns')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          const formattedList = data.map(g => ({
+            id: g.grnNo || g.id,
+            poRef: g.poRef || g.poNo || '—',
+            vendor: g.vendor || '—',
+            date: g.date || '—',
+            received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
+            status: g.status || 'Approved',
+            val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
+            challanNo: g.challanNo || '',
+            receivedBy: g.receivedBy || '',
+            inspectorName: g.inspectorName || '',
+            inspectionRemarks: g.inspectionRemarks || '',
+            documents: g.documents || []
+          }));
+          setGrnList(formattedList);
+          try {
+            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(data));
+            localStorage.setItem('goods_receipt_notes', JSON.stringify(data));
+          } catch (_) {}
+        }
+      })
+      .catch(err => console.error('Error refreshing GRNs:', err))
+      .finally(() => {
+        setTimeout(() => setIsRefreshing(false), 400);
+      });
+  };
+
+  const handleOpenViewGrn = (row) => {
+    resetCreateGRNForm();
+    loadPOItems(row.poRef);
+    if (row.challanNo) setGrnChallanNo(row.challanNo);
+    if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
+    if (row.inspectorName) setGrnInspectorName(row.inspectorName);
+    if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
+    if (row.documents && Array.isArray(row.documents) && row.documents.length > 0) {
+      setGrnDocs(row.documents);
+    } else {
+      setGrnDocs([{
+        title: 'Delivery Challan *',
+        filename: `Challan_${row.challanNo || 'Doc'}.pdf`,
+        size: '1.2 MB',
+        url: `data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0ZpbHRlci9GbGF0ZURlY29kZT4+CnN0cmVhbQp4nE3NPQ7CMAwG4D1T5Awhdtz8iZ0BiQEZqBslFiQkxPn9tJW6vOD3fV92120bhhF4R6mFNBp0FspbUQo7V4m0y2a3b0/b7fg87uPz/DzsT/txfF7v4/7m72m7nve7bZ7Xz+Pj/v2/L74BQ44l6gplbmRzdHJlYW0KZW5kb2JqCjMgMCBvYmoKOTYKZW5kb2JqCjEgMCBvYmoKPDwvVHlwZS9QYWdlL1BhcmludCA0IDAgUi9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+L0NvbnRlbnRzIDIgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvVHlwZS9QYWdlcy9Db3VudCAxL0tpZHNbMSAwIFJdPj4KZW5kb2JqCjUgMCBvYmoKPDwvVHlwZS9Gb250L1N1YnR5cGUvVHlwZTEvQmFzZUZvbnQvSGVsdmV0aWNhPj4KZW5kb2JqCjYgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDQgMCBSPj4KZXhyZWYKMCA3CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDE2MSAwMDAwMCBuIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAxNDIgMDAwMDAgbiAKMDAwMDAwMDI1NSAwMDAwMCBuIAowMDAwMDAwMzAyIDAwMDAwIG4gCjAwMDAwMDAzNjkgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDcvUm9vdCA2IDAgUj4+CnN0YXJ0eHJlZgo0MTgKJSVFT0YK`
+      }]);
+    }
+    setIsViewOnlyMode(true);
+    setShowCreateGRN(true);
+  };
+
+  const handleOpenEditGrn = (row) => {
+    resetCreateGRNForm();
+    loadPOItems(row.poRef);
+    if (row.challanNo) setGrnChallanNo(row.challanNo);
+    if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
+    if (row.inspectorName) setGrnInspectorName(row.inspectorName);
+    if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
+    setEditingGrnId(row.id);
+    setIsViewOnlyMode(false);
+    setShowCreateGRN(true);
+  };
 
   // Top-level state for Production Admin views to obey React Hook rules
   const [prodActiveSubTab, setProdActiveSubTab] = useState('All');
@@ -505,30 +605,32 @@ export default function GoodsReceiptNoteView(props) {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
-      fetch('/api/grns')
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            const formattedList = data.map(g => ({
-              id: g.grnNo || g.id,
-              poRef: g.poRef || g.poNo || '—',
-              vendor: g.vendor || '—',
-              date: g.date || '—',
-              received: `${g.receivedQty || 0} Units`,
-              status: g.status || 'Approved',
-              val: `₹ ${(g.receivedQty || 0) * 1250}`,
-              challanNo: g.challanNo || '',
-              receivedBy: g.receivedBy || '',
-              inspectorName: g.inspectorName || '',
-              inspectionRemarks: g.inspectionRemarks || '',
-              documents: g.documents || []
-            }));
-            setGrnList(formattedList);
-          }
-        })
-        .catch(err => console.error('Error fetching stored GRNs:', err));
-    }
+    fetch('/api/grns')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          const formattedList = data.map(g => ({
+            id: g.grnNo || g.id,
+            poRef: g.poRef || g.poNo || '—',
+            vendor: g.vendor || '—',
+            date: g.date || '—',
+            received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
+            status: g.status || 'Approved',
+            val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
+            challanNo: g.challanNo || '',
+            receivedBy: g.receivedBy || '',
+            inspectorName: g.inspectorName || '',
+            inspectionRemarks: g.inspectionRemarks || '',
+            documents: g.documents || []
+          }));
+          setGrnList(formattedList);
+          try {
+            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(data));
+            localStorage.setItem('goods_receipt_notes', JSON.stringify(data));
+          } catch (_) {}
+        }
+      })
+      .catch(err => console.error('Error fetching stored GRNs:', err));
   }, [activeTab]);
 
   // Function to load PO details and line items when a PO is selected
@@ -747,6 +849,16 @@ export default function GoodsReceiptNoteView(props) {
 
           setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
 
+          try {
+            const rawStored = localStorage.getItem('controlroom_central_grns_v2') || '[]';
+            const parsed = JSON.parse(rawStored);
+            const updated = [data.grn, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== (data.grn.grnNo || data.grn.id)) : [])];
+            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
+            localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
+            window.dispatchEvent(new CustomEvent('storage'));
+          } catch (_) {}
+
           fetch('/api/grns')
             .then(res => res.json())
             .then(grns => {
@@ -756,15 +868,19 @@ export default function GoodsReceiptNoteView(props) {
                   poRef: g.poRef || g.poNo || '—',
                   vendor: g.vendor || '—',
                   date: g.date || '—',
-                  received: `${g.receivedQty || 0} Units`,
+                  received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
                   status: g.status || 'Approved',
-                  val: `₹ ${(g.receivedQty || 0) * 1250}`,
+                  val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
                   challanNo: g.challanNo || '',
                   receivedBy: g.receivedBy || '',
                   inspectorName: g.inspectorName || '',
                   inspectionRemarks: g.inspectionRemarks || '',
                   documents: g.documents || []
                 })));
+                try {
+                  localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
+                  localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
+                } catch (_) {}
               }
             });
 
@@ -862,6 +978,16 @@ export default function GoodsReceiptNoteView(props) {
           };
 
           setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
+
+          try {
+            const rawStored = localStorage.getItem('controlroom_central_grns_v2') || '[]';
+            const parsed = JSON.parse(rawStored);
+            const updated = [data.grn, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== (data.grn.grnNo || data.grn.id)) : [])];
+            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
+            localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
+            window.dispatchEvent(new CustomEvent('storage'));
+          } catch (_) {}
         }
 
         fetch('/api/grns')
@@ -873,15 +999,19 @@ export default function GoodsReceiptNoteView(props) {
                 poRef: g.poRef || g.poNo || '—',
                 vendor: g.vendor || '—',
                 date: g.date || '—',
-                received: `${g.receivedQty || 0} Units`,
+                received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
                 status: g.status || 'CLOSED / FULLY RECEIVED',
-                val: `₹ ${(g.receivedQty || 0) * 1250}`,
+                val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
                 challanNo: g.challanNo || '',
                 receivedBy: g.receivedBy || '',
                 inspectorName: g.inspectorName || '',
                 inspectionRemarks: g.inspectionRemarks || '',
                 documents: g.documents || []
               })));
+              try {
+                localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
+                localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
+              } catch (_) {}
             }
           });
 
@@ -1486,7 +1616,7 @@ export default function GoodsReceiptNoteView(props) {
         } catch (e) {}
         return updated;
       });
-      setCreateStatus({ type: 'success', text: 'Product created locally in Control Room.' });
+      setCreateStatus({ type: 'success', text: 'Product created locally in Businz.' });
       setTimeout(() => {
         setIsCreatingItem(false);
         setCreateStatus(null);
@@ -1523,7 +1653,7 @@ export default function GoodsReceiptNoteView(props) {
       if (res.ok) {
         setItemSaveStatus({ type: 'success', text: 'Item updated successfully and synced with Zoho Books!' });
       } else {
-        setItemSaveStatus({ type: 'warning', text: 'Saved locally in Control Room.' });
+        setItemSaveStatus({ type: 'warning', text: 'Saved locally in Businz.' });
       }
 
       setItemsList(prev => {
@@ -1744,7 +1874,6 @@ export default function GoodsReceiptNoteView(props) {
   }, []);
 
   // GRN State
-  const [grnList, setGrnList] = useState([]);
   const [grnPo, setGrnPo] = useState('');
   const [grnVendor, setGrnVendor] = useState('');
   const [grnQty, setGrnQty] = useState('');
@@ -2128,13 +2257,52 @@ export default function GoodsReceiptNoteView(props) {
 
           {!showCreateGRN ? (
             <>
-              {/* List View Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* Header section with Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
                 <div>
-                  <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, color: '#0F172A' }}>Goods Receipt Note (GRN)</h2>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Record goods received against Purchase Order</span>
+                  <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, color: '#0F172A' }}>
+                    Goods Receipt Note (GRN)
+                  </h2>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    Record, inspect and reconcile incoming material shipments against Purchase Orders
+                  </span>
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshing}
+                    title="Refresh GRNs"
+                    style={{
+                      height: '40px',
+                      padding: '0 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      backgroundColor: '#FFFFFF',
+                      color: '#1E293B',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { if (!isRefreshing) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                    onMouseLeave={(e) => { if (!isRefreshing) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                  >
+                    <RotateCcw
+                      style={{
+                        width: '15px',
+                        height: '15px',
+                        color: '#0E7490',
+                        animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none'
+                      }}
+                    />
+                    <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+                  </button>
+
                   <button
                     onClick={() => {
                       setSelectedGRNPo('');
@@ -2144,230 +2312,615 @@ export default function GoodsReceiptNoteView(props) {
                       setShowCreateGRN(true);
                     }}
                     style={{
-                      height: '38px',
-                      padding: '0 16px',
-                      borderRadius: '8px',
+                      backgroundColor: '#0E7490',
                       border: 'none',
-                      backgroundColor: '#2563EB',
-                      color: '#FFFFFF',
+                      color: 'white',
+                      height: '40px',
                       fontSize: '13px',
-                      fontWeight: '600',
+                      fontWeight: '700',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      cursor: 'pointer'
+                      gap: '12px',
+                      padding: '0 6px 0 20px',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
+                      transition: 'all 0.2s ease',
+                      letterSpacing: '0.2px'
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
                   >
-                    <Plus style={{ width: '16px', height: '16px' }} />
-                    Create New GRN
+                    <span>Create GRN</span>
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#0E7490',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}>
+                      <ArrowRight size={16} strokeWidth={2.5} />
+                    </div>
                   </button>
                 </div>
               </div>
 
-              {/* Search / Filter GRN Card */}
-              <div className="section-card" style={{ padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <strong style={{ fontSize: '15px', color: '#0F172A' }}>Search / Filter GRN</strong>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>GRN No.</label>
-                    <input type="text" placeholder="Enter GRN No." style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>PO No.</label>
-                    <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
-                      <option>Select PO No.</option>
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Vendor</label>
-                    <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
-                      <option>Select Vendor</option>
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>GRN Date</label>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <input type="text" placeholder="01/05/2025 - 31/05/2025" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 36px 0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
-                      <Calendar style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', right: '12px' }} />
-                    </div>
-                  </div>
+              {/* 1. FILTERS & SEARCH ROW CARD */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '320px', maxWidth: '100%', boxSizing: 'border-box' }}>
+                  <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    placeholder="Search GRNs (GRN No, PO No, Vendor)..."
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setGrnPage(1); }}
+                    style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
+                  />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Item / Material</label>
-                    <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
-                      <option>Select Item</option>
-                    </select>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
+                    <Calendar style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
+                    <input
+                      type="date"
+                      value={filterDate}
+                      title="Filter by Date"
+                      onChange={(e) => { setFilterDate(e.target.value); setGrnPage(1); }}
+                      style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', backgroundColor: 'transparent' }}
+                    />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Warehouse</label>
-                    <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
-                      <option>Select Warehouse</option>
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>GRN Status</label>
-                    <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
-                      <option>Select Status</option>
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                    <button style={{
-                      height: '38px',
-                      padding: '0 24px',
-                      borderRadius: '8px',
-                      border: '1px solid #E2E8F0',
-                      backgroundColor: '#FFFFFF',
-                      color: '#2563EB',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      cursor: 'pointer'
-                    }}>Reset</button>
-                    <button style={{
-                      height: '38px',
-                      padding: '0 24px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: '#2563EB',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      fontWeight: '600',
+
+                  <select
+                    value={grnListStatusFilter}
+                    onChange={(e) => { setGrnListStatusFilter(e.target.value); setGrnPage(1); }}
+                    style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
+                  >
+                    <option value="All">Status: All</option>
+                    <option value="Approved">Approved</option>
+                    <option value="CLOSED / FULLY RECEIVED">Closed / Fully Received</option>
+                    <option value="OPEN / PARTIALLY RECEIVED">Open / Partially Received</option>
+                    <option value="Draft">Draft</option>
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterDate('');
+                      setGrnListStatusFilter('All');
+                      setGrnListActiveTab('All');
+                      setGrnPage(1);
+                    }}
+                    title="Clear Filters"
+                    style={{
+                      background: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      color: '#475569',
+                      cursor: 'pointer',
+                      padding: '0',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      cursor: 'pointer'
-                    }}>
-                      <Search style={{ width: '14px', height: '14px' }} />
-                      Search
-                    </button>
-                  </div>
+                      justifyContent: 'center',
+                      borderRadius: '8px',
+                      height: '38px',
+                      width: '38px',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <RotateCcw style={{ width: '15px', height: '15px' }} />
+                  </button>
                 </div>
               </div>
 
-              {/* Recent GRNs Card */}
-              <div className="section-card" style={{ padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong style={{ fontSize: '15px', color: '#0F172A' }}>Recent GRNs</strong>
-                  <button style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #E2E8F0',
-                    backgroundColor: '#FFFFFF',
-                    color: '#475569',
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}>View All</button>
-                </div>
+              {/* 2. STATUS TABS ROW */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+                {[
+                  { id: 'All', label: 'All Receipts', count: grnList.length, bg: '#e2e8f0', fg: '#475569' },
+                  { id: 'CLOSED', label: 'Closed / Fully Received', count: grnList.filter(g => String(g.status || '').toUpperCase().includes('CLOSED') || String(g.status || '').toUpperCase().includes('FULLY')).length, bg: '#dcfce7', fg: '#15803d' },
+                  { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: grnList.filter(g => String(g.status || '').toUpperCase().includes('PARTIAL')).length, bg: '#fef3c7', fg: '#b45309' },
+                  { id: 'Approved', label: 'Approved', count: grnList.filter(g => String(g.status || '').toLowerCase() === 'approved').length, bg: '#dcfce7', fg: '#166534' },
+                  { id: 'Draft', label: 'Draft', count: grnList.filter(g => String(g.status || '').toLowerCase().includes('draft')).length, bg: '#fff7ed', fg: '#c2410c' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { setGrnListActiveTab(tab.id); setGrnPage(1); }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      padding: '10px 4px',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      color: grnListActiveTab === tab.id ? '#2563eb' : '#64748b',
+                      borderBottom: grnListActiveTab === tab.id ? '2px solid #2563eb' : '2px solid transparent',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>{tab.label}</span>
+                    <span style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: tab.bg, color: tab.fg, padding: '1px 6px', borderRadius: '10px' }}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
 
-                <div style={{ overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
-                  <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '1px solid #F1F5F9', height: '48px' }}>
-                        <th style={{ width: '140px', minWidth: '140px', padding: '13px 16px', color: '#64748B', fontWeight: '700', boxSizing: 'border-box' }}>GRN No.</th>
-                        <th style={{ width: '140px', minWidth: '140px', padding: '13px 16px', color: '#64748B', fontWeight: '700', boxSizing: 'border-box' }}>PO No.</th>
-                        <th style={{ minWidth: '220px', padding: '13px 16px', color: '#64748B', fontWeight: '700', boxSizing: 'border-box' }}>Vendor Name</th>
-                        <th style={{ width: '130px', minWidth: '130px', padding: '13px 16px', color: '#64748B', fontWeight: '700', boxSizing: 'border-box' }}>GRN Date</th>
-                        <th style={{ width: '140px', minWidth: '140px', padding: '13px 16px', color: '#64748B', fontWeight: '700', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                        <th style={{ width: '130px', minWidth: '130px', padding: '13px 16px', color: '#64748B', fontWeight: '700', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
-                        <th style={{ width: '100px', minWidth: '100px', padding: '13px 16px', color: '#64748B', fontWeight: '700', textAlign: 'center', boxSizing: 'border-box' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {grnList.length === 0 ? (
-                        <tr>
-                          <td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
-                            No Goods Receipt Notes found. Click "Create New GRN" to log a new receipt.
-                          </td>
-                        </tr>
-                      ) : [...grnList].reverse().map((row, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                          <td style={{ padding: '13px 16px', fontWeight: '700', color: '#0F172A' }}>{row.id}</td>
-                          <td style={{ padding: '13px 16px', color: '#475569' }}>{row.poRef}</td>
-                          <td style={{ padding: '13px 16px', color: '#475569' }}>{row.vendor}</td>
-                          <td style={{ padding: '13px 16px', color: '#64748B' }}>{row.date}</td>
-                          <td style={{ padding: '13px 16px', fontWeight: '600', color: '#0F172A' }}>{row.val || '₹ 2,48,500'}</td>
-                          <td style={{ padding: '13px 16px', textAlign: 'center' }}>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 'bold',
-                              backgroundColor: (row.status === 'Approved' || row.status === 'Fully Accepted' || row.status === 'CLOSED / FULLY RECEIVED') ? '#E6F7ED' : '#FEF3D6',
-                              color: (row.status === 'Approved' || row.status === 'Fully Accepted' || row.status === 'CLOSED / FULLY RECEIVED') ? '#137333' : '#B06000'
-                            }}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td style={{ padding: '13px 16px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                              <button
-                                type="button"
-                                title="View GRN Full Details"
-                                onClick={() => {
-                                  resetCreateGRNForm();
-                                  loadPOItems(row.poRef);
-                                  if (row.challanNo) setGrnChallanNo(row.challanNo);
-                                  if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
-                                  if (row.inspectorName) setGrnInspectorName(row.inspectorName);
-                                  if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
-                                  if (row.documents && Array.isArray(row.documents) && row.documents.length > 0) {
-                                    setGrnDocs(row.documents);
+              {/* 3. MAIN GRN TABLE CARD */}
+              {(() => {
+                const filteredGrns = grnList.filter(g => {
+                  if (!g) return false;
+                  const gId = String(g.id || '').toLowerCase();
+                  const pRef = String(g.poRef || '').toLowerCase();
+                  const vend = String(g.vendor || '').toLowerCase();
+                  const q = searchQuery.toLowerCase().trim();
+                  const matchesSearch = !q || gId.includes(q) || pRef.includes(q) || vend.includes(q);
+
+                  const st = String(g.status || '').trim();
+                  const stUpper = st.toUpperCase();
+
+                  const matchesStatus = grnListStatusFilter === 'All' ||
+                    (grnListStatusFilter === 'CLOSED / FULLY RECEIVED' && (stUpper.includes('CLOSED') || stUpper.includes('FULLY'))) ||
+                    (grnListStatusFilter === 'OPEN / PARTIALLY RECEIVED' && stUpper.includes('PARTIAL')) ||
+                    (grnListStatusFilter === 'Approved' && st.toLowerCase() === 'approved') ||
+                    (grnListStatusFilter === 'Draft' && st.toLowerCase().includes('draft')) ||
+                    st === grnListStatusFilter;
+
+                  const matchesTab = grnListActiveTab === 'All' ||
+                    (grnListActiveTab === 'CLOSED' && (stUpper.includes('CLOSED') || stUpper.includes('FULLY'))) ||
+                    (grnListActiveTab === 'PARTIALLY_RECEIVED' && stUpper.includes('PARTIAL')) ||
+                    (grnListActiveTab === 'Approved' && st.toLowerCase() === 'approved') ||
+                    (grnListActiveTab === 'Draft' && st.toLowerCase().includes('draft')) ||
+                    st === grnListActiveTab;
+
+                  let matchesDate = true;
+                  if (filterDate) {
+                    if (g.date) {
+                      const d = new Date(g.date);
+                      const fd = new Date(filterDate);
+                      if (!isNaN(d.getTime()) && !isNaN(fd.getTime())) {
+                        matchesDate = d.toISOString().split('T')[0] === fd.toISOString().split('T')[0];
+                      } else {
+                        matchesDate = String(g.date).includes(filterDate);
+                      }
+                    } else {
+                      matchesDate = false;
+                    }
+                  }
+
+                  return matchesSearch && matchesStatus && matchesTab && matchesDate;
+                });
+
+                const sortedGrns = [...filteredGrns].sort((a, b) => {
+                  const numA = parseInt(String(a.id || '').replace(/\D/g, ''), 10) || 0;
+                  const numB = parseInt(String(b.id || '').replace(/\D/g, ''), 10) || 0;
+                  return numB - numA;
+                });
+
+                const totalPages = Math.ceil(sortedGrns.length / grnRowsPerPage) || 1;
+                const safeCurrentPage = Math.min(grnPage, totalPages);
+                const indexOfLastRow = safeCurrentPage * grnRowsPerPage;
+                const indexOfFirstRow = (safeCurrentPage - 1) * grnRowsPerPage;
+                const currentRows = sortedGrns.slice(indexOfFirstRow, indexOfLastRow);
+
+                let startPage = Math.max(1, safeCurrentPage - 1);
+                let endPage = startPage + 2;
+                if (endPage > totalPages) {
+                  endPage = totalPages;
+                  startPage = Math.max(1, endPage - 2);
+                }
+                const pageNumbers = [];
+                for (let i = startPage; i <= endPage; i++) {
+                  pageNumbers.push(i);
+                }
+
+                return (
+                  <div className="section-card" style={{ padding: 0, overflowX: 'auto', display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)' }}>
+                    {/* Header Bar */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #F1F5F9' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: '700' }}>Goods Receipt Notes</strong>
+                        <span style={{ fontSize: '11px', fontWeight: 'bold', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '2px 8px', borderRadius: '10px' }}>
+                          {sortedGrns.length}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setFilterDate('');
+                          setStatusFilter('All');
+                          setGrnTab('All');
+                          setGrnPage(1);
+                        }}
+                        style={{
+                          padding: '5px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid #CBD5E1',
+                          backgroundColor: '#FFFFFF',
+                          color: '#475569',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                      >
+                        View All
+                      </button>
+                    </div>
+
+                    {/* Table Responsive Wrapper */}
+                    <div className="table-responsive" style={{ border: 'none', borderRadius: '0', margin: 0, overflowX: 'auto', width: '100%', boxSizing: 'border-box' }}>
+                      <table className="custom-table" style={{ fontSize: '13px', width: '100%', minWidth: '1000px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#475569', height: '48px' }}>
+                            <th style={{ width: '48px', minWidth: '48px', textAlign: 'center', padding: '12px 0' }}>
+                              <input
+                                type="checkbox"
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    const allPageIds = currentRows.map(g => g.id);
+                                    setSelectedGrnRows(prev => Array.from(new Set([...prev, ...allPageIds])));
                                   } else {
-                                    setGrnDocs([{
-                                      title: 'Delivery Challan *',
-                                      filename: `Challan_${row.challanNo || 'Doc'}.pdf`,
-                                      size: '1.2 MB',
-                                      url: `data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0ZpbHRlci9GbGF0ZURlY29kZT4+CnN0cmVhbQp4nE3NPQ7CMAwG4D1T5Awhdtz8iZ0BiQEZqBslFiQkxPn9tJW6vOD3fV92120bhhF4R6mFNBp0FspbUQo7V4m0y2a3b0/b7fg87uPz/DzsT/txfF7v4/7m72m7nve7bZ7Xz+Pj/v2/L74BQ44l6gplbmRzdHJlYW0KZW5kb2JqCjMgMCBvYmoKOTYKZW5kb2JqCjEgMCBvYmoKPDwvVHlwZS9QYWdlL1BhcmludCA0IDAgUi9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+L0NvbnRlbnRzIDIgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvVHlwZS9QYWdlcy9Db3VudCAxL0tpZHNbMSAwIFJdPj4KZW5kb2JqCjUgMCBvYmoKPDwvVHlwZS9Gb250L1N1YnR5cGUvVHlwZTEvQmFzZUZvbnQvSGVsdmV0aWNhPj4KZW5kb2JqCjYgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDQgMCBSPj4KZXhyZWYKMCA3CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDE2MSAwMDAwMCBuIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAxNDIgMDAwMDAgbiAKMDAwMDAwMDI1NSAwMDAwMCBuIAowMDAwMDAwMzAyIDAwMDAwIG4gCjAwMDAwMDAzNjkgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDcvUm9vdCA2IDAgUj4+CnN0YXJ0eHJlZgo0MTgKJSVFT0YK`
-                                    }]);
+                                    const pageIdsSet = new Set(currentRows.map(g => g.id));
+                                    setSelectedGrnRows(prev => prev.filter(id => !pageIdsSet.has(id)));
                                   }
-                                  setIsViewOnlyMode(true);
-                                  setShowCreateGRN(true);
                                 }}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#2563EB' }}
-                              >
-                                <Eye style={{ width: '15px', height: '15px' }} />
-                              </button>
-                              {row.status !== 'CLOSED / FULLY RECEIVED' && row.status !== 'Approved' && row.status !== 'Fully Accepted' && (
-                                <button
-                                  type="button"
-                                  title="Edit Draft GRN"
-                                  onClick={() => {
-                                    resetCreateGRNForm();
-                                    loadPOItems(row.poRef);
-                                    if (row.challanNo) setGrnChallanNo(row.challanNo);
-                                    if (row.receivedBy) setGrnReceivedBy(row.receivedBy);
-                                    if (row.inspectorName) setGrnInspectorName(row.inspectorName);
-                                    if (row.inspectionRemarks) setGrnInspectionRemarks(row.inspectionRemarks);
-                                    setEditingGrnId(row.id);
-                                    setIsViewOnlyMode(false);
-                                    setShowCreateGRN(true);
+                                checked={currentRows.length > 0 && currentRows.every(g => selectedGrnRows.includes(g.id))}
+                                style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
+                              />
+                            </th>
+                            <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN No.</th>
+                            <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
+                            <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Vendor Name</th>
+                            <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>GRN Date</th>
+                            <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
+                            <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 16px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedGrns.length === 0 ? (
+                            <tr>
+                              <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                                No Goods Receipt Notes found matching the criteria. Click "Create GRN" to record a receipt.
+                              </td>
+                            </tr>
+                          ) : (
+                            currentRows.map((row, idx) => {
+                              const isChecked = selectedGrnRows.includes(row.id);
+                              return (
+                                <tr
+                                  key={row.id || idx}
+                                  style={{
+                                    borderBottom: idx === currentRows.length - 1 ? 'none' : '1px solid #f1f5f9',
+                                    transition: 'all 0.15s ease',
+                                    backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                                    borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                                   }}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#D97706' }}
+                                  className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
                                 >
-                                  <Edit3 style={{ width: '15px', height: '15px' }} />
-                                </button>
-                              )}
-                              {row.status !== 'CLOSED / FULLY RECEIVED' && row.status !== 'Approved' && row.status !== 'Fully Accepted' && row.status !== 'Closed' && row.status !== 'CLOSED' && (
-                                <button
-                                  type="button"
-                                  title="Delete GRN"
-                                  onClick={() => handleDeleteGRN(row.id)}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#EF4444' }}
-                                >
-                                  <Trash2 style={{ width: '15px', height: '15px' }} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                                  <td style={{ textAlign: 'center', width: '48px' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        setSelectedGrnRows(prev =>
+                                          prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id]
+                                        );
+                                      }}
+                                      style={{ accentColor: '#0E7490', cursor: 'pointer' }}
+                                    />
+                                  </td>
+                                  <td style={{ fontWeight: '600', color: '#2563eb', textAlign: 'left', padding: '12px 16px' }}>
+                                    <a
+                                      href="#"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        handleOpenViewGrn(row);
+                                      }}
+                                      style={{ fontWeight: '600', color: '#2563eb', textDecoration: 'none' }}
+                                    >
+                                      {row.id}
+                                    </a>
+                                  </td>
+                                  <td style={{ padding: '12px 16px', color: '#475569', textAlign: 'left', fontWeight: '500' }}>
+                                    {row.poRef}
+                                  </td>
+                                  <td style={{ padding: '12px 16px', fontWeight: '500', color: '#1e293b', textAlign: 'left' }}>
+                                    {row.vendor}
+                                  </td>
+                                  <td style={{ padding: '12px 16px', color: '#64748b', textAlign: 'left' }}>
+                                    {row.date}
+                                  </td>
+                                  <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>
+                                    {row.val || '—'}
+                                  </td>
+                                  <td style={{ textAlign: 'center', padding: '12px 16px' }}>
+                                    <StatusBadge status={row.status} size="sm" />
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Standard Pagination Footer Layout (Rule 6 compliant) */}
+                    {sortedGrns.length > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
+                        {/* Left Side: Rows per page selector + Showing X to Y entries */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>Showing per page</span>
+                            <select
+                              value={grnRowsPerPage}
+                              onChange={(e) => { setGrnRowsPerPage(Number(e.target.value)); setGrnPage(1); }}
+                              style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
+                            >
+                              <option value={5}>5</option>
+                              <option value={10}>10</option>
+                            </select>
+                          </div>
+                          <span>Showing {sortedGrns.length === 0 ? 0 : indexOfFirstRow + 1} to {Math.min(indexOfLastRow, sortedGrns.length)} of {sortedGrns.length} entries</span>
+                        </div>
+
+                        {/* Right Side: Page navigation controls adjacent to Go to page */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button
+                              disabled={safeCurrentPage === 1}
+                              onClick={() => setGrnPage(1)}
+                              style={{ border: '1px solid #E2E8F0', background: safeCurrentPage === 1 ? '#F8FAFC' : 'white', cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B', fontWeight: 'bold' }}
+                            >
+                              &laquo;
+                            </button>
+                            <button
+                              disabled={safeCurrentPage === 1}
+                              onClick={() => setGrnPage(prev => Math.max(prev - 1, 1))}
+                              style={{ border: '1px solid #E2E8F0', background: safeCurrentPage === 1 ? '#F8FAFC' : 'white', cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B' }}
+                            >
+                              &lt;
+                            </button>
+
+                            {pageNumbers.map(page => (
+                              <button
+                                key={page}
+                                onClick={() => setGrnPage(page)}
+                                style={{
+                                  border: '1px solid #E2E8F0',
+                                  background: page === safeCurrentPage ? '#0E7490' : 'white',
+                                  color: page === safeCurrentPage ? 'white' : '#475569',
+                                  cursor: 'pointer',
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  fontWeight: page === safeCurrentPage ? 'bold' : '500'
+                                }}
+                              >
+                                {page}
+                              </button>
+                            ))}
+
+                            <button
+                              disabled={safeCurrentPage === totalPages || totalPages === 0}
+                              onClick={() => setGrnPage(prev => Math.min(prev + 1, totalPages))}
+                              style={{ border: '1px solid #E2E8F0', background: (safeCurrentPage === totalPages || totalPages === 0) ? '#F8FAFC' : 'white', cursor: (safeCurrentPage === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B' }}
+                            >
+                              &gt;
+                            </button>
+                            <button
+                              disabled={safeCurrentPage === totalPages || totalPages === 0}
+                              onClick={() => setGrnPage(totalPages)}
+                              style={{ border: '1px solid #E2E8F0', background: (safeCurrentPage === totalPages || totalPages === 0) ? '#F8FAFC' : 'white', cursor: (safeCurrentPage === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B', fontWeight: 'bold' }}
+                            >
+                              &raquo;
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max={totalPages || 1}
+                              defaultValue={safeCurrentPage}
+                              id="grn-goto-page-input"
+                              style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
+                            />
+                            <button
+                              onClick={() => {
+                                const val = parseInt(document.getElementById('grn-goto-page-input')?.value || '1', 10);
+                                if (val >= 1 && val <= totalPages) setGrnPage(val);
+                              }}
+                              style={{ height: '32px', padding: '0 10px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#FFFFFF', color: '#0E7490', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}
+                            >
+                              Go &rsaquo;
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Floating Selection Toolbar - Single line (Rule 6) */}
+              {selectedGrnRows.length > 0 && (
+                <div style={{
+                  position: 'fixed',
+                  bottom: '24px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '50px',
+                  boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  padding: '8px 16px',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  flexWrap: 'nowrap',
+                  alignItems: 'center',
+                  whiteSpace: 'nowrap',
+                  gap: '8px',
+                  zIndex: 10000,
+                  width: 'max-content',
+                  maxWidth: 'calc(100vw - 32px)',
+                  overflowX: 'auto',
+                  fontFamily: "'Plus Jakarta Sans', sans-serif"
+                }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedGrnRows.length}</strong> Selected
+                  </span>
+
+                  <button
+                    onClick={() => {
+                      if (selectedGrnRows.length > 1) {
+                        alert("Please select a single GRN to view details.");
+                        return;
+                      }
+                      const target = grnList.find(g => g.id === selectedGrnRows[0]);
+                      if (target) handleOpenViewGrn(target);
+                    }}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#1E293B',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    <Eye size={14} style={{ color: '#0E7490' }} /> View Details
+                  </button>
+
+                  {selectedGrnRows.length === 1 && (() => {
+                    const target = grnList.find(g => g.id === selectedGrnRows[0]);
+                    if (!target) return null;
+                    const isClosed = String(target.status || '').toUpperCase().includes('CLOSED') || String(target.status || '').toUpperCase().includes('APPROVED') || target.status === 'Fully Accepted';
+                    if (isClosed) return null;
+                    return (
+                      <button
+                        onClick={() => handleOpenEditGrn(target)}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          color: '#1E293B',
+                          borderRadius: '10px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                      >
+                        <Edit3 size={14} style={{ color: '#D97706' }} /> Edit Info
+                      </button>
+                    );
+                  })()}
+
+                  <button
+                    onClick={() => window.print()}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#1E293B',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    <Printer size={14} style={{ color: '#64748B' }} /> Export / Print PDF
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const eligibleToDelete = selectedGrnRows.filter(id => {
+                        const t = grnList.find(g => g.id === id);
+                        return t && !(String(t.status || '').toUpperCase().includes('CLOSED') || String(t.status || '').toUpperCase().includes('APPROVED') || t.status === 'Fully Accepted');
+                      });
+                      if (eligibleToDelete.length === 0) {
+                        alert('Selected GRN(s) are approved or fully received and cannot be deleted.');
+                        return;
+                      }
+                      if (window.confirm(`Are you sure you want to delete ${eligibleToDelete.length} draft GRN(s)?`)) {
+                        eligibleToDelete.forEach(id => {
+                          fetch(`/api/grns/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+                        });
+                        setGrnList(prev => prev.filter(g => !eligibleToDelete.includes(g.id)));
+                        setSelectedGrnRows([]);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#DC2626',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedGrnRows([])}
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: '#94A3B8',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="Deselect all"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
-              </div>
+              )}
             </>
           ) : (() => {
             // Calculation of Totals

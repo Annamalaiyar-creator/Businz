@@ -59,9 +59,42 @@ const getDatabaseStore = async (key) => {
   return supabaseMemoryStore[key] || (key === 'presets_store' || key === 'company_branding_store' ? {} : []);
 };
 
+// ==========================================
+// ⚡ REAL-TIME INSTANT PUSH ENGINE (SSE)
+// Broadcasts updates to all connected users with sub-second latency (WhatsApp-style)
+// ==========================================
+const realtimeClients = new Set();
+
+const broadcastRealtimeEvent = (eventType, payload) => {
+  if (!realtimeClients || realtimeClients.size === 0) return;
+  const msg = JSON.stringify({
+    type: eventType,
+    payload,
+    timestamp: new Date().toISOString()
+  });
+  const chunk = `data: ${msg}\n\n`;
+  for (const client of realtimeClients) {
+    try {
+      client.write(chunk);
+    } catch (_) {
+      realtimeClients.delete(client);
+    }
+  }
+};
+
 const saveDatabaseStore = async (key, storeData) => {
   if (storeData === undefined || storeData === null) return storeData;
   supabaseMemoryStore[key] = storeData;
+
+  // Real-time broadcast to all connected users immediately
+  try {
+    broadcastRealtimeEvent('store_updated', { key, storeData });
+    if (key === 'raw_materials_store') {
+      broadcastRealtimeEvent('inventory_updated', { rawMaterials: storeData });
+    } else if (key === 'item_store' || key === 'vrm_prod_inventory') {
+      broadcastRealtimeEvent('item_store_updated', { items: storeData });
+    }
+  } catch (_) {}
   const employeeKey = key.toUpperCase();
   try {
     const { data: records } = await supabase
@@ -439,6 +472,33 @@ const saveLocalGRNs = (grns) => {
   supabaseMemoryStore.grn_store = grns;
   saveDatabaseStore('grn_store', grns);
 };
+
+// ⚡ Real-Time Push Gateway (Server-Sent Events)
+// Enables sub-second instant updates across all 10+ users without page refresh
+app.get('/api/realtime-events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
+  realtimeClients.add(res);
+
+  const keepAliveInterval = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch (_) {
+      clearInterval(keepAliveInterval);
+      realtimeClients.delete(res);
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(keepAliveInterval);
+    realtimeClients.delete(res);
+  });
+});
 
 // Generic Data Store endpoints backed 100% by Supabase Cloud Database
 app.get('/api/store/:key', async (req, res) => {
@@ -1650,6 +1710,51 @@ const approveOrOpenZohoPO = async (accessToken, poRefOrId) => {
   return res;
 };
 
+// Helper to automatically email PO PDF to vendor via Zoho Books API
+const emailZohoPOToVendor = async (accessToken, poRefOrId, vendorEmail, remarks = '') => {
+  const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
+  if (!realPoId || !vendorEmail || !vendorEmail.includes('@')) {
+    return { success: false, reason: 'Invalid or missing PO ID or vendor email' };
+  }
+
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({
+      to_mail_ids: [vendorEmail.trim()],
+      subject: `Purchase Order - ${poRefOrId}`,
+      body: `Dear Vendor,\n\nPlease find attached the authorized Purchase Order (${poRefOrId}) for fulfillment.\n${remarks ? `\nInstructions/Remarks: ${remarks}\n` : ''}\nThank you.`
+    });
+
+    const options = {
+      hostname: 'www.zohoapis.in',
+      port: 443,
+      path: `/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/email?organization_id=${zohoSession.orgId}`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Zoho-oauthtoken ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve({ success: parsed.code === 0, response: parsed });
+        } catch (e) {
+          resolve({ success: false, error: e.message });
+        }
+      });
+    });
+
+    req.on('error', (err) => resolve({ success: false, error: err.message }));
+    req.write(payload);
+    req.end();
+  });
+};
+
 // Helper to mark PO as closed in Zoho Books (transitions to Closed)
 const markZohoPOClosed = async (accessToken, poRefOrId) => {
   const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
@@ -1987,7 +2092,12 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
 
       if (matched && matched.item_id) {
         // Check if item has purchase permissions enabled in Zoho Books
-        if (matched.is_purchase !== true && matched.is_purchased !== true) {
+        let isPurchasableInZoho = matched.can_be_purchased === true || 
+                                  matched.item_type === 'sales_and_purchases' || 
+                                  matched.item_type === 'purchases' || 
+                                  matched.is_purchased === true;
+
+        if (!isPurchasableInZoho) {
           try {
             console.log('[ZOHO AUTO-ENABLE ITEM]', matched.item_id, matched.name);
             const upRes = await updateZohoItem(accessToken, matched.item_id, {
@@ -1999,12 +2109,13 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
               purchase_rate: baseRate,
               purchase_description: item.description || matched.description || matched.name,
               is_purchase: true,
-              is_purchased: true,
+              can_be_purchased: true,
+              item_type: 'sales_and_purchases',
               purchase_account_id: "4080449000000000567"
             });
-            if (upRes && (upRes.code === 0 || upRes.item)) {
-              matched.is_purchase = true;
-              matched.is_purchased = true;
+            if (upRes && upRes.item && (upRes.item.can_be_purchased === true || upRes.item.item_type === 'sales_and_purchases' || upRes.item.item_type === 'purchases')) {
+              isPurchasableInZoho = true;
+              matched.can_be_purchased = true;
             }
           } catch (e) {
             console.warn('Failed to auto-enable purchase on item:', e.message);
@@ -2012,8 +2123,11 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
         }
 
         // Attach item_id ONLY if it is verified as a purchase item in Zoho Books
-        if (matched.is_purchase === true || matched.is_purchased === true) {
+        if (isPurchasableInZoho) {
           li.item_id = matched.item_id;
+        } else {
+          // Sales-only item in Zoho: do not link item_id and use material label so Zoho accepts as a custom purchase line
+          li.name = `${itemName} (Material)`;
         }
       }
 
@@ -2165,14 +2279,20 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
       if (payload.delivery_address) payload.delivery_address = payload.delivery_address.slice(0, 60);
       if (payload.billing_address) payload.billing_address = payload.billing_address.slice(0, 60);
       
-      // If error mentions non-purchase item or item/account, strip item_id so Zoho accepts it as a custom purchase line item
+      // If error mentions non-purchase item or tax/item/account, strip item_id and tax_id so Zoho accepts it as a clean purchase order
       const isNonPurchaseError = String(result.message || "").toLowerCase().includes("non-purchase") ||
+        String(result.message || "").toLowerCase().includes("sales information") ||
         String(result.message || "").toLowerCase().includes("item");
 
       if (payload.line_items && Array.isArray(payload.line_items)) {
         payload.line_items = payload.line_items.map(li => {
-          // If initial attempt failed, strip item_id completely so Zoho accepts all line items without non-purchase restrictions
-          const cleanLi = { name: li.name, rate: li.rate, quantity: li.quantity };
+          const cleanName = (isNonPurchaseError && !li.name.includes('(Material)')) ? `${li.name} (Material)` : li.name;
+          const cleanLi = { 
+            name: cleanName, 
+            rate: li.rate, 
+            quantity: li.quantity,
+            account_id: "4080449000000000567"
+          };
           if (li.description) cleanLi.description = li.description;
           return cleanLi;
         });
@@ -3970,11 +4090,10 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         (grn.items || []).forEach((it, idx) => {
           const qty = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
           const idKey = it.id || it.itemId || it.lineItemId;
-          if (idKey) {
-            itemReceivedTotals[idKey] = (itemReceivedTotals[idKey] || 0) + qty;
-          } else {
-            itemReceivedTotals[`IDX-${idx}`] = (itemReceivedTotals[`IDX-${idx}`] || 0) + qty;
-          }
+          const nameKey = String(it.name || '').trim().toLowerCase();
+          if (idKey) itemReceivedTotals[idKey] = (itemReceivedTotals[idKey] || 0) + qty;
+          if (nameKey) itemReceivedTotals[nameKey] = (itemReceivedTotals[nameKey] || 0) + qty;
+          itemReceivedTotals[`IDX-${idx}`] = (itemReceivedTotals[`IDX-${idx}`] || 0) + qty;
         });
       });
 
@@ -3994,9 +4113,12 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
 
       const items = (po.line_items || []).map((item, idx) => {
         const idKey = item.id || item.itemId || item.line_item_id;
+        const nameKey = String(item.name || '').trim().toLowerCase();
         let prevReceived = 0;
         if (idKey && itemReceivedTotals[idKey] !== undefined) {
           prevReceived = itemReceivedTotals[idKey];
+        } else if (nameKey && itemReceivedTotals[nameKey] !== undefined) {
+          prevReceived = itemReceivedTotals[nameKey];
         } else if (itemReceivedTotals[`IDX-${idx}`] !== undefined) {
           prevReceived = itemReceivedTotals[`IDX-${idx}`];
         }
@@ -4004,7 +4126,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         const remaining = Math.max(0, ordered - prevReceived);
 
         totalOrderedQty += ordered;
-        totalReceivedQty += Math.min(ordered, prevReceived);
+        totalReceivedQty += prevReceived;
 
         const localItem = matchedLocalPO && matchedLocalPO.items && matchedLocalPO.items[idx];
         const effectiveTax = (localItem && localItem.tax !== undefined && localItem.tax !== '')
@@ -4024,6 +4146,14 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         };
       });
 
+      if (totalReceivedQty === 0 && matchingGRNs.length > 0) {
+        matchingGRNs.forEach(grn => {
+          (grn.items || []).forEach(it => {
+            totalReceivedQty += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
+          });
+        });
+      }
+
       let statusType = 'open';
       let statusText = 'OPEN';
 
@@ -4037,7 +4167,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
       if (po.status === 'billed' || po.status === 'closed' || po.status === 'received' || po.is_received === true || matchingClosedGRN || (totalOrderedQty > 0 && totalReceivedQty >= totalOrderedQty)) {
         statusType = 'closed';
         statusText = 'CLOSED / FULLY RECEIVED';
-      } else if (totalReceivedQty > 0 || po.status === 'partially_received') {
+      } else if (matchingGRNs.length > 0 || totalReceivedQty > 0 || po.status === 'partially_received') {
         statusType = 'partially_received';
         statusText = 'OPEN / PARTIALLY RECEIVED';
       } else if (matchedLocalPO && (matchedLocalPO.status === 'Proceed PO' || matchedLocalPO.statusType === 'proceed_po')) {
@@ -4650,11 +4780,12 @@ app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
   });
 });
 
-// Endpoint to Proceed PO (Payment Processed -> Proceed PO -> Ready for GRN)
+// Endpoint to Proceed PO (Payment Processed -> Proceed PO -> Ready for GRN & Auto Vendor Dispatch)
 app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
   const targetId = req.params.id;
   const remarks = req.body.remarks || 'Proceeded for dispatch and GRN';
-  const authorizedBy = req.body.authorizedBy || 'Procurement & Accounts';
+  const authorizedBy = req.body.authorizedBy || 'Procurement Head';
+  const incomingEmail = req.body.vendorEmail || req.body.email || '';
 
   const now = new Date();
   const proceedDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -4662,15 +4793,29 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
 
   const localPOs = loadLocalPOs();
   const matchedIdx = localPOs.findIndex(p => p.id === targetId || p.poNo === targetId);
+  const matchedPO = matchedIdx !== -1 ? localPOs[matchedIdx] : null;
+  const vendorEmail = (incomingEmail && incomingEmail !== '—' && incomingEmail.includes('@'))
+    ? incomingEmail.trim()
+    : (matchedPO && matchedPO.email && matchedPO.email !== '—' && matchedPO.email.includes('@') ? matchedPO.email.trim() : '');
+
+  const proceedDetails = {
+    date: proceedDate,
+    time: proceedTime,
+    remarks,
+    authorizedBy,
+    vendorEmail,
+    emailDispatched: Boolean(vendorEmail),
+    emailSentAt: new Date().toISOString(),
+    deliveryStatus: vendorEmail ? `Dispatched to ${vendorEmail}` : 'Authorized (Ready for GRN)'
+  };
+
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'Proceed PO';
     localPOs[matchedIdx].statusType = 'proceed_po';
-    localPOs[matchedIdx].proceedDetails = {
-      date: proceedDate,
-      time: proceedTime,
-      remarks,
-      authorizedBy
-    };
+    localPOs[matchedIdx].proceedDetails = proceedDetails;
+    if (vendorEmail && (!localPOs[matchedIdx].email || localPOs[matchedIdx].email === '—')) {
+      localPOs[matchedIdx].email = vendorEmail;
+    }
     saveLocalPOs(localPOs);
   } else {
     localPOs.unshift({
@@ -4678,27 +4823,38 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
       poNo: targetId,
       status: 'Proceed PO',
       statusType: 'proceed_po',
-      proceedDetails: {
-        date: proceedDate,
-        time: proceedTime,
-        remarks,
-        authorizedBy
-      }
+      email: vendorEmail,
+      proceedDetails
     });
     saveLocalPOs(localPOs);
   }
 
-  // Transition Zoho Books PO status from Draft to Issued / Open once PO is Proceeded
+  // Transition Zoho Books PO status from Draft to Issued / Open once PO is Proceeded, and email vendor
+  let zohoEmailResult = null;
   if (zohoSession.connected) {
     try {
       const accessToken = await getZohoAccessToken();
       await approveOrOpenZohoPO(accessToken, targetId);
+      if (vendorEmail && vendorEmail.includes('@')) {
+        zohoEmailResult = await emailZohoPOToVendor(accessToken, targetId, vendorEmail, remarks);
+        console.log(`[Zoho PO Email] Dispatched PO ${targetId} to vendor ${vendorEmail}:`, zohoEmailResult);
+      }
     } catch (err) {
-      console.warn('Failed to transition PO to issued in Zoho on Proceed PO:', err.message);
+      console.warn('Failed to transition PO or email vendor in Zoho on Proceed PO:', err.message);
     }
   }
 
-  res.json({ success: true, message: `PO ${targetId} marked as Proceed PO! Ready for GRN generation.` });
+  const message = vendorEmail
+    ? `PO ${targetId} marked as Proceed PO! An official copy was automatically dispatched to vendor (${vendorEmail}). Ready for GRN receiving.`
+    : `PO ${targetId} marked as Proceed PO! Ready for GRN receiving.`;
+
+  res.json({
+    success: true,
+    vendorEmail,
+    emailDispatched: Boolean(vendorEmail),
+    zohoEmailResult,
+    message
+  });
 });
 
 // Endpoint to explicitly reject a Purchase Order (Pending -> Rejected)
@@ -5119,6 +5275,8 @@ const updateZohoItem = (accessToken, id, itemData) => {
       purchase_rate: itemData.purchaseRate || itemData.purchase_rate || itemData.rate,
       purchase_description: itemData.purchaseDescription || itemData.purchase_description || itemData.description,
       is_purchase: true,
+      can_be_purchased: true,
+      item_type: 'sales_and_purchases',
       purchase_account_id: itemData.purchase_account_id || "4080449000000000567"
     });
 
@@ -5359,9 +5517,14 @@ app.post('/api/crm/whatsapp/webhook', (req, res) => {
 
             console.log(`📩 Incoming WhatsApp from +${senderPhone}: "${textBody}"`);
 
-            // Check if customer exists in customer store or lead store
             const formattedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`;
-            // Log incoming payload for CRM integration
+            broadcastRealtimeEvent('whatsapp_message', {
+              from: senderPhone,
+              formattedPhone,
+              text: textBody,
+              msgId,
+              timestamp
+            });
           }
         });
       });

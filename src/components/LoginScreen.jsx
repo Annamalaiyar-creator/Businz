@@ -537,13 +537,13 @@ export default function LoginScreen({ onLoginSuccess }) {
                 }}>
                   <Asterisk style={{ width: '22px', height: '22px', strokeWidth: 3 }} />
                 </div>
-                <span style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.02em' }}>ControlRoom</span>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.02em' }}>BUSINZ</span>
               </div>
             </div>
 
             {/* Title & Subtitle */}
             <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-              {isSignUpMode ? 'Create your ControlRoom Account' : 'Sign in to ControlRoom'}
+              {isSignUpMode ? 'Create your Businz Account' : 'Sign in to Businz'}
             </h1>
             <p style={{ fontSize: '12.5px', color: '#64748B', margin: '6px 0 16px 0', lineHeight: '1.4', maxWidth: '380px' }}>
               {isSignUpMode 

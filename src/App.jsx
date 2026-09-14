@@ -28,6 +28,7 @@ import { useEffect, Component } from 'react';
 import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
 import { getSafeZohoPOs, getSafeZohoItems } from './services/zohoSafeSync';
 import { fetchMasterBranding } from './services/brandingService';
+import { initRealtimeSync } from './services/realtimeSyncService';
 
 class AppErrorBoundary extends Component {
   constructor(props) {
@@ -163,8 +164,9 @@ function App() {
     return localStorage.getItem('controlroom_dev_view_mode') || 'console';
   });
 
-  // Ensure legacy stores are cleaned, but preserve authoritative stores
+  // Initialize WhatsApp-Style Real-Time Push Sync Engine across all modules
   useEffect(() => {
+    initRealtimeSync();
     try {
       localStorage.removeItem('controlroom_customer_list');
     } catch (_) {}
@@ -372,7 +374,7 @@ function App() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#38BDF8', boxShadow: '0 0 8px #38BDF8' }} />
-              <span>Technical Administrator Session — Control Room ERP Active (TA Integration Permissions Live)</span>
+              <span>Technical Administrator Session — Businz CRM Active (TA Integration Permissions Live)</span>
             </div>
             <button
               onClick={() => {
@@ -410,7 +412,7 @@ function App() {
 
         {/* Scrollable Center Content Pane */}
         <div className={`content-pane procurement-layout ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''}`}>
-          {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head') ? (
+          {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
             <ProductionAdminView activeTab={activeTab} userRole={userRole} />
           ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
             <PerformaInvoiceView 

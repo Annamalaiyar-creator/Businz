@@ -175,6 +175,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
   }, []);
 
   const [assignedEmployee, setAssignedEmployee] = useState('');
+  const [assignedHeads, setAssignedHeads] = useState(['Floor Supervisor', 'Dispatch Head']);
 
   const [priority, setPriority] = useState('');
   const [productionLocation, setProductionLocation] = useState('');
@@ -490,6 +491,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
         priority,
         productionLocation,
         assignedEmployee,
+        assignedHeads,
         expectedStartDate,
         expectedCompletionDate,
         instructions,
@@ -837,6 +839,110 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* SECTION: ASSIGN TO THE HEADS */}
+          <div style={{
+            backgroundColor: '#F8FAFC',
+            border: '1.5px solid #0E7490',
+            borderRadius: '14px',
+            padding: '18px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            boxShadow: '0 2px 6px rgba(14, 116, 144, 0.06)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#ECFEFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0E7490' }}>
+                  <Zap size={18} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '14.5px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Assign to the Heads
+                  </h4>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    Assigned directly to shop-floor supervisors for mobile handling. Laborers do not need mobile phones.
+                  </span>
+                </div>
+              </div>
+
+              <span style={{ fontSize: '11px', fontWeight: '700', backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={12} style={{ color: '#059669' }} /> Live Either-Or Sync Enabled
+              </span>
+            </div>
+
+            {/* Supervisor Checkbox Selectors */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginTop: '4px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                backgroundColor: assignedHeads.includes('Floor Supervisor') ? '#ECFEFF' : '#FFFFFF',
+                border: assignedHeads.includes('Floor Supervisor') ? '1.5px solid #0E7490' : '1px solid #CBD5E1',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={assignedHeads.includes('Floor Supervisor')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setAssignedHeads(prev => [...prev, 'Floor Supervisor']);
+                    } else {
+                      if (assignedHeads.length > 1) {
+                        setAssignedHeads(prev => prev.filter(h => h !== 'Floor Supervisor'));
+                      }
+                    }
+                  }}
+                  style={{ accentColor: '#0E7490', width: '17px', height: '17px' }}
+                />
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>Murugan (Floor Supervisor)</strong>
+                  <span style={{ fontSize: '11.5px', color: '#64748B' }}>Floor line operations, machine stations & cutting jobs</span>
+                </div>
+              </label>
+
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                backgroundColor: assignedHeads.includes('Dispatch Head') ? '#ECFEFF' : '#FFFFFF',
+                border: assignedHeads.includes('Dispatch Head') ? '1.5px solid #0E7490' : '1px solid #CBD5E1',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={assignedHeads.includes('Dispatch Head')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setAssignedHeads(prev => [...prev, 'Dispatch Head']);
+                    } else {
+                      if (assignedHeads.length > 1) {
+                        setAssignedHeads(prev => prev.filter(h => h !== 'Dispatch Head'));
+                      }
+                    }
+                  }}
+                  style={{ accentColor: '#0E7490', width: '17px', height: '17px' }}
+                />
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>Karthik Raja (Dispatch Head)</strong>
+                  <span style={{ fontSize: '11.5px', color: '#64748B' }}>Packing verification, staging & dispatch readiness</span>
+                </div>
+              </label>
+            </div>
+
+            <div style={{ fontSize: '11.5px', color: '#475569', backgroundColor: '#FFFFFF', border: '1px dashed #CBD5E1', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Info size={15} style={{ color: '#0E7490', flexShrink: 0 }} />
+              <span>
+                <strong>Redundancy & Fail-Safe:</strong> If either Murugan or Karthik Raja is absent, the other can immediately accept, start, or report output on mobile. A single update confirms the step for both accounts so floor production never stops.
+              </span>
+            </div>
           </div>
 
           {/* ACTIONS BAR */}

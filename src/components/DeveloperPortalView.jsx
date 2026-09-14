@@ -419,7 +419,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
             </div>
             {!isDevSidebarCollapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-                <div style={{ fontSize: '15px', fontWeight: '900', color: '#F8FAFC', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>ControlRoom</div>
+                <div style={{ fontSize: '15px', fontWeight: '900', color: '#F8FAFC', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Businz</div>
                 <div style={{ fontSize: '10px', fontWeight: '800', color: '#38BDF8', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>DEV CONSOLE v2.4.1</div>
               </div>
             )}
@@ -583,9 +583,9 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
               <button
                 onClick={onSwitchToErp}
                 style={{ backgroundColor: '#0284C7', border: '1px solid #38BDF8', color: '#FFFFFF', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 0 12px rgba(14,165,233,0.3)' }}
-                title="Open Control Room ERP View"
+                title="Open Businz ERP View"
               >
-                <ExternalLink style={{ width: '13px', height: '13px' }} /> Launch Control Room ERP ↗
+                <ExternalLink style={{ width: '13px', height: '13px' }} /> Launch Businz ERP ↗
               </button>
             )}
 

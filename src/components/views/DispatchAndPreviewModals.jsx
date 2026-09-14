@@ -85,7 +85,7 @@ import { getMediaFromCache } from "../../utils/otherViewsShared";
                     const phCount = completedBomSummaryModal.vehicleLoading?.photos?.length || 0;
                     const vdCount = completedBomSummaryModal.vehicleLoading?.videos?.length || 0;
 
-                    const msg = `📦 *DISPATCH NOTIFICATION - CONTROL ROOM*\n\nDear ${cust},\nYour order has been fully packed, inspected, and loaded into the delivery vehicle.\n\n• *BOM Reference:* ${bNum}\n• *Invoice No:* ${inv}\n• *Vehicle Number:* ${vNum}\n• *Driver:* ${drv} (${dPhone})\n• *LR Number:* ${lr}\n• *Loading Media:* ${phCount} Photo(s), ${vdCount} Video(s) verified on dock.\n\nThank you for choosing us!`;
+                    const msg = `📦 *DISPATCH NOTIFICATION - BUSINZ*\n\nDear ${cust},\nYour order has been fully packed, inspected, and loaded into the delivery vehicle.\n\n• *BOM Reference:* ${bNum}\n• *Invoice No:* ${inv}\n• *Vehicle Number:* ${vNum}\n• *Driver:* ${drv} (${dPhone})\n• *LR Number:* ${lr}\n• *Loading Media:* ${phCount} Photo(s), ${vdCount} Video(s) verified on dock.\n\nThank you for choosing us!`;
                     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
                     window.open(waUrl, '_blank');
                   }}

@@ -427,7 +427,7 @@ export default function ZohoIntegrationView({ userRole = '' }) {
     if (!isTaRole) {
       setPermissionAlert({
         title: 'Technical Administrator (TA) Required',
-        message: 'Only the Technical Administrator (TA) can register and add new third-party integrations or APIs to Control Room.',
+        message: 'Only the Technical Administrator (TA) can register and add new third-party integrations or APIs to Businz.',
         roleRequired: 'TA'
       });
       return;
@@ -549,7 +549,7 @@ export default function ZohoIntegrationView({ userRole = '' }) {
       id: 'zapier',
       name: 'Zapier Automations',
       category: 'Workflow Automation',
-      desc: 'Multi-app webhooks connecting Control Room triggers with Google Sheets, Slack, and email notifications.',
+      desc: 'Multi-app webhooks connecting Businz triggers with Google Sheets, Slack, and email notifications.',
       link: 'https://zapier.com',
       isZoho: false,
       accessRole: 'TA',
@@ -1232,7 +1232,7 @@ export default function ZohoIntegrationView({ userRole = '' }) {
                   if (activeConfigureApp.id === 'meta_whatsapp') {
                     localStorage.setItem('controlroom_meta_whatsapp_config', JSON.stringify(metaWhatsappConfig));
                     persistIntegrationsState({ ...integrationsState, meta_whatsapp: true });
-                    alert('Meta WhatsApp credentials saved! Active organization-wide across Control Room.');
+                    alert('Meta WhatsApp credentials saved! Active organization-wide across Businz.');
                   } else {
                     alert(`${activeConfigureApp.name} configuration updated successfully.`);
                   }
