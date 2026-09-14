@@ -3,22 +3,55 @@ import { formatCurrency } from '../../utils/otherViewsShared';
 
 export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [] }) {
   const visibleBomStore = passedVisibleBom || bomStore || [];
-          // Dynamically compute unified invoices list ensuring ONLY Accounts-Verified BOMs show up in Invoice Management
+          // Dynamically compute unified invoices list ensuring packed and Accounts-Verified BOMs show up in Invoice Management seamlessly
+          const isInvoiceEligibleBom = (b) => {
+            if (!b) return false;
+            if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+            const s = String(b.status || '').toLowerCase().trim();
+            const acc = b.accountsVerification || {};
+            const isAccVerified = Boolean(
+              acc.verified === true ||
+              b.isAccountsDone === true ||
+              s.includes('accounts verified') ||
+              s.includes('passed to invoice') ||
+              s.includes('ready for payment') ||
+              b.invoiceConfirmed === true ||
+              Boolean(b.invoiceNo)
+            );
+            const isPacked = Boolean(
+              s.includes('packed') ||
+              s.includes('ready for dispatch') ||
+              s.includes('sent to accounts') ||
+              s.includes('awaiting vehicle loading') ||
+              s.includes('dispatch') ||
+              (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 && b.dispatchPacking.some(p => Boolean(p.packed)))
+            );
+            return isAccVerified || isPacked;
+          };
+
           const verifiedBomInvoices = (bomStore || [])
-            .filter(b => b && (b.bomCode || b.code) && (
-              b.accountsVerification?.verified === true ||
-              b.status === 'Accounts Verified & Passed to Invoice' ||
-              b.status === 'Invoice Confirmed' ||
-              b.status === 'Ready for Payment' ||
-              b.invoiceConfirmed === true
-            ))
+            .filter(isInvoiceEligibleBom)
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
               const cleanNum = bCode.replace(/[^0-9]/g, '') || '101';
               const invNo = b.invoiceNo || `INV-2026-${cleanNum}`;
               const oVal = parseFloat(b.grandTotal || 0);
               const isConf = b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed;
-              const statusVal = isConf ? 'Invoice Confirmed' : (b.status === 'Accounts Verified & Passed to Invoice' ? 'Accounts Verified & Passed to Invoice' : 'Ready for Payment');
+              const s = String(b.status || '').toLowerCase();
+              const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
+
+              let statusVal = 'Ready for Invoicing';
+              let payVal = 'Ready for Payment';
+              if (isConf) {
+                statusVal = 'Invoice Confirmed';
+                payVal = 'Completed & Locked';
+              } else if (isAccDone || s.includes('passed to invoice')) {
+                statusVal = 'Accounts Verified & Passed to Invoice';
+                payVal = 'Ready for Payment';
+              } else if (s.includes('packed') || s.includes('ready for dispatch')) {
+                statusVal = 'Packing Verified - Ready for Billing';
+                payVal = 'Ready for Payment';
+              }
 
               const packedItems = (b.dispatchPacking && Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
                 ? b.dispatchPacking.map((p, pIdx) => ({
@@ -46,7 +79,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 poVal: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
                 grnVal: `₹ ${oVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
                 diff: '0.00', match: 'Matched',
-                pay: isConf ? 'Completed & Locked' : 'Ready for Payment',
+                pay: payVal,
                 status: statusVal,
                 items: packedItems,
                 dispatchPacking: b.dispatchPacking,
@@ -72,11 +105,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3))
             );
             if (matchingBom) {
-              return matchingBom.accountsVerification?.verified === true ||
-                matchingBom.status === 'Accounts Verified & Passed to Invoice' ||
-                matchingBom.status === 'Invoice Confirmed' ||
-                matchingBom.status === 'Ready for Payment' ||
-                matchingBom.invoiceConfirmed === true;
+              if (matchingBom.cancelled || matchingBom.status === 'Cancelled' || matchingBom.status === 'Cancelled & Stock Restored') return false;
+              return isInvoiceEligibleBom(matchingBom);
             }
             // Standalone or pre-existing invoices stay visible
             return true;
@@ -132,14 +162,14 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               searchPlaceholder: 'Search Invoices (Invoice No, Customer / Vendor, BOM Ref)...',
               tabs: [
                 { id: 'All', label: 'All Invoices', count: allInvoicesUnified.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Ready for Payment', label: 'Ready for Payment', count: allInvoicesUnified.filter(i => i.status === 'Ready for Payment' || i.status === 'Accounts Verified & Passed to Invoice' || i.pay === 'Ready' || i.pay === 'Ready for Payment').length, bg: '#dcfce7', fg: '#166534' },
+                { id: 'Ready for Payment', label: 'Ready for Payment', count: allInvoicesUnified.filter(i => i.status !== 'Invoice Confirmed' && i.status !== 'On Hold' && i.pay !== 'Hold').length, bg: '#dcfce7', fg: '#166534' },
                 { id: 'Invoice Confirmed', label: 'Confirmed', count: allInvoicesUnified.filter(i => i.status === 'Invoice Confirmed' || i.pay === 'Completed & Locked').length, bg: '#dcfce7', fg: '#166534' },
                 { id: 'On Hold', label: 'On Hold', count: allInvoicesUnified.filter(i => i.status === 'On Hold' || i.pay === 'Hold').length, bg: '#fee2e2', fg: '#991b1b' }
               ],
               headers: ['Invoice No.', 'Customer / Vendor', 'BOM Ref', 'Invoice Date', 'Invoice Amount (₹)', 'Payment Status', 'Status', 'Action'],
               rows: allInvoicesUnified.map(i => {
                 const isConfirmed = i.status === 'Invoice Confirmed' || i.status === 'Completed' || i.status === 'Confirmed' || i.pay === 'Completed & Locked';
-                const isReady = i.status === 'Ready for Payment' || i.status === 'Accounts Verified & Passed to Invoice' || i.pay === 'Ready' || i.pay === 'Ready for Payment';
+                const isReady = i.status === 'Ready for Payment' || i.status === 'Accounts Verified & Passed to Invoice' || i.status === 'Packing Verified - Ready for Billing' || i.status === 'Ready for Invoicing' || i.pay === 'Ready' || i.pay === 'Ready for Payment';
 
                 return {
                   ...i,

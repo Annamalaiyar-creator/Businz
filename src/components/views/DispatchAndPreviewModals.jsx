@@ -157,28 +157,33 @@ import { getMediaFromCache } from "../../utils/otherViewsShared";
       );
 }
 
-      export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
+export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
+  if (!activeMediaPreviewModal) return null;
+  const rawUrl = activeMediaPreviewModal.url || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id);
+
   return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100005 }}>
-          <div style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-              <span style={{ color: '#FFFFFF', fontSize: '14px', fontWeight: '700' }}>{activeMediaPreviewModal.name || 'Media Preview'}</span>
-              <button
-                type="button"
-                onClick={() => onClose()}
-                style={{ backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: '#FFFFFF', padding: '6px 14px', cursor: 'pointer', fontWeight: '700' }}
-              >
-                Close ✕
-              </button>
-            </div>
-            {activeMediaPreviewModal.type === 'video' ? (
-              <video controls autoPlay src={activeMediaPreviewModal.url} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: '12px' }} />
-            ) : (
-              <img src={activeMediaPreviewModal.url} alt="Full Preview" style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: '12px' }} />
-            )}
-          </div>
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100005 }}>
+      <div style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+          <span style={{ color: '#FFFFFF', fontSize: '14px', fontWeight: '700' }}>{activeMediaPreviewModal.name || 'Media Preview'}</span>
+          <button
+            type="button"
+            onClick={() => onClose()}
+            style={{ backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: '#FFFFFF', padding: '6px 14px', cursor: 'pointer', fontWeight: '700' }}
+          >
+            Close ✕
+          </button>
         </div>
-      );
+        {activeMediaPreviewModal.type === 'video' ? (
+          <video controls autoPlay playsInline src={rawUrl} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: '12px' }}>
+            Your browser does not support playing this video.
+          </video>
+        ) : (
+          <img src={rawUrl} alt="Full Preview" style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: '12px' }} />
+        )}
+      </div>
+    </div>
+  );
 }
 
       export function PreviewAddressProofModal({ previewAddressProofModal, onClose }) {

@@ -1374,6 +1374,12 @@ export default function BomOrdersView(props) {
       }
     } else if (rawDoc && typeof rawDoc === 'object') {
       resolvedData = rawDoc.dataUrl || rawDoc.url || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
+      if (!resolvedData && rawDoc.id) {
+        resolvedData = getMediaFromCache(rawDoc.id);
+      }
+      if (!resolvedData && docName) {
+        resolvedData = getMediaFromCache(docName);
+      }
       if (!resolvedData && rawDoc instanceof Blob) {
         try {
           resolvedData = URL.createObjectURL(rawDoc);
@@ -1485,9 +1491,12 @@ export default function BomOrdersView(props) {
               <video
                 controls
                 autoPlay
+                playsInline
                 src={resolvedData}
                 style={{ maxWidth: '100%', maxHeight: '68vh', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
-              />
+              >
+                Your browser does not support playing this video.
+              </video>
             ) : (
               <iframe
                 src={resolvedData}
@@ -4936,29 +4945,31 @@ export default function BomOrdersView(props) {
                         </div>
                       </div>
                     ))}
-                    {packVideos.map((vd, vIdx) => (
-                      <div
-                        key={vIdx}
-                        onClick={() => setPreviewDocModal({ title: vd.name || `Packed Item Video ${vIdx + 1}`, doc: { name: vd.name || `Video ${vIdx + 1}`, dataUrl: vd.dataUrl } })}
-                        style={{
-                          height: '84px',
-                          borderRadius: '10px',
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          border: '1.5px solid #CBD5E1',
-                          backgroundColor: '#0F172A',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'white',
-                          position: 'relative',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                          transition: 'transform 0.15s ease'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
+                    {packVideos.map((vd, vIdx) => {
+                      const videoUrl = vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || vd.url;
+                      return (
+                        <div
+                          key={vIdx}
+                          onClick={() => setPreviewDocModal({ title: vd.name || `Packed Item Video ${vIdx + 1}`, doc: { name: vd.name || `Video ${vIdx + 1}`, dataUrl: videoUrl } })}
+                          style={{
+                            height: '84px',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            border: '1.5px solid #CBD5E1',
+                            backgroundColor: '#0F172A',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            position: 'relative',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                            transition: 'transform 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
                         <Video size={22} style={{ color: '#38BDF8' }} />
                         <div style={{
                           position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -4970,7 +4981,8 @@ export default function BomOrdersView(props) {
                           <span>›</span>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                   </div>
                 ) : (
                   <div style={{ fontSize: '12px', color: '#94A3B8', fontStyle: 'italic', padding: '6px 0' }}>
@@ -6365,19 +6377,22 @@ export default function BomOrdersView(props) {
                           </div>
                         </div>
                       ))}
-                      {packVideos.map((vd, vIdx) => (
-                        <div
-                          key={vIdx}
-                          onClick={() => setPreviewDocModal({ title: vd.name || `Video ${vIdx + 1}`, doc: { name: vd.name || `Video ${vIdx + 1}`, dataUrl: vd.dataUrl } })}
-                          style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', position: 'relative' }}
-                        >
-                          <Video size={20} style={{ color: '#38BDF8' }} />
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                            <span>🎥 Video</span>
-                            <span>›</span>
+                      {packVideos.map((vd, vIdx) => {
+                        const videoUrl = vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || vd.url;
+                        return (
+                          <div
+                            key={vIdx}
+                            onClick={() => setPreviewDocModal({ title: vd.name || `Video ${vIdx + 1}`, doc: { name: vd.name || `Video ${vIdx + 1}`, dataUrl: videoUrl } })}
+                            style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', position: 'relative' }}
+                          >
+                            <Video size={20} style={{ color: '#38BDF8' }} />
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>🎥 Video</span>
+                              <span>›</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '10px', border: '1px dashed #E2E8F0' }}>

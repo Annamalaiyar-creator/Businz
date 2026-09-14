@@ -1,6 +1,7 @@
 import React from "react";
 import { Plus, X, XCircle, ChevronDown, ChevronUp, Receipt, Camera, Video } from "lucide-react";
 import StatusBadge from "../StatusBadge";
+import { getMediaFromCache } from "../../utils/otherViewsShared";
 
 export default function QuickPreviewDrawer({
   quickPreviewRecord,
@@ -328,25 +329,28 @@ export default function QuickPreviewDrawer({
                     </div>
                   </div>
                 ))}
-                {packVideos.map((vd, vIdx) => (
-                  <div
-                    key={vIdx}
-                    onClick={() => {
-                      if (typeof setActiveMediaPreviewModal === 'function') {
-                        setActiveMediaPreviewModal({ type: 'video', url: vd.dataUrl, name: vd.name || `Video ${vIdx + 1}` });
-                      } else if (vd.dataUrl) {
-                        window.open(vd.dataUrl, '_blank');
-                      }
-                    }}
-                    style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', position: 'relative' }}
-                  >
-                    <Video size={20} style={{ color: '#38BDF8' }} />
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>🎥 Video</span>
-                      <span>›</span>
+                {packVideos.map((vd, vIdx) => {
+                  const videoUrl = vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || vd.url;
+                  return (
+                    <div
+                      key={vIdx}
+                      onClick={() => {
+                        if (typeof setActiveMediaPreviewModal === 'function') {
+                          setActiveMediaPreviewModal({ type: 'video', url: videoUrl, name: vd.name || `Video ${vIdx + 1}` });
+                        } else if (videoUrl) {
+                          window.open(videoUrl, '_blank');
+                        }
+                      }}
+                      style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', position: 'relative' }}
+                    >
+                      <Video size={20} style={{ color: '#38BDF8' }} />
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>🎥 Video</span>
+                        <span>›</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '10px', border: '1px dashed #E2E8F0' }}>

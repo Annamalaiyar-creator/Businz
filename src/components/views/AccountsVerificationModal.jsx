@@ -3,7 +3,7 @@ import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image
 } from "lucide-react";
-import { getMediaFromCache, formatCurrency, cleanNum, compressAndSaveFile } from "../../utils/otherViewsShared";
+import { getMediaFromCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import StatusBadge from "../StatusBadge";
@@ -74,27 +74,49 @@ export default function AccountsVerificationModal({
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     const verifiedBOM = accountsVerificationModal;
     const newInvNo = verifiedBOM.invoiceNo || `INV-2026-${targetCode ? targetCode.replace(/[^0-9]/g, '') : Math.floor(100 + Math.random() * 900)}`;
-
-    setBomStore(prev => (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode) ? {
-      ...b,
+    const updatedBomData = {
+      ...verifiedBOM,
       invoiceNo: newInvNo,
       grandTotal: cleanNum(currentTotalAmount, 0),
       paymentDate: currentPayDate,
+      isAccountsDone: true,
       accountsVerification: {
-        ...(b.accountsVerification || {}),
+        ...(verifiedBOM.accountsVerification || {}),
         paymentStatus: currentPayStatus,
         paymentDate: currentPayDate,
         totalAmount: cleanNum(currentTotalAmount, 0),
         hardCopyReceived: true,
         verified: true,
-        verifiedBy: b.accountsVerification?.verifiedBy || 'Accounts Executive (Venkatesh)',
+        verifiedBy: verifiedBOM.accountsVerification?.verifiedBy || 'Accounts Executive (Venkatesh)',
         verifiedByRole: 'Accounts Team Lead',
         verifiedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })
       },
-      proofDoc: b.payments?.proofDoc || b.paymentProofDoc?.name || 'Payment_Proof_Receipt.pdf',
-      proofDocData: b.payments?.proofDocData || b.paymentProofDoc?.dataUrl || null,
+      proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || 'Payment_Proof_Receipt.pdf',
+      proofDocData: verifiedBOM.payments?.proofDocData || verifiedBOM.paymentProofDoc?.dataUrl || null,
       status: 'Accounts Verified & Passed to Invoice'
-    } : b));
+    };
+
+    setBomStore(prev => {
+      const updated = (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === verifiedBOM.id) ? updatedBomData : b);
+      return updated;
+    });
+
+    // Save to localStorage and Cloud Store for BOM
+    try {
+      const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+      const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === verifiedBOM.id) ? updatedBomData : b);
+      localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
+      saveCloudStore('bom_store', updatedLocal);
+    } catch (_) {}
+
+    // Push to server so Accounts & Billing sees it across devices
+    try {
+      fetch('/api/boms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
+      }).catch(() => {});
+    } catch (_) {}
 
     const packedItems = (verifiedBOM.dispatchPacking && Array.isArray(verifiedBOM.dispatchPacking) && verifiedBOM.dispatchPacking.length > 0)
       ? verifiedBOM.dispatchPacking.map((p, pIdx) => ({
@@ -150,9 +172,16 @@ export default function AccountsVerificationModal({
       const updated = [newInvEntry, ...filtered];
       try {
         saveCloudStore('invoice_store', updated);
+        localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
       } catch (e) { }
       return updated;
     });
+
+    // Global events
+    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
+    window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', { detail: { invoice: newInvEntry } }));
+    window.dispatchEvent(new Event('controlroom_storage_update'));
+    window.dispatchEvent(new Event('storage'));
 
     // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Billing & Sales
     notifyAccountsVerificationCompleted({

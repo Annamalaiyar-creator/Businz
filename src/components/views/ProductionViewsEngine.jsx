@@ -840,23 +840,48 @@ export default function ProductionViewsEngine(props) {
   const [closeReasonText, setCloseReasonText] = useState('');
   const [pendingDcModal, setPendingDcModal] = useState(null);
   const [confirmInvoiceSuccessModal, setConfirmInvoiceSuccessModal] = useState(null);
-  const [invoiceList, setInvoiceList] = useState([]);
+  const [invoiceList, setInvoiceList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_invoice_store');
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
 
-  // Sync invoiceList with Supabase cloud database
+  // Sync invoiceList with Supabase cloud database & localStorage
   useEffect(() => {
-    saveCloudStore('invoice_store', invoiceList);
+    if (invoiceList && invoiceList.length > 0) {
+      saveCloudStore('invoice_store', invoiceList);
+      try {
+        localStorage.setItem('controlroom_invoice_store', JSON.stringify(invoiceList.map(stripDataUrlsFromRecord)));
+      } catch (_) {}
+    }
   }, [invoiceList]);
 
-  // Initial cloud fetch for invoices
+  // Initial cloud fetch for invoices & listen for local update events
   useEffect(() => {
     fetchCloudStore('invoice_store', []).then(data => {
-      if (data && Array.isArray(data)) setInvoiceList(data);
+      if (data && Array.isArray(data) && data.length > 0) setInvoiceList(data);
     });
     const sub = subscribeToCloudStore('invoice_store', (latest) => {
-      if (latest && Array.isArray(latest)) setInvoiceList(latest);
+      if (latest && Array.isArray(latest) && latest.length > 0) setInvoiceList(latest);
     });
+
+    const handleInvoiceSync = (e) => {
+      const newInv = e.detail?.invoice;
+      if (newInv) {
+        setInvoiceList(prev => {
+          const filtered = (prev || []).filter(i => i.invNo !== newInv.invNo && i.poNo !== newInv.poNo);
+          return [newInv, ...filtered];
+        });
+      }
+    };
+    window.addEventListener('controlroom_invoice_store_updated', handleInvoiceSync);
+
     return () => {
       if (sub && typeof sub.unsubscribe === 'function') sub.unsubscribe();
+      window.removeEventListener('controlroom_invoice_store_updated', handleInvoiceSync);
     };
   }, []);
 

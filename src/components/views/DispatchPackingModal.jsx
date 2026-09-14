@@ -3,7 +3,7 @@ import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
   UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X
 } from "lucide-react";
-import { stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache } from "../../utils/otherViewsShared";
+import { stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
@@ -558,7 +558,6 @@ export default function DispatchPackingModal({
                 <th style={{ padding: '13px 20px', width: '60px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Check</th>
                 <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Code</th>
                 <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Description</th>
-                <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Cut Length (MM)</th>
                 <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
                 <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Status</th>
               </tr>
@@ -612,15 +611,6 @@ export default function DispatchPackingModal({
                     </td>
                     <td style={{ padding: '14px 16px', fontWeight: pItem.packed ? '700' : '600', color: pItem.packed ? '#166534' : '#1E293B', fontSize: '13px', textAlign: 'left' }}>
                       {pItem.name}
-                    </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
-                        borderRadius: '6px', fontSize: '12px', fontWeight: '800',
-                        backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC'
-                      }}>
-                        {cutLenMm} MM
-                      </span>
                     </td>
                     <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
                       {pItem.bomQty || pItem.qty || 1} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
@@ -726,13 +716,16 @@ export default function DispatchPackingModal({
                       if (file) {
                         const reader = new FileReader();
                         reader.onload = (evt) => {
+                          const vData = evt.target.result;
                           const vItem = {
                             id: `pack_video_${Date.now()}`,
                             name: file.name,
                             size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                            dataUrl: evt.target.result,
+                            dataUrl: vData,
                             uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
                           };
+                          saveMediaToCache(file.name, vData);
+                          saveMediaToCache(vItem.id, vData);
                           setDispatchPackingModal(prev => {
                             const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
                             return {
@@ -865,7 +858,7 @@ export default function DispatchPackingModal({
               {(dispatchPackingModal.dispatchPackingMedia?.videos || []).map((vd, vdIdx) => (
                 <div key={vd.id || vdIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <div
-                    onClick={() => handleMediaPreview({ type: 'video', url: vd.dataUrl, name: vd.name })}
+                    onClick={() => handleMediaPreview({ type: 'video', url: vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id), name: vd.name })}
                     style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
                   >
                     <Video size={24} style={{ color: '#38BDF8' }} />
