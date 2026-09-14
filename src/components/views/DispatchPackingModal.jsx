@@ -11,7 +11,9 @@ export default function DispatchPackingModal({
   setDispatchPackingModal,
   bomStore,
   setBomStore,
-  setInvoiceList
+  setInvoiceList,
+  canCancelBom = false,
+  handleCancelBomOrder = () => {}
 }) {
   const rawItems = (dispatchPackingModal.items || []).map(it => {
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();

@@ -957,6 +957,8 @@ export default function ProductionViewsEngine(props) {
                 bomStore={bomStore}
                 setBomStore={setBomStore}
                 setInvoiceList={setInvoiceList}
+                canCancelBom={canCancelBom}
+                handleCancelBomOrder={handleCancelBomOrder}
               />
             );
           }
