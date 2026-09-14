@@ -944,6 +944,7 @@ export default function ProductionViewsEngine(props) {
                 confirmingBomModal={confirmingBomModal}
                 setConfirmingBomModal={setConfirmingBomModal}
                 setBomStore={setBomStore}
+                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
               />
             );
           }
@@ -959,6 +960,7 @@ export default function ProductionViewsEngine(props) {
                 setInvoiceList={setInvoiceList}
                 canCancelBom={canCancelBom}
                 handleCancelBomOrder={handleCancelBomOrder}
+                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
               />
             );
           }

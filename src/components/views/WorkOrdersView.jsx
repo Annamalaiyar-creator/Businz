@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Search, X, CheckCircle, Edit3, RotateCcw, Eye } from "lucide-react";
 import { prodModuleEngine } from "../../utils/productionModuleEngine";
 import { fetchCloudStore } from "../../utils/supabaseDataSync";
+import { addLiveNotification } from "../Header";
 
 export default function WorkOrdersView({
   userRole,

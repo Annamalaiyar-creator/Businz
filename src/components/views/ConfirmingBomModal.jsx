@@ -7,7 +7,8 @@ import {
 export default function ConfirmingBomModal({
   confirmingBomModal,
   setConfirmingBomModal,
-  setBomStore
+  setBomStore,
+  setActiveMediaPreviewModal = () => {}
 }) {
   const isEditMode = Boolean(
     confirmingBomModal.isEditMode !== false &&

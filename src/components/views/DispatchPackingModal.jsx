@@ -1,10 +1,14 @@
-import React from "react";
+import React, { useState, useRef } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X
 } from "lucide-react";
 import { stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { addLiveNotification } from "../Header";
+import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
+import { VRM_PRODUCTS } from "../../utils/vrmProductsData";
+import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 
 export default function DispatchPackingModal({
   dispatchPackingModal,
@@ -13,8 +17,23 @@ export default function DispatchPackingModal({
   setBomStore,
   setInvoiceList,
   canCancelBom = false,
-  handleCancelBomOrder = () => {}
+  handleCancelBomOrder = () => {},
+  setActiveMediaPreviewModal
 }) {
+  const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
+  const [dispatchCameraError, setDispatchCameraError] = useState('');
+  const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
+  const dispatchCameraStreamRef = useRef(null);
+  const dispatchCameraVideoRef = useRef(null);
+  const dispatchCameraCanvasRef = useRef(null);
+
+  const handleMediaPreview = (media) => {
+    if (typeof setActiveMediaPreviewModal === 'function') {
+      setActiveMediaPreviewModal(media);
+    }
+    setLocalActiveMediaPreview(media);
+  };
+
   const rawItems = (dispatchPackingModal.items || []).map(it => {
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
     const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
@@ -793,7 +812,7 @@ export default function DispatchPackingModal({
               {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => (
                 <div key={ph.id || phIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <div
-                    onClick={() => setActiveMediaPreviewModal({ type: 'image', url: ph.dataUrl, name: ph.name })}
+                    onClick={() => handleMediaPreview({ type: 'image', url: ph.dataUrl, name: ph.name })}
                     style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <img src={ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -829,7 +848,7 @@ export default function DispatchPackingModal({
               {(dispatchPackingModal.dispatchPackingMedia?.videos || []).map((vd, vdIdx) => (
                 <div key={vd.id || vdIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <div
-                    onClick={() => setActiveMediaPreviewModal({ type: 'video', url: vd.dataUrl, name: vd.name })}
+                    onClick={() => handleMediaPreview({ type: 'video', url: vd.dataUrl, name: vd.name })}
                     style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
                   >
                     <Video size={24} style={{ color: '#38BDF8' }} />
@@ -1074,6 +1093,14 @@ export default function DispatchPackingModal({
             </div>
           </div>
         </div>
+      )}
+
+      {/* LOCAL MEDIA LIGHTBOX PREVIEW */}
+      {localActiveMediaPreview && (
+        <ActiveMediaPreviewModal
+          activeMediaPreviewModal={localActiveMediaPreview}
+          onClose={() => setLocalActiveMediaPreview(null)}
+        />
       )}
     </div>
   );

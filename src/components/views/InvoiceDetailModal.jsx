@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { addLiveNotification } from "../Header";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -20,7 +21,8 @@ export default function InvoiceDetailModal({
   setBomStore,
   invoices,
   setInvoices,
-  setPreviewDocModal
+  setPreviewDocModal,
+  setActiveMediaPreviewModal = () => {}
 }) {
   const inv = viewingInvoiceModal;
   const invNoText = isEditingInvoice ? (invoiceEditForm.invNo || inv.invNo || inv.code || 'INV-00027') : (inv.invNo || inv.code || 'INV-00027');

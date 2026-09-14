@@ -8,7 +8,8 @@ import { saveCloudStore } from "../../utils/supabaseDataSync";
 export default function VehicleLoadingModal({
   vehicleLoadingModal,
   onClose,
-  setBomStore
+  setBomStore,
+  setActiveMediaPreviewModal = () => {}
 }) {
   const [vehicleLoadingData, setVehicleLoadingData] = useState({
     vehicleNo: "",
