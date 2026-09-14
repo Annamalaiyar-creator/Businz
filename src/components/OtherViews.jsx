@@ -17,6 +17,7 @@ import ProductionViewsEngine from './views/ProductionViewsEngine';
 import BomOrdersView from './views/BomOrdersView';
 import PresetManagementView from './views/PresetManagementView';
 import SalesCrmEngine from './crm/SalesCrmEngine';
+import BackupVaultView from './views/BackupVaultView';
 import { RefreshCw } from 'lucide-react';
 
 class ViewErrorBoundary extends Component {
@@ -139,6 +140,11 @@ export default function OtherViews(props) {
           <PresetManagementView {...props} />
         )}
 
+        {/* Backup & Disaster Recovery Vault */}
+        {['Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault'].includes(activeTab) && (
+          <BackupVaultView userRole={userRole} />
+        )}
+
         {/* Production & BOM & Invoices engine */}
         {(![
           'Requests for Purchase', 'Vendor Management', 'Quotations',
@@ -148,12 +154,13 @@ export default function OtherViews(props) {
           'Procurement Reports', 'Spend Reports', 'Supplier Reports',
           'Dispatch Dashboard', 'BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing',
           'Preset Management', 'Presets', 'BOM Presets',
+          'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault',
           'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports'
         ].includes(activeTab) || ['Work Orders', 'Planning & Scheduling', 'Production Monitoring',
           'Quality Control', 'Machine Maintenance', 'Inventory',
           'Production Reports', 'Efficiency Reports', 'Downtime Analytics',
           'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management'
-        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing'].includes(activeTab) && (
+        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault'].includes(activeTab) && (
           <ProductionViewsEngine {...props} />
         )}
       </div>

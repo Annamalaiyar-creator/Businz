@@ -11,6 +11,7 @@ import {
 import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
 import { fetchLiveActiveSessions, revokeSession, revokeAllOtherSessions } from '../services/sessionService';
 import ZohoIntegrationView from './ZohoIntegrationView';
+import BackupVaultView from './views/BackupVaultView';
 
 export default function DeveloperPortalView({ userRole, onSignOut, showCustomAlert, onSwitchToErp }) {
   // Sidebar Collapse state
@@ -934,37 +935,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
 
           {/* 5. BACKUP & RESTORE */}
           {activeDevTab === 'BackupRestore' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ backgroundColor: '#1E293B', padding: '24px', borderRadius: '10px', border: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#F8FAFC' }}>Database Snapshot Backup & Restore Vault</h3>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94A3B8' }}>Nightly automated production backups with point-in-time recovery protection.</p>
-                  
-                  <div style={{ display: 'flex', gap: '20px', marginTop: '16px', fontSize: '12.5px' }}>
-                    <div>Last Backup: <strong style={{ color: '#34D399' }}>Today 02:00 AM (Successful)</strong></div>
-                    <div>Backup Size: <strong style={{ color: '#F1F5F9' }}>2.4 GB</strong></div>
-                    <div>Retention: <strong style={{ color: '#F1F5F9' }}>30 Days Automated GCS Sync</strong></div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => {
-                      if (showCustomAlert) showCustomAlert('Full production database backup initiated. Snapshot saving to GCS...', 'Backup Started', 'info');
-                    }}
-                    style={{ backgroundColor: '#0284C7', border: 'none', color: '#FFFFFF', padding: '10px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
-                  >
-                    + Create Instant Backup
-                  </button>
-                  <button
-                    onClick={() => setIsRestoreModalOpen(true)}
-                    style={{ backgroundColor: '#7F1D1D', border: '1px solid #991B1B', color: '#FCA5A5', padding: '10px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
-                  >
-                    ⚠️ Restore Database
-                  </button>
-                </div>
-              </div>
-            </div>
+            <BackupVaultView userRole={userRole || 'Technical Administrator'} />
           )}
 
           {/* 6. ROLLBACK & DEPLOYMENT */}

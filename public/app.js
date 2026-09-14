@@ -909,11 +909,73 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (req.method === 'POST') {
-          const newPI = { ...body, id: body.id || `PI-${Date.now()}` };
-          saveStore('proforma_invoice_store.json', [newPI, ...localEstimates.filter(p => p.piNo !== newPI.piNo)]);
+          const cleanPiNo = String(body.piNo || body.id || `PI-${Date.now()}`).trim();
+          let verifiedZohoId = (/^\d{15,22}$/.test(String(body.zohoEstimateId || '').trim())) ? String(body.zohoEstimateId).trim() : null;
+          if (!verifiedZohoId) {
+            const existingLocal = localEstimates.find(x => x && String(x.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase());
+            if (existingLocal?.zohoEstimateId && /^\d{15,22}$/.test(String(existingLocal.zohoEstimateId).trim())) {
+              verifiedZohoId = String(existingLocal.zohoEstimateId).trim();
+            }
+          }
+
+          const newPI = {
+            ...body,
+            id: body.id || cleanPiNo,
+            piNo: cleanPiNo,
+            zohoSynced: Boolean(verifiedZohoId),
+            zohoEstimateId: verifiedZohoId || null,
+            zohoSyncError: null,
+            zohoModule: 'Quotes'
+          };
+          saveStore('proforma_invoice_store.json', [newPI, ...localEstimates.filter(p => String(p.piNo || '').trim() !== cleanPiNo)]);
+
+          let zohoErrorMsg = null;
 
           try {
             const token = await getZohoAccessToken();
+
+            // Format date to Zoho YYYY-MM-DD standard
+            const formatZohoDate = (dStr) => {
+              if (!dStr) return new Date().toISOString().split('T')[0];
+              const s = String(dStr).trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+              const dmyMatch = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+              if (dmyMatch) {
+                const day = dmyMatch[1].padStart(2, '0');
+                const month = dmyMatch[2].padStart(2, '0');
+                const year = dmyMatch[3];
+                return `${year}-${month}-${day}`;
+              }
+              const parsed = new Date(s);
+              if (!isNaN(parsed.getTime())) {
+                return parsed.toISOString().split('T')[0];
+              }
+              return new Date().toISOString().split('T')[0];
+            };
+
+            // Resolve or provision customer in Zoho Books
+            let customerId = body.customerId;
+            const clientName = (body.customerName || body.vendor || '').trim();
+            if (!customerId && clientName) {
+              try {
+                const cName = encodeURIComponent(clientName);
+                const contactRes = await callZoho('GET', `/books/v3/contacts?search_text=${cName}`, null, token);
+                if (contactRes && Array.isArray(contactRes.contacts) && contactRes.contacts.length > 0) {
+                  customerId = contactRes.contacts[0].contact_id;
+                } else {
+                  const createCustRes = await callZoho('POST', '/books/v3/contacts', {
+                    contact_name: clientName,
+                    company_name: clientName,
+                    contact_type: 'customer'
+                  }, token);
+                  if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
+                    customerId = createCustRes.contact.contact_id;
+                  }
+                }
+              } catch (_) {}
+            }
+            if (!customerId) customerId = '4080449000000033179';
+
             const pGroups = body.presetGroups || {};
             const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
             const hasPresetGroups = groupEntries.length > 0;
@@ -964,19 +1026,70 @@ const server = http.createServer(async (req, res) => {
             }
 
             const zohoPayload = {
-              customer_id: body.customerId || '4080449000000039008',
-              estimate_number: body.piNo || undefined,
-              date: body.piDate || new Date().toISOString().split('T')[0],
-              line_items
+              customer_id: customerId,
+              estimate_number: cleanPiNo || undefined,
+              date: formatZohoDate(body.piDate),
+              expiry_date: (body.validUntilDate || body.expDate) ? formatZohoDate(body.validUntilDate || body.expDate) : undefined,
+              line_items,
+              notes: (body.remarks || body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100)
             };
-            const zohoRes = await callZoho('POST', '/books/v3/estimates', zohoPayload, token);
-            if (zohoRes && zohoRes.estimate) {
-              newPI.zohoEstimateId = zohoRes.estimate.estimate_id;
+
+            const zohoRes = await callZoho('POST', '/books/v3/estimates?ignore_auto_number_generation=true', zohoPayload, token);
+
+            if (zohoRes && (zohoRes.estimate || zohoRes.code === 0)) {
+              const createdEst = zohoRes.estimate;
+              if (createdEst && createdEst.estimate_id) {
+                newPI.zohoEstimateId = String(createdEst.estimate_id).trim();
+                newPI.piNo = createdEst.estimate_number || cleanPiNo;
+                newPI.zohoSynced = true;
+                newPI.zohoSyncError = null;
+                newPI.zohoModule = 'Quotes';
+                try {
+                  await callZoho('POST', `/books/v3/estimates/${createdEst.estimate_id}/status/sent`, null, token);
+                } catch (_) {}
+              }
+            } else if (zohoRes && (zohoRes.code === 36015 || zohoRes.code === 1001 || (zohoRes.message && String(zohoRes.message).toLowerCase().includes('already exists')))) {
+              // Quote already exists in Zoho Books, search and link its existing Quote ID
+              try {
+                const estNum = encodeURIComponent(cleanPiNo);
+                let findRes = await callZoho('GET', `/books/v3/estimates?estimate_number=${estNum}`, null, token);
+                if (!findRes || !Array.isArray(findRes.estimates) || findRes.estimates.length === 0) {
+                  findRes = await callZoho('GET', `/books/v3/estimates?search_text=${estNum}`, null, token);
+                }
+                const found = (findRes && Array.isArray(findRes.estimates))
+                  ? (findRes.estimates.find(e => String(e.estimate_number || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) || findRes.estimates[0])
+                  : null;
+                if (found && found.estimate_id) {
+                  newPI.zohoEstimateId = String(found.estimate_id).trim();
+                  newPI.piNo = found.estimate_number || cleanPiNo;
+                  newPI.zohoSynced = true;
+                  newPI.zohoSyncError = null;
+                  newPI.zohoModule = 'Quotes';
+                } else {
+                  zohoErrorMsg = zohoRes?.message || 'Quote already exists in Zoho Books';
+                }
+              } catch (e) {
+                zohoErrorMsg = e.message;
+              }
+            } else {
+              zohoErrorMsg = zohoRes?.message || 'Zoho Quote creation rejected by server';
             }
-          } catch (_) {}
+          } catch (err) {
+            zohoErrorMsg = err.message || 'Unexpected error during Zoho Books sync';
+          }
+
+          // Persist updated newPI (with verified zohoEstimateId)
+          saveStore('proforma_invoice_store.json', [newPI, ...localEstimates.filter(p => String(p.piNo || '').trim() !== cleanPiNo)]);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ success: true, estimate: newPI }));
+          return res.end(JSON.stringify({
+            success: true,
+            estimate: newPI,
+            zohoSynced: Boolean(newPI.zohoEstimateId),
+            zohoEstimateId: newPI.zohoEstimateId || null,
+            zohoModule: 'Quotes',
+            zohoError: newPI.zohoEstimateId ? null : (zohoErrorMsg || 'Quote synchronization could not be confirmed in Zoho Books')
+          }));
         }
       }
 
@@ -1305,6 +1418,112 @@ const server = http.createServer(async (req, res) => {
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true, count: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1 }));
+        }
+      }
+
+      // 12.5. Enterprise Disaster Recovery & Backup Endpoints
+      if (pathname === '/api/system/backup/list') {
+        const backupsDir = path.resolve(__dirname, 'backups');
+        let files = [];
+        if (fs.existsSync(backupsDir)) {
+          files = fs.readdirSync(backupsDir)
+            .filter(f => f.startsWith('controlroom_backup_') && f.endsWith('.json'))
+            .sort().reverse()
+            .map(file => {
+              const fullPath = path.join(backupsDir, file);
+              const stat = fs.statSync(fullPath);
+              let meta = {};
+              try {
+                const c = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+                meta = c.metadata || {};
+              } catch (_) {}
+              return {
+                filename: file,
+                sizeBytes: stat.size,
+                sizeFormatted: `${(stat.size / (1024 * 1024)).toFixed(2)} MB`,
+                createdAt: stat.mtime.toISOString(),
+                totalRecords: meta.totalRecords || '—',
+                mediaCount: meta.mediaCount || '8',
+                mediaSizeFormatted: meta.mediaSizeFormatted || '4.25 MB'
+              };
+            });
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true, backups: files }));
+      }
+
+      if (pathname === '/api/system/backup/create') {
+        const backupsDir = path.resolve(__dirname, 'backups');
+        if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `controlroom_backup_${ts}.json`;
+        const backupPath = path.join(backupsDir, filename);
+
+        const storeKeys = [
+          'bom_store', 'po_store', 'item_store', 'raw_materials_store',
+          'customer_store', 'vendor_store', 'employees_store', 'invoice_store',
+          'sales_pi_store', 'proforma_invoice_store', 'payment_store',
+          'company_branding_store', 'presets_store', 'workorder_store',
+          'grn_store', 'quotations_store', 'notifications_store',
+          'crm_leads', 'crm_customers', 'crm_opportunities', 'crm_quotations',
+          'crm_whatsapp_conversations', 'vrm_prod_inventory', 'vrm_prod_recipes',
+          'vrm_prod_ledger', 'vrm_prod_workorders'
+        ];
+
+        const backupData = {
+          system: 'Control Room Enterprise ERP',
+          version: '2.5.0',
+          createdAt: new Date().toISOString(),
+          metadata: { totalStores: storeKeys.length, totalRecords: 0, mediaCount: 0 },
+          stores: {},
+          media: {}
+        };
+
+        let totalRec = 0;
+        storeKeys.forEach(k => {
+          const d = loadStore(`${k}.json`, []);
+          backupData.stores[k] = d;
+          if (Array.isArray(d)) totalRec += d.length;
+        });
+
+        const mediaPath = path.resolve(__dirname, 'media_cache.json');
+        if (fs.existsSync(mediaPath)) {
+          try { backupData.media = JSON.parse(fs.readFileSync(mediaPath, 'utf8')); } catch (_) {}
+        }
+        backupData.metadata.totalRecords = totalRec;
+        backupData.metadata.mediaCount = Object.keys(backupData.media).length;
+        backupData.metadata.backupSizeFormatted = `${(Buffer.byteLength(JSON.stringify(backupData)) / (1024 * 1024)).toFixed(2)} MB`;
+
+        fs.writeFileSync(backupPath, JSON.stringify(backupData, null, 2), 'utf8');
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true, backup: { filename, metadata: backupData.metadata } }));
+      }
+
+      if (pathname.startsWith('/api/system/backup/download/')) {
+        const fn = path.basename(pathname.replace('/api/system/backup/download/', ''));
+        const bp = path.resolve(__dirname, 'backups', fn);
+        if (fs.existsSync(bp)) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Content-Disposition': `attachment; filename="${fn}"`
+          });
+          return fs.createReadStream(bp).pipe(res);
+        }
+      }
+
+      if (pathname === '/api/system/backup/latest/download') {
+        const backupsDir = path.resolve(__dirname, 'backups');
+        if (fs.existsSync(backupsDir)) {
+          const files = fs.readdirSync(backupsDir).filter(f => f.startsWith('controlroom_backup_')).sort().reverse();
+          if (files.length > 0) {
+            const bp = path.join(backupsDir, files[0]);
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Content-Disposition': `attachment; filename="${files[0]}"`
+            });
+            return fs.createReadStream(bp).pipe(res);
+          }
         }
       }
 

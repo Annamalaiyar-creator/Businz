@@ -25,6 +25,8 @@ server/zoho_token_cache.json
 *.sw?
 .env
 backup_recovered/
+backups/
+server/backups/
 
 .vercel
 

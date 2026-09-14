@@ -310,17 +310,20 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       sections = [...procurementSections];
     }
 
-    // Always ensure Zoho Integration & Templates are accessible under SYSTEM & CONFIG
+    // Always ensure Zoho Integration, Templates & Backup Vault are accessible under SYSTEM & CONFIG
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.targetTab === 'Templates'));
+    const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     if (sysSection) {
       if (!hasTemplates) sysSection.items.unshift({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
+      if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
     } else {
       const sysItems = [];
       if (!hasTemplates) {
         sysItems.push({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
       }
       sysItems.push({ label: 'Zoho Integration', icon: GitBranch });
+      sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
       sections.push({
         category: 'SYSTEM & CONFIG',
         items: sysItems

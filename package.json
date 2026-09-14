@@ -9,6 +9,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "backup": "node scripts/backup.js",
     "mobile:sync": "vite build && npx cap sync",
     "mobile:open": "npx cap open android"
   },
