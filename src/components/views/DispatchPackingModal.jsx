@@ -10,7 +10,8 @@ export default function DispatchPackingModal({
   dispatchPackingModal,
   setDispatchPackingModal,
   bomStore,
-  setBomStore
+  setBomStore,
+  setInvoiceList
 }) {
   const rawItems = (dispatchPackingModal.items || []).map(it => {
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
@@ -101,20 +102,22 @@ export default function DispatchPackingModal({
 
     const targetBomCode = dispatchPackingModal.bomCode;
     const targetNum = targetBomCode ? targetBomCode.replace(/[^0-9]/g, '') : '';
-    setInvoiceList(prev => prev.map(inv => {
-      const invPoNum = inv.poNo ? inv.poNo.replace(/[^0-9]/g, '') : '';
-      const invNoNum = inv.invNo ? inv.invNo.replace(/[^0-9]/g, '') : '';
-      const isMatch = inv.poNo === targetBomCode || inv.invNo === targetBomCode || inv.code === targetBomCode || (targetNum && (invPoNum === targetNum || invNoNum === targetNum));
-      if (isMatch) {
-        const currentItems = (inv.items && inv.items.length > 0) ? inv.items : (dispatchPackingModal.items || []);
-        const updatedInvItems = currentItems.map((it, idx) => {
-          const matchingPacked = itemsToPack.find(p => p.name === it.name || p.code === it.code || (it.name && p.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim())) || itemsToPack[idx];
-          return { ...it, selected: matchingPacked ? Boolean(matchingPacked.packed) : false };
-        });
-        return { ...inv, items: updatedInvItems };
-      }
-      return inv;
-    }));
+    if (typeof setInvoiceList === 'function') {
+      setInvoiceList(prev => (prev || []).map(inv => {
+        const invPoNum = inv.poNo ? inv.poNo.replace(/[^0-9]/g, '') : '';
+        const invNoNum = inv.invNo ? inv.invNo.replace(/[^0-9]/g, '') : '';
+        const isMatch = inv.poNo === targetBomCode || inv.invNo === targetBomCode || inv.code === targetBomCode || (targetNum && (invPoNum === targetNum || invNoNum === targetNum));
+        if (isMatch) {
+          const currentItems = (inv.items && inv.items.length > 0) ? inv.items : (dispatchPackingModal.items || []);
+          const updatedInvItems = currentItems.map((it, idx) => {
+            const matchingPacked = itemsToPack.find(p => p.name === it.name || p.code === it.code || (it.name && p.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim())) || itemsToPack[idx];
+            return { ...it, selected: matchingPacked ? Boolean(matchingPacked.packed) : false };
+          });
+          return { ...inv, items: updatedInvItems };
+        }
+        return inv;
+      }));
+    }
     setDispatchPackingModal(null);
 
     // Safely resolve the salesperson who created the BOM and customer name

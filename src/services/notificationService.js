@@ -9,6 +9,8 @@
 // 4. Billing -> Sales & Dispatch (Invoice completed & ready to dispatch) -> redirects to 'BOM Orders' / 'Dispatch Orders'
 // ===================================================================================
 
+import { fetchCloudStore, saveCloudStore } from "../utils/supabaseDataSync";
+
 let audioCtx = null;
 
 /**
@@ -597,6 +599,7 @@ export function sendWorkflowNotification({
     const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
     const updated = [notification, ...existing.filter(n => n.id !== notifId)].slice(0, 50);
     localStorage.setItem('vrm_live_notifications', JSON.stringify(updated));
+    saveCloudStore('notifications_store', updated);
   } catch (e) {
     console.error('Error saving live notification:', e);
   }
@@ -925,5 +928,33 @@ export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerso
       step: 'BOM_CANCELLED_NOTIF'
     }
   });
+}
+
+/**
+ * Fetch latest notifications from cloud store and merge with local notifications
+ * so Dispatch and Accounts logins on different devices/browsers receive live alerts.
+ */
+export async function syncCloudNotifications() {
+  if (typeof window === 'undefined') return;
+  try {
+    const cloudNotifs = await fetchCloudStore('notifications_store', []);
+    if (Array.isArray(cloudNotifs) && cloudNotifs.length > 0) {
+      const localNotifs = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
+      const map = new Map();
+      [...cloudNotifs, ...localNotifs].forEach(n => {
+        if (n && n.id && !map.has(n.id)) {
+          map.set(n.id, n);
+        }
+      });
+      const merged = Array.from(map.values()).slice(0, 50);
+      localStorage.setItem('vrm_live_notifications', JSON.stringify(merged));
+      window.dispatchEvent(new Event('vrm_notifications_updated'));
+    }
+  } catch (_) {}
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(() => syncCloudNotifications(), 1500);
+  window.addEventListener('controlroom_storage_update', () => syncCloudNotifications());
 }
 

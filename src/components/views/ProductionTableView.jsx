@@ -505,6 +505,10 @@ export default function ProductionTableView({
                   <>
                     <Eye size={14} style={{ color: '#DC2626' }} /> View Info (Cancelled)
                   </>
+                ) : activeTab === 'Dispatch Orders' ? (
+                  <>
+                    <Package size={14} style={{ color: '#0E7490' }} /> Pack BOM
+                  </>
                 ) : (
                   <>
                     <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
@@ -553,7 +557,7 @@ export default function ProductionTableView({
           })()}
 
           {/* Delete Button */}
-          {!isSuperUser && (
+          {!isSuperUser && activeTab !== 'Dispatch Orders' && (
             <button
               onClick={() => {
                 if (window.confirm(`Are you sure you want to delete ${selectedRows.length} selected item(s)?`)) {
@@ -621,23 +625,24 @@ export default function ProductionTableView({
           </button>
 
           {/* View Payment Details Button */}
-          <button
-            onClick={() => {
-              const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
-              const targetRow = codeVal
-                ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal))
-                : ((bomStore || [])[0] || (filteredRows || [])[0]);
+          {activeTab !== 'Dispatch Orders' && (
+            <button
+              onClick={() => {
+                const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+                const targetRow = codeVal
+                  ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal))
+                  : ((bomStore || [])[0] || (filteredRows || [])[0]);
 
-              if (targetRow) {
-                onUploadPayment(targetRow);
-              } else {
-                if (showAlert) showAlert('Please select a BOM order to view payment details.');
-              }
-            }}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
+                if (targetRow) {
+                  onUploadPayment(targetRow);
+                } else {
+                  if (showAlert) showAlert('Please select a BOM order to view payment details.');
+                }
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#1E293B',
               borderRadius: '10px',
               padding: '6px 14px',
               fontSize: '12px',
@@ -656,6 +661,7 @@ export default function ProductionTableView({
           >
             <CreditCard size={14} style={{ color: '#2563EB' }} /> Payment Details
           </button>
+        )}
 
           {/* Export and Print */}
           <button

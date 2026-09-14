@@ -709,7 +709,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [piNumber, setPiNumber] = useState('');
   const [isSubmittingPI, setIsSubmittingPI] = useState(false);
   const [piDate, setPiDate] = useState(new Date().toISOString().split('T')[0]);
-  const [validUntilDate, setValidUntilDate] = useState(() => new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
+  const [validUntilDate, setValidUntilDate] = useState('');
   const [salesPerson, setSalesPerson] = useState(getActiveUserName());
   const [vendorName, setVendorName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
@@ -738,7 +738,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [transportScope, setTransportScope] = useState('VRM Structures');
 
   // Commercial Fields
-  const [paymentTerms, setPaymentTerms] = useState('100% Advance');
+  const [paymentTerms, setPaymentTerms] = useState('100% Paid');
   const [creditDays, setCreditDays] = useState('');
   const [remarks, setRemarks] = useState('');
 
@@ -1081,7 +1081,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setIsUploading(false);
     setPiNumber('');
     setPiDate(new Date().toISOString().split('T')[0]);
-    setValidUntilDate(new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
+    setValidUntilDate('');
     setVendorName('');
     setContactPerson('');
     setPhone('');
@@ -1101,7 +1101,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setTransporterName('');
     setVehicleNo('');
     setTransportScope('VRM Structures');
-    setPaymentTerms('100% Advance');
+    setPaymentTerms('100% Paid');
     setCreditDays('');
     setRemarks('');
     setPiItems([]); // Fresh empty default with 0 prefilled items
@@ -1407,11 +1407,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (pi.piDate) setPiDate(pi.piDate);
     const todayStr = new Date().toISOString().split('T')[0];
     const incomingValidUntil = pi.validUntilDate || pi.expDate || pi.validUntil || '';
-    if (incomingValidUntil && incomingValidUntil >= todayStr) {
-      setValidUntilDate(incomingValidUntil);
-    } else {
-      setValidUntilDate(new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
-    }
+    setValidUntilDate(incomingValidUntil);
     setVendorName(pi.vendor || pi.customerName || '');
     setContactPerson(pi.contactPerson || '');
     setPhone(pi.phone || '');
@@ -2260,6 +2256,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 {(() => {
                   const targetPiNo = selectedPIs[0];
                   const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
+                  const isConverted = Boolean(targetPi && (targetPi.status === 'Converted to BOM' || targetPi.convertedToBom || targetPi.convertedBomCode));
+                  if (isConverted) return null;
 
                   return (
                     <button
@@ -2645,8 +2643,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     onChange={(e) => setPaymentTerms(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                   >
-                    <option value="100% Advance">100% Advance</option>
-                    <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
+                    <option value="100% Paid">100% Paid</option>
+                    <option value="Partial Payment">Partial Payment</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
                     <option value="Credit Payment">Credit Payment</option>
                   </select>
@@ -2661,8 +2659,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     onChange={(e) => setTransportScope(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                   >
-                    <option value="VRM Structures">VRM Structures (Included)</option>
-                    <option value="Customer Scope">Customer Scope / Ex-Works</option>
+                    <option value="VRM Structures">VRM Structures</option>
+                    <option value="Customer Scope">Customer Scope</option>
                   </select>
                 </div>
 
@@ -2675,9 +2673,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     onChange={(e) => setTransportMode(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                   >
-                    <option value="Transport">Transport (Road / Lorry)</option>
-                    <option value="Direct Pickup">Direct Customer Pickup</option>
-                    <option value="Train / Cargo">Train / Cargo Freight</option>
+                    <option value="Transport">Transport</option>
+                    <option value="Own Vehicle">Own Vehicle</option>
+                    <option value="Portal">Portal</option>
                   </select>
                 </div>
 
@@ -3948,30 +3946,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       ↻ Sync to Zoho
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
-                      handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
-                      setSelectedPi(null);
-                    }}
-                    title="Edit full Proforma Invoice details"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 14px',
-                      backgroundColor: '#0E7490',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: '800',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Edit3 size={14} /> Edit Info
-                  </button>
+                  {!(selectedPi?.status === 'Converted to BOM' || selectedPi?.convertedToBom || selectedPi?.convertedBomCode) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
+                        handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
+                        setSelectedPi(null);
+                      }}
+                      title="Edit full Proforma Invoice details"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 14px',
+                        backgroundColor: '#0E7490',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Edit3 size={14} /> Edit Info
+                    </button>
+                  )}
                   <button
                     onClick={() => setPrintModalPi(selectedPi)}
                     title="Open Print & PDF Template"
@@ -4443,29 +4443,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
-                      handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
-                      setSelectedPi(null);
-                    }}
-                    style={{
-                      padding: '10px 18px',
-                      borderRadius: '10px',
-                      border: 'none',
-                      backgroundColor: '#0E7490',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Edit3 size={15} /> Edit Info
-                  </button>
+                  {!isConverted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx = piList.findIndex(p => p.piNo === selectedPi.piNo);
+                        handleStartEdit(selectedPi, idx >= 0 ? idx : 0);
+                        setSelectedPi(null);
+                      }}
+                      style={{
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: '#0E7490',
+                        color: '#FFFFFF',
+                        fontSize: '13px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Edit3 size={15} /> Edit Info
+                    </button>
+                  )}
 
                   {selectedPi.status !== 'Cancelled' && !isConverted && (
                     <button

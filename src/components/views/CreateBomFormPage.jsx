@@ -32,6 +32,7 @@ export default function CreateBomFormPage(props) {
     showClearConfirmModal, setShowClearConfirmModal,
     bomConfirmModal, setBomConfirmModal, showCustomAlert
   } = props;
+  const [newBomPartialAmount, setNewBomPartialAmount] = React.useState(props.newBomPartialAmount || '');
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
     const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;
@@ -1237,6 +1238,41 @@ export default function CreateBomFormPage(props) {
               </select>
             </div>
 
+            {newBomPaymentType === 'Partial Payment' && (
+              <div style={{ backgroundColor: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
+                    Advance Paid Amount (₹) *
+                  </label>
+                  <span style={{ fontSize: '11px', color: '#0D9488', fontWeight: '700' }}>
+                    Total Order: ₹{Number(totals.grand || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      max={totals.grand || 9999999}
+                      value={newBomPartialAmount}
+                      onChange={(e) => setNewBomPartialAmount(e.target.value)}
+                      placeholder="e.g. 50000"
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #5EEAD4', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', fontWeight: '700' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #CCFBF1', padding: '0 14px', height: '42px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Remaining Balance</span>
+                    <strong style={{ fontSize: '13px', color: '#0F766E' }}>
+                      ₹{Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                </div>
+                <span style={{ fontSize: '11px', color: '#0D9488' }}>
+                  Record advance payment amount now. Balance payment proof can be uploaded anytime via Payment Details button.
+                </span>
+              </div>
+            )}
+
             {newBomPaymentType === 'Credit Payment' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -1654,10 +1690,12 @@ export default function CreateBomFormPage(props) {
                       vehicleNo: newBomVehicleNo || '',
                       lrNo: newBomLrNo || '',
                       paymentType: newBomPaymentType || '100% Paid',
+                      partialAmount: newBomPaymentType === 'Partial Payment' ? (parseFloat(newBomPartialAmount) || 0) : null,
+                      balanceAmount: newBomPaymentType === 'Partial Payment' ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (newBomPaymentType === '100% Paid' ? 0 : totals.grand),
                       creditDays: newBomPaymentType === 'Credit Payment' ? (parseInt(newBomCreditDays) || 7) : null,
                       creditDueDate: newBomPaymentType === 'Credit Payment' ? new Date(Date.now() + (parseInt(newBomCreditDays) || 7) * 86400000).toISOString().split('T')[0] : null,
                       paymentProofDoc: newBomPaymentProofDoc || null,
-                      paymentUpdated: newBomPaymentType === '100% Paid' && Boolean(newBomPaymentProofDoc),
+                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
                       remarks: newBomRemarks || '',
                       status: isDraft ? 'Draft' : 'Sales Confirmed - Sent to Dispatch',
                       salesConfirmed: !isDraft,

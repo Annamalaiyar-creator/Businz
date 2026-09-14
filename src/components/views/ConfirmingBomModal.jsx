@@ -132,6 +132,8 @@ export default function ConfirmingBomModal({
                   ...b,
                   companyName: confirmingBomModal.companyName || b.companyName,
                   paymentType: confirmingBomModal.paymentType || b.paymentType,
+                  partialAmount: confirmingBomModal.paymentType === 'Partial Payment' ? (parseFloat(confirmingBomModal.partialAmount) || 0) : (b.partialAmount || null),
+                  balanceAmount: confirmingBomModal.paymentType === 'Partial Payment' ? Math.max(0, (confirmingBomModal.grandTotal || orderGrandTotal) - (parseFloat(confirmingBomModal.partialAmount) || 0)) : (confirmingBomModal.paymentType === '100% Paid' ? 0 : (confirmingBomModal.grandTotal || orderGrandTotal)),
                   billingAddress: bStr,
                   billingAddressObj: bObj,
                   deliveryAddress: dStr,
@@ -249,19 +251,58 @@ export default function ConfirmingBomModal({
               </div>
             ) : (
               <select
-                value={confirmingBomModal.paymentType || '100% Advance'}
+                value={confirmingBomModal.paymentType || '100% Paid'}
                 onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                 style={{
                   width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px',
                   fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
                 }}
               >
-                <option value="100% Advance">100% Advance</option>
-                <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
-                <option value="Net 30 Days">Net 30 Days</option>
+                <option value="100% Paid">100% Paid</option>
+                <option value="Partial Payment">Partial Payment</option>
+                <option value="Payment While Dispatch">Payment While Dispatch</option>
+                <option value="Credit Payment">Credit Payment</option>
               </select>
             )}
           </div>
+
+          {confirmingBomModal.paymentType === 'Partial Payment' && (
+            <div style={{ gridColumn: 'span 2', backgroundColor: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '10px', padding: '12px 14px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
+                  Advance Paid Amount (₹)
+                </span>
+                <span style={{ fontSize: '11px', color: '#0D9488', fontWeight: '700' }}>
+                  Total Order: ₹{Number(confirmingBomModal.grandTotal || confirmingBomModal.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <input
+                  type="number"
+                  min="0"
+                  disabled={isAlreadyForwarded}
+                  value={confirmingBomModal.partialAmount !== undefined && confirmingBomModal.partialAmount !== null ? confirmingBomModal.partialAmount : ''}
+                  onChange={(e) => {
+                    const pAmt = parseFloat(e.target.value) || 0;
+                    const gTot = parseFloat(confirmingBomModal.grandTotal || confirmingBomModal.subTotal || 0);
+                    setConfirmingBomModal({
+                      ...confirmingBomModal,
+                      partialAmount: e.target.value,
+                      balanceAmount: Math.max(0, gTot - pAmt)
+                    });
+                  }}
+                  placeholder="Enter advance amount"
+                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #5EEAD4', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: isAlreadyForwarded ? '#F1F5F9' : '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #CCFBF1', padding: '0 12px', height: '38px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Remaining Balance</span>
+                  <strong style={{ fontSize: '13px', color: '#0F766E' }}>
+                    ₹{Math.max(0, (parseFloat(confirmingBomModal.grandTotal || confirmingBomModal.subTotal || 0)) - (parseFloat(confirmingBomModal.partialAmount) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* STRUCTURED ADDRESS CARDS (EDITABLE OR READ-ONLY) */}

@@ -5700,37 +5700,45 @@ export default function BomOrdersView(props) {
             <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedRows.length}</strong> Selected
           </span>
 
-          {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (
-            <button
-              onClick={() => {
-                if (selectedRows.length > 1) {
-                  alert('You cannot edit multiple items at once.');
-                } else if (selectedRows.length === 1) {
-                  const codeVal = selectedRows[0];
-                  const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
-                  setConfirmingBomModal({ ...targetRow, isEditMode: true });
-                }
-              }}
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                color: '#1E293B',
-                borderRadius: '10px',
-                padding: '6px 14px',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
-            >
-              <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
-            </button>
-          )}
+          {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
+            const isSentToDispatch = (selectedRows || []).some(codeVal => {
+              const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
+              return r && (r.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(r.status));
+            });
+            if (isSentToDispatch) return null;
+
+            return (
+              <button
+                onClick={() => {
+                  if (selectedRows.length > 1) {
+                    alert('You cannot edit multiple items at once.');
+                  } else if (selectedRows.length === 1) {
+                    const codeVal = selectedRows[0];
+                    const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
+                    setConfirmingBomModal({ ...targetRow, isEditMode: true });
+                  }
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#1E293B',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+              >
+                <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
+              </button>
+            );
+          })()}
 
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (
             <button

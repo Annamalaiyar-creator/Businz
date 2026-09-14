@@ -956,6 +956,7 @@ export default function ProductionViewsEngine(props) {
                 setDispatchPackingModal={setDispatchPackingModal}
                 bomStore={bomStore}
                 setBomStore={setBomStore}
+                setInvoiceList={setInvoiceList}
               />
             );
           }

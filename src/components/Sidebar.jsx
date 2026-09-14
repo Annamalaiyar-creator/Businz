@@ -21,6 +21,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const [realBOMCount, setRealBOMCount] = useState(0);
   const [realPendingPOCount, setRealPendingPOCount] = useState(0);
   const [realAccountsAwaitingPOCount, setRealAccountsAwaitingPOCount] = useState(0);
+  const [realPendingDispatchCount, setRealPendingDispatchCount] = useState(0);
 
   useEffect(() => {
     const unsubscribe = prodModuleEngine.subscribe(() => {
@@ -36,7 +37,16 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           fetchCloudStore('bom_store', []),
           fetchCloudStore('po_store', [])
         ]);
-        if (Array.isArray(boms)) setRealBOMCount(boms.length);
+        if (Array.isArray(boms)) {
+          setRealBOMCount(boms.length);
+          const pendingDispatch = boms.filter(b => {
+            const st = String(b.status || '').toLowerCase();
+            const isCancelled = st.includes('cancel') || Boolean(b.cancelled);
+            const isClosed = st.includes('closed') || st.includes('completed') || st.includes('delivered');
+            return !isCancelled && !isClosed;
+          });
+          setRealPendingDispatchCount(pendingDispatch.length);
+        }
         if (Array.isArray(pos)) {
           setRealPendingPOCount(pos.filter(p => p.status === 'Draft' || p.status === 'WAITING FOR APPROVAL' || p.status === 'Pending Approval' || p.statusType === 'draft' || p.statusType === 'pending').length);
           setRealAccountsAwaitingPOCount(pos.filter(p => p.status === 'MD Approved' || p.statusType === 'md_approved').length);
@@ -88,7 +98,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       items: [
         { label: 'Dashboard', icon: LayoutDashboard },
         { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
-        { label: 'Dispatch Orders', icon: Truck },
+        { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
         { label: 'Inventory', icon: Warehouse },
         { label: 'Raw Material Directory', icon: Layers }
       ]
@@ -130,7 +140,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'MAIN MENU',
           items: [
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
-            { label: 'Dispatch Orders', icon: Truck, badge: '4' },
+            { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
             { label: 'BOM Orders', icon: GitBranch },
             { label: 'Stock Status', icon: Layers }
           ]

@@ -163,19 +163,19 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               actionText: '',
               searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
               tabs: [
-                { id: 'All', label: 'All Accounts Orders', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Pending', label: 'Pending Verification', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !(b.accountsVerification?.verified || b.status === 'Accounts Verified & Passed to Invoice')).length, bg: '#FEF3C7', fg: '#B45309' },
+                { id: 'All', label: 'All Accounts Orders', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified).length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Pending', label: 'Pending Verification', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !(b.accountsVerification?.verified || b.status === 'Accounts Verified & Passed to Invoice')).length, bg: '#FEF3C7', fg: '#B45309' },
                 { id: 'Verified', label: 'Verified', count: (bomStore || []).filter(b => (b.accountsVerification?.verified || b.status === 'Accounts Verified & Passed to Invoice')).length, bg: '#DCFCE7', fg: '#166534' }
               ],
               headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Payment Status', 'Status'],
-              rows: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified).map(b => {
+              rows: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified).map(b => {
                 const acc = b.accountsVerification || {};
                 const isVerified = Boolean(
                   acc.verified ||
                   b.status === 'Accounts Verified & Passed to Invoice' ||
-                  (acc.paymentDate && acc.totalAmount && (acc.paymentStatus || b.paymentType === 'Net 30 Days'))
+                  (acc.paymentDate && acc.totalAmount && (acc.paymentStatus || b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment'))
                 );
-                const payStatus = acc.paymentStatus || (b.paymentType === 'Net 30 Days' ? 'Credit Payment' : isVerified ? '100% Received' : 'Pending Confirmation');
+                const payStatus = acc.paymentStatus || (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : isVerified ? '100% Received' : 'Pending Confirmation');
                 
                 // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
                 const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
@@ -240,7 +240,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered') && !b.cancelled).length, bg: '#F1F5F9', fg: '#475569' },
                 { id: 'Cancelled', label: 'Cancelled', count: (bomStore || []).filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
               ],
-              headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Dispatch Packing Status'],
+              headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
               rows: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true)).sort((a, b) => {
                 const parseBomSeq = (code) => {
                   const m = String(code || '').match(/BOM-(\d+)/i);
@@ -305,6 +305,9 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 }
 
                 const salesPersonName = (b.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim();
+                const totalAmt = b.grandTotal || b.subTotal || b.totalAmount || 0;
+                const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+
                 return {
                   ...b,
                   code: b.bomCode,
@@ -312,6 +315,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   salesPerson: salesPersonName,
                   c3: salesPersonName,
                   c4: b.paymentType || '100% Paid',
+                  c5: formattedAmt,
                   packingProgressText: isCancelled ? `Cancelled (${b.cancellationReason || 'Stock Restored'})` : (isClosed ? `All ${totalItemsCount} Items Dispatched & Closed` : `${packedCount} of ${totalItemsCount} Items Packed`),
                   status: statusLabel,
                   stBg: stBg,
