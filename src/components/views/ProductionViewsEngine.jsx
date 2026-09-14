@@ -77,6 +77,8 @@ export default function ProductionViewsEngine(props) {
     setProdActiveSubTab('All');
     setProdSearchQueryText('');
     setProdFilterStatusSelect('All');
+    setSelectedRows([]);
+    setCurrentPage(1);
   }, [activeTab]);
 
   const [showBOMForm, setShowBOMForm] = useState(false);
@@ -1222,8 +1224,10 @@ export default function ProductionViewsEngine(props) {
             const matchesTab = subTab === 'all' ||
               subTab === 'all boms' ||
               subTab === 'all orders' ||
+              subTab === 'all accounts orders' ||
               rTabGroup === subTab ||
-              (subTab.includes('pending') && (rStatus.includes('pending') || rStatus.includes('draft'))) ||
+              (subTab.includes('pending') && (rStatus.includes('pending') || rTabGroup.includes('pending') || rStatus.includes('draft'))) ||
+              (subTab.includes('verified') && (rStatus.includes('verified') || rTabGroup.includes('verified'))) ||
               (subTab.includes('draft') && rStatus.includes('draft')) ||
               (subTab.includes('sent') && (rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')));
 

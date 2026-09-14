@@ -2616,7 +2616,7 @@ app.post('/api/boms', async (req, res) => {
   return new Promise((resolveOuter) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let { bom, isNew } = req.body;
+        let { bom, isNew, isUpdate } = req.body;
         if (!bom) {
           res.status(400).json({ success: false, message: 'Valid bom record required' });
           return resolveOuter();
@@ -2702,8 +2702,10 @@ app.post('/api/boms', async (req, res) => {
         let finalCode = incomingCode;
         let shouldAssignNewCode = false;
 
+        const shouldUpdate = Boolean(isUpdate || req.body.isUpdate || req.body.isEdit || bom.isUpdate || (alreadyExists && !isNew));
+
         // If client sent a valid reserved code (e.g. BOM-663) that doesn't collide with a different existing order, honor it directly!
-        if (isValidIncomingCode && (!alreadyExists || bom.isUpdate)) {
+        if (isValidIncomingCode && (!alreadyExists || shouldUpdate)) {
           finalCode = incomingCode;
           const numMatch = incomingCode.match(/^BOM-(\d+)/i);
           if (numMatch) {

@@ -82,43 +82,48 @@ export default function DispatchPackingModal({
       : 'Partially Packed';
     const needsSalesPaymentNotification = allItemsPacked && isWhileDispatch;
 
-    setBomStore(prev => prev.map(b => (b.bomCode === dispatchPackingModal.bomCode || b.code === dispatchPackingModal.bomCode || b.id === dispatchPackingModal.id) ? {
-      ...b,
+    const accountsVerificationData = (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
+      ? dispatchPackingModal.accountsVerification
+      : (allItemsPacked ? { paymentStatus: isWhileDispatch ? 'Awaiting Sales Payment Slip' : null, hardCopyReceived: false, softCopyReceived: false, verified: false } : (dispatchPackingModal.accountsVerification || {}));
+
+    const updatedPackedBom = {
+      ...dispatchPackingModal,
       dispatchPacking: itemsToPack,
-      dispatchPackingMedia: dispatchPackingModal.dispatchPackingMedia || b.dispatchPackingMedia || null,
+      dispatchPackingMedia: dispatchPackingModal.dispatchPackingMedia || null,
       status: nextStatus,
       pendingSalesDispatchPayment: needsSalesPaymentNotification,
       reissuedByAccounts: false,
       isAccountsDone: false,
-      accountsVerification: (b.accountsVerification && b.accountsVerification.verified)
-        ? b.accountsVerification
-        : (allItemsPacked ? { paymentStatus: isWhileDispatch ? 'Awaiting Sales Payment Slip' : null, hardCopyReceived: false, softCopyReceived: false, verified: false } : (b.accountsVerification || {}))
-    } : b));
+      accountsVerification: accountsVerificationData,
+      isUpdate: true
+    };
 
-    // Push to server immediately so Accounts sees it in real time
+    const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
+
+    // 1. Update React state immediately
+    setBomStore(prev => {
+      const updated = (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b);
+      return updated;
+    });
+
+    // 2. Persist to cloud store and localStorage
+    saveCloudStore('bom_store', (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b));
     try {
-      const updatedPackedBom = {
-        ...dispatchPackingModal,
-        dispatchPacking: itemsToPack,
-        dispatchPackingMedia: dispatchPackingModal.dispatchPackingMedia || null,
-        status: nextStatus,
-        pendingSalesDispatchPayment: needsSalesPaymentNotification,
-        reissuedByAccounts: false,
-        isAccountsDone: false
-      };
+      const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+      const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b);
+      localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
+    } catch (_) {}
+
+    // 3. Dispatch global sync event so all views and tabs update in real time
+    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedPackedBom } }));
+
+    // 4. Push to server immediately so Accounts sees it across browsers and devices
+    try {
       fetch('/api/boms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedPackedBom), isUpdate: true })
       }).catch(() => {});
-      setBomStore(prev => {
-        const updated = (prev || []).map(b => (b.bomCode === updatedPackedBom.bomCode || b.code === updatedPackedBom.bomCode) ? { ...b, ...updatedPackedBom } : b);
-        saveCloudStore('bom_store', updated);
-        try {
-          localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-        } catch (_) {}
-        return updated;
-      });
     } catch (_) {}
 
     const targetBomCode = dispatchPackingModal.bomCode;

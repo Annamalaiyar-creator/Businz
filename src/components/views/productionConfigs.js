@@ -157,75 +157,109 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 };
               })
             },
-            'Accounts Verification': {
-              title: 'Accounts Verification & Document Control',
-              subtitle: 'Verify customer payment details (Payment Date, Total Amount, Payment Status) and Hard Copy BOM receipt',
-              actionText: '',
-              searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
-              tabs: [
-                { id: 'All', label: 'All Accounts Orders', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Pending', label: 'Pending Verification', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !(b.accountsVerification?.verified || b.status === 'Accounts Verified & Passed to Invoice')).length, bg: '#FEF3C7', fg: '#B45309' },
-                { id: 'Verified', label: 'Verified', count: (bomStore || []).filter(b => (b.accountsVerification?.verified || b.status === 'Accounts Verified & Passed to Invoice')).length, bg: '#DCFCE7', fg: '#166534' }
-              ],
-              headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Payment Status', 'Status'],
-              rows: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Packed & Awaiting Dispatch Payment' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified).map(b => {
-                const acc = b.accountsVerification || {};
-                const isVerified = Boolean(
+            'Accounts Verification': (() => {
+              const isAccountsEligible = (b) => {
+                if (!b) return false;
+                if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+                const s = String(b.status || '').toLowerCase().trim();
+                const isPacked = s.includes('packed') || s.includes('ready for dispatch') || s.includes('sent to accounts') || s.includes('awaiting dispatch') || s.includes('packing verified');
+                const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
+                const isAllItemsPacked = Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => Boolean(p.packed));
+                const isPartiallyPacked = Array.isArray(b.dispatchPacking) && b.dispatchPacking.some(p => Boolean(p.packed));
+                const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
+                return isPacked || isAccDone || isAllItemsPacked || isPartiallyPacked || isInvoiceOrLater || Boolean(b.pendingSalesDispatchPayment);
+              };
+
+              const isAccVerifiedOrder = (b) => {
+                const acc = b?.accountsVerification || {};
+                const s = String(b?.status || '').toLowerCase();
+                return Boolean(
                   acc.verified ||
-                  b.status === 'Accounts Verified & Passed to Invoice' ||
-                  (acc.paymentDate && acc.totalAmount && (acc.paymentStatus || b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment'))
+                  s.includes('accounts verified') ||
+                  b?.isAccountsDone ||
+                  (acc.paymentDate && acc.totalAmount && (acc.paymentStatus || b?.paymentType === 'Net 30 Days' || b?.paymentType === 'Credit Payment'))
                 );
-                const payStatus = acc.paymentStatus || (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : isVerified ? '100% Received' : 'Pending Confirmation');
-                
-                // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
-                const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
-                let paymentDateFormatted = '—';
-                if (rawDate) {
-                  try {
-                    const d = new Date(rawDate);
-                    if (!isNaN(d.getTime())) {
-                      paymentDateFormatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                    } else {
+              };
+
+              const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort((a, b) => {
+                const parseBomSeq = (code) => {
+                  const m = String(code || '').match(/BOM-(\d+)/i);
+                  return m ? parseInt(m[1], 10) : 0;
+                };
+                const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
+                const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
+                if (seqA !== seqB) return seqB - seqA;
+                const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
+                const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
+                return dateB - dateA;
+              });
+
+              return {
+                title: 'Accounts Verification & Document Control',
+                subtitle: 'Verify customer payment details (Payment Date, Total Amount, Payment Status) and Hard Copy BOM receipt',
+                actionText: '',
+                searchPlaceholder: 'Search Accounts Verification (BOM Code, Customer Name)...',
+                tabs: [
+                  { id: 'All', label: 'All Accounts Orders', count: allAccountsBoms.length, bg: '#e2e8f0', fg: '#475569' },
+                  { id: 'Pending', label: 'Pending Verification', count: allAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Verified', label: 'Verified', count: allAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
+                ],
+                headers: ['BOM Code', 'Customer Name', 'Payment Type', 'Payment Date', 'Total Amount', 'Payment Status', 'Status'],
+                rows: allAccountsBoms.map(b => {
+                  const acc = b.accountsVerification || {};
+                  const isVerified = isAccVerifiedOrder(b);
+                  const payStatus = acc.paymentStatus || (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : isVerified ? '100% Received' : 'Pending Confirmation');
+                  
+                  // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
+                  const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
+                  let paymentDateFormatted = '—';
+                  if (rawDate) {
+                    try {
+                      const d = new Date(rawDate);
+                      if (!isNaN(d.getTime())) {
+                        paymentDateFormatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      } else {
+                        paymentDateFormatted = rawDate;
+                      }
+                    } catch (e) {
                       paymentDateFormatted = rawDate;
                     }
-                  } catch (e) {
-                    paymentDateFormatted = rawDate;
                   }
-                }
 
-                // Format Total Amount (should NOT be prefilled if accounts haven't verified/entered it)
-                let totalAmtFormatted = '—';
-                if (acc.totalAmount !== undefined && acc.totalAmount !== null && acc.totalAmount !== '') {
-                  const val = parseFloat(acc.totalAmount) || 0;
-                  totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                } else if (isVerified && b.grandTotal) {
-                  const val = parseFloat(b.grandTotal) || 0;
-                  totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                }
+                  // Format Total Amount (should NOT be prefilled if accounts haven't verified/entered it)
+                  let totalAmtFormatted = '—';
+                  if (acc.totalAmount !== undefined && acc.totalAmount !== null && acc.totalAmount !== '') {
+                    const val = parseFloat(acc.totalAmount) || 0;
+                    totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  } else if (isVerified && b.grandTotal) {
+                    const val = parseFloat(b.grandTotal) || 0;
+                    totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  }
 
-                const statusText = isVerified ? 'ACCOUNTS VERIFIED' : 'PENDING VERIFICATION';
-                const stBg = isVerified ? '#DCFCE7' : '#FEF3C7';
-                const stFg = isVerified ? '#166534' : '#B45309';
-                const stBorder = isVerified ? '1px solid #BBF7D0' : '1px solid #FDE68A';
-                const tabGroup = isVerified ? 'Verified' : 'Pending';
+                  const statusText = isVerified ? 'ACCOUNTS VERIFIED' : 'PENDING VERIFICATION';
+                  const stBg = isVerified ? '#DCFCE7' : '#FEF3C7';
+                  const stFg = isVerified ? '#166534' : '#B45309';
+                  const stBorder = isVerified ? '1px solid #BBF7D0' : '1px solid #FDE68A';
+                  const tabGroup = isVerified ? 'Verified' : 'Pending';
 
-                return {
-                  ...b,
-                  code: b.bomCode,
-                  c2: b.customerName,
-                  c3: b.paymentType,
-                  c4: paymentDateFormatted,
-                  c5: totalAmtFormatted,
-                  c6: payStatus,
-                  status: statusText,
-                  stBg: stBg,
-                  stFg: stFg,
-                  stBorder: stBorder,
-                  isAccountsDone: isVerified,
-                  tabGroup: tabGroup
-                };
-              })
-            },
+                  return {
+                    ...b,
+                    code: b.bomCode,
+                    c2: b.customerName,
+                    c3: b.paymentType,
+                    c4: paymentDateFormatted,
+                    c5: totalAmtFormatted,
+                    c6: payStatus,
+                    status: statusText,
+                    stBg: stBg,
+                    stFg: stFg,
+                    stBorder: stBorder,
+                    isAccountsDone: isVerified,
+                    tabGroup: tabGroup
+                  };
+                })
+              };
+            })(),
             'Dispatch Orders': {
               title: 'Dispatch & Packing Fulfillment Center',
               subtitle: 'Verify goods packing, track dispatch progress, and release shipments for approved Sales BOM orders',
