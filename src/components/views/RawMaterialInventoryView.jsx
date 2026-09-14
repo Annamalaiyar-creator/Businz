@@ -6,10 +6,24 @@ import {
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
 
-const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert }) => {
+const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
   const [internalShowAddStockForm, setInternalShowAddStockForm] = useState(false);
   const isAddStockActive = externalShowForm !== undefined ? externalShowForm : internalShowAddStockForm;
   const setAddStockActive = externalSetShowForm || setInternalShowAddStockForm;
+
+  const getStoredItemsList = () => {
+    if (Array.isArray(passedItemsList) && passedItemsList.length > 0) return passedItemsList;
+    try {
+      const saved = localStorage.getItem('controlroom_items_list') || localStorage.getItem('controlroom_inventory_items');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return [];
+  };
+
+  const itemsList = useMemo(() => getStoredItemsList(), [passedItemsList]);
 
   const getEngineAluStock = () => {
     try {
@@ -80,7 +94,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Aluminium', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 290, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' }
   ];
 
-  const initialMaterials = ALUMINUM_PROFILES.map(p => ({
+  const initialMaterials = useMemo(() => ALUMINUM_PROFILES.map(p => ({
     ...p,
     lastUpdated: 'Live Store',
     reserved: 0,
@@ -89,7 +103,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     issuedProd: 0,
     matReturn: 0,
     stockAdj: 0
-  }));
+  })), []);
 
   const getDeletedMaterialCodes = () => {
     try {

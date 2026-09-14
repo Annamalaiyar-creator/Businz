@@ -934,6 +934,7 @@ export default function ProductionViewsEngine(props) {
                 activeTab={activeTab}
                 itemsLoading={itemsLoading}
                 showCustomAlert={showCustomAlert}
+                itemsList={props.itemsList || []}
               />
             );
           }

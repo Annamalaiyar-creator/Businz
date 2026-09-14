@@ -450,6 +450,8 @@ function App() {
               targetBomCode={targetBomCode}
               clearTargetBom={() => setTargetBomCode(null)}
               targetPiNo={targetPiNo}
+              itemsList={itemsList}
+              purchaseOrders={purchaseOrders}
             />
           ) : (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head')) ? (
             <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
