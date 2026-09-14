@@ -16,7 +16,7 @@ import { getSafeZohoVendors, getSafeZohoItems } from '../../services/zohoSafeSyn
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
-import { VRM_PRODUCTS, resolveProductCode, wordFingerprint } from '../../utils/vrmProductsData';
+import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from '../../utils/vrmProductsData';
 
 
 export default function StockStatusView(props) {
@@ -2259,16 +2259,18 @@ export default function StockStatusView(props) {
             if (Array.isArray(bomStore)) {
               bomStore.forEach(b => {
                 const bStatus = String(b.status || '').toLowerCase();
-                if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored') && bStatus !== 'delivered') {
+                if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
                   (b.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
                     if (qty > 0) {
                       const resCode = resolveProductCode(pItem).toLowerCase().trim();
                       const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
                       const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+                      const norm = normalizeProductName(pName);
                       const pFp = wordFingerprint(pName);
                       if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
                       if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
+                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
                       if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
                     }
                   });
@@ -2286,16 +2288,18 @@ export default function StockStatusView(props) {
               }
               localPIs.forEach(pi => {
                 const piStatus = String(pi.status || '').toLowerCase();
-                if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom) {
+                if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom && !pi.isConverted) {
                   (pi.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.quantity || 0) || 0;
                     if (qty > 0) {
                       const resCode = resolveProductCode(pItem).toLowerCase().trim();
                       const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
                       const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+                      const norm = normalizeProductName(pName);
                       const pFp = wordFingerprint(pName);
                       if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
                       if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
+                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
                       if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
                     }
                   });
@@ -2317,9 +2321,11 @@ export default function StockStatusView(props) {
               const mRes = resolveProductCode(m).toLowerCase().trim();
               const mCode = String(mRes || m.code || '').toLowerCase().trim();
               const mName = String(m.name || '').toLowerCase().trim();
+              const mNorm = normalizeProductName(m.name);
               const mFp = wordFingerprint(mName);
               if (mCode) rawMatMap.set(mCode, m);
               if (mName) rawMatMap.set(mName, m);
+              if (mNorm) rawMatMap.set(mNorm, m);
               if (mFp) rawMatMap.set(mFp, m);
             });
 
@@ -2327,21 +2333,23 @@ export default function StockStatusView(props) {
               const itRes = resolveProductCode(it).toLowerCase().trim();
               const codeKey = String(itRes || it.code || it.sku || it.itemId || '').toLowerCase().trim();
               const nameKey = String(it.name || '').toLowerCase().trim();
+              const itNorm = normalizeProductName(it.name);
               const itFp = wordFingerprint(nameKey);
-              const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
+              const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (itNorm && rawMatMap.get(itNorm)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
 
               const physicalBase = Math.max(0, Number(matchedMat?.physicalStock || matchedMat?.openingStock || it.physicalStock || it.openingStock || 5000));
               const activeBlocked = Math.max(
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
+                (itNorm && bomReservedMap.get(itNorm)) || 0,
                 (nameKey && bomReservedMap.get(nameKey)) || 0,
                 (itFp && bomReservedMap.get(itFp)) || 0,
                 Number(matchedMat?.reserved || it.reserved || 0)
               );
               let availableQty = Math.max(0, physicalBase - activeBlocked);
-              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
-                availableQty = Math.min(availableQty, Number(matchedMat.stock));
-              } else if (it.stock !== undefined && !isNaN(it.stock) && Number(it.stock) > 0) {
-                availableQty = Math.min(availableQty, Number(it.stock));
+              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock)) {
+                availableQty = Math.min(availableQty, Math.max(0, Number(matchedMat.stock)));
+              } else if (it.stock !== undefined && !isNaN(it.stock)) {
+                availableQty = Math.min(availableQty, Math.max(0, Number(it.stock)));
               }
               const minLvl = Number(it.reorderLevel || it.minLevel || 50);
 
@@ -2510,16 +2518,18 @@ export default function StockStatusView(props) {
               }
               localPIs.forEach(pi => {
                 const piStatus = String(pi.status || '').toLowerCase();
-                if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom) {
+                if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom && !pi.isConverted) {
                   (pi.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.quantity || 0) || 0;
                     if (qty > 0) {
                       const resCode = resolveProductCode(pItem).toLowerCase().trim();
                       const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
                       const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+                      const norm = normalizeProductName(pName);
                       const pFp = wordFingerprint(pName);
                       if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
                       if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
+                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
                       if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
                     }
                   });
@@ -2542,9 +2552,11 @@ export default function StockStatusView(props) {
               const mRes = resolveProductCode(m).toLowerCase().trim();
               const mCode = String(mRes || m.code || '').toLowerCase().trim();
               const mName = String(m.name || '').toLowerCase().trim();
+              const mNorm = normalizeProductName(m.name);
               const mFp = wordFingerprint(mName);
               if (mCode) rawMatMap.set(mCode, m);
               if (mName) rawMatMap.set(mName, m);
+              if (mNorm) rawMatMap.set(mNorm, m);
               if (mFp) rawMatMap.set(mFp, m);
             });
 
@@ -2591,21 +2603,23 @@ export default function StockStatusView(props) {
               const itRes = resolveProductCode(it).toLowerCase().trim();
               const codeKey = String(itRes || it.code || it.sku || it.itemId || '').toLowerCase().trim();
               const nameKey = String(it.name || '').toLowerCase().trim();
+              const itNorm = normalizeProductName(it.name);
               const itFp = wordFingerprint(nameKey);
-              const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
+              const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (itNorm && rawMatMap.get(itNorm)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
 
               const physicalBase = Math.max(0, Number(matchedMat?.physicalStock || matchedMat?.openingStock || it.physicalStock || it.openingStock || 5000));
               const activeBlocked = Math.max(
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
+                (itNorm && bomReservedMap.get(itNorm)) || 0,
                 (nameKey && bomReservedMap.get(nameKey)) || 0,
                 (itFp && bomReservedMap.get(itFp)) || 0,
                 Number(matchedMat?.reserved || it.reserved || 0)
               );
               let availableQty = Math.max(0, physicalBase - activeBlocked);
-              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
-                availableQty = Math.min(availableQty, Number(matchedMat.stock));
-              } else if (it.stock !== undefined && !isNaN(it.stock) && Number(it.stock) > 0) {
-                availableQty = Math.min(availableQty, Number(it.stock));
+              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock)) {
+                availableQty = Math.min(availableQty, Math.max(0, Number(matchedMat.stock)));
+              } else if (it.stock !== undefined && !isNaN(it.stock)) {
+                availableQty = Math.min(availableQty, Math.max(0, Number(it.stock)));
               }
 
               const rateVal = Number(it.rate || it.price || 250);

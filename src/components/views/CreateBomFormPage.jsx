@@ -8,6 +8,7 @@ import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache
 } from "../../utils/otherViewsShared";
 import { saveCloudStoreImmediate } from "../../utils/supabaseDataSync";
+import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
 
@@ -1787,6 +1788,43 @@ export default function CreateBomFormPage(props) {
                       }
                     }
 
+                    // Deduct / Reserve Stock in Central Inventory & Raw Materials Stores immediately
+                    try {
+                      centralInventoryStore.deductStockForBOM(finalAssignedCode, sanitizedNewBom.items, sanitizedNewBom.salesPerson || 'Sales Executive');
+                    } catch (cErr) {
+                      console.warn('Central store deduction error in CreateBomFormPage:', cErr);
+                    }
+
+                    // If BOM originates from a converted Proforma Invoice, mark the PI as converted to avoid double-allocation
+                    const srcPi = sanitizedNewBom.sourcePiNo;
+                    if (srcPi) {
+                      const updatePiList = (storeKey) => {
+                        try {
+                          const raw = localStorage.getItem(storeKey);
+                          if (raw) {
+                            const list = JSON.parse(raw);
+                            if (Array.isArray(list)) {
+                              const updated = list.map(pi => (pi.piNo === srcPi || pi.id === srcPi) ? {
+                                ...pi,
+                                status: 'Converted to BOM',
+                                convertedToBom: true,
+                                isConverted: true,
+                                convertedBomCode: finalAssignedCode,
+                                convertedDate: new Date().toISOString()
+                              } : pi);
+                              localStorage.setItem(storeKey, JSON.stringify(updated));
+                              saveCloudStoreImmediate('sales_pi_store', updated);
+                            }
+                          }
+                        } catch (_) {}
+                      };
+                      updatePiList('controlroom_sales_pi_store');
+                      updatePiList('controlroom_procurement_pi_store');
+                      try {
+                        window.dispatchEvent(new CustomEvent('controlroom_pi_store_updated', { detail: { piNo: srcPi, bomCode: finalAssignedCode } }));
+                      } catch (_) {}
+                    }
+
                     setBomStore(prev => {
                       const current = Array.isArray(prev) ? prev : [];
                       const filtered = current.filter(item => item && (item.bomCode !== finalAssignedCode && item.code !== finalAssignedCode));
@@ -1808,7 +1846,10 @@ export default function CreateBomFormPage(props) {
                       setCurrentPage(1);
                       try {
                         window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: sanitizedNewBom } }));
+                        window.dispatchEvent(new Event('central_inventory_updated'));
+                        window.dispatchEvent(new Event('controlroom_raw_materials_update'));
                         window.dispatchEvent(new Event('controlroom_storage_update'));
+                        window.dispatchEvent(new Event('storage'));
                       } catch (e) { }
                       return updatedList;
                     });

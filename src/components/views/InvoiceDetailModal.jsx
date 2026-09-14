@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
 
 export default function InvoiceDetailModal({
@@ -543,6 +544,16 @@ export default function InvoiceDetailModal({
                   window.dispatchEvent(new Event('controlroom_raw_materials_update'));
                 } catch (err) { console.error('Error updating raw materials store:', err); }
               } // end if (!isStockAlreadyBlocked)
+
+              // Deduct Inventory in Central Inventory Store
+              try {
+                centralInventoryStore.deductStockForBOM(bomRefText, packedItemsToDeduct, 'Accounts Invoice Confirmation');
+                window.dispatchEvent(new Event('central_inventory_updated'));
+                window.dispatchEvent(new Event('controlroom_storage_update'));
+                window.dispatchEvent(new Event('storage'));
+              } catch (cErr) {
+                console.warn('Central inventory store deduction error in InvoiceDetailModal:', cErr);
+              }
 
                 // 5. Update Invoice status & persist to localStorage / cloud store
                 setViewingInvoiceModal(prev => prev ? {

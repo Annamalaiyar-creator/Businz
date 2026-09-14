@@ -1,4 +1,4 @@
-import { VRM_PRODUCTS } from './vrmProductsData.js';
+import { VRM_PRODUCTS, resolveProductCode, normalizeProductName } from './vrmProductsData.js';
 import { fetchCloudStore, saveCloudStore } from './supabaseDataSync.js';
 
 // Initial Seed Item Master derived strictly from official VRM catalog (All items initialized with 5000 units stock)
@@ -44,11 +44,21 @@ class CentralInventoryStore {
   }
 
   initStore() {
-    // 1. Load Item Master with Supabase Cloud Database fallback
-    this.items = [...INITIAL_CENTRAL_ITEMS];
-    fetchCloudStore('item_store', INITIAL_CENTRAL_ITEMS).then(cloudItems => {
+    // 1. Load Item Master with localStorage and Supabase Cloud Database fallback
+    let seeded = [...INITIAL_CENTRAL_ITEMS];
+    try {
+      const savedItems = localStorage.getItem(this.storageKeyItems);
+      if (savedItems) {
+        const parsed = JSON.parse(savedItems);
+        if (Array.isArray(parsed) && parsed.length > 0) seeded = parsed;
+      }
+    } catch (_) {}
+    this.items = seeded;
+
+    fetchCloudStore('item_store', seeded).then(cloudItems => {
       if (Array.isArray(cloudItems) && cloudItems.length > 0) {
         this.items = cloudItems;
+        try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
         this.notifyChange();
       }
     }).catch(() => {});
@@ -417,26 +427,41 @@ class CentralInventoryStore {
   }
 
   // ----------------------------------------------------
-  // 2. STOCK RESERVATIONS & DEDUCTIONS (BOM / PROD ORDER)
+  // 2. PRODUCTION WORK ORDER & STOCK RESERVATION
   // ----------------------------------------------------
-  reserveStockForBOM(refNo, itemsList) {
-    itemsList.forEach(item => {
-      const res = {
-        id: `RES-${Date.now()}-${Math.floor(Math.random() * 100)}`,
-        refNo,
-        itemCode: item.itemCode || item.code,
-        reservedQty: parseFloat(item.reqQty || item.qty) || 0,
-        date: new Date().toISOString().split('T')[0],
-        status: 'Active'
-      };
-      this.reservations.push(res);
-    });
+  createProductionOrder(orderData, user = 'Production Head') {
+    const prodOrderNo = orderData.prodOrderNo || `PROD-${Date.now().toString().slice(-5)}`;
+    const newOrder = {
+      ...orderData,
+      prodOrderNo,
+      status: 'In Production',
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    this.productionOrders.unshift(newOrder);
 
+    // Reserve raw materials
+    if (Array.isArray(orderData.requiredMaterials)) {
+      orderData.requiredMaterials.forEach(mat => {
+        const resId = `RES-${prodOrderNo}-${mat.code}`;
+        this.reservations.push({
+          id: resId,
+          refNo: prodOrderNo,
+          itemCode: mat.code,
+          reservedQty: parseFloat(mat.reqQty) || 0,
+          date: new Date().toISOString().split('T')[0],
+          status: 'Active'
+        });
+      });
+    }
+
+    this.saveProdOrders();
     this.saveReservations();
     this.notifyChange();
+    return newOrder;
   }
 
-  releaseReservation(refNo, itemCode) {
+  // Release reservation upon dispatch or cancellation
+  releaseReservation(refNo, itemCode = null) {
     this.reservations = this.reservations.filter(r => !(r.refNo === refNo && (!itemCode || r.itemCode === itemCode)));
     this.saveReservations();
     this.notifyChange();
@@ -447,29 +472,44 @@ class CentralInventoryStore {
     if (!Array.isArray(itemsList) || itemsList.length === 0) return;
     const timestamp = new Date().toISOString();
 
+    // Read current raw materials store to keep in sync
+    let currentMats = [];
+    try {
+      const rawStr = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawStr) currentMats = JSON.parse(rawStr);
+    } catch (_) {}
+    if (!Array.isArray(currentMats)) currentMats = [];
+
     itemsList.forEach(pItem => {
-      const qty = parseFloat(pItem.qty || pItem.bomQty || 1) || 0;
+      const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
       if (qty <= 0) return;
-      const pCode = String(pItem.code || '').toUpperCase().trim();
-      const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+      const resCode = resolveProductCode(pItem);
+      const pCode = String(pItem.code || resCode || '').toUpperCase().trim();
+      const pName = String(pItem.name || pItem.description || '').trim();
+      const normPName = normalizeProductName(pName);
 
       // Find item in this.items
       let item = this.items.find(i => {
         const iCode = String(i.code || '').toUpperCase().trim();
-        const iName = String(i.name || '').toLowerCase().trim();
+        const iName = String(i.name || '').trim();
+        const normIName = normalizeProductName(i.name);
         if (pCode && iCode === pCode) return true;
-        if (pName && (iName === pName || iName.includes(pName) || pName.includes(iName))) return true;
+        if (normPName && normIName === normPName) return true;
+        if (normPName && (normIName.includes(normPName) || normPName.includes(normIName))) return true;
+        if (pName && iName.toLowerCase() === pName.toLowerCase()) return true;
         return false;
       });
 
       const targetCode = item ? item.code : (pCode || `ITEM-${Date.now().toString().slice(-4)}`);
       const targetName = item ? item.name : (pItem.name || 'BOM Item');
-      const targetUnit = (item && item.uom) || pItem.uom || 'Nos';
+      const targetUnit = (item && item.uom) || pItem.uom || pItem.unit || 'Nos';
 
-      const basePhysical = Math.max(0, parseFloat(item ? (item.physicalStock || item.openingStock || item.stock || 5000) : 5000) || 5000);
       if (item) {
-        item.physicalStock = basePhysical;
-        item.stock = Math.max(0, basePhysical - qty);
+        const curStock = Math.max(0, parseFloat(item.stock !== undefined ? item.stock : (item.physicalStock || item.openingStock || 5000)) || 0);
+        const newStock = Math.max(0, curStock - qty);
+        item.stock = newStock;
+        item.physicalStock = newStock;
+        item.available = newStock;
       }
 
       // Add to reservations
@@ -498,10 +538,46 @@ class CentralInventoryStore {
         user,
         department: 'Production & Logistics',
         sourceDoc: `BOM Order: ${bomCode}`,
-        remarks: `Reserved ${qty} ${targetUnit} for BOM ${bomCode}`
+        remarks: `Deducted/Reserved ${qty} ${targetUnit} for BOM ${bomCode}`
       };
       this.transactions.push(tx);
+
+      // Sync to raw materials store
+      let mMatch = currentMats.find(m => {
+        const mCode = String(m.code || m.sku || '').toUpperCase().trim();
+        const mNorm = normalizeProductName(m.name);
+        return (pCode && mCode === pCode) || (normPName && mNorm === normPName) || (targetCode && mCode === targetCode);
+      });
+      if (mMatch) {
+        const curM = Math.max(0, parseFloat(mMatch.stock !== undefined ? mMatch.stock : (mMatch.physicalStock || 5000)) || 0);
+        const nextM = Math.max(0, curM - qty);
+        mMatch.stock = nextM;
+        mMatch.availableStock = nextM;
+        mMatch.physicalStock = nextM;
+        mMatch.reserved = (parseFloat(mMatch.reserved) || 0) + qty;
+        mMatch.blockedForBom = (mMatch.blockedForBom || 0) + qty;
+        mMatch.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (mMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
+      } else {
+        const nextM = Math.max(0, 5000 - qty);
+        currentMats.push({
+          code: targetCode,
+          name: targetName,
+          cat: pItem.category || 'Finished Goods',
+          unit: targetUnit,
+          stock: nextM,
+          availableStock: nextM,
+          physicalStock: nextM,
+          reserved: qty,
+          blockedForBom: qty,
+          status: nextM <= 0 ? 'Out of Stock' : 'In Stock'
+        });
+      }
     });
+
+    try {
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
+      saveCloudStore('raw_materials_store', currentMats);
+    } catch (_) {}
 
     this.saveItems();
     this.saveReservations();
@@ -524,19 +600,25 @@ class CentralInventoryStore {
     if (Array.isArray(itemsList) && itemsList.length > 0) {
       itemsList.forEach(pItem => {
         const qty = parseFloat(pItem.qty || pItem.bomQty || 1) || 0;
-        const pCode = String(pItem.code || '').toUpperCase().trim();
-        const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+        const resCode = resolveProductCode(pItem);
+        const pCode = String(pItem.code || resCode || '').toUpperCase().trim();
+        const pName = String(pItem.name || pItem.description || '').trim();
+        const normPName = normalizeProductName(pName);
 
         let item = this.items.find(i => {
           const iCode = String(i.code || '').toUpperCase().trim();
-          const iName = String(i.name || '').toLowerCase().trim();
+          const iName = String(i.name || '').trim();
+          const normIName = normalizeProductName(i.name);
           if (pCode && iCode === pCode) return true;
-          if (pName && (iName === pName || iName.includes(pName) || pName.includes(iName))) return true;
+          if (normPName && normIName === normPName) return true;
+          if (pName && iName.toLowerCase() === pName.toLowerCase()) return true;
           return false;
         });
 
         if (item) {
           item.stock = (parseFloat(item.stock) || 0) + qty;
+          item.available = (parseFloat(item.available) || 0) + qty;
+          item.physicalStock = (parseFloat(item.physicalStock) || 0) + qty;
         }
       });
     }

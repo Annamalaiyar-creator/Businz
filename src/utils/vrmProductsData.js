@@ -3426,9 +3426,21 @@ export const VRM_PRODUCTS = [
   }
 ];
 
+export const normalizeProductName = (str) => {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .replace(/(\d+)\s*(mm|m|inch|nos|w|wp|kg)\b/gi, '$1$2')
+    .replace(/[*x×]/g, 'x')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 export const wordFingerprint = (str) => {
   if (!str) return '';
-  const words = str.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(w => w && !['300mm', '350mm', '400mm', 'nos', 'mm'].includes(w));
+  const normalized = normalizeProductName(str);
+  const words = normalized.split(/\s+/).filter(w => w && !['nos', 'mm'].includes(w));
   return Array.from(new Set(words)).sort().join('_');
 };
 
@@ -3439,11 +3451,16 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
     return direct;
   }
 
-  const rawName = String(item.name || item.description || '').toLowerCase().trim();
+  const rawName = String(item.name || item.description || '').trim();
   if (!rawName) return direct || '';
 
-  // 1. Direct name match in products catalog
-  const exact = productsList.find(p => p.name && p.name.toLowerCase().trim() === rawName);
+  const normRaw = normalizeProductName(rawName);
+
+  // 1. Direct or normalized name match in products catalog
+  const exact = productsList.find(p => p.name && (
+    p.name.toLowerCase().trim() === rawName.toLowerCase().trim() ||
+    normalizeProductName(p.name) === normRaw
+  ));
   if (exact && exact.code) return exact.code.toUpperCase();
 
   // 2. Word fingerprint match
@@ -3453,13 +3470,15 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
     if (fpMatch && fpMatch.code) return fpMatch.code.toUpperCase();
   }
 
-  // 3. Fallback: check if rawName includes code or code includes in name
+  // 3. Fallback: check if normalized names or codes include each other
   const subMatch = productsList.find(p => {
+    const pNorm = normalizeProductName(p.name);
     const pCode = String(p.code || '').toLowerCase();
-    const pName = String(p.name || '').toLowerCase();
-    return (pCode && rawName.includes(pCode)) || (pName && rawName.includes(pName)) || (pName && pName.includes(rawName));
+    return (pCode && normRaw.includes(pCode)) ||
+           (pNorm && (normRaw.includes(pNorm) || pNorm.includes(normRaw)));
   });
   if (subMatch && subMatch.code) return subMatch.code.toUpperCase();
 
   return direct || '';
 };
+

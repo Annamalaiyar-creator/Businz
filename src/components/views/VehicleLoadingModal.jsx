@@ -4,6 +4,7 @@ import {
   Upload, Camera, Image, Video, Film
 } from "lucide-react";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { centralInventoryStore } from "../../utils/centralInventoryStore";
 
 export default function VehicleLoadingModal({
   vehicleLoadingModal,
@@ -155,6 +156,14 @@ const handleFinalizeVehicleLoading = () => {
     loadedTimeStr: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   };
 
+  // Deduct Inventory in Central Inventory Store & Raw Materials Store
+  try {
+    const itemsToDeduct = (bom.items && bom.items.length > 0) ? bom.items : packedItems;
+    centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, bom.salesPerson || 'Dispatch Vehicle Loading');
+  } catch (cErr) {
+    console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
+  }
+
   // Update BOM status to Fully Completed & persist
   setBomStore(prev => {
     const updated = prev.map(b => (b.bomCode === bCode || b.code === bCode) ? {
@@ -171,18 +180,25 @@ const handleFinalizeVehicleLoading = () => {
   });
 
   // Update Invoice status to Fully Dispatched & Delivered & persist
-  setInvoiceList(prev => {
-    const updatedInvoices = prev.map(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo) ? {
-      ...i,
-      status: 'Fully Dispatched & Delivered',
-      pay: 'Completed & Delivered',
-      vehicleLoading: loadingPayload
-    } : i);
-    try {
-      saveCloudStore('invoice_store', updatedInvoices);
-    } catch (e) { }
-    return updatedInvoices;
-  });
+  if (typeof setInvoiceList === 'function') {
+    setInvoiceList(prev => {
+      const updatedInvoices = (prev || []).map(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo) ? {
+        ...i,
+        status: 'Fully Dispatched & Delivered',
+        pay: 'Completed & Delivered',
+        vehicleLoading: loadingPayload
+      } : i);
+      try {
+        saveCloudStore('invoice_store', updatedInvoices);
+      } catch (e) { }
+      return updatedInvoices;
+    });
+  }
+
+  window.dispatchEvent(new Event('central_inventory_updated'));
+  window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+  window.dispatchEvent(new Event('controlroom_storage_update'));
+  window.dispatchEvent(new Event('storage'));
 
   const completedSummary = {
     bomCode: bCode,

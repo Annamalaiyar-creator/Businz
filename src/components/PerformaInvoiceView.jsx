@@ -7,6 +7,7 @@ import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
+import { normalizeProductName } from '../utils/vrmProductsData';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
 
@@ -694,11 +695,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (!itemName && !itemCode) return null;
     const cleanName = (itemName || '').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
-    const found = (itemsList || []).find(p => 
-      (cleanCode && (p.code || '').toLowerCase().trim() === cleanCode) ||
-      (cleanName && (p.name || '').toLowerCase().trim() === cleanName) ||
-      (cleanName && (p.name || '').toLowerCase().includes(cleanName))
-    );
+    const normName = normalizeProductName(itemName);
+
+    const found = (itemsList || []).find(p => {
+      const pCode = (p.code || '').toLowerCase().trim();
+      const pName = (p.name || '').toLowerCase().trim();
+      const pNorm = normalizeProductName(p.name);
+      return (cleanCode && pCode === cleanCode) ||
+        (normName && pNorm === normName) ||
+        (cleanName && pName === cleanName) ||
+        (cleanName && pName.includes(cleanName)) ||
+        (normName && pNorm.includes(normName));
+    });
     if (!found) return null;
     return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
   };

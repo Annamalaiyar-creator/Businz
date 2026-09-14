@@ -8,6 +8,7 @@ import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
 import { VRM_PRODUCTS } from "../../utils/vrmProductsData";
+import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 
 export default function DispatchPackingModal({
@@ -100,13 +101,20 @@ export default function DispatchPackingModal({
 
     const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
 
-    // 1. Update React state immediately
+    // 1. Deduct / Reserve Stock in Central Inventory & Raw Materials Stores immediately
+    try {
+      centralInventoryStore.deductStockForBOM(targetCode, itemsToPack, 'Dispatch Packing');
+    } catch (cErr) {
+      console.warn('Central store deduction error in DispatchPackingModal:', cErr);
+    }
+
+    // 2. Update React state immediately
     setBomStore(prev => {
       const updated = (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b);
       return updated;
     });
 
-    // 2. Persist to cloud store and localStorage
+    // 3. Persist to cloud store and localStorage
     saveCloudStore('bom_store', (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b));
     try {
       const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
@@ -114,10 +122,14 @@ export default function DispatchPackingModal({
       localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
     } catch (_) {}
 
-    // 3. Dispatch global sync event so all views and tabs update in real time
+    // 4. Dispatch global sync event so all views and tabs update in real time
     window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedPackedBom } }));
+    window.dispatchEvent(new Event('central_inventory_updated'));
+    window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+    window.dispatchEvent(new Event('controlroom_storage_update'));
+    window.dispatchEvent(new Event('storage'));
 
-    // 4. Push to server immediately so Accounts sees it across browsers and devices
+    // 5. Push to server immediately so Accounts sees it across browsers and devices
     try {
       fetch('/api/boms', {
         method: 'POST',

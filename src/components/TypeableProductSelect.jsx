@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search, Check, AlertCircle, Package, Plus } from 'lucide-react';
+import { normalizeProductName } from '../utils/vrmProductsData';
 
 /**
  * TypeableProductSelect
@@ -84,12 +85,15 @@ export default function TypeableProductSelect({
     const list = Array.isArray(itemsList) ? itemsList : [];
     const q = (searchQuery || '').toLowerCase().trim();
     if (!q) return list.slice(0, 100);
+    const normQ = normalizeProductName(q);
 
     return list.filter(item => {
       const name = String(item.name || '').toLowerCase();
       const code = String(item.code || '').toLowerCase();
       const cat = String(item.category || item.description || '').toLowerCase();
-      return name.includes(q) || code.includes(q) || cat.includes(q);
+      const normName = normalizeProductName(item.name);
+      return name.includes(q) || code.includes(q) || cat.includes(q) ||
+        (normQ && normName.includes(normQ));
     }).slice(0, 100);
   }, [itemsList, searchQuery]);
 
@@ -99,11 +103,15 @@ export default function TypeableProductSelect({
     if (!isOpen) setIsOpen(true);
     setHighlightedIndex(0);
 
-    // Call onChange with typed text and matched item if exact
-    const matched = (itemsList || []).find(it => 
-      (it.name || '').toLowerCase() === val.toLowerCase() || 
-      (it.code || '').toLowerCase() === val.toLowerCase()
-    );
+    // Call onChange with typed text and matched item if exact or normalized
+    const vLow = val.toLowerCase().trim();
+    const vNorm = normalizeProductName(val);
+    const matched = (itemsList || []).find(it => {
+      const itName = (it.name || '').toLowerCase().trim();
+      const itCode = (it.code || '').toLowerCase().trim();
+      const itNorm = normalizeProductName(it.name);
+      return itName === vLow || itCode === vLow || (vNorm && itNorm === vNorm);
+    });
     if (onChange) {
       onChange(val, matched || null);
     }
@@ -321,7 +329,7 @@ export default function TypeableProductSelect({
               const isHighlighted = highlightedIndex === idx;
               const stockNum = Number(
                 prod.stock !== undefined ? prod.stock :
-                (prod.availableStock !== undefined ? prod.availableStock : 100)
+                (prod.availableStock !== undefined ? prod.availableStock : 0)
               );
               const isOutOfStock = stockNum <= 0;
               const uom = prod.uom || prod.unit || 'NOS';

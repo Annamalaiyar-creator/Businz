@@ -1,4 +1,4 @@
-import { VRM_PRODUCTS, resolveProductCode, wordFingerprint } from './vrmProductsData.js';
+import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
 import { centralInventoryStore } from './centralInventoryStore.js';
 
 /**
@@ -17,12 +17,16 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       centralItems.forEach(ci => {
         const codeKey = String(ci.code || '').toLowerCase().trim();
         const nameKey = String(ci.name || '').toLowerCase().trim();
+        const normKey = normalizeProductName(ci.name);
+        const fpKey = wordFingerprint(ci.name);
         const st = ci.available !== undefined 
           ? Number(ci.available) 
-          : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock || 0));
+          : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock !== undefined ? ci.stock : 0));
         
         if (codeKey) stockMap.set(codeKey, st);
         if (nameKey) stockMap.set(nameKey, st);
+        if (normKey) stockMap.set(normKey, st);
+        if (fpKey) stockMap.set(fpKey, st);
       });
     }
   } catch (e) {
@@ -38,9 +42,13 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
         parsed.forEach(rm => {
           const codeKey = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
           const nameKey = String(rm.name || '').toLowerCase().trim();
-          const st = Number(rm.stock !== undefined ? rm.stock : (rm.physicalStock || 0));
+          const normKey = normalizeProductName(rm.name);
+          const fpKey = wordFingerprint(rm.name);
+          const st = Number(rm.stock !== undefined ? rm.stock : (rm.availableStock !== undefined ? rm.availableStock : (rm.physicalStock || 0)));
           if (codeKey) rawStoreMap.set(codeKey, st);
           if (nameKey) rawStoreMap.set(nameKey, st);
+          if (normKey) rawStoreMap.set(normKey, st);
+          if (fpKey) rawStoreMap.set(fpKey, st);
         });
       }
     }
@@ -48,6 +56,20 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
 
   // 1.5 Calculate active allocations from active BOMs and active Proforma Invoices (PIs)
   const bomReservedMap = new Map();
+  const registerAllocation = (pItem) => {
+    const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 0) || 0;
+    if (qty <= 0) return;
+    const resCode = resolveProductCode(pItem).toLowerCase().trim();
+    const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
+    const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+    const norm = normalizeProductName(pName);
+    const fp = wordFingerprint(pName);
+    if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
+    if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
+    if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
+    if (fp) bomReservedMap.set(fp, (bomReservedMap.get(fp) || 0) + qty);
+  };
+
   try {
     const bomSaved = localStorage.getItem('controlroom_bom_store');
     let localBOMs = [];
@@ -57,18 +79,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     }
     localBOMs.forEach(b => {
       const bStatus = String(b.status || '').toLowerCase();
-      if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored') && bStatus !== 'delivered') {
+      if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
         (b.items || []).forEach(pItem => {
-          const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
-          if (qty > 0) {
-            const resCode = resolveProductCode(pItem).toLowerCase().trim();
-            const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
-            const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
-            const pFp = wordFingerprint(pName);
-            if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
-            if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
-            if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
-          }
+          registerAllocation(pItem);
         });
       }
     });
@@ -83,18 +96,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     }
     localPIs.forEach(pi => {
       const piStatus = String(pi.status || '').toLowerCase();
-      if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom) {
+      if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom && !pi.isConverted) {
         (pi.items || []).forEach(pItem => {
-          const qty = parseFloat(pItem.qty || pItem.quantity || 0) || 0;
-          if (qty > 0) {
-            const resCode = resolveProductCode(pItem).toLowerCase().trim();
-            const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
-            const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
-            const pFp = wordFingerprint(pName);
-            if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
-            if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
-            if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
-          }
+          registerAllocation(pItem);
         });
       }
     });
@@ -107,44 +111,60 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     const resCode = resolveProductCode(p).toLowerCase().trim();
     const codeKey = String(resCode || p.code || '').toLowerCase().trim();
     const nameKey = String(p.name || '').toLowerCase().trim();
+    const normKey = normalizeProductName(p.name);
     const fpKey = wordFingerprint(nameKey);
 
-    // Determine baseline stock before allocations (default 5000)
-    let baseStock = 5000;
-    if (codeKey && stockMap.has(codeKey) && Number(stockMap.get(codeKey)) > 0) {
+    // Determine baseline stock before allocations
+    let baseStock = null;
+    if (codeKey && stockMap.has(codeKey)) {
       baseStock = Number(stockMap.get(codeKey));
-    } else if (nameKey && stockMap.has(nameKey) && Number(stockMap.get(nameKey)) > 0) {
+    } else if (normKey && stockMap.has(normKey)) {
+      baseStock = Number(stockMap.get(normKey));
+    } else if (nameKey && stockMap.has(nameKey)) {
       baseStock = Number(stockMap.get(nameKey));
-    } else if (fpKey && stockMap.has(fpKey) && Number(stockMap.get(fpKey)) > 0) {
+    } else if (fpKey && stockMap.has(fpKey)) {
       baseStock = Number(stockMap.get(fpKey));
-    } else {
-      for (const [k, v] of stockMap.entries()) {
-        if (k && (k === codeKey || k === nameKey || nameKey.includes(k) || k.includes(nameKey))) {
-          if (Number(v) > 0) {
-            baseStock = Number(v);
-            break;
-          }
-        }
-      }
+    } else if (codeKey && rawStoreMap.has(codeKey)) {
+      baseStock = Number(rawStoreMap.get(codeKey));
+    } else if (normKey && rawStoreMap.has(normKey)) {
+      baseStock = Number(rawStoreMap.get(normKey));
+    } else if (nameKey && rawStoreMap.has(nameKey)) {
+      baseStock = Number(rawStoreMap.get(nameKey));
+    } else if (fpKey && rawStoreMap.has(fpKey)) {
+      baseStock = Number(rawStoreMap.get(fpKey));
+    }
+
+    if (baseStock === null || isNaN(baseStock)) {
+      baseStock = 5000;
     }
 
     // Active allocations for this item from active BOMs and active PIs
     const blockedQty = Math.max(
       (codeKey && bomReservedMap.get(codeKey)) || 0,
+      (normKey && bomReservedMap.get(normKey)) || 0,
       (nameKey && bomReservedMap.get(nameKey)) || 0,
       (fpKey && bomReservedMap.get(fpKey)) || 0
     );
     let realStock = Math.max(0, baseStock - blockedQty);
 
-    // If raw materials store has explicit stock adjustment, honor it without letting uninitialized 0s wipe baseline
-    const rawStock = (codeKey && rawStoreMap.get(codeKey)) !== undefined 
-      ? rawStoreMap.get(codeKey) 
-      : (nameKey && rawStoreMap.get(nameKey) !== undefined ? rawStoreMap.get(nameKey) : (fpKey && rawStoreMap.get(fpKey) !== undefined ? rawStoreMap.get(fpKey) : null));
-    if (rawStock !== null && !isNaN(rawStock) && Number(rawStock) > 0) {
-      realStock = Math.min(realStock, Number(rawStock));
+    // If raw materials store has explicit stock adjustment, honor it (including legitimate 0)
+    const rawStock = (codeKey && rawStoreMap.has(codeKey))
+      ? rawStoreMap.get(codeKey)
+      : ((normKey && rawStoreMap.has(normKey))
+        ? rawStoreMap.get(normKey)
+        : ((nameKey && rawStoreMap.has(nameKey))
+          ? rawStoreMap.get(nameKey)
+          : ((fpKey && rawStoreMap.has(fpKey))
+            ? rawStoreMap.get(fpKey)
+            : null)));
+
+    if (rawStock !== null && !isNaN(rawStock)) {
+      const explicitRaw = Number(rawStock);
+      // If raw stock is 0 or less than baseline, honor the reduced balance
+      realStock = Math.min(realStock, Math.max(0, explicitRaw));
     }
 
-    catalogMap.set(nameKey, {
+    const itemRecord = {
       code: p.code || '',
       name: p.name || '',
       category: p.material || p.category || 'Structure Assembly',
@@ -156,8 +176,14 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       availableStock: realStock,
       physicalStock: baseStock,
       reservedStock: blockedQty
-    });
+    };
+
+    catalogMap.set(nameKey, itemRecord);
+    if (normKey && !catalogMap.has(normKey)) {
+      catalogMap.set(normKey, itemRecord);
+    }
   });
+
 
   // 3. Include any items from Zoho or custom item store
   const mergeExtraItems = (items) => {
@@ -205,7 +231,15 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     }
   } catch (_) {}
 
-  const fullList = Array.from(catalogMap.values());
+  // Deduplicate items so fullList only contains unique items
+  const uniqueItemsMap = new Map();
+  for (const it of catalogMap.values()) {
+    const uKey = String(it.name || it.code || '').toLowerCase().trim();
+    if (uKey && !uniqueItemsMap.has(uKey)) {
+      uniqueItemsMap.set(uKey, it);
+    }
+  }
+  const fullList = Array.from(uniqueItemsMap.values());
 
   // Save to localStorage so other modules also have the full catalog ready
   try {
