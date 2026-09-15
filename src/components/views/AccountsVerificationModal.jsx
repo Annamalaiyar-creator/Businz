@@ -73,7 +73,7 @@ export default function AccountsVerificationModal({
 
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     const verifiedBOM = accountsVerificationModal;
-    const newInvNo = verifiedBOM.invoiceNo || `INV-2026-${targetCode ? targetCode.replace(/[^0-9]/g, '') : Math.floor(100 + Math.random() * 900)}`;
+    const newInvNo = verifiedBOM.invoiceNo || null;
     const updatedBomData = {
       ...verifiedBOM,
       invoiceNo: newInvNo,
@@ -132,8 +132,8 @@ export default function AccountsVerificationModal({
       : (verifiedBOM.items || []).map(it => ({ ...it, selected: true, packed: true }));
 
     const newInvEntry = {
-      invNo: newInvNo,
-      code: newInvNo,
+      invNo: newInvNo || 'Pending Confirmation',
+      code: newInvNo || targetCode,
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       vendor: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
       customerName: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
@@ -168,7 +168,7 @@ export default function AccountsVerificationModal({
     };
 
     setInvoiceList(prev => {
-      const filtered = (prev || []).filter(i => i.poNo !== targetCode && i.bomCode !== targetCode && i.invNo !== newInvNo && i.code !== newInvNo);
+      const filtered = (prev || []).filter(i => i.poNo !== targetCode && i.bomCode !== targetCode && (newInvNo ? (i.invNo !== newInvNo && i.code !== newInvNo) : true));
       const updated = [newInvEntry, ...filtered];
       try {
         saveCloudStore('invoice_store', updated);
@@ -192,7 +192,7 @@ export default function AccountsVerificationModal({
     });
 
     setAccountsVerificationModal(null);
-    alert(`✅ Accounts Verification Approved for ${bomCodeText}.\n\nInvoice (${newInvNo}) generated and passed directly to Invoice Management!`);
+    alert(`✅ Accounts Verification Approved for ${bomCodeText}.\n\nOrder passed directly to Invoice Management for invoice generation and confirmation.`);
   };
 
   return (

@@ -3362,21 +3362,23 @@ app.post('/api/zoho/invoices', async (req, res) => {
 
     const invDateStr = normalizeZohoDate(req.body.date);
 
-    const lineItems = (req.body.items || []).map(item => ({
-      name: item.name || item.description || 'Solar Rail Product',
-      rate: Number(item.rate || item.price || item.unitValue || 1000),
-      quantity: Number(item.quantity || item.qty || 1),
-      account_id: '4080449000000000567'
-    }));
+    // User Requirement: Show ONLY the Preset Name with total preset price in Zoho Books invoice (do NOT show individual product prices)
+    const presetName = req.body.presetName || (req.body.items && req.body.items.length === 1 && req.body.items[0].name) || 'Solar Structure Package';
+    const totalPresetPrice = Number(
+      req.body.totalPresetPrice ||
+      (req.body.invAmt ? String(req.body.invAmt).replace(/[^0-9.]/g, '') : null) ||
+      (req.body.items && req.body.items.length === 1 ? req.body.items[0].rate : null) ||
+      (req.body.items && req.body.items.length > 1 ? req.body.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.quantity || it.qty || 1)), 0) : null) ||
+      5000
+    );
 
-    if (lineItems.length === 0) {
-      lineItems.push({
-        name: 'Solar Structure Sales Invoice Item',
-        rate: Number(req.body.invAmt ? String(req.body.invAmt).replace(/[^0-9.]/g, '') : 5000),
-        quantity: 1,
-        account_id: '4080449000000000567'
-      });
-    }
+    const lineItems = [{
+      name: presetName,
+      rate: totalPresetPrice,
+      quantity: 1,
+      account_id: '4080449000000000567',
+      description: `Preset Structure Package: ${presetName}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
+    }];
 
     const payload = {
       customer_id: customerId,

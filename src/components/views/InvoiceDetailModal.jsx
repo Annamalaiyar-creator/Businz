@@ -29,8 +29,10 @@ export default function InvoiceDetailModal({
 }) {
   const invoiceList = passedInvoiceList || invoices || [];
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
-  const inv = viewingInvoiceModal;
-  const invNoText = isEditingInvoice ? (invoiceEditForm.invNo || inv.invNo || inv.code || 'INV-00027') : (inv.invNo || inv.code || 'INV-00027');
+  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
+  const invNoText = isEditingInvoice
+    ? (invoiceEditForm.invNo || inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'))
+    : (inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'));
   const bomRefText = inv.poNo || inv.c3 || 'BOM-00007';
   const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.c2 || 'ABC Industries') : (inv.vendor || inv.c2 || 'ABC Industries');
   const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
@@ -604,40 +606,54 @@ export default function InvoiceDetailModal({
                   packedItemsDeducted: packedItemsToDeduct
                 } : b));
 
-                // 7. Post Invoice to Zoho Books API (/api/zoho/invoices)
+                // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) with ONLY Preset Name and Preset Price
+                const presetName = matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Kit';
+                const totalPresetPrice = Number(totalAmtRaw || (inv.invAmt ? String(inv.invAmt).replace(/[^0-9.]/g, '') : 0));
+
                 try {
                   fetch('/api/zoho/invoices', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      invNo: invNoText,
+                      invNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
                       poNo: bomRefText,
                       bomCode: bomRefText,
                       vendor: customerText,
                       customerName: customerText,
                       date: invDateText || new Date().toISOString().split('T')[0],
-                      invAmt: totalAmtRaw,
-                      items: packedItemsToDeduct.map(it => ({
-                        name: it.name || it.description || 'Finished Good',
-                        rate: Number(it.rate || it.unitPrice || 1000),
-                        quantity: Number(it.invQty || it.bomQty || it.qty || 1)
-                      })),
-                      notes: `Sales Invoice confirmed for BOM ${bomRefText} with ${packedItemsToDeduct.length} item(s) dispatched.`
+                      invAmt: totalPresetPrice,
+                      presetName: presetName,
+                      items: [{
+                        name: presetName,
+                        rate: totalPresetPrice,
+                        quantity: 1,
+                        description: `Preset Structure Package: ${presetName} (BOM Ref: ${bomRefText})`
+                      }],
+                      notes: `Sales Invoice confirmed for BOM ${bomRefText} (${presetName}).`
                     })
                   })
                     .then(res => res.json())
                     .then(data => {
                       if (data && data.invoice) {
                         const zohoInv = data.invoice;
+                        const finalConfirmedInvNo = zohoInv.invoice_number || zohoInv.invNo || invNoText;
                         setInvoiceList(prev => (prev || []).map(item =>
-                          (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode)
+                          (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText)
                             ? {
                                 ...item,
+                                invNo: finalConfirmedInvNo,
+                                code: finalConfirmedInvNo,
+                                invoiceNo: finalConfirmedInvNo,
                                 zohoId: zohoInv.zohoId || zohoInv.id,
-                                zohoInvoiceNumber: zohoInv.invNo,
+                                zohoInvoiceNumber: finalConfirmedInvNo,
                                 syncedToZoho: true
                               }
                             : item
+                        ));
+                        setBomStore(prev => (prev || []).map(b =>
+                          (b.bomCode === bomRefText || b.code === bomRefText)
+                            ? { ...b, invoiceNo: finalConfirmedInvNo }
+                            : b
                         ));
                       }
                     })
@@ -843,8 +859,8 @@ export default function InvoiceDetailModal({
           const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18)), 0);
 
           const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
-          const foundBom = bomStore.find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", "")))) || bomStore.find(b => b.deliveryAddressProofDoc);
-          const rawAddressProof = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || (bomStore.find(b => b.deliveryAddressProofDoc))?.deliveryAddressProofDoc || null;
+          const foundBom = bomStore.find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+          const rawAddressProof = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
           let addressProofDoc = rawAddressProof;
           if (addressProofDoc && !addressProofDoc.dataUrl && addressProofDoc.name) {
             const cached = getMediaFromCache(addressProofDoc.name);
@@ -852,8 +868,14 @@ export default function InvoiceDetailModal({
               addressProofDoc = { ...addressProofDoc, dataUrl: cached };
             }
           }
-          const bAddr = inv.billingAddress || matchingBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
-          const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || bAddr;
+          const bAddr = inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
+          const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress || bAddr;
+          const isSameAddress = Boolean(
+            inv.sameAsBilling ||
+            matchingBom?.sameAsBilling ||
+            foundBom?.sameAsBilling ||
+            (bAddr && dAddr && bAddr.trim().toLowerCase() === dAddr.trim().toLowerCase())
+          );
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -1285,148 +1307,162 @@ export default function InvoiceDetailModal({
                 </div>
               </div>
 
-              {/* COMPACT ADDRESS & INLINE PROOF IMAGE BELOW ITEMS */}
-              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '34px', height: '34px', borderRadius: '10px', backgroundColor: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Truck style={{ width: '18px', height: '18px' }} />
+              {/* COMPACT ADDRESS & INLINE PROOF IMAGE BELOW ITEMS - ONLY IF DIFFERENT ADDRESS */}
+              {!isSameAddress && addressProofDoc && (
+                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '10px', backgroundColor: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Truck style={{ width: '18px', height: '18px' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', letterSpacing: '0.5px', textTransform: 'uppercase' }}>DELIVERY DESTINATION</div>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>{dAddr}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', letterSpacing: '0.5px', textTransform: 'uppercase' }}>DELIVERY DESTINATION</div>
-                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>{dAddr}</div>
-                    </div>
-                  </div>
 
-                  {/* REISSUE BUTTON FOR ADDRESS PROOF */}
-                  <label style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    backgroundColor: '#EFF6FF',
-                    border: '1px solid #BFDBFE',
-                    color: '#1D4ED8',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: '800',
-                    cursor: 'pointer',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    transition: 'all 0.15s ease'
-                  }} title="Reissue or update address proof document">
-                    <RotateCcw style={{ width: '13px', height: '13px', color: '#1D4ED8' }} />
-                    Reissue
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        const file = e.target.files && e.target.files[0];
-                        if (file) {
-                          compressAndSaveFile(file, (res) => {
-                            if (res) {
-                              if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                              const nowIso = new Date().toISOString();
-                              const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
-                              const prevHistory = addressProofDoc?.history || (addressProofDoc ? [addressProofDoc] : []);
-                              const updatedDoc = {
-                                ...res,
-                                reissuedAt: nowIso,
-                                reissueReason: 'Reissued from Invoice Desk',
-                                history: [...prevHistory, { ...res, uploadedAt: nowIso, version: prevHistory.length + 1 }]
-                              };
+                    {/* REISSUE BUTTON FOR ADDRESS PROOF */}
+                    <label style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      backgroundColor: '#EFF6FF',
+                      border: '1px solid #BFDBFE',
+                      color: '#1D4ED8',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }} title="Reissue or update address proof document">
+                      <RotateCcw style={{ width: '13px', height: '13px', color: '#1D4ED8' }} />
+                      Reissue
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files && e.target.files[0];
+                          if (file) {
+                            compressAndSaveFile(file, (res) => {
+                              if (res) {
+                                if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                const nowIso = new Date().toISOString();
+                                const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
+                                const prevHistory = addressProofDoc?.history || (addressProofDoc ? [addressProofDoc] : []);
+                                const updatedDoc = {
+                                  ...res,
+                                  reissuedAt: nowIso,
+                                  reissueReason: 'Reissued from Invoice Desk',
+                                  history: [...prevHistory, { ...res, uploadedAt: nowIso, version: prevHistory.length + 1 }]
+                                };
 
-                              setViewingInvoiceModal(prev => prev ? {
-                                ...prev,
-                                deliveryAddressProofDoc: updatedDoc,
-                                status: 'Address Proof Reissued'
-                              } : prev);
+                                setViewingInvoiceModal(prev => prev ? {
+                                  ...prev,
+                                  deliveryAddressProofDoc: updatedDoc,
+                                  status: 'Address Proof Reissued'
+                                } : prev);
 
-                              setInvoiceList(prev => {
-                                const updated = prev.map(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode) ? {
-                                  ...i,
+                                setInvoiceList(prev => {
+                                  const updated = prev.map(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode) ? {
+                                    ...i,
+                                    deliveryAddressProofDoc: updatedDoc,
+                                    status: 'Address Proof Reissued',
+                                    addressProofReissuedAt: nowIso
+                                  } : i);
+                                  try { saveCloudStore("invoice_store", updated); } catch (e) { }
+                                  return updated;
+                                });
+
+                                setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.salesOrderNo === targetCode || b.code === targetCode) ? {
+                                  ...b,
                                   deliveryAddressProofDoc: updatedDoc,
                                   status: 'Address Proof Reissued',
                                   addressProofReissuedAt: nowIso
-                                } : i);
-                                try { saveCloudStore("invoice_store", updated); } catch (e) { }
-                                return updated;
-                              });
+                                } : b));
 
-                              setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.salesOrderNo === targetCode || b.code === targetCode) ? {
-                                ...b,
-                                deliveryAddressProofDoc: updatedDoc,
-                                status: 'Address Proof Reissued',
-                                addressProofReissuedAt: nowIso
-                              } : b));
+                                alert(`✅ Address proof has been successfully reissued with: ${res.name || file.name}`);
+                              }
+                            });
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
 
-                              alert(`✅ Address proof has been successfully reissued with: ${res.name || file.name}`);
-                            }
-                          });
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
+                  {(() => {
+                    const proofName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Delivery Address Proof Document");
+                    let proofDataUrl = (typeof addressProofDoc === "string" && addressProofDoc.startsWith("data:"))
+                      ? addressProofDoc
+                      : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || null);
 
-                {addressProofDoc && (() => {
-                  const proofDataUrl = (typeof addressProofDoc === "string" && addressProofDoc.startsWith("data:"))
-                    ? addressProofDoc
-                    : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || (typeof addressProofDoc === "string" && addressProofDoc.includes("data:") ? addressProofDoc : null));
-                  const proofName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Delivery Address Proof Document");
+                    if (!proofDataUrl && proofName) {
+                      proofDataUrl = getMediaFromCache(proofName);
+                    }
 
-                  return (
-                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <FileCheck style={{ width: '15px', height: '15px', color: '#166534' }} />
-                          <span>Delivery Address Proof Document ({proofName}):</span>
+                    const historyList = addressProofDoc?.history || [addressProofDoc];
+
+                    return (
+                      <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileCheck style={{ width: '15px', height: '15px', color: '#166534' }} />
+                            <span>Delivery Address Proof Document ({proofName}):</span>
+                          </div>
+                          {proofDataUrl && (
+                            <a
+                              href={proofDataUrl}
+                              download={proofName}
+                              style={{ fontSize: '11px', fontWeight: '700', color: '#1D4ED8', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Download size={12} /> Download
+                            </a>
+                          )}
                         </div>
-                      </div>
 
-                      {(() => {
-                        const effectiveDataUrl = proofDataUrl || ("data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="260" viewBox="0 0 540 260"><rect width="100%" height="100%" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="3"/><rect x="20" y="20" width="500" height="50" fill="#2563EB" rx="8"/><text x="40" y="52" fill="#FFFFFF" font-family="sans-serif" font-size="18" font-weight="bold">OFFICIAL DELIVERY ADDRESS PROOF</text><text x="30" y="110" fill="#0F172A" font-family="sans-serif" font-size="14" font-weight="bold">DOCUMENT FILE: ' + (proofName || 'Delivery_Address_Proof.png') + '</text><text x="30" y="140" fill="#475569" font-family="sans-serif" font-size="13">Delivery Consignee Site: 123 Main Street, Industrial Area, Chennai</text><text x="30" y="170" fill="#475569" font-family="sans-serif" font-size="13">Uploaded by: Sales Team Executive</text><rect x="30" y="195" width="240" height="42" fill="#DCFCE7" stroke="#86EFAC" rx="6"/><text x="48" y="222" fill="#166534" font-family="sans-serif" font-size="13" font-weight="bold">✓ VERIFIED ADDRESS PROOF DOCUMENT</text></svg>'));
-                        const historyList = addressProofDoc?.history || [addressProofDoc];
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {historyList.length > 1 && (
+                            <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Document Version History ({historyList.length} Uploads Tracked):
+                            </div>
+                          )}
 
-                        return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {historyList.length > 1 && (
-                              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                Document Version History ({historyList.length} Uploads Tracked):
-                              </div>
-                            )}
-
-                            <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', padding: '12px', textAlign: 'center' }}>
+                          <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', padding: '12px', textAlign: 'center' }}>
+                            {proofDataUrl ? (
                               <img
-                                src={effectiveDataUrl}
+                                src={proofDataUrl}
                                 alt="Delivery Address Proof"
                                 style={{ maxWidth: '100%', maxHeight: '420px', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                               />
-                            </div>
-
-                            {historyList.length > 1 && (
-                              <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingTop: '6px' }}>
-                                {historyList.map((hDoc, hIdx) => {
-                                  const hUrl = hDoc?.dataUrl || (typeof hDoc === "string" ? hDoc : null);
-                                  return (
-                                    <div key={hIdx} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#FFFFFF', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <FileText style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                                      <div>
-                                        <div style={{ fontWeight: '700', color: '#0F172A' }}>Version {hIdx + 1}: {hDoc.name || 'Proof.png'}</div>
-                                        <div style={{ fontSize: '10px', color: '#64748B' }}>{hDoc.uploadedAt ? new Date(hDoc.uploadedAt).toLocaleString('en-GB') : 'Uploaded'}</div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                            ) : (
+                              <div style={{ padding: '24px', color: '#64748B', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                <FileCheck size={18} color="#0E7490" />
+                                <span>{proofName} (Uploaded Address Proof File)</span>
                               </div>
                             )}
                           </div>
-                        );
-                      })()}
-                    </div>
-                  );
-                })()}
-              </div>
+
+                          {historyList.length > 1 && (
+                            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingTop: '6px' }}>
+                              {historyList.map((hDoc, hIdx) => (
+                                <div key={hIdx} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#FFFFFF', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <FileText style={{ width: '14px', height: '14px', color: '#2563EB' }} />
+                                  <div>
+                                    <div style={{ fontWeight: '700', color: '#0F172A' }}>Version {hIdx + 1}: {hDoc.name || 'Proof.png'}</div>
+                                    <div style={{ fontSize: '10px', color: '#64748B' }}>{hDoc.uploadedAt ? new Date(hDoc.uploadedAt).toLocaleString('en-GB') : 'Uploaded'}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -1484,31 +1520,31 @@ export default function InvoiceDetailModal({
                 </div>
               </div>
 
-              {/* ADDRESS PROOF DOCUMENT PREVIEW CARD */}
-              <div style={{ backgroundColor: addressProofDoc ? '#F0FDF4' : '#F8FAFC', border: `1px solid ${addressProofDoc ? '#86EFAC' : '#E2E8F0'}`, borderRadius: '14px', padding: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: addressProofDoc ? '#DCFCE7' : '#EFF6FF', color: addressProofDoc ? '#166534' : '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <FileCheck style={{ width: '20px', height: '20px' }} />
+              {/* ADDRESS PROOF DOCUMENT PREVIEW CARD - ONLY IF DIFFERENT ADDRESS */}
+              {!isSame && addressProofDoc && (
+                <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '14px', padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileCheck style={{ width: '20px', height: '20px' }} />
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#166534' }}>
+                          Delivery Address Proof Document
+                        </h4>
+                        <span style={{ fontSize: '12px', color: '#64748B' }}>
+                          Mandatory proof attached for alternate delivery address: {addressProofDoc.name || 'Address_Proof.png'}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: addressProofDoc ? '#166534' : '#0F172A' }}>
-                        Delivery Address Proof Document
-                      </h4>
-                      <span style={{ fontSize: '12px', color: '#64748B' }}>
-                        {addressProofDoc ? `Mandatory proof attached for alternate delivery address: ${addressProofDoc.name}` : 'Delivery address matches registered billing address. No separate proof required.'}
-                      </span>
-                    </div>
-                  </div>
 
-                  {addressProofDoc ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button
                         onClick={() => {
+                          const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.jpg");
                           const docDataUrl = (typeof addressProofDoc === "string" && addressProofDoc.startsWith("data:"))
                             ? addressProofDoc
-                            : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || (typeof addressProofDoc === "string" ? addressProofDoc : null));
-                          const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.jpg");
+                            : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || getMediaFromCache(docName) || null);
                           if (docDataUrl) {
                             const win = window.open();
                             if (win) {
@@ -1522,149 +1558,10 @@ export default function InvoiceDetailModal({
                       >
                         <Eye style={{ width: '14px', height: '14px' }} /> View Address Proof
                       </button>
-                      <label style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        padding: '8px 14px',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }} title="Reissue address proof document">
-                        <RotateCcw style={{ width: '13px', height: '13px', color: '#1D4ED8' }} /> Reissue
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                          style={{ display: 'none' }}
-                          onChange={(e) => {
-                            const file = e.target.files && e.target.files[0];
-                            if (file) {
-                              compressAndSaveFile(file, (res) => {
-                                if (res) {
-                                  if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                  const nowIso = new Date().toISOString();
-                                  const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
-                                  const prevHistory = addressProofDoc?.history || (addressProofDoc ? [addressProofDoc] : []);
-                                  const updatedDoc = {
-                                    ...res,
-                                    reissuedAt: nowIso,
-                                    reissueReason: 'Reissued from Invoice Desk',
-                                    history: [...prevHistory, { ...res, uploadedAt: nowIso, version: prevHistory.length + 1 }]
-                                  };
-
-                                  setViewingInvoiceModal(prev => prev ? {
-                                    ...prev,
-                                    deliveryAddressProofDoc: updatedDoc,
-                                    status: 'Address Proof Reissued'
-                                  } : prev);
-
-                                  setInvoiceList(prev => {
-                                    const updated = prev.map(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode) ? {
-                                      ...i,
-                                      deliveryAddressProofDoc: updatedDoc,
-                                      status: 'Address Proof Reissued',
-                                      addressProofReissuedAt: nowIso
-                                    } : i);
-                                    try { saveCloudStore("invoice_store", updated); } catch (e) { }
-                                    return updated;
-                                  });
-
-                                  setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.salesOrderNo === targetCode || b.code === targetCode) ? {
-                                    ...b,
-                                    deliveryAddressProofDoc: updatedDoc,
-                                    status: 'Address Proof Reissued',
-                                    addressProofReissuedAt: nowIso
-                                  } : b));
-
-                                  alert(`✅ Address proof has been successfully reissued with: ${res.name || file.name}`);
-                                }
-                              });
-                            }
-                          }}
-                        />
-                      </label>
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '4px 10px', borderRadius: '10px' }}>
-                        ✓ Verified & Compliant
-                      </span>
-                      <label style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }} title="Reissue address proof document">
-                        <RotateCcw style={{ width: '13px', height: '13px', color: '#1D4ED8' }} /> Reissue
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                          style={{ display: 'none' }}
-                          onChange={(e) => {
-                            const file = e.target.files && e.target.files[0];
-                            if (file) {
-                              compressAndSaveFile(file, (res) => {
-                                if (res) {
-                                  if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                  const nowIso = new Date().toISOString();
-                                  const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
-                                  const updatedDoc = {
-                                    ...res,
-                                    reissuedAt: nowIso,
-                                    reissueReason: 'Reissued from Invoice Desk',
-                                    history: [{ ...res, uploadedAt: nowIso, version: 1 }]
-                                  };
-
-                                  setViewingInvoiceModal(prev => prev ? {
-                                    ...prev,
-                                    deliveryAddressProofDoc: updatedDoc,
-                                    status: 'Address Proof Reissued'
-                                  } : prev);
-
-                                  setInvoiceList(prev => {
-                                    const updated = prev.map(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode) ? {
-                                      ...i,
-                                      deliveryAddressProofDoc: updatedDoc,
-                                      status: 'Address Proof Reissued',
-                                      addressProofReissuedAt: nowIso
-                                    } : i);
-                                    try { saveCloudStore("invoice_store", updated); } catch (e) { }
-                                    return updated;
-                                  });
-
-                                  setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.salesOrderNo === targetCode || b.code === targetCode) ? {
-                                    ...b,
-                                    deliveryAddressProofDoc: updatedDoc,
-                                    status: 'Address Proof Reissued',
-                                    addressProofReissuedAt: nowIso
-                                  } : b));
-
-                                  alert(`✅ Address proof has been successfully reissued with: ${res.name || file.name}`);
-                                }
-                              });
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })()}

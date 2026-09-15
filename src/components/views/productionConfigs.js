@@ -34,9 +34,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
               const cleanNum = bCode.replace(/[^0-9]/g, '') || '101';
-              const invNo = b.invoiceNo || `INV-2026-${cleanNum}`;
-              const oVal = parseFloat(b.grandTotal || 0);
               const isConf = b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed;
+              const invNo = b.invoiceNo || (isConf ? `INV-2026-${cleanNum}` : 'Pending Confirmation');
               const s = String(b.status || '').toLowerCase();
               const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
 
@@ -166,7 +165,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 { id: 'Invoice Confirmed', label: 'Confirmed', count: allInvoicesUnified.filter(i => i.status === 'Invoice Confirmed' || i.pay === 'Completed & Locked').length, bg: '#dcfce7', fg: '#166534' },
                 { id: 'On Hold', label: 'On Hold', count: allInvoicesUnified.filter(i => i.status === 'On Hold' || i.pay === 'Hold').length, bg: '#fee2e2', fg: '#991b1b' }
               ],
-              headers: ['Invoice No.', 'Customer / Vendor', 'BOM Ref', 'Invoice Date', 'Invoice Amount (₹)', 'Payment Status', 'Status', 'Action'],
+              headers: ['Invoice No.', 'Customer / Vendor', 'BOM Ref', 'Invoice Date', 'Invoice Amount (₹)', 'Payment Status', 'Status'],
               rows: allInvoicesUnified.map(i => {
                 const isConfirmed = i.status === 'Invoice Confirmed' || i.status === 'Completed' || i.status === 'Confirmed' || i.pay === 'Completed & Locked';
                 const isReady = i.status === 'Ready for Payment' || i.status === 'Accounts Verified & Passed to Invoice' || i.status === 'Packing Verified - Ready for Billing' || i.status === 'Ready for Invoicing' || i.pay === 'Ready' || i.pay === 'Ready for Payment';

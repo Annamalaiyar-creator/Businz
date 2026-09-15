@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package
+  CreditCard, Printer, X, Edit3, Package, FileText
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 

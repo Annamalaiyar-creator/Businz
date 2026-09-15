@@ -885,25 +885,33 @@ const server = http.createServer(async (req, res) => {
 
             const invDateStr = normalizeZohoDate(body.date);
 
+            // User Requirement: Show ONLY the Preset Name with total preset price in Zoho Books invoice (do NOT show individual product prices)
+            const presetName = body.presetName || (body.items && body.items.length === 1 && body.items[0].name) || 'Solar Structure Package';
+            const totalPresetPrice = Number(
+              body.totalPresetPrice ||
+              (body.invAmt ? String(body.invAmt).replace(/[^0-9.]/g, '') : null) ||
+              (body.items && body.items.length === 1 ? body.items[0].rate : null) ||
+              (body.items && body.items.length > 1 ? body.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.quantity || it.qty || 1)), 0) : null) ||
+              5000
+            );
+
             const zohoPayload = {
               customer_id: customerId,
-              invoice_number: body.invoiceNumber || body.invoiceNo || undefined,
               date: invDateStr,
               due_date: invDateStr,
               reference_number: body.poNo || body.bomCode || undefined,
-              line_items: (body.items && body.items.length > 0) ? body.items.map(it => ({
-                name: it.name || 'Fabrication Work',
-                rate: Number(it.rate || it.price || 0),
-                quantity: Number(it.quantity || it.qty || 1),
-                account_id: '4080449000000000567'
-              })) : [{
-                name: 'Solar Structure Sales Invoice Item',
-                rate: Number(body.invAmt ? String(body.invAmt).replace(/[^0-9.]/g, '') : 5000),
+              line_items: [{
+                name: presetName,
+                rate: totalPresetPrice,
                 quantity: 1,
-                account_id: '4080449000000000567'
+                account_id: '4080449000000000567',
+                description: `Preset Structure Package: ${presetName}${body.bomCode ? ` (Ref BOM: ${body.bomCode})` : ''}`
               }],
               notes: body.notes || 'Sales Invoice created via Control Room'
             };
+            if (body.invoiceNumber && body.invoiceNumber !== 'Pending Confirmation' && !body.invoiceNumber.startsWith('INV-2026') && !body.invoiceNumber.startsWith('INV-PENDING')) {
+              zohoPayload.invoice_number = body.invoiceNumber;
+            }
             const zohoRes = await callZoho('POST', '/books/v3/invoices', zohoPayload, token);
             if (zohoRes && zohoRes.invoice) {
               newInvoice.zohoInvoiceId = zohoRes.invoice.invoice_id;

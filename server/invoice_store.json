@@ -1,5 +1,17 @@
 [
   {
+    "presetName": "4kW Rooftop Mounting Structure Kit",
+    "invAmt": 35000,
+    "vendor": "VRM Structures India Private Limited",
+    "bomCode": "BOM-TEST-PRESET",
+    "id": "4080449000000447017",
+    "zohoId": "4080449000000447017",
+    "invNo": "INV-000007",
+    "status": "Invoice Confirmed",
+    "pay": "Completed & Locked",
+    "syncedToZoho": true
+  },
+  {
     "invNo": "INV-000005",
     "poNo": "BOM-VRM-3",
     "vendor": "VRM Structures India Private Limited",
