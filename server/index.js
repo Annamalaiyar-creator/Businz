@@ -56,6 +56,17 @@ const getDatabaseStore = async (key) => {
   } catch (err) {
     console.error(`[getDatabaseStore Error for ${key}]:`, err?.message || err);
   }
+
+  // Fallback to local JSON store file on disk
+  const diskPath = getStoreFilePath(key + '.json');
+  if (fs.existsSync(diskPath)) {
+    try {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      supabaseMemoryStore[key] = diskData;
+      return diskData;
+    } catch (_) {}
+  }
+
   return supabaseMemoryStore[key] || (key === 'presets_store' || key === 'company_branding_store' ? {} : []);
 };
 
@@ -549,6 +560,33 @@ const saveLocalCustomers = (customers) => {
 const loadLocalItems = () => {
   if (supabaseMemoryStore.item_store && Array.isArray(supabaseMemoryStore.item_store) && supabaseMemoryStore.item_store.length > 0) {
     return supabaseMemoryStore.item_store;
+  }
+  const itemsPath = getStoreFilePath('item_store.json');
+  if (fs.existsSync(itemsPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(itemsPath, 'utf8'));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        supabaseMemoryStore.item_store = parsed;
+        return parsed;
+      }
+    } catch (_) {}
+  }
+  return [];
+};
+
+const loadLocalRawMaterials = () => {
+  if (supabaseMemoryStore.raw_materials_store && Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0) {
+    return supabaseMemoryStore.raw_materials_store;
+  }
+  const rawPath = getStoreFilePath('raw_materials_store.json');
+  if (fs.existsSync(rawPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(rawPath, 'utf8'));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        supabaseMemoryStore.raw_materials_store = parsed;
+        return parsed;
+      }
+    } catch (_) {}
   }
   return [];
 };
@@ -2737,11 +2775,12 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
     }
     if (!Array.isArray(boms)) boms = [];
 
-    // 1. Calculate total active allocations per item
+    // 1. Calculate total active and completed allocations per item
     const allocations = new Map();
     boms.forEach(b => {
       const st = String(b?.status || '').toLowerCase();
-      if (!st.includes('cancelled') && !st.includes('stock restored') && st !== 'delivered') {
+      // Only exclude cancelled or stock-restored BOMs
+      if (!st.includes('cancel') && !st.includes('stock restored')) {
         (b?.items || []).forEach(it => {
           const q = parseFloat(it?.qty || it?.bomQty || 0) || 0;
           if (q > 0) {
@@ -2794,6 +2833,7 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
         fs.writeFileSync(rawMatsPath, JSON.stringify(rawMats, null, 2), 'utf8');
         supabaseMemoryStore.raw_materials_store = rawMats;
         pushStoreToSupabase('raw_materials_store', rawMats).catch(() => {});
+        broadcastRealtimeEvent('inventory_updated', { rawMaterials: rawMats });
       }
     }
 
@@ -2833,6 +2873,7 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
         fs.writeFileSync(itemsPath, JSON.stringify(items, null, 2), 'utf8');
         supabaseMemoryStore.item_store = items;
         pushStoreToSupabase('item_store', items).catch(() => {});
+        broadcastRealtimeEvent('item_store_updated', { items });
       }
     }
     console.log(`[Inventory Reconcile] Reconciled stock for ${allocations.size} allocated items across ${boms.length} BOMs.`);
@@ -5196,19 +5237,34 @@ app.get('/api/zoho/items', async (req, res) => {
       const data = await fetchZohoItems(accessToken);
       
       if (data && data.items && Array.isArray(data.items)) {
-        // Map local items by SKU and itemId to preserve user settings like status: 'Inactive'
+        // Map local items by Code, SKU, itemId, and name fingerprint to preserve live deducted stock
         const localMap = new Map();
         localItems.forEach(i => {
-          if (i.itemId) localMap.set(String(i.itemId).toLowerCase(), i);
-          if (i.sku && i.sku !== '—') localMap.set(String(i.sku).toLowerCase(), i);
-          if (i.name) localMap.set(String(i.name).toLowerCase(), i);
+          if (i.itemId) localMap.set(String(i.itemId).toLowerCase().trim(), i);
+          if (i.code && i.code !== '—') localMap.set(String(i.code).toLowerCase().trim(), i);
+          if (i.sku && i.sku !== '—') localMap.set(String(i.sku).toLowerCase().trim(), i);
+          const res = resolveProductCode(i);
+          if (res) localMap.set(String(res).toLowerCase().trim(), i);
+          if (i.name) localMap.set(String(i.name).toLowerCase().trim(), i);
+          const fp = wordFingerprint(i.name);
+          if (fp) localMap.set(fp, i);
         });
 
         const translatedZoho = data.items.map(item => {
-          const keyId = String(item.item_id || item.id || '').toLowerCase();
-          const keySku = String(item.sku || '').toLowerCase();
-          const keyName = String(item.name || '').toLowerCase();
-          const localMatch = localMap.get(keyId) || (keySku && localMap.get(keySku)) || (keyName && localMap.get(keyName));
+          const keyId = String(item.item_id || item.id || '').toLowerCase().trim();
+          const keySku = String(item.sku || '').toLowerCase().trim();
+          const keyName = String(item.name || '').toLowerCase().trim();
+          const keyRes = resolveProductCode(item).toLowerCase().trim();
+          const keyFp = wordFingerprint(item.name);
+          const localMatch = localMap.get(keyId) ||
+            (keySku && localMap.get(keySku)) ||
+            (keyRes && localMap.get(keyRes)) ||
+            (keyName && localMap.get(keyName)) ||
+            (keyFp && localMap.get(keyFp));
+
+          const calculatedStock = (localMatch?.stock !== undefined && localMatch.stock !== null)
+            ? Number(localMatch.stock)
+            : 5000;
 
           return {
             id: item.item_id || item.id,
@@ -5227,7 +5283,7 @@ app.get('/api/zoho/items', async (req, res) => {
             uom: item.unit || localMatch?.uom || 'NOS',
             material: localMatch?.material || 'General Component',
             category: localMatch?.category || 'General',
-            stock: (localMatch?.stock !== undefined && localMatch.stock !== null) ? Number(localMatch.stock) : 5000,
+            stock: calculatedStock,
             openingStock: (localMatch?.openingStock !== undefined && localMatch.openingStock !== null) ? Number(localMatch.openingStock) : 5000,
             reorderLevel: localMatch?.reorderLevel || 100
           };
@@ -5256,6 +5312,34 @@ app.get('/api/zoho/items', async (req, res) => {
     openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 5000
   }));
   res.json(guaranteedItems);
+});
+
+// Endpoint to retrieve live reconciled Raw Materials inventory
+app.get('/api/raw-materials', async (req, res) => {
+  try {
+    const rawMats = loadLocalRawMaterials();
+    res.json(rawMats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to update Raw Materials inventory
+app.post('/api/raw-materials', async (req, res) => {
+  try {
+    const updatedMats = req.body;
+    if (Array.isArray(updatedMats)) {
+      const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+      fs.writeFileSync(rawMatsPath, JSON.stringify(updatedMats, null, 2), 'utf8');
+      supabaseMemoryStore.raw_materials_store = updatedMats;
+      pushStoreToSupabase('raw_materials_store', updatedMats).catch(() => {});
+      broadcastRealtimeEvent('inventory_updated', { rawMaterials: updatedMats });
+      return res.json({ success: true, count: updatedMats.length });
+    }
+    res.status(400).json({ success: false, message: 'Array of materials required' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Helper to delete an Item in Zoho Books

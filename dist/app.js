@@ -805,6 +805,22 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
+      // 4b. Raw Materials Endpoint
+      if (pathname === '/api/raw-materials' || pathname.endsWith('/raw-materials')) {
+        const localRawMats = loadStore('raw_materials_store.json', []);
+        if (req.method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify(localRawMats));
+        }
+        if (req.method === 'POST') {
+          if (Array.isArray(body)) {
+            saveStore('raw_materials_store.json', body);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: true, count: body.length }));
+          }
+        }
+      }
+
       // 5. Invoices (Fetch & Create)
       if (pathname === '/api/zoho/invoices' || pathname.endsWith('/invoices')) {
         const localInvoices = loadStore('invoice_store.json', []);

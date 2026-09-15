@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
-import { VRM_PRODUCTS, resolveProductCode } from '../../utils/vrmProductsData';
+import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from '../../utils/vrmProductsData';
 
 const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
   const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
@@ -438,13 +438,20 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           if (matMap.has(upperKey)) {
             const existing = matMap.get(upperKey);
+            const existingStock = existing.stock !== undefined ? existing.stock : null;
+            const isExistingReduced = existingStock !== null && existingStock < (existing.openingStock || 5000);
+            const incomingStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : null;
+            const finalStock = isExistingReduced
+              ? existingStock
+              : (incomingStock !== null && incomingStock < 5000 ? incomingStock : (existingStock ?? 5000));
+
             matMap.set(upperKey, {
               ...existing,
               name: it.name || existing.name,
-              stock: (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : (existing.stock || 5000),
-              openingStock: 5000,
+              stock: finalStock,
+              openingStock: existing.openingStock || 5000,
               goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
-              status: 'In Stock',
+              status: finalStock === 0 ? 'Out of Stock' : (finalStock <= (existing.minLevel || 50) ? 'Low Stock' : 'In Stock'),
               lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
               grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
             });
@@ -533,6 +540,60 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           });
         }
       });
+      // 4. Authoritative Live BOM Allocations: Deduct quantities for all items in active/completed BOMs
+      let bomsList = [];
+      try {
+        const bRaw = localStorage.getItem('controlroom_bom_store');
+        if (bRaw) bomsList = JSON.parse(bRaw);
+      } catch (_) {}
+
+      const bomAllocations = new Map();
+      if (Array.isArray(bomsList)) {
+        bomsList.forEach(b => {
+          const st = String(b.status || '').toLowerCase();
+          if (!st.includes('cancel') && !st.includes('restored')) {
+            (b.items || []).forEach(it => {
+              const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+              if (q > 0) {
+                const resCode = resolveProductCode(it);
+                const c = String(resCode || it.code || '').toUpperCase().trim();
+                const n = normalizeProductName(it.name || it.description || '');
+                const fp = wordFingerprint(it.name || it.description || '');
+                if (c) bomAllocations.set(c, (bomAllocations.get(c) || 0) + q);
+                if (n) bomAllocations.set(n, (bomAllocations.get(n) || 0) + q);
+                if (fp) bomAllocations.set(fp, (bomAllocations.get(fp) || 0) + q);
+              }
+            });
+          }
+        });
+      }
+
+      // Reconcile remaining stock in matMap
+      matMap.forEach((m, key) => {
+        const mCode = String(m.code || key).toUpperCase().trim();
+        const mNorm = normalizeProductName(m.name || '');
+        const mFp = wordFingerprint(m.name || '');
+        const allocated = Math.max(
+          (mCode && bomAllocations.get(mCode)) || 0,
+          (mNorm && bomAllocations.get(mNorm)) || 0,
+          (mFp && bomAllocations.get(mFp)) || 0,
+          Number(m.reserved) || 0,
+          Number(m.blockedForBom) || 0
+        );
+
+        if (allocated > 0) {
+          const base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : 5000)) || 5000);
+          const grnQty = Number(m.goodsReceived || 0);
+          const rem = Math.max(0, base + grnQty - allocated);
+          m.stock = rem;
+          m.availableStock = rem;
+          m.reserved = allocated;
+          m.blockedForBom = allocated;
+          const minL = Number(m.minLevel || 50);
+          m.status = rem === 0 ? 'Out of Stock' : (rem <= minL ? 'Low Stock' : 'In Stock');
+        }
+      });
+
       const filteredMaterials = Array.from(matMap.values()).filter(m => {
         if (deletedCodes.includes(m.code)) return false;
         return true;
@@ -556,20 +617,32 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       })
       .catch(() => {});
 
-    // Authoritative Cloud Database Inventory Sync: Ensures all 10+ sales users see identical live stock
+    // Authoritative Server & Cloud Database Inventory Sync
     const fetchDatabaseInventory = () => {
-      fetch('/api/store/raw_materials_store')
+      fetch('/api/raw-materials')
         .then(res => res.json())
-        .then(resData => {
-          const cloudMats = resData?.data;
-          if (Array.isArray(cloudMats) && cloudMats.length > 0) {
+        .then(rawMats => {
+          if (Array.isArray(rawMats) && rawMats.length > 0) {
             try {
-              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(cloudMats));
+              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
             } catch (_) {}
             syncEngineInventory();
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          fetch('/api/store/raw_materials_store')
+            .then(res => res.json())
+            .then(resData => {
+              const cloudMats = resData?.data;
+              if (Array.isArray(cloudMats) && cloudMats.length > 0) {
+                try {
+                  localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(cloudMats));
+                } catch (_) {}
+                syncEngineInventory();
+              }
+            })
+            .catch(() => {});
+        });
     };
 
     fetchDatabaseInventory();
@@ -580,12 +653,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     });
     window.addEventListener('controlroom_raw_materials_update', syncEngineInventory);
     window.addEventListener('controlroom_grn_completed', syncEngineInventory);
+    window.addEventListener('controlroom_storage_update', syncEngineInventory);
+    window.addEventListener('central_inventory_updated', syncEngineInventory);
     window.addEventListener('storage', syncEngineInventory);
     return () => {
       clearInterval(pollDbInterval);
       unsubscribe();
       window.removeEventListener('controlroom_raw_materials_update', syncEngineInventory);
       window.removeEventListener('controlroom_grn_completed', syncEngineInventory);
+      window.removeEventListener('controlroom_storage_update', syncEngineInventory);
+      window.removeEventListener('central_inventory_updated', syncEngineInventory);
       window.removeEventListener('storage', syncEngineInventory);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
