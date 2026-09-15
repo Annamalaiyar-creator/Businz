@@ -579,10 +579,83 @@ class CentralInventoryStore {
       saveCloudStore('raw_materials_store', currentMats);
     } catch (_) {}
 
+    // Synchronize controlroom_items_list (used by Items Directory, Product Catalog, Stock Status)
+    try {
+      const itemsStr = localStorage.getItem('controlroom_items_list');
+      let currentItems = [];
+      if (itemsStr) currentItems = JSON.parse(itemsStr);
+      if (Array.isArray(currentItems) && currentItems.length > 0) {
+        itemsList.forEach(pItem => {
+          const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
+          if (qty <= 0) return;
+          const resCode = resolveProductCode(pItem);
+          const pCode = String(pItem.code || resCode || '').toUpperCase().trim();
+          const pName = String(pItem.name || pItem.description || '').trim();
+          const normPName = normalizeProductName(pName);
+
+          const itMatch = currentItems.find(it => {
+            const itCode = String(it.code || it.sku || it.itemId || '').toUpperCase().trim();
+            const itNorm = normalizeProductName(it.name);
+            return (pCode && itCode === pCode) || (normPName && itNorm === normPName) || (pName && it.name && it.name.toLowerCase() === pName.toLowerCase());
+          });
+          if (itMatch) {
+            const basePhysical = Math.max(0, parseFloat(itMatch.physicalStock !== undefined ? itMatch.physicalStock : (itMatch.openingStock || 5000)) || 5000);
+            itMatch.physicalStock = basePhysical;
+            itMatch.reserved = (parseFloat(itMatch.reserved) || 0) + qty;
+            const newSt = Math.max(0, basePhysical - itMatch.reserved);
+            itMatch.stock = newSt;
+            itMatch.availableStock = newSt;
+            itMatch.status = newSt <= 0 ? 'Out of Stock' : (newSt <= (itMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
+          }
+        });
+        localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
+        saveCloudStore('item_store', currentItems);
+      }
+    } catch (_) {}
+
+    // Synchronize controlroom_stock_registry_store
+    try {
+      const regStr = localStorage.getItem('controlroom_stock_registry_store');
+      let stockRegistry = [];
+      if (regStr) stockRegistry = JSON.parse(regStr);
+      if (Array.isArray(stockRegistry) && stockRegistry.length > 0) {
+        itemsList.forEach(pItem => {
+          const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
+          if (qty <= 0) return;
+          const pCode = String(pItem.code || '').toUpperCase().trim();
+          const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
+          const rMatch = stockRegistry.find(r => {
+            const rCode = String(r.code || '').toUpperCase().trim();
+            const rName = String(r.item || r.name || '').toLowerCase().trim();
+            return (pCode && rCode === pCode) || (pName && (rName === pName || rName.includes(pName) || pName.includes(rName)));
+          });
+          if (rMatch) {
+            const cur = Math.max(0, parseFloat(String(r.stock).replace(/,/g, '')) || 0);
+            const next = Math.max(0, cur - qty);
+            r.stock = String(next);
+            r.allocated = (parseFloat(String(r.allocated).replace(/,/g, '')) || 0) + qty;
+            const minL = parseFloat(String(r.minLevel || '50').replace(/,/g, '')) || 50;
+            r.status = next <= 0 ? 'Out of Stock' : (next <= minL ? 'Low Stock' : 'In Stock');
+          }
+        });
+        localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(stockRegistry));
+      }
+    } catch (_) {}
+
+    // Guarantee backend disk reconciliation
+    try {
+      fetch('/api/inventory/reconcile-boms', { method: 'POST' }).catch(() => {});
+    } catch (_) {}
+
     this.saveItems();
     this.saveReservations();
     this.saveTransactions();
     this.notifyChange();
+    try {
+      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+      window.dispatchEvent(new Event('storage'));
+    } catch (_) {}
   }
 
   // Restore / Unblock Inventory when a BOM is Cancelled

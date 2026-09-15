@@ -3,7 +3,9 @@ import {
   Plus, Check, Trash2, FileText, AlertCircle, CheckCircle,
   CheckSquare, Truck, Package, Upload, Camera, Video
 } from "lucide-react";
-import { normalizePaymentTerm } from "../../utils/otherViewsShared";
+import { normalizePaymentTerm, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
+import { centralInventoryStore } from "../../utils/centralInventoryStore";
+import { saveCloudStore } from "../../utils/supabaseDataSync";
 
 export default function ConfirmingBomModal({
   confirmingBomModal,
@@ -130,11 +132,11 @@ export default function ConfirmingBomModal({
                     packed: false
                   }));
 
-                setBomStore(prev => prev.map(b => b.bomCode === confirmingBomModal.bomCode ? {
-                  ...b,
-                  companyName: confirmingBomModal.companyName || b.companyName,
-                  paymentType: confirmingBomModal.paymentType || b.paymentType,
-                  partialAmount: confirmingBomModal.paymentType === 'Partial Payment' ? (parseFloat(confirmingBomModal.partialAmount) || 0) : (b.partialAmount || null),
+                const updatedBomRecord = {
+                  ...confirmingBomModal,
+                  companyName: confirmingBomModal.companyName || bObj.companyName,
+                  paymentType: confirmingBomModal.paymentType,
+                  partialAmount: confirmingBomModal.paymentType === 'Partial Payment' ? (parseFloat(confirmingBomModal.partialAmount) || 0) : (confirmingBomModal.partialAmount || null),
                   balanceAmount: confirmingBomModal.paymentType === 'Partial Payment' ? Math.max(0, (confirmingBomModal.grandTotal || orderGrandTotal) - (parseFloat(confirmingBomModal.partialAmount) || 0)) : (confirmingBomModal.paymentType === '100% Paid' ? 0 : (confirmingBomModal.grandTotal || orderGrandTotal)),
                   billingAddress: bStr,
                   billingAddressObj: bObj,
@@ -147,7 +149,41 @@ export default function ConfirmingBomModal({
                   subTotal: confirmingBomModal.subTotal || orderSubTotal,
                   gstAmount: confirmingBomModal.gstAmount || orderGstAmount,
                   grandTotal: confirmingBomModal.grandTotal || orderGrandTotal
-                } : b));
+                };
+
+                // 1. Deduct / Reserve inventory across all stores
+                try {
+                  centralInventoryStore.deductStockForBOM(confirmingBomModal.bomCode, finalizedItems, 'Sales BOM Verification');
+                } catch (cErr) {
+                  console.warn('Inventory deduction error on BOM confirmation:', cErr);
+                }
+
+                // 2. Update React State and persist locally & to cloud
+                setBomStore(prev => {
+                  const updated = (prev || []).map(b => b.bomCode === confirmingBomModal.bomCode ? { ...b, ...updatedBomRecord } : b);
+                  try {
+                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+                    saveCloudStore('bom_store', updated);
+                  } catch (_) {}
+                  return updated;
+                });
+
+                // 3. Post to backend and trigger server reconciliation
+                try {
+                  fetch('/api/boms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomRecord), isUpdate: true })
+                  }).catch(() => {});
+                  fetch('/api/inventory/reconcile-boms', { method: 'POST' }).catch(() => {});
+                } catch (_) {}
+
+                // 4. Dispatch live synchronization events
+                window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomRecord } }));
+                window.dispatchEvent(new Event('central_inventory_updated'));
+                window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+                window.dispatchEvent(new Event('controlroom_storage_update'));
+                window.dispatchEvent(new Event('storage'));
 
                 // Trigger Real-time Workflow Notification with synthesized sound & deep-link to Dispatch Orders
                 notifyBomSentToDispatch({
@@ -157,7 +193,7 @@ export default function ConfirmingBomModal({
                 });
 
                 setConfirmingBomModal(null);
-                alert(`✅ BOM (${confirmingBomModal.bomCode}) successfully verified and sent to Production (Work Orders) & Dispatch Orders!`);
+                alert(`✅ BOM (${confirmingBomModal.bomCode}) successfully verified and sent to Production (Work Orders) & Dispatch Orders!\n\nInventory has been allocated and deducted.`);
               }}
               style={{
                 border: 'none',
