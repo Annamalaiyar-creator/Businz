@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, HelpCircle, ChevronDown, LogOut, Check, RotateCcw, CheckCircle2, ArrowRight, Code, FileCheck, CheckCircle, Menu } from 'lucide-react';
+import { Bell, HelpCircle, ChevronDown, LogOut, Check, RotateCcw, CheckCircle2, ArrowRight, Code, FileCheck, CheckCircle, Menu, Smartphone } from 'lucide-react';
 
 import { isRoleTargeted, speakNotificationVoice, playPorterOrderAlert, getPorterVoiceCue } from '../services/notificationService';
 
@@ -80,7 +80,7 @@ export const addLiveNotification = (notif) => {
   }
 };
 
-export default function Header({ activeTab, userRole = 'Procurement Admin', onSwitchRole, onOpenLoginModal, onSelectTab, onToggleSidebar }) {
+export default function Header({ activeTab, userRole = 'Procurement Admin', onSwitchRole, onOpenLoginModal, onSelectTab, onToggleSidebar, onToggleMobileView }) {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD';
@@ -352,6 +352,35 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
         >
           <HelpCircle style={{ width: '18px', height: '18px', color: '#1E293B' }} />
         </button>
+
+        {/* Quick Switch to Dedicated Mobile UI */}
+        {onToggleMobileView && (
+          <button
+            title="Switch to Dedicated Mobile View"
+            onClick={onToggleMobileView}
+            style={{
+              height: '38px',
+              padding: '0 12px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
+              color: '#FFFFFF',
+              fontSize: '12px',
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+          >
+            <Smartphone size={16} />
+            <span>Mobile App</span>
+          </button>
+        )}
 
         {/* Neumorphism Notification Icon Button with Disappearing Badge Animation */}
         <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>

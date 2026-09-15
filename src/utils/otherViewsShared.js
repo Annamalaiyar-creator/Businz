@@ -5,7 +5,8 @@ export {
   getMediaFromCacheAsync,
   stripDataUrlsFromRecord,
   readCompressedImage,
-  compressAndSaveFile
+  compressAndSaveFile,
+  uploadMediaFile
 } from './mediaUtils';
 
 /**

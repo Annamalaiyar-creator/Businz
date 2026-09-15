@@ -3,7 +3,7 @@ import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
   UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X
 } from "lucide-react";
-import { stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
+import { stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, getMediaFromCache, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
@@ -677,21 +677,39 @@ export default function DispatchPackingModal({
                         Array.from(files).forEach(f => {
                           compressAndSaveFile(f, (docMeta) => {
                             if (docMeta) {
+                              const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                               saveMediaToCache(docMeta.name, docMeta.dataUrl);
+                              const newPhoto = {
+                                id: photoId,
+                                name: docMeta.name,
+                                size: docMeta.size,
+                                dataUrl: docMeta.dataUrl,
+                                uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                              };
                               setDispatchPackingModal(prev => {
-                                const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                                const updatedPhotos = [...(existingMedia.photos || []), {
-                                  id: `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                                  name: docMeta.name,
-                                  size: docMeta.size,
-                                  dataUrl: docMeta.dataUrl,
-                                  uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                                }];
+                                const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
                                 return {
                                   ...prev,
-                                  dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
+                                  dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] }
                                 };
                               });
+                              // Asynchronously stream photo to backend server disk
+                              uploadMediaFile(f).then(uRes => {
+                                if (uRes && uRes.url) {
+                                  saveMediaToCache(docMeta.name, uRes.url);
+                                  saveMediaToCache(photoId, uRes.url);
+                                  setDispatchPackingModal(prev => {
+                                    const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
+                                    const updatedPhotos = (existingMedia.photos || []).map(p =>
+                                      p.id === photoId ? { ...p, url: uRes.url } : p
+                                    );
+                                    return {
+                                      ...prev,
+                                      dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
+                                    };
+                                  });
+                                }
+                              }).catch(() => {});
                             }
                           });
                         });
@@ -714,27 +732,54 @@ export default function DispatchPackingModal({
                     onChange={(e) => {
                       const file = e.target.files && e.target.files[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (evt) => {
-                          const vData = evt.target.result;
-                          const vItem = {
-                            id: `pack_video_${Date.now()}`,
-                            name: file.name,
-                            size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                            dataUrl: vData,
-                            uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                          };
-                          saveMediaToCache(file.name, vData);
-                          saveMediaToCache(vItem.id, vData);
-                          setDispatchPackingModal(prev => {
-                            const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                            return {
-                              ...prev,
-                              dispatchPackingMedia: { ...existingMedia, videos: [...(existingMedia.videos || []), vItem] }
-                            };
-                          });
+                        const vItemId = `pack_video_${Date.now()}`;
+                        let localUrl = '';
+                        try {
+                          localUrl = URL.createObjectURL(file);
+                        } catch (_) {}
+
+                        const vItem = {
+                          id: vItemId,
+                          name: file.name,
+                          size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                          dataUrl: localUrl,
+                          url: localUrl,
+                          uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+                          uploading: true
                         };
-                        reader.readAsDataURL(file);
+
+                        if (localUrl) {
+                          saveMediaToCache(file.name, localUrl);
+                          saveMediaToCache(vItemId, localUrl);
+                        }
+
+                        setDispatchPackingModal(prev => {
+                          const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
+                          return {
+                            ...prev,
+                            dispatchPackingMedia: { ...existingMedia, videos: [...(existingMedia.videos || []), vItem] }
+                          };
+                        });
+
+                        // 🎥 Stream large video directly to backend server disk so sales and accounts can view it
+                        uploadMediaFile(file).then(res => {
+                          if (res && res.url) {
+                            saveMediaToCache(file.name, res.url);
+                            saveMediaToCache(vItemId, res.url);
+                            setDispatchPackingModal(prev => {
+                              const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
+                              const updatedVideos = (existingMedia.videos || []).map(v =>
+                                v.id === vItemId ? { ...v, url: res.url, uploading: false } : v
+                              );
+                              return {
+                                ...prev,
+                                dispatchPackingMedia: { ...existingMedia, videos: updatedVideos }
+                              };
+                            });
+                          }
+                        }).catch(err => {
+                          console.warn('[DispatchPackingModal video upload error]:', err);
+                        });
                       }
                     }}
                   />
@@ -819,51 +864,56 @@ export default function DispatchPackingModal({
           {/* Media Gallery Thumbnails */}
           {((dispatchPackingModal.dispatchPackingMedia?.photos || []).length > 0 || (dispatchPackingModal.dispatchPackingMedia?.videos || []).length > 0) ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginTop: '6px' }}>
-              {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => (
-                <div key={ph.id || phIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <div
-                    onClick={() => handleMediaPreview({ type: 'image', url: ph.dataUrl, name: ph.name })}
-                    style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <img src={ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => {
+                const photoSrc = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                return (
+                  <div key={ph.id || phIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div
+                      onClick={() => handleMediaPreview({ type: 'image', url: photoSrc, name: ph.name })}
+                      style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <img src={photoSrc} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
+                        {ph.name}
+                      </span>
+                      {!isPackedAndReady && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDispatchPackingModal(prev => {
+                              const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                              return {
+                                ...prev,
+                                dispatchPackingMedia: {
+                                  ...existingMedia,
+                                  photos: existingMedia.photos.filter((_, i) => i !== phIdx)
+                                }
+                              };
+                            });
+                          }}
+                          style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
-                      {ph.name}
-                    </span>
-                    {!isPackedAndReady && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDispatchPackingModal(prev => {
-                            const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                            return {
-                              ...prev,
-                              dispatchPackingMedia: {
-                                ...existingMedia,
-                                photos: existingMedia.photos.filter((_, i) => i !== phIdx)
-                              }
-                            };
-                          });
-                        }}
-                        style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
-              {(dispatchPackingModal.dispatchPackingMedia?.videos || []).map((vd, vdIdx) => (
-                <div key={vd.id || vdIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <div
-                    onClick={() => handleMediaPreview({ type: 'video', url: vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id), name: vd.name })}
-                    style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
-                  >
-                    <Video size={24} style={{ color: '#38BDF8' }} />
-                    <span style={{ fontSize: '10px' }}>Play Video</span>
-                  </div>
+              {(dispatchPackingModal.dispatchPackingMedia?.videos || []).map((vd, vdIdx) => {
+                const videoSrc = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
+                return (
+                  <div key={vd.id || vdIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div
+                      onClick={() => handleMediaPreview({ type: 'video', url: videoSrc, name: vd.name })}
+                      style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
+                    >
+                      <Video size={24} style={{ color: '#38BDF8' }} />
+                      <span style={{ fontSize: '10px' }}>Play Video</span>
+                    </div>
                   <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
                       {vd.name}
@@ -890,7 +940,8 @@ export default function DispatchPackingModal({
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ fontSize: '11px', color: '#64748B', fontStyle: 'italic' }}>
@@ -1068,9 +1119,14 @@ export default function DispatchPackingModal({
                     ctx.drawImage(v, 0, 0, c.width, c.height);
                     const photoUrl = c.toDataURL('image/jpeg', 0.85);
 
+                    const capturedId = `pack_photo_live_${Date.now()}`;
+                    const capturedName = `Live_Packed_Box_${Date.now().toString().slice(-4)}.jpg`;
+                    saveMediaToCache(capturedName, photoUrl);
+                    saveMediaToCache(capturedId, photoUrl);
+
                     const capturedPhoto = {
-                      id: `pack_photo_live_${Date.now()}`,
-                      name: `Live_Packed_Box_${Date.now().toString().slice(-4)}.jpg`,
+                      id: capturedId,
+                      name: capturedName,
                       size: '1.1 MB',
                       dataUrl: photoUrl,
                       uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
@@ -1083,6 +1139,24 @@ export default function DispatchPackingModal({
                         dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), capturedPhoto] }
                       };
                     });
+
+                    // Asynchronously upload camera snapshot to server
+                    uploadMediaFile(photoUrl, capturedName).then(uRes => {
+                      if (uRes && uRes.url) {
+                        saveMediaToCache(capturedName, uRes.url);
+                        saveMediaToCache(capturedId, uRes.url);
+                        setDispatchPackingModal(prev => {
+                          const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
+                          const updatedPhotos = (existingMedia.photos || []).map(p =>
+                            p.id === capturedId ? { ...p, url: uRes.url } : p
+                          );
+                          return {
+                            ...prev,
+                            dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
+                          };
+                        });
+                      }
+                    }).catch(() => {});
 
                     if (dispatchCameraStreamRef.current) {
                       dispatchCameraStreamRef.current.getTracks().forEach(t => t.stop());

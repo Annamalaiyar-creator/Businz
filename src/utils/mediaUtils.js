@@ -135,25 +135,113 @@ export const getMediaFromCacheAsync = async (docKey) => {
   if (syncVal) return syncVal;
 
   const db = await getDB();
-  if (!db) return null;
 
   return new Promise((resolve) => {
     try {
+      if (!db) {
+        // Direct fallback to server media finder
+        fetch(`/api/media/find/${encodeURIComponent(docKey)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data?.found && data?.url) {
+              saveMediaToCache(docKey, data.url);
+              resolve(data.url);
+            } else {
+              resolve(null);
+            }
+          })
+          .catch(() => resolve(null));
+        return;
+      }
+
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const req = store.get(docKey);
       req.onsuccess = () => {
-        const res = req.result?.dataUrl || null;
-        if (res && typeof window !== 'undefined' && window.__CR_MEDIA_MAP__) {
-          window.__CR_MEDIA_MAP__.set(docKey, res);
+        if (req.result?.dataUrl) {
+          if (typeof window !== 'undefined' && window.__CR_MEDIA_MAP__) {
+            window.__CR_MEDIA_MAP__.set(docKey, req.result.dataUrl);
+          }
+          resolve(req.result.dataUrl);
+        } else {
+          // Check backend server
+          fetch(`/api/media/find/${encodeURIComponent(docKey)}`)
+            .then(r => r.json())
+            .then(data => {
+              if (data?.found && data?.url) {
+                saveMediaToCache(docKey, data.url);
+                resolve(data.url);
+              } else {
+                resolve(null);
+              }
+            })
+            .catch(() => resolve(null));
         }
-        resolve(res);
       };
-      req.onerror = () => resolve(null);
+      req.onerror = () => {
+        fetch(`/api/media/find/${encodeURIComponent(docKey)}`)
+          .then(r => r.json())
+          .then(data => resolve(data?.found ? data.url : null))
+          .catch(() => resolve(null));
+      };
     } catch (_) {
       resolve(null);
     }
   });
+};
+
+/**
+ * High-performance media uploader: streams video/image binary to backend server
+ * Returns public URL (/api/uploads/...) accessible by all users across devices
+ */
+export const uploadMediaFile = async (file, originalName) => {
+  if (!file) return null;
+  const fileName = originalName || file.name || `media_${Date.now()}`;
+
+  // 1. If native File or Blob, stream upload directly without base64 overhead
+  if (file instanceof Blob || (typeof File !== 'undefined' && file instanceof File)) {
+    try {
+      const res = await fetch('/api/media/upload-raw', {
+        method: 'POST',
+        body: file,
+        headers: {
+          'x-file-name': encodeURIComponent(fileName),
+          'Content-Type': file.type || 'application/octet-stream'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.url) {
+          saveMediaToCache(fileName, data.url);
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn('[uploadMediaFile raw stream failed]:', err);
+    }
+  }
+
+  // 2. Fallback: Base64 JSON upload
+  if (typeof file === 'string' && file.startsWith('data:')) {
+    try {
+      const res = await fetch('/api/media/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fileName, dataUrl: file })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.url) {
+          saveMediaToCache(fileName, data.url);
+          return data;
+        }
+      }
+    } catch (err2) {
+      console.warn('[uploadMediaFile base64 fallback failed]:', err2);
+    }
+  }
+
+  return null;
 };
 
 export const stripDataUrlsFromRecord = (obj) => {

@@ -310,27 +310,30 @@ export default function QuickPreviewDrawer({
 
             {hasMedia ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                {packPhotos.map((ph, pIdx) => (
-                  <div
-                    key={pIdx}
-                    onClick={() => {
-                      if (typeof setActiveMediaPreviewModal === 'function') {
-                        setActiveMediaPreviewModal({ type: 'image', url: ph.dataUrl, name: ph.name || `Photo ${pIdx + 1}` });
-                      } else if (ph.dataUrl) {
-                        window.open(ph.dataUrl, '_blank');
-                      }
-                    }}
-                    style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
-                  >
-                    <img src={ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>📷 Photo</span>
-                      <span>›</span>
+                {(packPhotos || []).map((ph, pIdx) => {
+                  const photoUrl = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                  return (
+                    <div
+                      key={pIdx}
+                      onClick={() => {
+                        if (typeof setActiveMediaPreviewModal === 'function') {
+                          setActiveMediaPreviewModal({ type: 'image', url: photoUrl, name: ph.name || `Photo ${pIdx + 1}` });
+                        } else if (photoUrl) {
+                          window.open(photoUrl, '_blank');
+                        }
+                      }}
+                      style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
+                    >
+                      <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>📷 Photo</span>
+                        <span>›</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {packVideos.map((vd, vIdx) => {
-                  const videoUrl = vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || vd.url;
+                  const videoUrl = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
                   return (
                     <div
                       key={vIdx}

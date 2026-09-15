@@ -32,7 +32,7 @@ export default function InvoiceDetailModal({
   const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
   const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || '100% Advance') : (inv.paymentType || '100% Advance');
   const isFullAdvance = paymentTypeText === '100% Advance';
-  const is50Percent = paymentTypeText === '50% Advance / 50% Dispatch';
+  const is50Percent = paymentTypeText.includes('50%') || paymentTypeText === '50% Advance / 50% Dispatch';
 
   // Look up matching BOM from bomStore to sync items & dispatch checkboxes
   const matchingBom = bomStore.find(b =>

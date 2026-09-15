@@ -922,6 +922,78 @@ class CentralInventoryStore {
     this.saveTransactions();
     this.notifyChange();
   }
+
+  // Complete Stock Reset: sets stock to 0, clears allocations, and sets every stock to 5000
+  resetAllStockTo5000() {
+    // 1. Remove all stock (start from 0)
+    this.items = (this.items || []).map(item => ({
+      ...item,
+      stock: 0,
+      openingStock: 0,
+      physicalStock: 0,
+      available: 0,
+      reserved: 0
+    }));
+
+    // 2. Wipe reservations
+    this.reservations = [];
+    try {
+      localStorage.removeItem(this.storageKeyReservations);
+    } catch (_) {}
+
+    // 3. Set every stock to exactly 5,000
+    this.items = INITIAL_CENTRAL_ITEMS.map(item => ({
+      ...item,
+      stock: 5000,
+      openingStock: 5000,
+      physicalStock: 5000,
+      available: 5000,
+      reserved: 0
+    }));
+
+    this.saveItems();
+    try {
+      saveCloudStore('item_store', this.items);
+    } catch (_) {}
+
+    // 4. Update raw materials store for Inventory Stores with all items having 5,000 stock
+    const rawMaterials5000 = this.items.map(item => ({
+      code: item.code,
+      name: item.name,
+      cat: item.cat || 'Structure Assemblies',
+      category: item.cat || 'Structure Assemblies',
+      unit: item.uom || 'Nos',
+      stock: 5000,
+      physicalStock: 5000,
+      availableStock: 5000,
+      minLevel: item.minLevel || 50,
+      reorderLevel: item.reorderLevel || 100,
+      status: 'In Stock',
+      store: item.location || 'Main Store',
+      hsn: '7604',
+      lastUpdated: 'Stock Reset to 5,000',
+      reserved: 0,
+      openingStock: 5000,
+      goodsReceived: 0,
+      issuedProd: 0,
+      matReturn: 0,
+      stockAdj: 0
+    }));
+
+    try {
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMaterials5000));
+      saveCloudStore('raw_materials_store', rawMaterials5000);
+    } catch (_) {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+      window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_raw_materials_store' } }));
+    } catch (_) {}
+
+    this.notifyChange();
+    return this.items;
+  }
 }
 
 export const centralInventoryStore = new CentralInventoryStore();
+

@@ -18,10 +18,11 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
   const balancePaidSoFar = Number(uploadPaymentModal.balanceAmountPaid || 0);
   const currentOutstanding = Math.max(0, recordedBalance - balancePaidSoFar);
 
-  const isEligibleForBalance = ['Partial Payment', 'Payment While Dispatch', 'Credit Payment', '50% Advance + 50% Dispatch', 'Net 30 Days'].includes(uploadPaymentModal.paymentType) ||
+  const isEligibleForBalance = ['Partial Payment', 'Payment While Dispatch', 'Credit Payment', '50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', 'Net 30 Days'].includes(uploadPaymentModal.paymentType) ||
     (uploadPaymentModal.paymentType || '').toLowerCase().includes('partial') ||
     (uploadPaymentModal.paymentType || '').toLowerCase().includes('dispatch') ||
-    (uploadPaymentModal.paymentType || '').toLowerCase().includes('credit');
+    (uploadPaymentModal.paymentType || '').toLowerCase().includes('credit') ||
+    (uploadPaymentModal.paymentType || '').includes('50%');
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif" }}>
@@ -159,7 +160,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                         <option value="Payment While Dispatch">Dispatch Settlement Payment</option>
                       ) : uploadPaymentModal.paymentType === 'Credit Payment' ? (
                         <option value="Credit Payment">Credit Invoice Settlement</option>
-                      ) : uploadPaymentModal.paymentType === '50% Advance + 50% Dispatch' ? (
+                      ) : ((uploadPaymentModal.paymentType || '').includes('50%') || uploadPaymentModal.paymentType === '50% Advance + 50% Dispatch' || uploadPaymentModal.paymentType === '50% Advance + 50% Before Dispatch') ? (
                         <>
                           <option value="50% Advance">Stage 1: 50% Advance Payment</option>
                           <option value="50% Dispatch">Stage 2: 50% Dispatch Payment</option>

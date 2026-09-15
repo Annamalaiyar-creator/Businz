@@ -186,7 +186,7 @@ export default function BomOrdersView(props) {
   const [newBomDeliveryCity, setNewBomDeliveryCity] = useState('');
   const [newBomDeliveryState, setNewBomDeliveryState] = useState('');
   const [newBomDeliveryPincode, setNewBomDeliveryPincode] = useState('');
-  const [newBomPaymentType, setNewBomPaymentType] = useState('100% Paid');
+  const [newBomPaymentType, setNewBomPaymentType] = useState('50% Advance + 50% Dispatch');
   const [newBomPartialAmount, setNewBomPartialAmount] = useState('');
   const [modalBalanceAmount, setModalBalanceAmount] = useState('');
   const [newBomCreditDays, setNewBomCreditDays] = useState(7);
@@ -921,10 +921,11 @@ export default function BomOrdersView(props) {
       }
       if (pendingPi.customerName) setNewBomProductName(pendingPi.customerName);
       setNewBomRemarks('');
-      if (pendingPi.paymentTerms && pendingPi.paymentTerms !== '50% Advance + 50% Before Dispatch') {
-        setNewBomPaymentType(pendingPi.paymentTerms);
+      const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms;
+      if (effectivePiPaymentTerm) {
+        setNewBomPaymentType(effectivePiPaymentTerm);
       } else {
-        setNewBomPaymentType('100% Paid');
+        setNewBomPaymentType('50% Advance + 50% Dispatch');
       }
       if (pendingPi.creditDays) setNewBomCreditDays(pendingPi.creditDays);
       if (pendingPi.transportMode) setNewBomTransportMode(pendingPi.transportMode);
@@ -1231,7 +1232,7 @@ export default function BomOrdersView(props) {
           return sp;
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
-        c4: b.paymentType || '100% Advance',
+        c4: b.paymentType || b.paymentTerms || b.piPaymentTerms || '50% Advance + 50% Dispatch',
         c5: formatCurrency(b.grandTotal),
         status: isAddressRequested ? 'Address Proof Requested from Sales' : (b.status || 'Pending Sales Confirmation'),
         stBg,
@@ -1367,13 +1368,13 @@ export default function BomOrdersView(props) {
 
     let resolvedData = null;
     if (typeof rawDoc === 'string') {
-      if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:')) {
+      if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
         resolvedData = rawDoc;
       } else {
         resolvedData = getMediaFromCache(rawDoc);
       }
     } else if (rawDoc && typeof rawDoc === 'object') {
-      resolvedData = rawDoc.dataUrl || rawDoc.url || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
+      resolvedData = rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
       if (!resolvedData && rawDoc.id) {
         resolvedData = getMediaFromCache(rawDoc.id);
       }
@@ -1387,6 +1388,23 @@ export default function BomOrdersView(props) {
       }
     }
 
+    // Auto-fetch from server if not found in local memory/IndexedDB
+    if (!resolvedData && docName && typeof window !== 'undefined') {
+      const isMediaFile = /\.(mp4|webm|mov|mkv|avi|jpg|jpeg|png|webp|gif|pdf)($|\?)/i.test(docName);
+      if (isMediaFile && !rawDoc._fetchingServer) {
+        rawDoc._fetchingServer = true;
+        fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data?.found && data?.url) {
+              saveMediaToCache(docName, data.url);
+              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
     const isImg = Boolean(
       resolvedData && (
         resolvedData.startsWith('data:image/') ||
@@ -1397,12 +1415,14 @@ export default function BomOrdersView(props) {
     );
 
     const isVid = Boolean(
-      resolvedData && (
+      (resolvedData && (
         resolvedData.startsWith('data:video/') ||
         rawDoc?.type?.startsWith('video/') ||
         /\.(mp4|webm|mov|mkv|avi)($|\?)/i.test(docName) ||
         /\.(mp4|webm|mov|mkv|avi)($|\?)/i.test(resolvedData)
-      )
+      )) ||
+      rawDoc?.type?.startsWith('video/') ||
+      /\.(mp4|webm|mov|mkv|avi)($|\?)/i.test(docName)
     );
 
     return (
@@ -1518,6 +1538,356 @@ export default function BomOrdersView(props) {
           </div>
         </div>
       </div>
+    );
+  };
+
+  // Helper to render Export Format Selector Modal (PDF / JPG / CSV) + hidden canvas
+  const renderExportFormatModal = () => {
+    if (!exportFormatRecord) return null;
+    return (
+      <>
+        {/* EXPORT FORMAT SELECTOR MODAL (PDF / JPG / CSV) */}
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+          onClick={() => !isExportingFormat && setExportFormatRecord(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '560px',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              overflow: 'hidden',
+              border: '1px solid #E2E8F0'
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid #F1F5F9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(to right, #F8FAFC, #FFFFFF)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    backgroundColor: '#ECFEFF',
+                    border: '1px solid #CFFAFE',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Download size={20} style={{ color: '#0E7490' }} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>
+                    Select Export Format
+                  </h3>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>
+                    {exportFormatRecord.bomCode || exportFormatRecord.code || 'BOM Order'} • Choose your required format
+                  </p>
+                </div>
+              </div>
+              <button
+                disabled={Boolean(isExportingFormat)}
+                onClick={() => setExportFormatRecord(null)}
+                style={{
+                  border: 'none',
+                  backgroundColor: '#F1F5F9',
+                  borderRadius: '8px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                  color: '#64748B'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Format Options */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* PDF Option */}
+              <div
+                onClick={() => !isExportingFormat && handleExportAsPdf(exportFormatRecord)}
+                style={{
+                  border: '1.5px solid #E2E8F0',
+                  borderRadius: '14px',
+                  padding: '16px 18px',
+                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: isExportingFormat === 'pdf' ? '#EFF6FF' : '#FFFFFF',
+                  borderColor: isExportingFormat === 'pdf' ? '#3B82F6' : '#E2E8F0',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '10px',
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FEE2E2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    <FileText size={24} style={{ color: '#DC2626' }} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>PDF Document</span>
+                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#FEE2E2', color: '#B91C1C' }}>.pdf</span>
+                    </div>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
+                      Official printable A4 document with complete specifications, items, and authorized signature.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={Boolean(isExportingFormat)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {isExportingFormat === 'pdf' ? (
+                    <>
+                      <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    'Export PDF'
+                  )}
+                </button>
+              </div>
+
+              {/* JPG Option */}
+              <div
+                onClick={() => !isExportingFormat && handleExportAsJpg(exportFormatRecord)}
+                style={{
+                  border: '1.5px solid #E2E8F0',
+                  borderRadius: '14px',
+                  padding: '16px 18px',
+                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: isExportingFormat === 'jpg' ? '#EFF6FF' : '#FFFFFF',
+                  borderColor: isExportingFormat === 'jpg' ? '#3B82F6' : '#E2E8F0',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '10px',
+                      backgroundColor: '#EEF2FF',
+                      border: '1px solid #E0E7FF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    <ImageIcon size={24} style={{ color: '#4F46E5' }} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>JPG Image</span>
+                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#E0E7FF', color: '#4338CA' }}>.jpg</span>
+                    </div>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
+                      High-resolution graphic image formatted for instant mobile viewing, WhatsApp, and chat.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={Boolean(isExportingFormat)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {isExportingFormat === 'jpg' ? (
+                    <>
+                      <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    'Export JPG'
+                  )}
+                </button>
+              </div>
+
+              {/* CSV Option */}
+              <div
+                onClick={() => {
+                  if (isExportingFormat) return;
+                  handleExportBomCsv(exportFormatRecord);
+                  setExportFormatRecord(null);
+                }}
+                style={{
+                  border: '1.5px solid #E2E8F0',
+                  borderRadius: '14px',
+                  padding: '16px 18px',
+                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#FFFFFF',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '10px',
+                      backgroundColor: '#ECFDF5',
+                      border: '1px solid #D1FAE5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    <FileSpreadsheet size={24} style={{ color: '#059669' }} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>CSV Spreadsheet</span>
+                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#D1FAE5', color: '#047857' }}>.csv</span>
+                    </div>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
+                      Structured tabular spreadsheet with item breakdown, GST, pricing, and customer metadata.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={Boolean(isExportingFormat)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: isExportingFormat ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                padding: '14px 24px',
+                borderTop: '1px solid #F1F5F9',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center'
+              }}
+            >
+              <button
+                type="button"
+                disabled={Boolean(isExportingFormat)}
+                onClick={() => setExportFormatRecord(null)}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: isExportingFormat ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Hidden offscreen sheet for high-res PDF / JPG rasterization */}
+        <div
+          id="bom-export-hidden-target"
+          style={{
+            position: 'fixed',
+            left: '-9999px',
+            top: 0,
+            width: '880px',
+            backgroundColor: '#FFFFFF',
+            pointerEvents: 'none',
+            zIndex: -9999
+          }}
+        >
+          <VRMBomPrintSheet bomData={exportFormatRecord} id="export-sheet-hidden-canvas" />
+        </div>
+      </>
     );
   };
 
@@ -3234,10 +3604,17 @@ export default function BomOrdersView(props) {
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                 >
+                  <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
+                  <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
+                  <option value="100% Advance">100% Advance</option>
                   <option value="100% Paid">100% Paid</option>
                   <option value="Partial Payment">Partial Payment</option>
                   <option value="Payment While Dispatch">Payment While Dispatch</option>
                   <option value="Credit Payment">Credit Payment</option>
+                  <option value="Net 30 Days">Net 30 Days</option>
+                  {Boolean(newBomPaymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(newBomPaymentType)) && (
+                    <option value={newBomPaymentType}>{newBomPaymentType}</option>
+                  )}
                 </select>
               </div>
 
@@ -3908,7 +4285,7 @@ export default function BomOrdersView(props) {
                         setNewBomTransportScope('VRM Structures');
                         setNewBomLrNo('');
                         setNewBomCreditDays(7);
-                        setNewBomPaymentType('100% Paid');
+                        setNewBomPaymentType('50% Advance + 50% Dispatch');
                         setNewBomProductName('');
                         setBomMaterialsList([]);
                         setSelectedPreset('');
@@ -4492,14 +4869,21 @@ export default function BomOrdersView(props) {
                 </div>
               ) : (
                 <select
-                  value={confirmingBomModal.paymentType || '100% Paid'}
+                  value={confirmingBomModal.paymentType || '50% Advance + 50% Dispatch'}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
                 >
+                  <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
+                  <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
+                  <option value="100% Advance">100% Advance</option>
                   <option value="100% Paid">100% Paid</option>
                   <option value="Partial Payment">Partial Payment</option>
                   <option value="Payment While Dispatch">Payment While Dispatch</option>
                   <option value="Credit Payment">Credit Payment</option>
+                  <option value="Net 30 Days">Net 30 Days</option>
+                  {Boolean(confirmingBomModal.paymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(confirmingBomModal.paymentType)) && (
+                    <option value={confirmingBomModal.paymentType}>{confirmingBomModal.paymentType}</option>
+                  )}
                 </select>
               )}
             </div>
@@ -4915,42 +5299,45 @@ export default function BomOrdersView(props) {
 
                 {hasMedia ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '4px' }}>
-                    {packPhotos.map((ph, pIdx) => (
-                      <div
-                        key={pIdx}
-                        onClick={() => setPreviewDocModal({ title: ph.name || `Packed Item Photo ${pIdx + 1}`, doc: { name: ph.name || `Photo ${pIdx + 1}`, dataUrl: ph.dataUrl } })}
-                        style={{
-                          height: '84px',
-                          borderRadius: '10px',
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          border: '1.5px solid #CBD5E1',
-                          backgroundColor: '#0F172A',
-                          position: 'relative',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                          transition: 'transform 0.15s ease'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        <img src={ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <div style={{
-                          position: 'absolute', bottom: 0, left: 0, right: 0,
-                          backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
-                          padding: '2px 6px', fontSize: '10px', fontWeight: '700',
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                        }}>
-                          <span>📷 View Photo</span>
-                          <span>›</span>
+                    {packPhotos.map((ph, pIdx) => {
+                      const photoUrl = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                      return (
+                        <div
+                          key={pIdx}
+                          onClick={() => setPreviewDocModal({ title: ph.name || `Packed Item Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
+                          style={{
+                            height: '84px',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            border: '1.5px solid #CBD5E1',
+                            backgroundColor: '#0F172A',
+                            position: 'relative',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                            transition: 'transform 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <div style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
+                            padding: '2px 6px', fontSize: '10px', fontWeight: '700',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                          }}>
+                            <span>📷 View Photo</span>
+                            <span>›</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {packVideos.map((vd, vIdx) => {
-                      const videoUrl = vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || vd.url;
+                      const videoUrl = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
                       return (
                         <div
                           key={vIdx}
-                          onClick={() => setPreviewDocModal({ title: vd.name || `Packed Item Video ${vIdx + 1}`, doc: { name: vd.name || `Video ${vIdx + 1}`, dataUrl: videoUrl } })}
+                          onClick={() => setPreviewDocModal({ title: vd.name || `Packed Item Video ${vIdx + 1}`, doc: { ...vd, name: vd.name || `Video ${vIdx + 1}`, dataUrl: videoUrl, url: vd.url || videoUrl } })}
                           style={{
                             height: '84px',
                             borderRadius: '10px',
@@ -5392,6 +5779,17 @@ export default function BomOrdersView(props) {
             </div>
           </div>
         </div>
+
+        {/* EXPORT FORMAT SELECTOR MODAL (PDF / JPG / CSV) */}
+        {renderExportFormatModal()}
+
+        {/* PRINTABLE BOM ORDER SHEET TEMPLATE */}
+        {printingBomRecord && (
+          <VRMBomPrintTemplate
+            bomData={printingBomRecord}
+            onClose={() => setPrintingBomRecord(null)}
+          />
+        )}
 
         {/* DOCUMENT PREVIEW MODAL */}
         {renderDocPreviewModal()}
@@ -6364,25 +6762,28 @@ export default function BomOrdersView(props) {
 
                   {hasMedia ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                      {packPhotos.map((ph, pIdx) => (
-                        <div
-                          key={pIdx}
-                          onClick={() => setPreviewDocModal({ title: ph.name || `Photo ${pIdx + 1}`, doc: { name: ph.name || `Photo ${pIdx + 1}`, dataUrl: ph.dataUrl } })}
-                          style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
-                        >
-                          <img src={ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                            <span>📷 Photo</span>
-                            <span>›</span>
+                      {packPhotos.map((ph, pIdx) => {
+                        const photoUrl = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                        return (
+                          <div
+                            key={pIdx}
+                            onClick={() => setPreviewDocModal({ title: ph.name || `Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
+                            style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
+                          >
+                            <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>📷 Photo</span>
+                              <span>›</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       {packVideos.map((vd, vIdx) => {
-                        const videoUrl = vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || vd.url;
+                        const videoUrl = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
                         return (
                           <div
                             key={vIdx}
-                            onClick={() => setPreviewDocModal({ title: vd.name || `Video ${vIdx + 1}`, doc: { name: vd.name || `Video ${vIdx + 1}`, dataUrl: videoUrl } })}
+                            onClick={() => setPreviewDocModal({ title: vd.name || `Video ${vIdx + 1}`, doc: { ...vd, name: vd.name || `Video ${vIdx + 1}`, dataUrl: videoUrl, url: vd.url || videoUrl } })}
                             style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', position: 'relative' }}
                           >
                             <Video size={20} style={{ color: '#38BDF8' }} />
@@ -6723,353 +7124,7 @@ export default function BomOrdersView(props) {
       {renderDocPreviewModal()}
 
       {/* EXPORT FORMAT SELECTOR MODAL (PDF / JPG / CSV) */}
-      {exportFormatRecord && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-            padding: '20px'
-          }}
-          onClick={() => !isExportingFormat && setExportFormatRecord(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              width: '100%',
-              maxWidth: '560px',
-              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
-              overflow: 'hidden',
-              border: '1px solid #E2E8F0'
-            }}
-          >
-            {/* Modal Header */}
-            <div
-              style={{
-                padding: '20px 24px',
-                borderBottom: '1px solid #F1F5F9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'linear-gradient(to right, #F8FAFC, #FFFFFF)'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '12px',
-                    backgroundColor: '#ECFEFF',
-                    border: '1px solid #CFFAFE',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Download size={20} style={{ color: '#0E7490' }} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>
-                    Select Export Format
-                  </h3>
-                  <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>
-                    {exportFormatRecord.bomCode || exportFormatRecord.code || 'BOM Order'} • Choose your required format
-                  </p>
-                </div>
-              </div>
-              <button
-                disabled={Boolean(isExportingFormat)}
-                onClick={() => setExportFormatRecord(null)}
-                style={{
-                  border: 'none',
-                  backgroundColor: '#F1F5F9',
-                  borderRadius: '8px',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                  color: '#64748B'
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Format Options */}
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* PDF Option */}
-              <div
-                onClick={() => !isExportingFormat && handleExportAsPdf(exportFormatRecord)}
-                style={{
-                  border: '1.5px solid #E2E8F0',
-                  borderRadius: '14px',
-                  padding: '16px 18px',
-                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px',
-                  backgroundColor: '#FFFFFF',
-                  transition: 'all 0.18s ease',
-                  opacity: isExportingFormat && isExportingFormat !== 'pdf' ? 0.45 : 1
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div
-                    style={{
-                      width: '46px',
-                      height: '46px',
-                      borderRadius: '12px',
-                      backgroundColor: '#FFF1F2',
-                      border: '1px solid #FFE4E6',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}
-                  >
-                    <FileText size={24} style={{ color: '#E11D48' }} />
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>PDF Document</span>
-                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#FFE4E6', color: '#BE123C' }}>.pdf</span>
-                    </div>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
-                      Official printable A4 document with complete specifications, items, and authorized signature.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={Boolean(isExportingFormat)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  {isExportingFormat === 'pdf' ? (
-                    <>
-                      <Loader size={13} className="animate-spin" /> Generating...
-                    </>
-                  ) : (
-                    'Export PDF'
-                  )}
-                </button>
-              </div>
-
-              {/* JPG Option */}
-              <div
-                onClick={() => !isExportingFormat && handleExportAsJpg(exportFormatRecord)}
-                style={{
-                  border: '1.5px solid #E2E8F0',
-                  borderRadius: '14px',
-                  padding: '16px 18px',
-                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px',
-                  backgroundColor: '#FFFFFF',
-                  transition: 'all 0.18s ease',
-                  opacity: isExportingFormat && isExportingFormat !== 'jpg' ? 0.45 : 1
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div
-                    style={{
-                      width: '46px',
-                      height: '46px',
-                      borderRadius: '12px',
-                      backgroundColor: '#EEF2FF',
-                      border: '1px solid #E0E7FF',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}
-                  >
-                    <Image size={24} style={{ color: '#4F46E5' }} />
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>JPG Image</span>
-                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#E0E7FF', color: '#4338CA' }}>.jpg</span>
-                    </div>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
-                      High-resolution graphic image formatted for instant mobile viewing, WhatsApp, and chat.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={Boolean(isExportingFormat)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  {isExportingFormat === 'jpg' ? (
-                    <>
-                      <Loader size={13} className="animate-spin" /> Generating...
-                    </>
-                  ) : (
-                    'Export JPG'
-                  )}
-                </button>
-              </div>
-
-              {/* CSV Option */}
-              <div
-                onClick={() => {
-                  if (!isExportingFormat) {
-                    handleExportBomCsv(exportFormatRecord);
-                    setExportFormatRecord(null);
-                  }
-                }}
-                style={{
-                  border: '1.5px solid #E2E8F0',
-                  borderRadius: '14px',
-                  padding: '16px 18px',
-                  cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px',
-                  backgroundColor: '#FFFFFF',
-                  transition: 'all 0.18s ease',
-                  opacity: isExportingFormat ? 0.45 : 1
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div
-                    style={{
-                      width: '46px',
-                      height: '46px',
-                      borderRadius: '12px',
-                      backgroundColor: '#ECFDF5',
-                      border: '1px solid #D1FAE5',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}
-                  >
-                    <FileSpreadsheet size={24} style={{ color: '#059669' }} />
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>CSV Spreadsheet</span>
-                      <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#D1FAE5', color: '#047857' }}>.csv</span>
-                    </div>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
-                      Structured tabular spreadsheet with item breakdown, GST, pricing, and customer metadata.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={Boolean(isExportingFormat)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: isExportingFormat ? 'not-allowed' : 'pointer',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  Export CSV
-                </button>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div
-              style={{
-                padding: '14px 24px',
-                borderTop: '1px solid #F1F5F9',
-                backgroundColor: '#F8FAFC',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center'
-              }}
-            >
-              <button
-                type="button"
-                disabled={Boolean(isExportingFormat)}
-                onClick={() => setExportFormatRecord(null)}
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: '8px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#475569',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: isExportingFormat ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Hidden offscreen sheet for high-res PDF / JPG rasterization */}
-      {exportFormatRecord && (
-        <div
-          id="bom-export-hidden-target"
-          style={{
-            position: 'fixed',
-            left: '-9999px',
-            top: 0,
-            width: '880px',
-            backgroundColor: '#FFFFFF',
-            pointerEvents: 'none',
-            zIndex: -9999
-          }}
-        >
-          <VRMBomPrintSheet bomData={exportFormatRecord} id="export-sheet-hidden-canvas" />
-        </div>
-      )}
+      {renderExportFormatModal()}
 
       {/* PRINTABLE BOM ORDER SHEET TEMPLATE */}
       {printingBomRecord && (

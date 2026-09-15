@@ -10,13 +10,19 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
 
   let resolvedData = null;
   if (typeof rawDoc === 'string') {
-    if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:')) {
+    if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
       resolvedData = rawDoc;
     } else {
       resolvedData = getMediaFromCache(rawDoc);
     }
   } else if (rawDoc && typeof rawDoc === 'object') {
-    resolvedData = rawDoc.dataUrl || rawDoc.url || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
+    resolvedData = rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
+    if (!resolvedData && rawDoc.id) {
+      resolvedData = getMediaFromCache(rawDoc.id);
+    }
+    if (!resolvedData && docName) {
+      resolvedData = getMediaFromCache(docName);
+    }
     if (!resolvedData && rawDoc instanceof Blob) {
       try {
         resolvedData = URL.createObjectURL(rawDoc);
@@ -34,12 +40,14 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
   );
 
   const isVid = Boolean(
-    resolvedData && (
+    (resolvedData && (
       resolvedData.startsWith('data:video/') ||
       rawDoc?.type?.startsWith('video/') ||
       /\.(mp4|webm|mov|mkv|avi)($|\?)/i.test(docName) ||
       /\.(mp4|webm|mov|mkv|avi)($|\?)/i.test(resolvedData)
-    )
+    )) ||
+    rawDoc?.type?.startsWith('video/') ||
+    /\.(mp4|webm|mov|mkv|avi)($|\?)/i.test(docName)
   );
 
   return (

@@ -198,8 +198,109 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '150mb' }));
+app.use(express.urlencoded({ limit: '150mb', extended: true }));
+
+// 📁 STATIC MEDIA UPLOADS & STREAMING DIRECTORY (Supports byte-range video streaming)
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir, { acceptRanges: true }));
+app.use('/api/uploads', express.static(uploadsDir, { acceptRanges: true }));
+
+// 🎥 MEDIA UPLOAD API (High-performance streaming binary upload for large videos)
+app.post('/api/media/upload-raw', (req, res) => {
+  try {
+    const rawFileName = req.headers['x-file-name'] || `media_${Date.now()}`;
+    const decodedName = decodeURIComponent(rawFileName);
+    const ext = path.extname(decodedName) || '.mp4';
+    const safeBase = path.basename(decodedName, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const uniqueName = `${Date.now()}_${safeBase}${ext}`;
+    const targetPath = path.join(uploadsDir, uniqueName);
+
+    const writeStream = fs.createWriteStream(targetPath);
+    req.pipe(writeStream);
+
+    writeStream.on('finish', () => {
+      const stats = fs.existsSync(targetPath) ? fs.statSync(targetPath) : { size: 0 };
+      console.log(`[MEDIA UPLOAD] Raw file saved: ${uniqueName} (${stats.size} bytes)`);
+      res.json({
+        success: true,
+        url: `/api/uploads/${uniqueName}`,
+        filename: uniqueName,
+        originalName: decodedName,
+        size: stats.size
+      });
+    });
+
+    writeStream.on('error', (err) => {
+      console.error('[MEDIA UPLOAD WRITE ERROR]:', err);
+      res.status(500).json({ success: false, error: err.message });
+    });
+  } catch (err) {
+    console.error('[MEDIA UPLOAD EXCEPTION]:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 🎥 MEDIA UPLOAD API (JSON Base64 for images and documents)
+app.post('/api/media/upload', async (req, res) => {
+  try {
+    const { name, dataUrl, mimeType } = req.body || {};
+    if (!name || !dataUrl) {
+      return res.status(400).json({ success: false, error: 'Missing name or dataUrl' });
+    }
+    const ext = path.extname(name) || (mimeType?.includes('video') ? '.mp4' : '.jpg');
+    const safeBase = path.basename(name, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const uniqueName = `${Date.now()}_${safeBase}${ext}`;
+    const targetPath = path.join(uploadsDir, uniqueName);
+
+    const base64Data = dataUrl.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    await fs.promises.writeFile(targetPath, buffer);
+
+    console.log(`[MEDIA UPLOAD] Base64 saved: ${uniqueName} (${buffer.length} bytes)`);
+    res.json({
+      success: true,
+      url: `/api/uploads/${uniqueName}`,
+      filename: uniqueName,
+      originalName: name,
+      size: buffer.length
+    });
+  } catch (err) {
+    console.error('[MEDIA UPLOAD BASE64 ERROR]:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 🔍 MEDIA FINDER API (Locates existing uploaded files on disk by original name)
+app.get('/api/media/find/:name', (req, res) => {
+  try {
+    const rawSearch = decodeURIComponent(req.params.name || '').toLowerCase().trim();
+    if (!rawSearch || !fs.existsSync(uploadsDir)) {
+      return res.json({ found: false });
+    }
+    const files = fs.readdirSync(uploadsDir);
+    // 1. Exact filename match
+    const exact = files.find(f => f.toLowerCase() === rawSearch);
+    if (exact) {
+      return res.json({ found: true, url: `/api/uploads/${exact}`, filename: exact });
+    }
+    // 2. Base slug match (ignoring timestamps and special characters)
+    const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '');
+    const matched = files.find(f => {
+      const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
+      return searchBase && (fBase.includes(searchBase) || searchBase.includes(fBase));
+    });
+    if (matched) {
+      return res.json({ found: true, url: `/api/uploads/${matched}`, filename: matched });
+    }
+    res.json({ found: false });
+  } catch (err) {
+    res.status(500).json({ found: false, error: err.message });
+  }
+});
 
 const loadCredentialsFromEnv = () => {
   const DEFAULT_ORG_ID = '60082137608';
@@ -3581,12 +3682,15 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
           customerId = contactRes.contacts[0].contact_id;
         } else {
           // Dynamic contact provision in Zoho Books so Quote reflects the real customer name & GST
+          const rawGstVal = (req.body.gstNo || req.body.gstNumber || '').trim();
+          const isValidGstFormat = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(rawGstVal);
           const newCustPayload = {
             contact_name: clientName,
             company_name: clientName,
             contact_type: 'customer',
-            gst_treatment: (req.body.gstNo || req.body.gstNumber) ? 'business_gst' : 'consumer',
-            gst_no: (req.body.gstNo || req.body.gstNumber || '').trim() || undefined
+            customer_sub_type: 'business',
+            gst_treatment: isValidGstFormat ? 'business_gst' : 'consumer',
+            ...(isValidGstFormat ? { gstin: rawGstVal } : {})
           };
           const createCustRes = await callZohoEstimateApi('POST', `/books/v3/contacts`, newCustPayload);
           if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
@@ -3627,26 +3731,16 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
           quantity: setCount,
           tax_id: taxId,
           tax_percentage: itemTaxPct,
-          description: `Preset Structure Kit - ${setCount} Set(s) complete assembly`
+          description: `Preset Kit Package (${setCount} Set)`
         });
-      });
-    } else if (req.body.presetName && (req.body.presetKitPrice != null || req.body.kitSubtotal != null)) {
-      const setCount = parseFloat(req.body.presetSetCount) || 1;
-      const unitPrice = parseFloat(req.body.presetKitPrice != null ? req.body.presetKitPrice : req.body.kitSubtotal) || 0;
-      lineItems.push({
-        name: req.body.presetName,
-        rate: unitPrice,
-        quantity: setCount,
-        tax_id: '4080449000000055031',
-        tax_percentage: 18,
-        description: `Preset Structure Kit - ${setCount} Set(s) complete assembly`
       });
     }
 
-    // 2. Add Separate / Custom products (non-preset components) with GST
-    (req.body.items || []).forEach(it => {
-      const isPreset = Boolean(it.isPresetItem || it.category === 'Preset Component' || it.presetGroupId);
-      if (hasPresetGroups || req.body.presetName) {
+    // 2. Add individual line items (skipping components already represented in the preset kit)
+    const customItems = Array.isArray(req.body.items) ? req.body.items : [];
+    customItems.forEach(it => {
+      if (hasPresetGroups) {
+        const isPreset = it.isPresetItem || Boolean(it.presetGroupId);
         if (isPreset) return;
       }
       const q = parseFloat(it.qty || it.quantity) || 1;
@@ -3700,9 +3794,7 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
       date: formatZohoDate(req.body.piDate),
       expiry_date: (req.body.validUntilDate || req.body.expDate) ? formatZohoDate(req.body.validUntilDate || req.body.expDate) : undefined,
       line_items: lineItems,
-      notes: (req.body.remarks || req.body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100),
-      gst_treatment: (req.body.gstNo || req.body.gstNumber) ? 'business_gst' : 'consumer',
-      gst_no: (req.body.gstNo || req.body.gstNumber || '').trim() || undefined
+      notes: (req.body.remarks || req.body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100)
     };
 
     let zohoRes = null;
@@ -5475,6 +5567,127 @@ app.post('/api/zoho/items', async (req, res) => {
       : 'Item saved successfully and synced with Zoho Books.'
   });
 });
+
+// Universal Stock Reset Endpoint: Resets all stock to 0, wipes allocations, and sets each item to exactly 5,000
+app.all('/api/inventory/reset-to-5000', async (req, res) => {
+  try {
+    const localItems = loadLocalItems();
+    const existingRaw = supabaseMemoryStore.raw_materials_store || [];
+    
+    // Step 1: Combine VRM standardized products, Zoho items, and existing raw profiles
+    const itemMap = new Map();
+
+    // 1. Add all 285 VRM standardized products
+    (VRM_PRODUCTS || []).forEach(p => {
+      const code = p.code || resolveProductCode(p) || p.name;
+      const key = String(code).toUpperCase().trim();
+      itemMap.set(key, {
+        code: p.code || code,
+        sku: p.code || code,
+        itemId: p.code || code,
+        name: p.name,
+        cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
+        category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
+        unit: p.uom || 'Nos',
+        uom: p.uom || 'Nos',
+        price: p.price || p.rate || 0,
+        rate: p.price || p.rate || 0,
+        gstRate: p.gst || '18%',
+        status: 'Active',
+        productType: 'goods',
+        store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
+        location: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
+        hsn: '7604',
+        minLevel: 50,
+        reorderLevel: 100
+      });
+    });
+
+    // 2. Merge existing raw materials
+    (existingRaw || []).forEach(rm => {
+      const code = rm.code || rm.sku || rm.itemId || rm.name;
+      if (!code) return;
+      const key = String(code).toUpperCase().trim();
+      const existing = itemMap.get(key) || {};
+      itemMap.set(key, {
+        ...existing,
+        ...rm,
+        code: rm.code || existing.code || code,
+        name: rm.name || existing.name,
+        cat: rm.cat || rm.category || existing.cat || 'Aluminium',
+        category: rm.cat || rm.category || existing.cat || 'Aluminium',
+        unit: rm.unit || rm.uom || existing.unit || 'Nos'
+      });
+    });
+
+    // 3. Merge local Zoho items
+    (localItems || []).forEach(it => {
+      const code = it.code || it.sku || it.itemId || it.name;
+      if (!code) return;
+      const key = String(code).toUpperCase().trim();
+      const existing = itemMap.get(key) || {};
+      itemMap.set(key, {
+        ...existing,
+        ...it,
+        code: it.code || it.sku || existing.code || code,
+        name: it.name || existing.name,
+        cat: it.category || it.material || existing.cat || 'General',
+        category: it.category || it.material || existing.cat || 'General',
+        unit: it.unit || it.uom || existing.unit || 'Nos'
+      });
+    });
+
+    // Step 2: Remove all stock (start from 0) and then add exactly 5,000
+    const unified5000List = Array.from(itemMap.values()).map(item => ({
+      ...item,
+      stock: 5000,
+      openingStock: 5000,
+      physicalStock: 5000,
+      availableStock: 5000,
+      stockOnHand: 5000,
+      reserved: 0,
+      blockedForBom: 0,
+      goodsReceived: 0,
+      issuedProd: 0,
+      matReturn: 0,
+      stockAdj: 0,
+      status: 'In Stock',
+      lastUpdated: 'Stock Reset to 5,000'
+    }));
+
+    // Step 3: Persist to raw_materials_store (used by Inventory Stores)
+    const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+    try {
+      fs.writeFileSync(rawMatsPath, JSON.stringify(unified5000List, null, 2), 'utf8');
+    } catch (_) {}
+    supabaseMemoryStore.raw_materials_store = unified5000List;
+    await saveDatabaseStore('raw_materials_store', unified5000List);
+
+    // Step 4: Persist to item_store (used by Item Directory & Zoho Catalog)
+    const itemsPath = getStoreFilePath('item_store.json');
+    try {
+      fs.writeFileSync(itemsPath, JSON.stringify(unified5000List, null, 2), 'utf8');
+    } catch (_) {}
+    supabaseMemoryStore.item_store = unified5000List;
+    await saveDatabaseStore('item_store', unified5000List);
+
+    // Broadcast update to all connected clients
+    broadcastRealtimeEvent('inventory_updated', { rawMaterials: unified5000List });
+    broadcastRealtimeEvent('item_store_updated', { items: unified5000List });
+    broadcastRealtimeEvent('stock_reset_5000', { timestamp: new Date().toISOString() });
+
+    console.log(`✅ [STOCK RESET] All ${unified5000List.length} items reset from 0 to exactly 5,000 stock!`);
+    res.json({
+      success: true,
+      count: unified5000List.length,
+      message: `Successfully reset all stock starting from 0 and assigned exactly 5,000 stock to all ${unified5000List.length} items in the inventory store and item directory.`
+    });
+  } catch (err) {
+    console.error('Error during stock reset:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // ==========================================
 // 📱 META WHATSAPP CLOUD API & CRM BACKEND

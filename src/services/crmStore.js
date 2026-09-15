@@ -40,7 +40,7 @@ export const INITIAL_CRM_CUSTOMERS = [
     companyName: 'Tata Power Solar Systems Ltd',
     customerType: 'Independent Power Producer (IPP)',
     industry: 'Renewable Infrastructure',
-    gstNumber: '27AAACT2345D1ZA',
+    gstNumber: '29AAACT2345D1ZA',
     panNumber: 'AAACT2345D',
     address: 'Corporate Park, Phase 2, Whitefield',
     city: 'Bengaluru',

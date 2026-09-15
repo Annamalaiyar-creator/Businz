@@ -1232,10 +1232,17 @@ export default function CreateBomFormPage(props) {
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
               >
+                <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
+                <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
+                <option value="100% Advance">100% Advance</option>
                 <option value="100% Paid">100% Paid</option>
                 <option value="Partial Payment">Partial Payment</option>
                 <option value="Payment While Dispatch">Payment While Dispatch</option>
                 <option value="Credit Payment">Credit Payment</option>
+                <option value="Net 30 Days">Net 30 Days</option>
+                {Boolean(newBomPaymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(newBomPaymentType)) && (
+                  <option value={newBomPaymentType}>{newBomPaymentType}</option>
+                )}
               </select>
             </div>
 
@@ -1690,9 +1697,9 @@ export default function CreateBomFormPage(props) {
                       transporterName: newBomTransporterName || '',
                       vehicleNo: newBomVehicleNo || '',
                       lrNo: newBomLrNo || '',
-                      paymentType: newBomPaymentType || '100% Paid',
+                      paymentType: newBomPaymentType || '50% Advance + 50% Dispatch',
                       partialAmount: newBomPaymentType === 'Partial Payment' ? (parseFloat(newBomPartialAmount) || 0) : null,
-                      balanceAmount: newBomPaymentType === 'Partial Payment' ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (newBomPaymentType === '100% Paid' ? 0 : totals.grand),
+                      balanceAmount: newBomPaymentType === 'Partial Payment' ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (['100% Paid', '100% Advance'].includes(newBomPaymentType) ? 0 : totals.grand),
                       creditDays: newBomPaymentType === 'Credit Payment' ? (parseInt(newBomCreditDays) || 7) : null,
                       creditDueDate: newBomPaymentType === 'Credit Payment' ? new Date(Date.now() + (parseInt(newBomCreditDays) || 7) * 86400000).toISOString().split('T')[0] : null,
                       paymentProofDoc: newBomPaymentProofDoc || null,

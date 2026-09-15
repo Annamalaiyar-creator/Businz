@@ -330,7 +330,7 @@
     "companyName": "Tata Power Solar Systems Ltd",
     "customerType": "Independent Power Producer (IPP)",
     "industry": "Renewable Infrastructure",
-    "gstNumber": "27AAACT2345D1ZA",
+    "gstNumber": "29AAACT2345D1ZA",
     "panNumber": "AAACT2345D",
     "address": "Corporate Park, Phase 2, Whitefield",
     "city": "Bengaluru",
@@ -376,7 +376,8 @@
     "createdAt": "2026-09-12T09:03:53.770Z",
     "email": "—",
     "phone": "—",
-    "zohoContactId": "4080449000000388001"
+    "zohoContactId": "4080449000000388001",
+    "gstNo": "29AAACT2345D1ZA"
   },
   {
     "id": "CUST-VRM-103",

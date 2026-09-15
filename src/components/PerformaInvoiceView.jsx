@@ -44,6 +44,17 @@ const normalizePiRecord = (item) => {
   return item;
 };
 
+// Official GST State Code mappings for Indian GSTINs
+export const GST_STATE_MAP = {
+  '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
+  '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
+  '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur',
+  '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal',
+  '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
+  '24': 'Gujarat', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa',
+  '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry', '36': 'Telangana', '37': 'Andhra Pradesh'
+};
+
 export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procurement Head', onNavigateTab, targetPiNo, clearTargetPi }) {
   const isSalesRole = userRole === 'Sales Head' || userRole === 'Sales Executive';
   const storageKey = isSalesRole ? 'controlroom_sales_pi_store' : 'controlroom_procurement_pi_store';
@@ -582,7 +593,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     } catch (e) {}
     return [
       { code: 'Vikram Solar Pvt Ltd', companyName: 'Vikram Solar Pvt Ltd', c2: 'Vikram Solar Pvt Ltd', gst: '33AABCV1234F1Z5', gstNo: '33AABCV1234F1Z5', contact: 'Rajesh Kannan', contactPerson: 'Rajesh Kannan', phone: '+91 98765 43210', email: 'rajesh@vikramsolar.com', billingAddress: 'Plot 42, SIDCO Industrial Estate, Ambattur', city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' },
-      { code: 'Tata Power Solar Systems Ltd', companyName: 'Tata Power Solar Systems Ltd', c2: 'Tata Power Solar Systems Ltd', gst: '27AAACT2345D1ZA', gstNo: '27AAACT2345D1ZA', contact: 'Karthik Raja', contactPerson: 'Karthik Raja', phone: '+91 98450 12345', email: 'karthik@tatapower.com', billingAddress: '12 Electronic City Phase 1', city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
+      { code: 'Tata Power Solar Systems Ltd', companyName: 'Tata Power Solar Systems Ltd', c2: 'Tata Power Solar Systems Ltd', gst: '29AAACT2345D1ZA', gstNo: '29AAACT2345D1ZA', contact: 'Karthik Raja', contactPerson: 'Karthik Raja', phone: '+91 98450 12345', email: 'karthik@tatapower.com', billingAddress: '12 Electronic City Phase 1', city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
       { code: 'Waaree Energies Ltd', companyName: 'Waaree Energies Ltd', c2: 'Waaree Energies Ltd', gst: '24AAACW5678B1Z2', gstNo: '24AAACW5678B1Z2', contact: 'Dharmesh Patel', contactPerson: 'Dharmesh Patel', phone: '+91 97234 56789', email: 'dharmesh@waaree.com', billingAddress: '88 Ring Road, Surat', city: 'Surat', state: 'Gujarat', pincode: '395001' }
     ];
   });
@@ -745,8 +756,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [vehicleNo, setVehicleNo] = useState('');
   const [transportScope, setTransportScope] = useState('VRM Structures');
 
-  // Commercial Fields
-  const [paymentTerms, setPaymentTerms] = useState('100% Paid');
+  const [paymentTerms, setPaymentTerms] = useState('50% Advance + 50% Dispatch');
   const [creditDays, setCreditDays] = useState('');
   const [remarks, setRemarks] = useState('');
 
@@ -1109,7 +1119,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setTransporterName('');
     setVehicleNo('');
     setTransportScope('VRM Structures');
-    setPaymentTerms('100% Paid');
+    setPaymentTerms('50% Advance + 50% Dispatch');
     setCreditDays('');
     setRemarks('');
     setPiItems([]); // Fresh empty default with 0 prefilled items
@@ -1173,6 +1183,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         message: 'Please enter the 6-digit Pincode.',
         targetId: 'pi-field-billingPincode'
       });
+    }
+
+    // 3.5 GST State match validation
+    const checkGstCode = (gstNo || '').trim().substring(0, 2);
+    const expectedGstState = GST_STATE_MAP[checkGstCode];
+    if (gstNo && gstNo.trim().length >= 2 && expectedGstState && billingState && billingState.trim()) {
+      if (expectedGstState.toLowerCase() !== billingState.trim().toLowerCase()) {
+        missingList.push({
+          field: 'GST Number State Mismatch',
+          message: `GSTIN code "${checkGstCode}" is registered to ${expectedGstState}, but Billing State is entered as "${billingState}". Click "Sync to ${expectedGstState}" to resolve.`,
+          targetId: 'pi-field-billingState'
+        });
+      }
     }
 
     // 4. Delivery Address
@@ -1422,7 +1445,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setEmail(pi.email || '');
     setGstNo(pi.gstNo || '');
     setSalesPerson(pi.salesPerson || getActiveUserName());
-    setPaymentTerms(pi.paymentTerms || '100% Advance');
+    setPaymentTerms(pi.paymentTerms || '50% Advance + 50% Dispatch');
     setCreditDays(pi.creditDays || '');
     setRemarks(pi.remarks || '');
     setTransportMode(pi.transportMode || 'Transport');
@@ -2646,10 +2669,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     onChange={(e) => setPaymentTerms(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                   >
+                    <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
+                    <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
+                    <option value="100% Advance">100% Advance</option>
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Payment">Partial Payment</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
                     <option value="Credit Payment">Credit Payment</option>
+                    <option value="Net 30 Days">Net 30 Days</option>
+                    {Boolean(paymentTerms && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(paymentTerms)) && (
+                      <option value={paymentTerms}>{paymentTerms}</option>
+                    )}
                   </select>
                 </div>
 
@@ -2786,16 +2816,66 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Customer GSTIN
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', margin: 0 }}>
+                      Customer GSTIN
+                    </label>
+                    {Boolean(gstNo && gstNo.trim().length >= 2 && GST_STATE_MAP[gstNo.trim().substring(0, 2)]) && (
+                      <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700' }}>
+                        State: {GST_STATE_MAP[gstNo.trim().substring(0, 2)]}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. 33AABCV1234F1Z5"
                     value={gstNo}
-                    onChange={(e) => setGstNo(e.target.value.toUpperCase())}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setGstNo(val);
+                      if (val.trim().length >= 2) {
+                        const sCode = val.trim().substring(0, 2);
+                        const mappedState = GST_STATE_MAP[sCode];
+                        if (mappedState && (!billingState || billingState.trim() === '')) {
+                          setBillingState(mappedState);
+                          if (sameAsBilling) setDeliveryState(mappedState);
+                        }
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      borderRadius: '10px',
+                      border: (gstNo && gstNo.trim().length >= 2 && GST_STATE_MAP[gstNo.trim().substring(0, 2)] && billingState && billingState.trim() && GST_STATE_MAP[gstNo.trim().substring(0, 2)].toLowerCase() !== billingState.trim().toLowerCase()) ? '1.5px solid #F87171' : '1px solid #E2E8F0',
+                      padding: '0 14px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      color: '#0F172A',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
                   />
+                  {Boolean(
+                    gstNo && gstNo.trim().length >= 2 &&
+                    GST_STATE_MAP[gstNo.trim().substring(0, 2)] &&
+                    billingState && billingState.trim() &&
+                    GST_STATE_MAP[gstNo.trim().substring(0, 2)].toLowerCase() !== billingState.trim().toLowerCase()
+                  ) && (
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#B91C1C', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', padding: '6px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <span>⚠️ GST code ({gstNo.trim().substring(0, 2)}) is for <strong>{GST_STATE_MAP[gstNo.trim().substring(0, 2)]}</strong>, but Billing State is <strong>{billingState}</strong>.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const correct = GST_STATE_MAP[gstNo.trim().substring(0, 2)];
+                          setBillingState(correct);
+                          if (sameAsBilling) setDeliveryState(correct);
+                        }}
+                        style={{ backgroundColor: '#DC2626', color: 'white', border: 'none', borderRadius: '5px', padding: '3px 8px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        Sync to {GST_STATE_MAP[gstNo.trim().substring(0, 2)]}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

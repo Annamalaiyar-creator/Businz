@@ -160,8 +160,8 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
 
     if (rawStock !== null && !isNaN(rawStock)) {
       const explicitRaw = Number(rawStock);
-      // If raw stock is 0 or less than baseline, honor the reduced balance
-      realStock = Math.min(realStock, Math.max(0, explicitRaw));
+      // Honor the explicit balance directly from the Inventory Store
+      realStock = Math.max(0, explicitRaw);
     }
 
     const itemRecord = {
