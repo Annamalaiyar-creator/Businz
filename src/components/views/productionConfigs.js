@@ -65,6 +65,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 }))
                 : (b.items || []).map(it => ({ ...it, selected: true, packed: true }));
 
+              const oVal = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
+
               return {
                 invNo: invNo,
                 code: invNo,
