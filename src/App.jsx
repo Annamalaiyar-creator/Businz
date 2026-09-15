@@ -19,6 +19,7 @@ import VRMTemplateStudioView from './components/VRMTemplateStudioView';
 
 import ProductionAdminView from './components/ProductionAdminView';
 import SalesExecutiveDashboardView from './components/views/SalesExecutiveDashboardView';
+import AccountsFinanceDashboard from './components/views/AccountsFinanceDashboard';
 import LoginScreen from './components/LoginScreen';
 import DeveloperPortalView from './components/DeveloperPortalView';
 import NotificationToast from './components/NotificationToast';
@@ -478,7 +479,7 @@ function App() {
             <MaterialCalculationEngine onBack={() => handleTabChange('BOM')} />
           ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
             <InventoryAutoConversion />
-          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Sales & CRM' && activeTab !== 'Design & BOM Center') ? (
+          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Sales & CRM' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard') ? (
             <OtherViews 
               activeTab={activeTab} 
               onChangeTab={handleTabChange} 
@@ -493,6 +494,8 @@ function App() {
             />
           ) : (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head')) ? (
             <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+          ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+            <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (
             <DashboardFullReference userRole={userRole} />
           )}

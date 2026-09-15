@@ -186,7 +186,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'MAIN MENU',
           items: [
-            { label: 'Dashboard', icon: LayoutDashboard },
+            { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'PO Verification', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: ShoppingCart, badge: realAccountsAwaitingPOCount > 0 ? String(realAccountsAwaitingPOCount) : undefined },
             { label: 'Accounts Verification', icon: CheckCircle },
             { label: 'Payments', icon: Wallet }
@@ -266,7 +266,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'MAIN MENU',
           items: [
-            { label: 'Dashboard', icon: LayoutDashboard },
+            { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
             { label: 'Payments', icon: Wallet }
           ]
