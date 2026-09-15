@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package, FileText
+  CreditCard, Printer, X, Edit3, Package, FileText, FileCode
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
+import TallySyncModal from './TallySyncModal';
 
 export default function ProductionTableView({
   pageConfig,
@@ -37,6 +38,7 @@ export default function ProductionTableView({
   showAlert
 }) {
   const isSuperUser = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director';
+  const [showTallyModal, setShowTallyModal] = useState(false);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
@@ -695,6 +697,35 @@ export default function ProductionTableView({
             <Printer size={14} style={{ color: '#059669' }} /> Export &amp; Print
           </button>
 
+          {/* Export to Tally Button */}
+          {activeTab === 'Invoice Management' && (
+            <button
+              onClick={() => setShowTallyModal(true)}
+              style={{
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(217,119,6,0.1)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+              title="Export or Sync selected invoices to TallyPrime / Tally.ERP 9"
+            >
+              <FileCode size={14} style={{ color: '#D97706' }} /> Export to Tally
+            </button>
+          )}
+
           {/* Deselect All */}
           <button
             onClick={() => setSelectedRows([])}
@@ -714,6 +745,19 @@ export default function ProductionTableView({
             <X size={16} />
           </button>
         </div>
+      )}
+
+      {/* TallyPrime Integration Modal */}
+      {showTallyModal && (
+        <TallySyncModal
+          isOpen={showTallyModal}
+          onClose={() => setShowTallyModal(false)}
+          records={(selectedRows || []).map(codeVal => {
+            return (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal || r.invNo === codeVal);
+          }).filter(Boolean)}
+          type="Sales Invoice"
+          showAlert={showAlert}
+        />
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -402,6 +403,118 @@ const saveCredentialsToEnv = (orgId, apiToken, clientId, clientSecret) => {
     console.error("Failed to write credentials to .env file:", err);
   }
 };
+
+// ============================================================================
+// BUSINZ - TALLYPRIME & TALLY.ERP 9 HTTP CONNECTOR & XML INTEGRATION
+// ============================================================================
+
+// Check connectivity to local Tally HTTP Server (Default port 9000)
+app.get('/api/tally/status', (req, res) => {
+  const tallyUrl = process.env.TALLY_URL || 'http://127.0.0.1:9000';
+  let urlObj;
+  try {
+    urlObj = new URL(tallyUrl);
+  } catch (_) {
+    urlObj = new URL('http://127.0.0.1:9000');
+  }
+
+  const testReq = http.request({
+    hostname: urlObj.hostname,
+    port: parseInt(urlObj.port, 10) || 9000,
+    path: '/',
+    method: 'GET',
+    timeout: 2000
+  }, (tResp) => {
+    res.json({
+      online: true,
+      host: `${urlObj.hostname}:${urlObj.port || 9000}`,
+      statusCode: tResp.statusCode,
+      message: 'Tally HTTP Server is online and responding.'
+    });
+  });
+
+  testReq.on('error', () => {
+    res.json({
+      online: false,
+      host: `${urlObj.hostname}:${urlObj.port || 9000}`,
+      message: 'Tally HTTP Server is offline or unreachable on port 9000.'
+    });
+  });
+
+  testReq.on('timeout', () => {
+    testReq.destroy();
+    res.json({
+      online: false,
+      host: `${urlObj.hostname}:${urlObj.port || 9000}`,
+      message: 'Connection to Tally timed out.'
+    });
+  });
+
+  testReq.end();
+});
+
+// Post XML Vouchers directly to Tally HTTP Server
+app.post('/api/tally/sync', (req, res) => {
+  const { xml, type, recordCount, companyName } = req.body;
+  if (!xml) {
+    return res.status(400).json({ success: false, message: 'Tally XML payload is required' });
+  }
+
+  const tallyUrl = process.env.TALLY_URL || 'http://127.0.0.1:9000';
+  let urlObj;
+  try {
+    urlObj = new URL(tallyUrl);
+  } catch (_) {
+    urlObj = new URL('http://127.0.0.1:9000');
+  }
+
+  const xmlBuffer = Buffer.from(xml, 'utf8');
+
+  const tallyReq = http.request({
+    hostname: urlObj.hostname,
+    port: parseInt(urlObj.port, 10) || 9000,
+    path: '/',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml;charset=utf-8',
+      'Content-Length': xmlBuffer.length
+    },
+    timeout: 8000
+  }, (tResp) => {
+    let tBody = '';
+    tResp.on('data', chunk => tBody += chunk);
+    tResp.on('end', () => {
+      console.log(`[BUSINZ Tally Sync] Received response from Tally (${tResp.statusCode})`);
+      const hasErrors = tBody.includes('<LINEERROR>') || tBody.includes('<ERROR>');
+      res.json({
+        success: !hasErrors,
+        statusCode: tResp.statusCode,
+        tallyRawResponse: tBody.slice(0, 500),
+        message: hasErrors ? 'Tally returned an import notice or error.' : `Successfully synchronized ${recordCount || 1} voucher(s) with Tally!`
+      });
+    });
+  });
+
+  tallyReq.on('error', (err) => {
+    console.warn('[BUSINZ Tally Sync] Tally HTTP server not reachable:', err.message);
+    res.status(503).json({
+      success: false,
+      offline: true,
+      message: `Could not connect to Tally HTTP server on ${urlObj.hostname}:${urlObj.port || 9000}. Please ensure TallyPrime HTTP server is enabled or download the XML file for manual import.`
+    });
+  });
+
+  tallyReq.on('timeout', () => {
+    tallyReq.destroy();
+    res.status(504).json({
+      success: false,
+      message: 'Connection to Tally timed out.'
+    });
+  });
+
+  tallyReq.write(xmlBuffer);
+  tallyReq.end();
+});
 
 // 1. Check Connection Status and Credentials
 app.get('/api/zoho/status', async (req, res) => {
