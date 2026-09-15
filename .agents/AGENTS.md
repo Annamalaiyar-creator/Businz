@@ -1,9 +1,12 @@
 # Project Guidelines & Rules
 
+## Application Identity & Branding
+- This application is **BUSINZ** (not Control Room). All user-facing references, communications, and documentation MUST strictly use the name **BUSINZ**.
+
 ## Purchase Order (PO) & Zoho Books Integration Rules
 
 1. **PO Numbering Sequence**:
-   - PO numbers generated in Control Room MUST strictly match Zoho Books' sequential format (`PO-000XX`).
+   - PO numbers generated in BUSINZ MUST strictly match Zoho Books' sequential format (`PO-000XX`).
    - Use `GET /api/zoho/next-po-number` to fetch the next sequential PO number.
 
 2. **PO State Persistence**:
