@@ -242,13 +242,21 @@ function App() {
       setTargetPoTab(poTabTarget);
     }
     setActiveTab(tab);
-    localStorage.setItem('controlroom_active_tab', tab);
+    try {
+      localStorage.setItem('controlroom_active_tab', tab);
+    } catch (e) {
+      console.warn('Could not persist active tab to localStorage:', e);
+    }
   };
 
   const toggleSidebar = () => {
     const nextState = !sidebarCollapsed;
     setSidebarCollapsed(nextState);
-    localStorage.setItem('controlroom_sidebar_collapsed', String(nextState));
+    try {
+      localStorage.setItem('controlroom_sidebar_collapsed', String(nextState));
+    } catch (e) {
+      console.warn('Could not persist sidebar state to localStorage:', e);
+    }
   };
 
   // Heartbeat & session verification interval (checks every 25 seconds)

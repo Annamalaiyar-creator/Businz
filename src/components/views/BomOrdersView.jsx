@@ -10,7 +10,7 @@ import jsPDF from 'jspdf';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions } from '../../utils/supabaseDataSync';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
-import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency } from '../../utils/otherViewsShared';
+import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import SearchablePresetSelector from '../SearchablePresetSelector';
@@ -186,7 +186,7 @@ export default function BomOrdersView(props) {
   const [newBomDeliveryCity, setNewBomDeliveryCity] = useState('');
   const [newBomDeliveryState, setNewBomDeliveryState] = useState('');
   const [newBomDeliveryPincode, setNewBomDeliveryPincode] = useState('');
-  const [newBomPaymentType, setNewBomPaymentType] = useState('50% Advance + 50% Dispatch');
+  const [newBomPaymentType, setNewBomPaymentType] = useState('100% Paid');
   const [newBomPartialAmount, setNewBomPartialAmount] = useState('');
   const [modalBalanceAmount, setModalBalanceAmount] = useState('');
   const [newBomCreditDays, setNewBomCreditDays] = useState(7);
@@ -242,14 +242,10 @@ export default function BomOrdersView(props) {
       });
     }
 
-    // 2. Delivery Date (required for confirmed orders)
+    // 2. Delivery Date (auto-populate default if missing)
     if (!isDraft && (!newBomDeliveryDate || !newBomDeliveryDate.trim())) {
-      errors.deliveryDate = 'Delivery Date is required';
-      missingList.push({
-        field: 'Delivery Date',
-        message: 'Please select the committed delivery date for Dispatch fulfillment.',
-        targetId: 'field-newBomDeliveryDate'
-      });
+      const defaultDelivery = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      setNewBomDeliveryDate(defaultDelivery);
     }
 
     // 3. Materials / Items List
@@ -294,25 +290,27 @@ export default function BomOrdersView(props) {
       }
     }
 
-    // 5. Payment Proof for 100% Paid / Partial Payment Orders
-    if (!isDraft && (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Payment')) {
+    // 5. Payment Proof for 100% Paid / Partial Paid Orders
+    const isPaidOrder = newBomPaymentType === '100% Paid';
+    const isPartialOrder = newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment';
+    if (!isDraft && (isPaidOrder || isPartialOrder)) {
       if (!newBomPaymentProofDoc) {
         errors.paymentProof = 'Payment Attachment / Slip is required';
         missingList.push({
           field: 'Payment Slip / Advice',
-          message: `Payment proof attachment is mandatory for "${newBomPaymentType}" orders. Please attach the payment advice or slip.`,
+          message: `Payment proof attachment is mandatory for "${newBomPaymentType}" orders. Please attach the payment advice/slip, or choose "Payment While Dispatch" or "Credit Payment".`,
           targetId: 'field-newBomPaymentProofDoc'
         });
       }
     }
 
-    if (!isDraft && newBomPaymentType === 'Partial Payment') {
+    if (!isDraft && isPartialOrder) {
       const pAmt = parseFloat(newBomPartialAmount);
       if (!pAmt || pAmt <= 0) {
         errors.partialAmount = 'Partial Advance Amount is required';
         missingList.push({
           field: 'Partial Advance Amount',
-          message: 'Please enter the advance amount paid for this Partial Payment order.',
+          message: 'Please enter the advance amount paid for this Partial Paid order.',
           targetId: 'field-newBomPartialAmount'
         });
       }
@@ -922,12 +920,13 @@ export default function BomOrdersView(props) {
       if (pendingPi.customerName) setNewBomProductName(pendingPi.customerName);
       setNewBomRemarks('');
       const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms;
-      if (effectivePiPaymentTerm) {
-        setNewBomPaymentType(effectivePiPaymentTerm);
-      } else {
-        setNewBomPaymentType('50% Advance + 50% Dispatch');
-      }
+      setNewBomPaymentType(normalizePaymentTerm(effectivePiPaymentTerm));
+      const defaultDelivery = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      setNewBomDeliveryDate(pendingPi.deliveryDate || defaultDelivery);
       if (pendingPi.creditDays) setNewBomCreditDays(pendingPi.creditDays);
+      if (pendingPi.partialAmount) setNewBomPartialAmount(String(pendingPi.partialAmount));
+      if (pendingPi.paymentProofDoc || pendingPi.proofDoc) setNewBomPaymentProofDoc(pendingPi.paymentProofDoc || pendingPi.proofDoc);
+      if (pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc) setNewBomDeliveryProofDoc(pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc);
       if (pendingPi.transportMode) setNewBomTransportMode(pendingPi.transportMode);
       if (pendingPi.transporterName) setNewBomTransporterName(pendingPi.transporterName);
       if (pendingPi.vehicleNo) setNewBomVehicleNo(pendingPi.vehicleNo);
@@ -1232,7 +1231,7 @@ export default function BomOrdersView(props) {
           return sp;
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
-        c4: b.paymentType || b.paymentTerms || b.piPaymentTerms || '50% Advance + 50% Dispatch',
+        c4: normalizePaymentTerm(b.paymentType || b.paymentTerms || b.piPaymentTerms),
         c5: formatCurrency(b.grandTotal),
         status: isAddressRequested ? 'Address Proof Requested from Sales' : (b.status || 'Pending Sales Confirmation'),
         stBg,
@@ -1534,6 +1533,54 @@ export default function BomOrdersView(props) {
               style={{ padding: '8px 20px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: '#334155', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
             >
               Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper to render Validation Error Modal consistently
+  const renderValidationErrorModal = () => {
+    if (!validationErrorModal) return null;
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999 }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', width: '460px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', margin: 0 }}>Mandatory Fields Required</h3>
+              <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>Please complete all required fields to move forward.</p>
+            </div>
+          </div>
+          <div style={{ backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: '#334155' }}>You did not fill out the following mandatory box(es):</span>
+            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: '#DC2626', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {(validationErrorModal.fields || []).map((field, idx) => (
+                <li key={idx}><strong>{field}</strong></li>
+              ))}
+            </ul>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+            <button
+              onClick={() => {
+                const targetId = validationErrorModal.firstTargetId;
+                setValidationErrorModal(null);
+                if (targetId) {
+                  setTimeout(() => {
+                    const el = document.getElementById(targetId);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.focus?.();
+                    }
+                  }, 100);
+                }
+              }}
+              style={{ backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 22px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.2)' }}
+            >
+              OK, I'll fill it
             </button>
           </div>
         </div>
@@ -3604,21 +3651,14 @@ export default function BomOrdersView(props) {
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                 >
-                  <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
-                  <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
-                  <option value="100% Advance">100% Advance</option>
                   <option value="100% Paid">100% Paid</option>
-                  <option value="Partial Payment">Partial Payment</option>
+                  <option value="Partial Paid">Partial Paid</option>
                   <option value="Payment While Dispatch">Payment While Dispatch</option>
                   <option value="Credit Payment">Credit Payment</option>
-                  <option value="Net 30 Days">Net 30 Days</option>
-                  {Boolean(newBomPaymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(newBomPaymentType)) && (
-                    <option value={newBomPaymentType}>{newBomPaymentType}</option>
-                  )}
                 </select>
               </div>
 
-              {newBomPaymentType === 'Partial Payment' && (
+              {(newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && (
                 <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
@@ -4052,13 +4092,13 @@ export default function BomOrdersView(props) {
                           transporterName: newBomTransporterName || '',
                           vehicleNo: newBomVehicleNo || '',
                           lrNo: newBomLrNo || '',
-                          paymentType: newBomPaymentType || '100% Paid',
-                          partialAmount: newBomPaymentType === 'Partial Payment' ? (parseFloat(newBomPartialAmount) || 0) : null,
-                          balanceAmount: newBomPaymentType === 'Partial Payment' ? Math.max(0, cleanNum(totals.grand, 0) - (parseFloat(newBomPartialAmount) || 0)) : null,
+                          paymentType: normalizePaymentTerm(newBomPaymentType),
+                          partialAmount: (newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') ? (parseFloat(newBomPartialAmount) || 0) : null,
+                          balanceAmount: (newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') ? Math.max(0, cleanNum(totals.grand, 0) - (parseFloat(newBomPartialAmount) || 0)) : null,
                           creditDays: newBomPaymentType === 'Credit Payment' ? (parseInt(newBomCreditDays) || 7) : null,
                           creditDueDate: newBomPaymentType === 'Credit Payment' ? new Date(Date.now() + (parseInt(newBomCreditDays) || 7) * 86400000).toISOString().split('T')[0] : null,
                           paymentProofDoc: newBomPaymentProofDoc || null,
-                          paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
+                          paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
                           remarks: newBomRemarks || '',
                           status: isDraft ? 'Draft' : 'Sales Confirmed - Sent to Dispatch',
                           salesConfirmed: !isDraft,
@@ -4285,7 +4325,7 @@ export default function BomOrdersView(props) {
                         setNewBomTransportScope('VRM Structures');
                         setNewBomLrNo('');
                         setNewBomCreditDays(7);
-                        setNewBomPaymentType('50% Advance + 50% Dispatch');
+                        setNewBomPaymentType('100% Paid');
                         setNewBomProductName('');
                         setBomMaterialsList([]);
                         setSelectedPreset('');
@@ -4353,6 +4393,9 @@ export default function BomOrdersView(props) {
 
         {/* DOCUMENT PREVIEW MODAL */}
         {renderDocPreviewModal()}
+
+        {/* CUSTOM MANDATORY VALIDATION MODAL */}
+        {renderValidationErrorModal()}
       </div>
     );
   }
@@ -4622,7 +4665,7 @@ export default function BomOrdersView(props) {
               </button>
             )}
 
-            {isAlreadyForwarded && ['Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
+            {isAlreadyForwarded && ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
               <button
                 type="button"
                 onClick={() => {
@@ -4873,17 +4916,10 @@ export default function BomOrdersView(props) {
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
                 >
-                  <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
-                  <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
-                  <option value="100% Advance">100% Advance</option>
                   <option value="100% Paid">100% Paid</option>
-                  <option value="Partial Payment">Partial Payment</option>
+                  <option value="Partial Paid">Partial Paid</option>
                   <option value="Payment While Dispatch">Payment While Dispatch</option>
                   <option value="Credit Payment">Credit Payment</option>
-                  <option value="Net 30 Days">Net 30 Days</option>
-                  {Boolean(confirmingBomModal.paymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(confirmingBomModal.paymentType)) && (
-                    <option value={confirmingBomModal.paymentType}>{confirmingBomModal.paymentType}</option>
-                  )}
                 </select>
               )}
             </div>
@@ -4897,7 +4933,7 @@ export default function BomOrdersView(props) {
             </div>
           </div>
 
-          {confirmingBomModal.paymentType === 'Partial Payment' && (
+          {(confirmingBomModal.paymentType === 'Partial Paid' || confirmingBomModal.paymentType === 'Partial Payment') && (
             <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
                 <label style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', whiteSpace: 'nowrap' }}>
@@ -6911,10 +6947,10 @@ export default function BomOrdersView(props) {
                     </div>
                   )}
 
-                  {(!hasProof || ['Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
+                  {(!hasProof || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
                     <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
-                        {uploadPaymentModal.paymentType === 'Partial Payment'
+                        {(uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment')
                           ? (hasProof ? 'Upload Remaining Balance Payment Proof:' : 'Upload Advance / Balance Payment Proof:')
                           : uploadPaymentModal.paymentType === 'Payment While Dispatch'
                             ? 'Upload Dispatch Payment Proof / Receipt:'
@@ -6923,7 +6959,7 @@ export default function BomOrdersView(props) {
                               : 'Upload Payment Proof Document / Slip:'}
                       </span>
 
-                      {uploadPaymentModal.paymentType === 'Partial Payment' && (
+                      {(uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment') && (
                         <div>
                           <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
                             Balance Amount Paid (₹)
@@ -6971,7 +7007,7 @@ export default function BomOrdersView(props) {
               >
                 Close
               </button>
-              {(!uploadPaymentModal.paymentProofDoc || ['Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
+              {(!uploadPaymentModal.paymentProofDoc || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
                 <button
                   onClick={() => {
                     if (!paymentProofFile) {
@@ -6979,7 +7015,7 @@ export default function BomOrdersView(props) {
                       return;
                     }
                     const pDocObj = typeof paymentProofFile === 'object' ? paymentProofFile : { name: paymentProofFile, dataUrl: null };
-                    const isPartial = uploadPaymentModal.paymentType === 'Partial Payment';
+                    const isPartial = uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment';
                     const balPaid = parseFloat(modalBalanceAmount) || 0;
                     const prevBal = uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0));
                     const newBal = isPartial && balPaid > 0 ? Math.max(0, prevBal - balPaid) : prevBal;
@@ -7331,50 +7367,8 @@ export default function BomOrdersView(props) {
         </div>
       )}
 
-      {/* CUSTOM MANDATORY VALIDATION MODAL (MATCHING PO CREATION POPUP) */}
-      {validationErrorModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', width: '460px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
-                <AlertCircle size={24} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', margin: 0 }}>Mandatory Fields Required</h3>
-                <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>Please complete all required fields to move forward.</p>
-              </div>
-            </div>
-            <div style={{ backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '600', color: '#334155' }}>You did not fill out the following mandatory box(es):</span>
-              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: '#DC2626', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {(validationErrorModal.fields || []).map((field, idx) => (
-                  <li key={idx}><strong>{field}</strong></li>
-                ))}
-              </ul>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-              <button
-                onClick={() => {
-                  const targetId = validationErrorModal.firstTargetId;
-                  setValidationErrorModal(null);
-                  if (targetId) {
-                    setTimeout(() => {
-                      const el = document.getElementById(targetId);
-                      if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        el.focus?.();
-                      }
-                    }, 100);
-                  }
-                }}
-                style={{ backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 22px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.2)' }}
-              >
-                OK, I'll fill it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* CUSTOM MANDATORY VALIDATION MODAL */}
+      {renderValidationErrorModal()}
 
       {/* FULL-SCREEN BOM CREATION LOADING OVERLAY */}
       {renderBomSubmittingOverlay()}

@@ -5,7 +5,7 @@ import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
 import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
-import { saveMediaToCache, getMediaFromCache, compressAndSaveFile } from '../utils/otherViewsShared';
+import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 import { normalizeProductName } from '../utils/vrmProductsData';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
@@ -448,7 +448,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       transporterName: pi.transporterName || '',
       vehicleNo: pi.vehicleNo || '',
       transportScope: pi.transportScope || 'VRM Structures',
-      paymentTerms: pi.paymentTerms || '',
+      paymentType: normalizePaymentTerm(pi.paymentType || pi.paymentTerms || '100% Paid'),
+      paymentTerms: normalizePaymentTerm(pi.paymentType || pi.paymentTerms || '100% Paid'),
+      paymentProofDoc: pi.paymentProofDoc || pi.proofDoc || pi.paymentSlip || pi.paymentDoc || null,
+      partialAmount: pi.partialAmount || null,
+      deliveryProofDoc: pi.deliveryProofDoc || pi.deliveryAddressProofDoc || null,
       creditDays: pi.creditDays || '',
       presetGroups: pGroups,
       presetName: pName,
@@ -756,7 +760,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [vehicleNo, setVehicleNo] = useState('');
   const [transportScope, setTransportScope] = useState('VRM Structures');
 
-  const [paymentTerms, setPaymentTerms] = useState('50% Advance + 50% Dispatch');
+  const [paymentTerms, setPaymentTerms] = useState('100% Paid');
   const [creditDays, setCreditDays] = useState('');
   const [remarks, setRemarks] = useState('');
 
@@ -1445,7 +1449,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setEmail(pi.email || '');
     setGstNo(pi.gstNo || '');
     setSalesPerson(pi.salesPerson || getActiveUserName());
-    setPaymentTerms(pi.paymentTerms || '50% Advance + 50% Dispatch');
+    setPaymentTerms(normalizePaymentTerm(pi.paymentTerms || pi.paymentType || '100% Paid'));
     setCreditDays(pi.creditDays || '');
     setRemarks(pi.remarks || '');
     setTransportMode(pi.transportMode || 'Transport');
@@ -1955,7 +1959,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               )}
                             </td>
                             <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>
-                              {pi.vendor || pi.customerName || 'N/A'}
+                              <div>{pi.vendor || pi.customerName || 'N/A'}</div>
+                              <div style={{ marginTop: '3px' }}>
+                                <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
+                                  {normalizePaymentTerm(pi.paymentTerms || pi.paymentType)}
+                                </span>
+                              </div>
                             </td>
                             <td style={{ padding: '12px 14px', fontFamily: 'monospace', color: '#475569' }}>{pi.gstNo || '—'}</td>
                             <td style={{ padding: '12px 14px', color: '#64748B' }}>{pi.piDate}</td>
@@ -2669,17 +2678,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     onChange={(e) => setPaymentTerms(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
                   >
-                    <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
-                    <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
-                    <option value="100% Advance">100% Advance</option>
                     <option value="100% Paid">100% Paid</option>
-                    <option value="Partial Payment">Partial Payment</option>
+                    <option value="Partial Paid">Partial Paid</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
                     <option value="Credit Payment">Credit Payment</option>
-                    <option value="Net 30 Days">Net 30 Days</option>
-                    {Boolean(paymentTerms && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(paymentTerms)) && (
-                      <option value={paymentTerms}>{paymentTerms}</option>
-                    )}
                   </select>
                 </div>
 
@@ -4265,7 +4267,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
                   <div>
                     <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Payment Terms</span>
-                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{selectedPi.paymentTerms || '50% Advance + 50% Before Dispatch'}</strong>
+                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{normalizePaymentTerm(selectedPi.paymentTerms || selectedPi.paymentType)}</strong>
                   </div>
                   <div>
                     <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Credit Days</span>

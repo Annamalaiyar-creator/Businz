@@ -5,7 +5,7 @@ import {
   ShoppingCart, Upload, Layers, Image, Bell, Save
 } from "lucide-react";
 import {
-  cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache
+  cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
 } from "../../utils/otherViewsShared";
 import { saveCloudStoreImmediate } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
@@ -1232,21 +1232,14 @@ export default function CreateBomFormPage(props) {
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
-                <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
-                <option value="100% Advance">100% Advance</option>
                 <option value="100% Paid">100% Paid</option>
-                <option value="Partial Payment">Partial Payment</option>
+                <option value="Partial Paid">Partial Paid</option>
                 <option value="Payment While Dispatch">Payment While Dispatch</option>
                 <option value="Credit Payment">Credit Payment</option>
-                <option value="Net 30 Days">Net 30 Days</option>
-                {Boolean(newBomPaymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(newBomPaymentType)) && (
-                  <option value={newBomPaymentType}>{newBomPaymentType}</option>
-                )}
               </select>
             </div>
 
-            {newBomPaymentType === 'Partial Payment' && (
+            {(newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && (
               <div style={{ backgroundColor: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
@@ -1697,13 +1690,13 @@ export default function CreateBomFormPage(props) {
                       transporterName: newBomTransporterName || '',
                       vehicleNo: newBomVehicleNo || '',
                       lrNo: newBomLrNo || '',
-                      paymentType: newBomPaymentType || '50% Advance + 50% Dispatch',
-                      partialAmount: newBomPaymentType === 'Partial Payment' ? (parseFloat(newBomPartialAmount) || 0) : null,
-                      balanceAmount: newBomPaymentType === 'Partial Payment' ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (['100% Paid', '100% Advance'].includes(newBomPaymentType) ? 0 : totals.grand),
+                      paymentType: normalizePaymentTerm(newBomPaymentType),
+                      partialAmount: (newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') ? (parseFloat(newBomPartialAmount) || 0) : null,
+                      balanceAmount: (newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (['100% Paid', '100% Advance'].includes(newBomPaymentType) ? 0 : totals.grand),
                       creditDays: newBomPaymentType === 'Credit Payment' ? (parseInt(newBomCreditDays) || 7) : null,
                       creditDueDate: newBomPaymentType === 'Credit Payment' ? new Date(Date.now() + (parseInt(newBomCreditDays) || 7) * 86400000).toISOString().split('T')[0] : null,
                       paymentProofDoc: newBomPaymentProofDoc || null,
-                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
+                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
                       remarks: newBomRemarks || '',
                       status: isDraft ? 'Draft' : 'Sales Confirmed - Sent to Dispatch',
                       salesConfirmed: !isDraft,

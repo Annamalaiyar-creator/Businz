@@ -3,6 +3,7 @@ import {
   Plus, Check, Trash2, FileText, AlertCircle, CheckCircle,
   CheckSquare, Truck, Package, Upload, Camera, Video
 } from "lucide-react";
+import { normalizePaymentTerm } from "../../utils/otherViewsShared";
 
 export default function ConfirmingBomModal({
   confirmingBomModal,
@@ -248,33 +249,26 @@ export default function ConfirmingBomModal({
             </label>
             {isAlreadyForwarded ? (
               <div style={{ fontSize: '13px', fontWeight: '700', color: '#2563EB', height: '40px', display: 'flex', alignItems: 'center' }}>
-                {confirmingBomModal.paymentType}
+                {normalizePaymentTerm(confirmingBomModal.paymentType)}
               </div>
             ) : (
               <select
-                value={confirmingBomModal.paymentType || '50% Advance + 50% Dispatch'}
+                value={normalizePaymentTerm(confirmingBomModal.paymentType)}
                 onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                 style={{
                   width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px',
                   fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
                 }}
               >
-                <option value="50% Advance + 50% Dispatch">50% Advance + 50% Dispatch</option>
-                <option value="50% Advance + 50% Before Dispatch">50% Advance + 50% Before Dispatch</option>
-                <option value="100% Advance">100% Advance</option>
                 <option value="100% Paid">100% Paid</option>
-                <option value="Partial Payment">Partial Payment</option>
+                <option value="Partial Paid">Partial Paid</option>
                 <option value="Payment While Dispatch">Payment While Dispatch</option>
                 <option value="Credit Payment">Credit Payment</option>
-                <option value="Net 30 Days">Net 30 Days</option>
-                {Boolean(confirmingBomModal.paymentType && !['50% Advance + 50% Dispatch', '50% Advance + 50% Before Dispatch', '100% Advance', '100% Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment', 'Net 30 Days'].includes(confirmingBomModal.paymentType)) && (
-                  <option value={confirmingBomModal.paymentType}>{confirmingBomModal.paymentType}</option>
-                )}
               </select>
             )}
           </div>
 
-          {confirmingBomModal.paymentType === 'Partial Payment' && (
+          {(confirmingBomModal.paymentType === 'Partial Paid' || confirmingBomModal.paymentType === 'Partial Payment') && (
             <div style={{ gridColumn: 'span 2', backgroundColor: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: '10px', padding: '12px 14px', marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>

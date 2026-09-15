@@ -515,10 +515,9 @@ const server = http.createServer(async (req, res) => {
                 state: String(localRecord.dispatchState || localRecord.state || '').slice(0, 40),
                 zip: String(localRecord.dispatchPincode || localRecord.pincode || '').slice(0, 20),
                 country: 'India'
-              }
+              },
+              notes: localRecord.gstNumber ? `GSTIN: ${String(localRecord.gstNumber).trim()}` : undefined
             };
-
-            if (localRecord.gstNumber) zohoPayload.gst_no = String(localRecord.gstNumber).trim();
 
             const zohoRes = await callZoho('POST', '/books/v3/contacts', zohoPayload, token);
 
@@ -967,8 +966,7 @@ const server = http.createServer(async (req, res) => {
                     contact_name: clientName,
                     company_name: clientName,
                     contact_type: 'customer',
-                    gst_treatment: (body.gstNo || body.gstNumber) ? 'business_gst' : 'consumer',
-                    gst_no: (body.gstNo || body.gstNumber || '').trim() || undefined
+                    notes: (body.gstNo || body.gstNumber) ? `GSTIN: ${String(body.gstNo || body.gstNumber).trim()}` : undefined
                   }, token);
                   if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
                     customerId = createCustRes.contact.contact_id;
@@ -996,14 +994,10 @@ const server = http.createServer(async (req, res) => {
                 if (!grp) return;
                 const setCount = parseFloat(grp.setCount) || 1;
                 const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
-                const itemTaxPct = Number(grp.gstRate ? String(grp.gstRate).replace('%', '') : 18) || 18;
-                const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
                 line_items.push({
                   name: grp.presetName || grp.name || body.presetName || 'Solar Mounting Structure Preset Kit',
                   rate: unitPrice,
                   quantity: setCount,
-                  tax_id: taxId,
-                  tax_percentage: itemTaxPct,
                   description: `Preset Structure Kit - ${setCount} Set(s)`
                 });
               });
@@ -1014,8 +1008,6 @@ const server = http.createServer(async (req, res) => {
                 name: body.presetName,
                 rate: unitPrice,
                 quantity: setCount,
-                tax_id: '4080449000000055031',
-                tax_percentage: 18,
                 description: `Preset Structure Kit - ${setCount} Set(s)`
               });
             }
@@ -1025,25 +1017,21 @@ const server = http.createServer(async (req, res) => {
               if (hasPresetGroups || body.presetName) {
                 if (isPreset) return;
               }
-              const itemTaxPct = Number(it.tax != null && it.tax !== '' ? it.tax : (it.gstRate != null && it.gstRate !== '' ? String(it.gstRate).replace('%', '') : 18)) || 18;
-              const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
               line_items.push({
                 name: it.name || it.productName || 'Solar Structure Component',
                 rate: Number(it.rate != null ? it.rate : (it.unitValue || 0)),
                 quantity: Number(it.qty || it.quantity || 1),
-                tax_id: taxId,
-                tax_percentage: itemTaxPct,
                 description: it.description || it.category || 'Separate Product Scope'
               });
             });
 
             if (line_items.length === 0) {
+              const fallbackRate = Number(body.total || body.subtotal || 1000);
               line_items.push({
                 name: body.productName || 'Solar Mounting Structure Kit',
-                rate: Number(body.subtotal || 1000),
+                rate: fallbackRate,
                 quantity: 1,
-                tax_id: '4080449000000055031',
-                tax_percentage: 18
+                description: 'Standard Line Item'
               });
             }
 
@@ -1053,9 +1041,7 @@ const server = http.createServer(async (req, res) => {
               date: formatZohoDate(body.piDate),
               expiry_date: (body.validUntilDate || body.expDate) ? formatZohoDate(body.validUntilDate || body.expDate) : undefined,
               line_items,
-              notes: (body.remarks || body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100),
-              gst_treatment: (body.gstNo || body.gstNumber) ? 'business_gst' : 'consumer',
-              gst_no: (body.gstNo || body.gstNumber || '').trim() || undefined
+              notes: (body.remarks || body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100)
             };
 
             let zohoRes = null;

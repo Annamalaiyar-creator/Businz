@@ -1,5 +1,46 @@
 [
   {
+    "piNo": "PI-00030",
+    "customerName": "INDIAN GREEN ENERGY SOLUTIONS",
+    "gstNo": "37AALFI7342C1ZD",
+    "piDate": "2026-09-15",
+    "subtotal": 333167,
+    "total": 333167,
+    "items": [
+      {
+        "name": "Solar Mounting Structure Kit",
+        "qty": 1,
+        "rate": 333167
+      }
+    ],
+    "paymentType": "100% Paid",
+    "id": "PI-00030",
+    "zohoSynced": false,
+    "zohoEstimateId": "4080449000000441012",
+    "zohoSyncError": "You are not authorized to perform this operation",
+    "zohoModule": "Quotes"
+  },
+  {
+    "piNo": "PI-TEST-999",
+    "customerName": "INDIAN GREEN ENERGY SOLUTIONS",
+    "gstNo": "37AALFI7342C1ZD",
+    "piDate": "2026-09-15",
+    "items": [
+      {
+        "name": "Solar Module Mounting Structure",
+        "qty": 1,
+        "rate": 1000,
+        "tax": 18
+      }
+    ],
+    "paymentType": "100% Paid",
+    "id": "PI-TEST-999",
+    "zohoSynced": false,
+    "zohoEstimateId": null,
+    "zohoSyncError": "You are not allowed to create tax invoice in GST Regime, as you're not registered for GST.",
+    "zohoModule": "Quotes"
+  },
+  {
     "piNo": "PI-00017",
     "customerName": "Tata Power Solar Systems Ltd",
     "gstNo": "29AAACT2345D1ZA",
@@ -16,7 +57,8 @@
     "zohoSynced": true,
     "zohoEstimateId": "4080449000000437002",
     "zohoSyncError": null,
-    "zohoModule": "Quotes"
+    "zohoModule": "Quotes",
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000403001",
@@ -39,7 +81,8 @@
     "zohoEstimateId": "4080449000000403001",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000399003",
@@ -62,7 +105,8 @@
     "zohoEstimateId": "4080449000000399003",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000406001",
@@ -311,7 +355,8 @@
     "convertedBomNo": null,
     "convertedBomCode": null,
     "convertedAt": null,
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "Partial Paid"
   },
   {
     "id": "4080449000000408001",
@@ -586,7 +631,8 @@
     "zohoModule": "Quotes",
     "convertedAt": null,
     "zohoSyncError": null,
-    "gstNumber": "33AABCV1234F1Z5"
+    "gstNumber": "33AABCV1234F1Z5",
+    "paymentType": "Partial Paid"
   },
   {
     "id": "4080449000000387001",
@@ -602,7 +648,8 @@
     "zohoEstimateId": "4080449000000387001",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000389001",
@@ -626,7 +673,8 @@
     "zohoEstimateId": "4080449000000389001",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000386011",
@@ -650,7 +698,8 @@
     "zohoEstimateId": "4080449000000386011",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000363727",
@@ -666,7 +715,8 @@
     "zohoEstimateId": "4080449000000363727",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "100% Paid"
   },
   {
     "id": "4080449000000357019",
@@ -907,7 +957,8 @@
     "zohoSynced": true,
     "zohoModule": "Quotes",
     "zohoSyncError": null,
-    "gstNumber": "29AAACT2345D1ZA"
+    "gstNumber": "29AAACT2345D1ZA",
+    "paymentType": "Partial Paid"
   },
   {
     "id": "4080449000000386001",
@@ -984,7 +1035,8 @@
     "zohoEstimateId": "4080449000000386001",
     "zohoSynced": true,
     "zohoModule": "Quotes",
-    "zohoSyncError": null
+    "zohoSyncError": null,
+    "paymentType": "Partial Paid"
   },
   {
     "id": "PI-00016",
@@ -1296,7 +1348,8 @@
     "convertedToBom": false,
     "convertedBomNo": null,
     "convertedBomCode": null,
-    "convertedAt": null
+    "convertedAt": null,
+    "paymentType": "Partial Paid"
   },
   {
     "id": "PI-00013",
@@ -1555,7 +1608,8 @@
     "zohoSynced": true,
     "zohoSyncError": null,
     "zohoEstimateId": "4080449000000427001",
-    "zohoModule": "Quotes"
+    "zohoModule": "Quotes",
+    "paymentType": "Partial Paid"
   },
   {
     "id": "4080449000000371002",
@@ -1800,7 +1854,8 @@
     "convertedBomNo": null,
     "convertedBomCode": null,
     "convertedAt": null,
-    "gstNumber": "29AAACT2345D1ZA"
+    "gstNumber": "29AAACT2345D1ZA",
+    "paymentType": "Partial Paid"
   },
   {
     "id": "PI-00014",
@@ -1869,7 +1924,8 @@
     "createdById": "SE-VRM001",
     "convertedToBom": false,
     "convertedBomNo": null,
-    "convertedBomCode": null
+    "convertedBomCode": null,
+    "paymentType": "Partial Paid"
   },
   {
     "id": "4080449000000402008",
@@ -1892,7 +1948,8 @@
     "zohoSynced": true,
     "zohoSyncError": null,
     "zohoEstimateId": "4080449000000402008",
-    "zohoModule": "Quotes"
+    "zohoModule": "Quotes",
+    "paymentType": "100% Paid"
   },
   {
     "piNo": "PI-00015",
@@ -1915,6 +1972,7 @@
     "customerId": "4080449000000372011",
     "total": 21000,
     "status": "Pending",
-    "statusType": "sent"
+    "statusType": "sent",
+    "paymentType": "100% Paid"
   }
 ]

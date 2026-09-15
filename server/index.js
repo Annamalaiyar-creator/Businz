@@ -1016,8 +1016,6 @@ app.post('/api/zoho/customers', async (req, res) => {
       contact_type: 'customer',
       customer_sub_type: 'business',
       currency_code: 'INR',
-      gst_treatment: isValidGst ? 'business_gst' : 'business_none',
-      gstin: isValidGst ? rawGst : undefined,
       pan_no: localCustomerRecord.panNumber ? String(localCustomerRecord.panNumber).trim().slice(0, 10) : undefined,
       billing_address: billingAddress,
       shipping_address: shippingAddress,
@@ -1027,16 +1025,32 @@ app.post('/api/zoho/customers', async (req, res) => {
 
     let result = await createZohoCustomer(accessToken, zohoPayload);
 
+    // Auto-resolve Zoho code 8 / Invalid Element error (e.g. if any field is rejected by Zoho org config)
+    if (result && result.code === 8 && result.message) {
+      const match = result.message.match(/Invalid Element\s+(\w+)/i);
+      if (match && match[1]) {
+        const invalidKey = match[1];
+        console.warn(`[Zoho Contact Notice] Stripping invalid element "${invalidKey}" and retrying customer creation...`);
+        delete zohoPayload[invalidKey];
+        result = await createZohoCustomer(accessToken, zohoPayload);
+      }
+    }
+
     // Auto-resolve Zoho code 3062 / duplicate contact name error
     if (result && (result.code === 3062 || (result.message && result.message.toLowerCase().includes('already exists')))) {
       console.log(`[Zoho Contact Notice] Contact "${contactNameVal}" already exists in Zoho Books. Linking or resolving unique name...`);
       try {
         const existingData = await fetchZohoCustomers(accessToken);
         if (existingData && Array.isArray(existingData.contacts)) {
-          const exactMatch = existingData.contacts.find(c =>
-            (c.contact_name && c.contact_name.toLowerCase() === contactNameVal.toLowerCase()) ||
-            (c.company_name && c.company_name.toLowerCase() === companyNameVal.toLowerCase())
-          );
+          const targetName = contactNameVal.toLowerCase().trim();
+          const targetComp = companyNameVal.toLowerCase().trim();
+          const targetBase = baseCompanyName.toLowerCase().trim();
+
+          const exactMatch = existingData.contacts.find(c => {
+            const zName = (c.contact_name || '').toLowerCase().trim();
+            const zComp = (c.company_name || '').toLowerCase().trim();
+            return zName === targetName || zName === targetBase || zComp === targetComp || zComp === targetBase;
+          });
           if (exactMatch && exactMatch.contact_id) {
             localCustomerRecord.zohoContactId = exactMatch.contact_id;
             const finalized = updatedCustomers.map(c => 
@@ -3683,14 +3697,13 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
         } else {
           // Dynamic contact provision in Zoho Books so Quote reflects the real customer name & GST
           const rawGstVal = (req.body.gstNo || req.body.gstNumber || '').trim();
-          const isValidGstFormat = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(rawGstVal);
           const newCustPayload = {
             contact_name: clientName,
             company_name: clientName,
             contact_type: 'customer',
             customer_sub_type: 'business',
-            gst_treatment: isValidGstFormat ? 'business_gst' : 'consumer',
-            ...(isValidGstFormat ? { gstin: rawGstVal } : {})
+            currency_code: 'INR',
+            notes: rawGstVal ? `GSTIN: ${rawGstVal}` : undefined
           };
           const createCustRes = await callZohoEstimateApi('POST', `/books/v3/contacts`, newCustPayload);
           if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
@@ -3716,21 +3729,17 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
     const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
     const hasPresetGroups = groupEntries.length > 0;
 
-    // 1. Add Preset Kits as single consolidated line items with their set price and GST
+    // 1. Add Preset Kits as single consolidated line items
     if (hasPresetGroups) {
       groupEntries.forEach(grp => {
         if (!grp) return;
         const setCount = parseFloat(grp.setCount) || 1;
         const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
         const name = grp.presetName || grp.name || req.body.presetName || 'Solar Mounting Structure Preset Kit';
-        const itemTaxPct = Number(grp.gstRate ? String(grp.gstRate).replace('%', '') : 18) || 18;
-        const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
         lineItems.push({
           name: name,
           rate: unitPrice,
           quantity: setCount,
-          tax_id: taxId,
-          tax_percentage: itemTaxPct,
           description: `Preset Kit Package (${setCount} Set)`
         });
       });
@@ -3746,26 +3755,21 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
       const q = parseFloat(it.qty || it.quantity) || 1;
       let r = parseFloat(it.rate != null ? it.rate : it.unitValue);
       if (isNaN(r) || r < 0) r = 0;
-      const itemTaxPct = Number(it.tax != null && it.tax !== '' ? it.tax : (it.gstRate != null && it.gstRate !== '' ? String(it.gstRate).replace('%', '') : 18)) || 18;
-      const taxId = taxIdMap[itemTaxPct] || taxIdMap[Math.round(itemTaxPct)] || '4080449000000055031';
       lineItems.push({
         name: it.name || it.productName || 'Solar Structure Component',
         rate: r,
         quantity: q,
-        tax_id: taxId,
-        tax_percentage: itemTaxPct,
         description: it.description || it.category || 'Separate Product Scope'
       });
     });
 
     // 3. Fallback if no items were created
     if (lineItems.length === 0) {
+      const fallbackRate = parseFloat(req.body.total || req.body.subtotal) || 1000;
       lineItems.push({
         name: req.body.productName || 'Solar Mounting Structure Kit',
-        rate: parseFloat(req.body.subtotal) || 1000,
+        rate: fallbackRate,
         quantity: 1,
-        tax_id: '4080449000000055031',
-        tax_percentage: 18,
         description: 'Standard Order Scope'
       });
     }

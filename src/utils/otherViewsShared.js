@@ -31,3 +31,35 @@ export const formatCurrency = (val, decimals = 2) => {
     maximumFractionDigits: decimals
   })}`;
 };
+
+/**
+ * The only 4 approved Payment Terms for PI and BOM
+ */
+export const STANDARD_PAYMENT_TERMS = [
+  '100% Paid',
+  'Partial Paid',
+  'Payment While Dispatch',
+  'Credit Payment'
+];
+
+/**
+ * Universal payment term normalizer: strictly maps all historical / ad-hoc terms into the 4 approved options
+ */
+export const normalizePaymentTerm = (term) => {
+  if (!term) return '100% Paid';
+  const s = String(term).trim().toLowerCase();
+  if (s.includes('partial') || s.includes('advance +') || s.includes('50%')) {
+    return 'Partial Paid';
+  }
+  if (s.includes('dispatch') || s.includes('while dispatch')) {
+    return 'Payment While Dispatch';
+  }
+  if (s.includes('credit') || s.includes('net ') || s.includes('days')) {
+    return 'Credit Payment';
+  }
+  if (s.includes('100%') || s.includes('advance') || s.includes('paid') || s.includes('full')) {
+    return '100% Paid';
+  }
+  return '100% Paid';
+};
+
