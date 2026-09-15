@@ -91,7 +91,7 @@ export default function AccountsVerificationModal({
         verifiedByRole: 'Accounts Team Lead',
         verifiedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })
       },
-      proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || 'Payment_Proof_Receipt.pdf',
+      proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || null,
       proofDocData: verifiedBOM.payments?.proofDocData || verifiedBOM.paymentProofDoc?.dataUrl || null,
       status: 'Accounts Verified & Passed to Invoice'
     };
@@ -162,7 +162,7 @@ export default function AccountsVerificationModal({
         hardCopyReceived: hardCopy,
         verified: true
       },
-      proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || 'Payment_Proof_Receipt.pdf',
+      proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || null,
       proofDocData: verifiedBOM.payments?.proofDocData || verifiedBOM.paymentProofDoc?.dataUrl || null,
       paymentProofDoc: verifiedBOM.paymentProofDoc || null
     };
@@ -503,15 +503,27 @@ export default function AccountsVerificationModal({
               accountsVerificationModal.payments?.proofDoc ||
               accountsVerificationModal.proofDoc ||
               accountsVerificationModal.salesPoDetails?.proofDocObj;
-            const docName = typeof rawProof === 'string' ? rawProof : rawProof?.name || accountsVerificationModal.paymentProofDocName || 'Payment_Proof_Receipt.jpg';
+            
+            let docName = null;
+            if (rawProof) {
+              if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
+                if (rawProof !== 'Payment_Proof_Receipt.pdf' && rawProof !== 'Payment_Proof_Receipt.jpg') {
+                  docName = rawProof;
+                }
+              } else if (rawProof.name && rawProof.name !== 'Payment_Proof_Receipt.pdf' && rawProof.name !== 'Payment_Proof_Receipt.jpg') {
+                docName = rawProof.name;
+              }
+            }
+            if (!docName && accountsVerificationModal.paymentProofDocName && accountsVerificationModal.paymentProofDocName !== 'Payment_Proof_Receipt.jpg' && accountsVerificationModal.paymentProofDocName !== 'Payment_Proof_Receipt.pdf') {
+              docName = accountsVerificationModal.paymentProofDocName;
+            }
+
             let pDocDataUrl = (typeof rawProof === 'string' && rawProof.startsWith('data:'))
               ? rawProof
               : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null);
+            
             if (!pDocDataUrl && docName) {
               pDocDataUrl = getMediaFromCache(docName);
-            }
-            if (!pDocDataUrl && accountsVerificationModal.deliveryAddressProofDoc?.dataUrl) {
-              pDocDataUrl = accountsVerificationModal.deliveryAddressProofDoc.dataUrl;
             }
 
             return (
@@ -525,45 +537,47 @@ export default function AccountsVerificationModal({
                     <Image size={15} style={{ color: '#2563EB' }} /> Payment Proof Document & Remittance Slip
                   </label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => setViewingProofDocModal(accountsVerificationModal)}
-                      style={{
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        padding: '4px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Eye size={12} /> View Full Size
-                    </button>
                     {pDocDataUrl && (
-                      <a
-                        href={pDocDataUrl}
-                        download={docName || 'payment_proof.jpg'}
-                        style={{
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #CBD5E1',
-                          color: '#334155',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          textDecoration: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Download size={12} /> Download
-                      </a>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setViewingProofDocModal(accountsVerificationModal)}
+                          style={{
+                            backgroundColor: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            color: '#1D4ED8',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            padding: '4px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Eye size={12} /> View Full Size
+                        </button>
+                        <a
+                          href={pDocDataUrl}
+                          download={docName || 'payment_proof.jpg'}
+                          style={{
+                            backgroundColor: '#F8FAFC',
+                            border: '1px solid #CBD5E1',
+                            color: '#334155',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            textDecoration: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Download size={12} /> Download
+                        </a>
+                      </>
                     )}
                   </div>
                 </div>
@@ -629,59 +643,40 @@ export default function AccountsVerificationModal({
                     backgroundColor: '#F8FAFC',
                     border: '1px solid #E2E8F0',
                     borderRadius: '12px',
-                    padding: '12px 16px',
+                    padding: '14px 18px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: '12px',
                     flexWrap: 'wrap'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284C7' }}>
-                        <Receipt size={20} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+                        <Receipt size={22} />
                       </div>
                       <div>
-                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>{docName || 'Electronic Payment Remittance Record'}</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>NEFT / RTGS settlement record linked to {bomCodeText}</div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>
+                          {docName || 'No Payment Proof Document Attached'}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                          Payment advice recorded for {bomCodeText}. Verification is approved based on direct bank remittance / credit settlement.
+                        </div>
                       </div>
                     </div>
-                    {!isAlreadyCompleted && (
-                      <label style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '11.5px',
-                        fontWeight: '700',
-                        color: '#334155',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px'
-                      }}>
-                        <UploadCloud size={14} color="#0E7490" /> Upload / Replace Slip
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          style={{ display: 'none' }}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              const res = await compressAndSaveFile(file);
-                              setAccountsVerificationModal(prev => prev ? ({
-                                ...prev,
-                                paymentProofDoc: res,
-                                proofDocData: res.dataUrl || null,
-                                payments: { ...(prev.payments || {}), proofDoc: res.name, proofDocData: res.dataUrl }
-                              }) : null);
-                            } catch (err) {
-                              console.error('Failed to attach payment slip:', err);
-                            }
-                          }}
-                        />
-                      </label>
-                    )}
+                    <div style={{
+                      backgroundColor: '#F1F5F9',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <CheckCircle size={13} color="#0E7490" /> Verified via Bank Remittance
+                    </div>
                   </div>
                 )}
               </div>
@@ -949,15 +944,26 @@ export default function AccountsVerificationModal({
           viewingProofDocModal.payments?.proofDoc ||
           viewingProofDocModal.proofDoc ||
           viewingProofDocModal.salesPoDetails?.proofDocObj;
-        const docName = typeof rawProof === 'string' ? rawProof : rawProof?.name || viewingProofDocModal.paymentProofDocName || 'Payment_Proof_Receipt.jpg';
+        
+        let docName = null;
+        if (rawProof) {
+          if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
+            if (rawProof !== 'Payment_Proof_Receipt.pdf' && rawProof !== 'Payment_Proof_Receipt.jpg') {
+              docName = rawProof;
+            }
+          } else if (rawProof.name && rawProof.name !== 'Payment_Proof_Receipt.pdf' && rawProof.name !== 'Payment_Proof_Receipt.jpg') {
+            docName = rawProof.name;
+          }
+        }
+        if (!docName && viewingProofDocModal.paymentProofDocName && viewingProofDocModal.paymentProofDocName !== 'Payment_Proof_Receipt.jpg' && viewingProofDocModal.paymentProofDocName !== 'Payment_Proof_Receipt.pdf') {
+          docName = viewingProofDocModal.paymentProofDocName;
+        }
+
         let pDocDataUrl = (typeof rawProof === 'string' && rawProof.startsWith('data:'))
           ? rawProof
           : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || viewingProofDocModal.proofDocData || viewingProofDocModal.payments?.proofDocData || null);
         if (!pDocDataUrl && docName) {
           pDocDataUrl = getMediaFromCache(docName);
-        }
-        if (!pDocDataUrl && viewingProofDocModal.deliveryAddressProofDoc?.dataUrl) {
-          pDocDataUrl = viewingProofDocModal.deliveryAddressProofDoc.dataUrl;
         }
         const bCode = viewingProofDocModal.bomCode || viewingProofDocModal.code || 'BOM-2026';
         const cName = viewingProofDocModal.customerName || viewingProofDocModal.companyName || custNameText;

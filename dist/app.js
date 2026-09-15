@@ -849,20 +849,66 @@ const server = http.createServer(async (req, res) => {
 
           try {
             const token = await getZohoAccessToken();
+            let customerId = body.customerId || body.customer_id;
+            const targetCustomer = (body.customerName || body.vendor || '').trim();
+            if (!customerId && targetCustomer) {
+              try {
+                const custRes = await callZoho('GET', '/books/v3/contacts?contact_type=customer', null, token);
+                const contacts = (custRes && Array.isArray(custRes.contacts)) ? custRes.contacts : [];
+                const found = contacts.find(c =>
+                  (c.contact_name && c.contact_name.toLowerCase() === targetCustomer.toLowerCase()) ||
+                  (c.company_name && c.company_name.toLowerCase() === targetCustomer.toLowerCase())
+                );
+                if (found) customerId = found.contact_id;
+              } catch (_) {}
+            }
+            if (!customerId) customerId = '4080449000000033179';
+
+            const normalizeZohoDate = (dateVal) => {
+              if (!dateVal) return new Date().toISOString().split('T')[0];
+              if (typeof dateVal === 'string') {
+                const cleaned = dateVal.trim().replace(/Sept/i, 'Sep');
+                const dmy = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (dmy) {
+                  return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+                }
+                const d = new Date(cleaned);
+                if (!isNaN(d.getTime())) {
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  return `${year}-${month}-${day}`;
+                }
+              }
+              return new Date().toISOString().split('T')[0];
+            };
+
+            const invDateStr = normalizeZohoDate(body.date);
+
             const zohoPayload = {
-              customer_id: body.customerId || body.customer_id,
+              customer_id: customerId,
               invoice_number: body.invoiceNumber || body.invoiceNo || undefined,
-              date: body.date || new Date().toISOString().split('T')[0],
-              due_date: body.dueDate || body.date || new Date().toISOString().split('T')[0],
-              line_items: (body.items || []).map(it => ({
+              date: invDateStr,
+              due_date: invDateStr,
+              reference_number: body.poNo || body.bomCode || undefined,
+              line_items: (body.items && body.items.length > 0) ? body.items.map(it => ({
                 name: it.name || 'Fabrication Work',
                 rate: Number(it.rate || it.price || 0),
-                quantity: Number(it.quantity || it.qty || 1)
-              }))
+                quantity: Number(it.quantity || it.qty || 1),
+                account_id: '4080449000000000567'
+              })) : [{
+                name: 'Solar Structure Sales Invoice Item',
+                rate: Number(body.invAmt ? String(body.invAmt).replace(/[^0-9.]/g, '') : 5000),
+                quantity: 1,
+                account_id: '4080449000000000567'
+              }],
+              notes: body.notes || 'Sales Invoice created via Control Room'
             };
             const zohoRes = await callZoho('POST', '/books/v3/invoices', zohoPayload, token);
             if (zohoRes && zohoRes.invoice) {
               newInvoice.zohoInvoiceId = zohoRes.invoice.invoice_id;
+              newInvoice.zohoInvoiceNumber = zohoRes.invoice.invoice_number;
+              newInvoice.invNo = zohoRes.invoice.invoice_number;
             }
           } catch (_) {}
 

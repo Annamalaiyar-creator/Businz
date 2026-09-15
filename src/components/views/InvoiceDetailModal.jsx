@@ -22,9 +22,13 @@ export default function InvoiceDetailModal({
   setBomStore,
   invoices,
   setInvoices,
+  invoiceList: passedInvoiceList,
+  setInvoiceList: passedSetInvoiceList,
   setPreviewDocModal,
   setActiveMediaPreviewModal = () => {}
 }) {
+  const invoiceList = passedInvoiceList || invoices || [];
+  const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
   const inv = viewingInvoiceModal;
   const invNoText = isEditingInvoice ? (invoiceEditForm.invNo || inv.invNo || inv.code || 'INV-00027') : (inv.invNo || inv.code || 'INV-00027');
   const bomRefText = inv.poNo || inv.c3 || 'BOM-00007';
@@ -620,7 +624,24 @@ export default function InvoiceDetailModal({
                       })),
                       notes: `Sales Invoice confirmed for BOM ${bomRefText} with ${packedItemsToDeduct.length} item(s) dispatched.`
                     })
-                  }).catch(err => console.warn('Zoho invoice sync notice:', err));
+                  })
+                    .then(res => res.json())
+                    .then(data => {
+                      if (data && data.invoice) {
+                        const zohoInv = data.invoice;
+                        setInvoiceList(prev => (prev || []).map(item =>
+                          (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode)
+                            ? {
+                                ...item,
+                                zohoId: zohoInv.zohoId || zohoInv.id,
+                                zohoInvoiceNumber: zohoInv.invNo,
+                                syncedToZoho: true
+                              }
+                            : item
+                        ));
+                      }
+                    })
+                    .catch(err => console.warn('Zoho invoice sync notice:', err));
                 } catch (e) { console.error('Zoho invoice fetch trigger error:', e); }
 
                 // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch

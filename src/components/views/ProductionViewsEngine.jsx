@@ -861,6 +861,25 @@ export default function ProductionViewsEngine(props) {
 
   // Initial cloud fetch for invoices & listen for local update events
   useEffect(() => {
+    // Fetch live invoices from Zoho Books & local backend
+    fetch('/api/zoho/invoices')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data) && data.length > 0) {
+          setInvoiceList(prev => {
+            const map = new Map();
+            data.forEach(i => map.set(i.invNo || i.id, i));
+            (prev || []).forEach(i => {
+              const k = i.invNo || i.id;
+              if (!map.has(k)) map.set(k, i);
+              else map.set(k, { ...map.get(k), ...i });
+            });
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch(() => {});
+
     fetchCloudStore('invoice_store', []).then(data => {
       if (data && Array.isArray(data) && data.length > 0) setInvoiceList(data);
     });
@@ -913,8 +932,10 @@ export default function ProductionViewsEngine(props) {
                 setInvoiceModalActiveTab={setInvoiceModalActiveTab}
                 bomStore={bomStore}
                 setBomStore={setBomStore}
-                invoices={invoices}
-                setInvoices={setInvoices}
+                invoices={invoiceList}
+                setInvoices={setInvoiceList}
+                invoiceList={invoiceList}
+                setInvoiceList={setInvoiceList}
                 setPreviewDocModal={setPreviewDocModal}
               />
             );

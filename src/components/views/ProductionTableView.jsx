@@ -461,7 +461,7 @@ export default function ProductionTableView({
             <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedRows.length}</strong> Selected
           </span>
 
-          {!isSuperUser && activeTab !== 'Invoice Management' && (() => {
+          {!isSuperUser && (() => {
             const firstCode = selectedRows[0];
             const targetRow = (filteredRows || []).find(r => r.code === firstCode || r.id === firstCode || r.bomCode === firstCode) || { code: firstCode };
             const isCancelledRow = Boolean(
@@ -508,6 +508,10 @@ export default function ProductionTableView({
                 ) : activeTab === 'Dispatch Orders' ? (
                   <>
                     <Package size={14} style={{ color: '#0E7490' }} /> Pack BOM
+                  </>
+                ) : activeTab === 'Invoice Management' ? (
+                  <>
+                    <FileText size={14} style={{ color: '#0E7490' }} /> View / Confirm Invoice
                   </>
                 ) : (
                   <>
@@ -625,7 +629,7 @@ export default function ProductionTableView({
           </button>
 
           {/* View Payment Details Button */}
-          {activeTab !== 'Dispatch Orders' && (
+          {activeTab !== 'Dispatch Orders' && activeTab !== 'Accounts Verification' && activeTab !== 'Invoice Management' && (
             <button
               onClick={() => {
                 const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;

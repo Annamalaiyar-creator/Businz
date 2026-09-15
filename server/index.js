@@ -3314,14 +3314,53 @@ app.post('/api/zoho/invoices', async (req, res) => {
     const accessToken = await getZohoAccessToken();
     
     // Lookup customer or fallback contact in Zoho
-    let customerId = req.body.customerId;
-    if (!customerId && req.body.vendor) {
-      const vendorData = await fetchZohoVendors(accessToken);
-      const contacts = (vendorData && Array.isArray(vendorData.contacts)) ? vendorData.contacts : [];
-      const found = contacts.find(c => c.contact_name.toLowerCase() === String(req.body.vendor).toLowerCase());
-      if (found) customerId = found.contact_id;
+    let customerId = req.body.customerId || req.body.customer_id;
+    const targetCustomer = (req.body.customerName || req.body.vendor || '').trim();
+    if (!customerId && targetCustomer) {
+      try {
+        const custData = await fetchZohoCustomers(accessToken);
+        const contacts = (custData && Array.isArray(custData.contacts)) ? custData.contacts : [];
+        const found = contacts.find(c =>
+          (c.contact_name && c.contact_name.toLowerCase() === targetCustomer.toLowerCase()) ||
+          (c.company_name && c.company_name.toLowerCase() === targetCustomer.toLowerCase())
+        );
+        if (found) {
+          customerId = found.contact_id;
+        } else {
+          const vendorData = await fetchZohoVendors(accessToken);
+          const vContacts = (vendorData && Array.isArray(vendorData.contacts)) ? vendorData.contacts : [];
+          const vFound = vContacts.find(c =>
+            (c.contact_name && c.contact_name.toLowerCase() === targetCustomer.toLowerCase()) ||
+            (c.company_name && c.company_name.toLowerCase() === targetCustomer.toLowerCase())
+          );
+          if (vFound) customerId = vFound.contact_id;
+        }
+      } catch (err) {
+        console.warn('[ZOHO INVOICE CUSTOMER LOOKUP ERROR]', err);
+      }
     }
-    if (!customerId) customerId = '4080449000000033179'; // Paramount Industrial Supplies (Customer ID in Zoho)
+    if (!customerId) customerId = '4080449000000033179'; // Paramount Industrial Supplies (fallback Customer ID in Zoho)
+
+    const normalizeZohoDate = (dateVal) => {
+      if (!dateVal) return new Date().toISOString().split('T')[0];
+      if (typeof dateVal === 'string') {
+        const cleaned = dateVal.trim().replace(/Sept/i, 'Sep');
+        const dmy = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (dmy) {
+          return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+        }
+        const d = new Date(cleaned);
+        if (!isNaN(d.getTime())) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      }
+      return new Date().toISOString().split('T')[0];
+    };
+
+    const invDateStr = normalizeZohoDate(req.body.date);
 
     const lineItems = (req.body.items || []).map(item => ({
       name: item.name || item.description || 'Solar Rail Product',
@@ -3341,7 +3380,8 @@ app.post('/api/zoho/invoices', async (req, res) => {
 
     const payload = {
       customer_id: customerId,
-      date: req.body.date || new Date().toISOString().split('T')[0],
+      date: invDateStr,
+      due_date: invDateStr,
       reference_number: req.body.poNo || req.body.bomCode || undefined,
       line_items: lineItems,
       notes: req.body.notes || 'Sales Invoice created via Control Room'
