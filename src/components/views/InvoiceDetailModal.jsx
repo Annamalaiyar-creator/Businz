@@ -29,6 +29,7 @@ export default function InvoiceDetailModal({
 }) {
   const invoiceList = passedInvoiceList || invoices || [];
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
+  const inv = viewingInvoiceModal || {};
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
     ? (invoiceEditForm.invNo || inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'))

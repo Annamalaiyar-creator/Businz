@@ -7,7 +7,7 @@ export default function DeliveryChallanModal({
   bomStore,
   setBomStore
 }) {
-const inv = pendingDcModal;
+const inv = pendingDcModal || {};
 const invNoText = inv.invNo || inv.code || 'INV-2026-102';
 const bomRefText = inv.poNo || inv.c3 || 'BOM-102';
 const customerText = inv.vendor || inv.c2 || 'Customer';
