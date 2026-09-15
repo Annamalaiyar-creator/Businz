@@ -11,7 +11,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-09-02"
+    "targetDate": "2026-09-02",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-56",
@@ -25,7 +30,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-09-02"
+    "targetDate": "2026-09-02",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-55",
@@ -39,7 +49,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-09-02"
+    "targetDate": "2026-09-02",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-54",
@@ -53,7 +68,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-09-03"
+    "targetDate": "2026-09-03",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-4",
@@ -67,7 +87,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-09-02"
+    "targetDate": "2026-09-02",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-3",
@@ -81,7 +106,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-09-02"
+    "targetDate": "2026-09-02",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_1787979587391",
@@ -95,7 +125,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-08-30"
+    "targetDate": "2026-08-30",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_1787979024194",
@@ -109,7 +144,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-08-30"
+    "targetDate": "2026-08-30",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_1787978925273",
@@ -123,7 +163,12 @@
     "statusColor": "#EA580C",
     "rawMaterial": "Raw Alu Coil",
     "customer": "Solar Client",
-    "targetDate": "2026-08-30"
+    "targetDate": "2026-08-30",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_1",
@@ -138,7 +183,12 @@
     "rawMaterial": "Raw Aluminum Coil 1.5mm",
     "customer": "Vikram Solar",
     "startDate": "2026-07-15",
-    "targetDate": "2026-07-22"
+    "targetDate": "2026-07-22",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_2",
@@ -153,7 +203,12 @@
     "rawMaterial": "HDG Steel Profile Stock",
     "customer": "Tata Power Renewable",
     "startDate": "2026-07-14",
-    "targetDate": "2026-07-21"
+    "targetDate": "2026-07-21",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_3",
@@ -168,7 +223,12 @@
     "rawMaterial": "Alu Fastener Bar",
     "customer": "Adani Solar",
     "startDate": "2026-07-18",
-    "targetDate": "2026-07-25"
+    "targetDate": "2026-07-25",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "wo_4",
@@ -183,6 +243,11 @@
     "rawMaterial": "Alu Extrusion 6063-T6",
     "customer": "Sterling & Wilson",
     "startDate": "2026-07-19",
-    "targetDate": "2026-07-26"
+    "targetDate": "2026-07-26",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   }
 ]

@@ -12,7 +12,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "PENDING_MATERIAL"
+    "status": "PENDING_MATERIAL",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-56",
@@ -27,7 +32,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "IN_PROGRESS"
+    "status": "IN_PROGRESS",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-55",
@@ -42,7 +52,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "IN_PROGRESS"
+    "status": "IN_PROGRESS",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-54",
@@ -57,7 +72,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "IN_PROGRESS"
+    "status": "IN_PROGRESS",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-4",
@@ -72,7 +92,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "IN_PROGRESS"
+    "status": "IN_PROGRESS",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-3",
@@ -87,7 +112,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "IN_PROGRESS"
+    "status": "IN_PROGRESS",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-2",
@@ -102,7 +132,12 @@
     "rawMaterialName": "Raw Alu Coil",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "IN_PROGRESS"
+    "status": "IN_PROGRESS",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-50",
@@ -117,7 +152,12 @@
     "rawMaterialName": "Raw Aluminum Coil 1.5mm",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "Overdue"
+    "status": "Overdue",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-51",
@@ -132,7 +172,12 @@
     "rawMaterialName": "HDG Steel Profile Stock",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "Overdue"
+    "status": "Overdue",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-52",
@@ -147,7 +192,12 @@
     "rawMaterialName": "Alu Fastener Bar",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "PENDING_MATERIAL"
+    "status": "PENDING_MATERIAL",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-53",
@@ -162,7 +212,12 @@
     "rawMaterialName": "Alu Extrusion 6063-T6",
     "priority": "Normal",
     "assignedEmployee": "Floor Team",
-    "status": "PENDING_MATERIAL"
+    "status": "PENDING_MATERIAL",
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "completionImages": []
   },
   {
     "id": "WO-1",

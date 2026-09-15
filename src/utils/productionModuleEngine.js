@@ -258,8 +258,20 @@ class ProductionModuleEngine {
     ];
 
     this.subscribers = [];
+    this.workOrders = (this.workOrders || []).map(w => this._sanitizeWorkOrder(w));
     this.loadFromStorage();
     this.initCloudSync();
+  }
+
+  _sanitizeWorkOrder(wo) {
+    if (!wo || typeof wo !== 'object') return wo;
+    if (!Array.isArray(wo.progressHistory)) wo.progressHistory = [];
+    if (!Array.isArray(wo.materialIssueHistory)) wo.materialIssueHistory = [];
+    if (!Array.isArray(wo.additionalMaterialRequests)) wo.additionalMaterialRequests = [];
+    if (!Array.isArray(wo.reworkHistory)) wo.reworkHistory = [];
+    if (!Array.isArray(wo.completionImages)) wo.completionImages = [];
+    if (!Array.isArray(wo.productItems)) wo.productItems = [];
+    return wo;
   }
 
   initCloudSync() {
@@ -270,7 +282,7 @@ class ProductionModuleEngine {
       fetchCloudStore('vrm_prod_recipes', this.recipes),
       fetchCloudStore('vrm_prod_ledger', this.ledger)
     ]).then(([cloudWOs, cloudInv, cloudRecipes, cloudLedger]) => {
-      if (Array.isArray(cloudWOs) && cloudWOs.length > 0) this.workOrders = cloudWOs;
+      if (Array.isArray(cloudWOs) && cloudWOs.length > 0) this.workOrders = cloudWOs.map(w => this._sanitizeWorkOrder(w));
       if (Array.isArray(cloudInv) && cloudInv.length > 0) this.inventory = cloudInv;
       if (Array.isArray(cloudRecipes) && cloudRecipes.length > 0) this.recipes = cloudRecipes;
       if (Array.isArray(cloudLedger) && cloudLedger.length > 0) this.ledger = cloudLedger;
@@ -280,7 +292,7 @@ class ProductionModuleEngine {
     // Live Realtime subscriptions from Supabase
     subscribeToCloudStore('vrm_prod_workorders', (latestWOs) => {
       if (Array.isArray(latestWOs)) {
-        this.workOrders = latestWOs;
+        this.workOrders = latestWOs.map(w => this._sanitizeWorkOrder(w));
         this.notifySubscribers();
       }
     });
@@ -623,6 +635,7 @@ class ProductionModuleEngine {
   issueMaterial(woId) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     if (wo.status !== 'MATERIAL_RESERVED' && wo.status !== 'PENDING_MATERIAL') {
       // Auto reserve if not reserved yet
@@ -694,6 +707,7 @@ class ProductionModuleEngine {
   startWork(woId) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     wo.status = 'IN_PROGRESS';
     wo.startedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -714,6 +728,7 @@ class ProductionModuleEngine {
   updateProgress(woId, completedQty, rejectedQty, wastageQty, remarks) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
     wo.actualGoodOutput = Number(completedQty);
@@ -737,6 +752,7 @@ class ProductionModuleEngine {
   requestAdditionalMaterial(woId, additionalQty, reason) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     const reqObj = {
       id: `REQ-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -756,6 +772,7 @@ class ProductionModuleEngine {
   approveAdditionalMaterialRequest(woId, requestId) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     const req = wo.additionalMaterialRequests.find(r => r.id === requestId);
     if (!req) throw new Error('Request not found');
@@ -807,13 +824,14 @@ class ProductionModuleEngine {
   submitCompletion(woId, completionData) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     wo.status = 'COMPLETED_PENDING_VERIFICATION';
     wo.completedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
     wo.actualGoodOutput = Number(completionData.goodQty);
     wo.actualRejectedOutput = Number(completionData.rejectedQty || 0);
     wo.actualWastageOutput = Number(completionData.wastageQty || 0);
-    wo.operatorRemarks = completionData.remarks || '';
+    wo.operatorRemarks = completionData.remarks || completionData.operatorRemarks || '';
     if (completionData.images) wo.completionImages = completionData.images;
 
     wo.progressHistory.push({
@@ -999,6 +1017,7 @@ class ProductionModuleEngine {
   sendForRework(woId, reworkReason) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     wo.status = 'REWORK_REQUIRED';
     wo.reworkHistory.push({
@@ -1015,6 +1034,7 @@ class ProductionModuleEngine {
   cancelWorkOrder(woId, cancelReason) {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
+    this._sanitizeWorkOrder(wo);
 
     const item = this.inventory.find(i => i.code === wo.rawMaterialCode);
 
@@ -1134,11 +1154,12 @@ class ProductionModuleEngine {
   }
 
   getWorkOrders() {
-    return this.workOrders;
+    return (this.workOrders || []).map(w => this._sanitizeWorkOrder(w));
   }
 
   getWorkOrderById(woId) {
-    return this.workOrders.find(w => w.id === woId) || null;
+    const wo = this.workOrders.find(w => w.id === woId);
+    return wo ? this._sanitizeWorkOrder(wo) : null;
   }
 
   getLedger() {
