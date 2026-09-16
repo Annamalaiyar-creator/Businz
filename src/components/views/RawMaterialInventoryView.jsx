@@ -643,7 +643,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         m.availableStock = rem;
         m.reserved = finalReserved;
         m.blockedForBom = finalReserved;
-        const minL = Number(m.minLevel || 50);
+        const minL = Number(m.minLevel !== undefined ? m.minLevel : (m.reorderLevel !== undefined ? m.reorderLevel : 50));
+        m.minLevel = minL;
         m.status = rem === 0 ? 'Out of Stock' : (rem <= minL ? 'Low Stock' : 'In Stock');
       });
 
@@ -2131,8 +2132,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     const physicalStockVal = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
     const reservedVal = Math.max(0, parseFloat(selectedMat.reserved !== undefined ? selectedMat.reserved : (selectedMat.blockedForBom || 0)) || 0);
-    const availableVal = selectedMat.stock !== undefined ? selectedMat.stock : Math.max(0, physicalStockVal - reservedVal);
-    const minLevelVal = parseFloat(selectedMat.minLevel || 50) || 50;
+    const availableVal = Math.max(0, parseFloat(selectedMat.stock !== undefined ? selectedMat.stock : (physicalStockVal - reservedVal)) || 0);
+    const minLevelVal = Math.max(0, parseFloat(selectedMat.minLevel !== undefined ? selectedMat.minLevel : (selectedMat.reorderLevel || 50)) || 50);
 
     const filteredLogs = itemAuditLogs.filter(log => {
       if (auditTypeFilter === 'OUTFLOW' && log.qty >= 0) return false;
@@ -3091,9 +3092,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       {m.unit}
                     </td>
                     <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 'bold', color: isOut ? '#B91C1C' : isLow ? '#C2410C' : '#334155', whiteSpace: 'nowrap' }}>
-                      {m.stock.toLocaleString()}
+                      {(Number(m.stock !== undefined ? m.stock : (m.physicalStock !== undefined ? m.physicalStock : 0)) || 0).toLocaleString()}
                     </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right', color: '#64748B', whiteSpace: 'nowrap' }}>{m.minLevel.toLocaleString()}</td>
+                    <td style={{ padding: '12px 14px', textAlign: 'right', color: '#64748B', whiteSpace: 'nowrap' }}>
+                      {(Number(m.minLevel !== undefined ? m.minLevel : (m.reorderLevel !== undefined ? m.reorderLevel : 0)) || 0).toLocaleString()}
+                    </td>
 
                     {/* Status Badge */}
                     <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
