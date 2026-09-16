@@ -389,6 +389,18 @@ export const VRM_PRODUCTS = [
     "description": ""
   },
   {
+    "sno": "32B",
+    "material": "6063T6",
+    "code": "MR-300MM",
+    "name": "Mini Rail - 300 mm",
+    "sections": "300MM",
+    "uom": "NOS",
+    "gst": "18%",
+    "price": 140,
+    "rate": 140,
+    "description": "Mini Rail - 300 mm Solar Mounting Profile"
+  },
+  {
     "sno": "33",
     "material": "6063T6",
     "code": "MR100N",
@@ -3456,9 +3468,13 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
 
   // Pattern-based resolution for common aliases (e.g. Mini Rails, Adhesive Rails, Double C Rails)
   const cleanStr = rawName.toLowerCase();
-  const mrMatch = cleanStr.match(/mini\s*rail\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*mini\s*rail/i);
+  if (cleanStr.includes('mini rail') && cleanStr.includes('300')) {
+    return 'MR-300MM';
+  }
+  const mrMatch = cleanStr.match(/mini\s*rail\s*[-–—]?\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*mini\s*rail/i);
   if (mrMatch) {
     const mm = mrMatch[1];
+    if (mm === '300') return 'MR-300MM';
     if (cleanStr.includes('old')) return ('MR' + mm + 'O').toUpperCase();
     return ('MR' + mm).toUpperCase();
   }

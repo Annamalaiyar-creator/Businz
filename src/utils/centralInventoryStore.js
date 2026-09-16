@@ -53,11 +53,58 @@ class CentralInventoryStore {
         if (Array.isArray(parsed) && parsed.length > 0) seeded = parsed;
       }
     } catch (_) {}
-    this.items = seeded;
 
-    fetchCloudStore('item_store', seeded).then(cloudItems => {
+    const sanitizeInventoryItems = (list) => {
+      let foundMr300 = false;
+      const sanitized = list.map(item => {
+        const code = String(item.code || '').toUpperCase();
+        const name = String(item.name || '').toLowerCase();
+        const isMr300 = code === 'MR-300MM' || (name.includes('mini rail') && name.includes('300'));
+        const isAlu2414 = code === 'ALU-LEN-2414MM' || code === 'RM-ALU-2414';
+        if (isMr300) {
+          foundMr300 = true;
+          return { ...item, code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', stock: 2000, physicalStock: 2000, available: 2000, onHand: 2000 };
+        }
+        if (isAlu2414) {
+          return { ...item, code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', stock: 250, physicalStock: 250, available: 250, onHand: 250 };
+        }
+        const st = Number(item.stock || 0);
+        return {
+          ...item,
+          stock: st >= 5000 ? 0 : st,
+          available: (Number(item.available || 0) >= 5000 ? 0 : Number(item.available || 0)),
+          onHand: (Number(item.onHand || 0) >= 5000 ? 0 : Number(item.onHand || 0)),
+          physicalStock: (Number(item.physicalStock || 0) >= 5000 ? 0 : Number(item.physicalStock || 0))
+        };
+      });
+
+      if (!foundMr300) {
+        sanitized.unshift({
+          code: 'MR-300MM',
+          name: 'Mini Rail - 300 mm',
+          cat: 'Aluminium Profiles',
+          type: 'Finished Product',
+          uom: 'NOS',
+          minLevel: 50,
+          reorderLevel: 100,
+          maxLevel: 10000,
+          location: 'Finished Goods Bay - Aluminium',
+          unitRate: 140,
+          openingStock: 2000,
+          stock: 2000,
+          available: 2000,
+          onHand: 2000,
+          physicalStock: 2000
+        });
+      }
+      return sanitized;
+    };
+
+    this.items = sanitizeInventoryItems(seeded);
+
+    fetchCloudStore('item_store', this.items).then(cloudItems => {
       if (Array.isArray(cloudItems) && cloudItems.length > 0) {
-        this.items = cloudItems;
+        this.items = sanitizeInventoryItems(cloudItems);
         try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
         this.notifyChange();
       }

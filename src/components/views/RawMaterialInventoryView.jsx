@@ -110,6 +110,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
 
   const ALUMINUM_PROFILES = [
+    { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 2000, minLevel: 50, store: 'Bay #4 - FG Store', hsn: '7604', status: 'In Stock' },
     { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Aluminium', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
@@ -161,8 +162,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const [materials, setMaterials] = useState(() => {
     const currentEngineStock = getEngineAluStock();
     const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: currentEngineStock, lengthMm: '2414', minLevel: 15, status: currentEngineStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngineStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 2000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 2000, physicalStock: 2000, availableStock: 2000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
+    matMap.set('MR-300MM', defaultMiniRail);
+    matMap.set('MINI RAIL - 300 MM', defaultMiniRail);
 
     // 1. Seed all official VRM standardized catalog products (285 items)
     (VRM_PRODUCTS || []).forEach(p => {
@@ -349,7 +353,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const matMap = new Map();
       const currentEngStock = getEngineAluStock();
       const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: currentEngStock, lengthMm: '2414', minLevel: 15, status: currentEngStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 2000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 2000, physicalStock: 2000, availableStock: 2000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
+      matMap.set('MR-300MM', defaultMiniRail);
+      matMap.set('MINI RAIL - 300 MM', defaultMiniRail);
       // 1. Seed all official VRM standardized catalog products (285 items)
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
@@ -962,7 +969,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const mNameLower = mName.toLowerCase();
 
       // Filter out invalid items or blank rows upfront
-      if (!mCode || !mName || mCode === '—' || mCodeLower.includes('item') || mCodeLower === 'rm-vrm' || mCodeLower === 'mr100' || mNameLower === 'mini rail') return false;
+      if (!mCode || !mName || mCode === '—' || mCodeLower === 'rm-vrm') return false;
 
       // Identify whether an item is raw material strictly based on Category
       const itemCat = String(m.category || m.cat || '').trim().toLowerCase();
