@@ -2971,11 +2971,23 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
     if (!Array.isArray(boms)) boms = [];
 
     // 1. Calculate total active and completed allocations per item
+    // STRICT RULE: Only reduce stock when BOM is completed and sent to dispatch
     const allocations = new Map();
     boms.forEach(b => {
       const st = String(b?.status || '').toLowerCase();
-      // Only exclude cancelled or stock-restored BOMs
-      if (!st.includes('cancel') && !st.includes('stock restored')) {
+      const isSentToDispatch = Boolean(b?.salesConfirmed) || [
+        'sales confirmed - sent to dispatch',
+        'sent to production',
+        'confirmed',
+        'packed & ready for dispatch',
+        'partially packed',
+        'closed',
+        'dispatch packing verified - sent to accounts',
+        'awaiting vehicle loading & dispatch'
+      ].some(s => st.includes(s));
+
+      // ONLY deduct stock when BOM is completed and sent to dispatch
+      if (isSentToDispatch && !st.includes('cancel') && !st.includes('stock restored')) {
         (b?.items || []).forEach(it => {
           const q = parseFloat(it?.qty || it?.bomQty || 0) || 0;
           if (q > 0) {
@@ -3009,12 +3021,14 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
           (mName && allocations.get(mName)) || 0,
           (mFp && allocations.get(mFp)) || 0
         );
-        const baseline = Math.max(0, parseFloat(m?.openingStock !== undefined ? m.openingStock : (m?.physicalStock !== undefined ? m.physicalStock : 5000)) || 5000);
+        const baseline = Math.max(0, parseFloat(m?.openingStock !== undefined ? m.openingStock : 5000) || 5000);
         const newStock = Math.max(0, baseline - blocked);
         const minL = parseFloat(m?.minLevel || 100) || 100;
         const newStatus = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
 
-        if (m.stock !== newStock || m.reserved !== blocked || m.status !== newStatus) {
+        if (m.stock !== newStock || m.reserved !== blocked || m.status !== newStatus || m.openingStock !== baseline) {
+          m.openingStock = baseline;
+          m.physicalStock = baseline;
           m.stock = newStock;
           m.availableStock = newStock;
           m.reserved = blocked;
@@ -3050,12 +3064,14 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
           (itName && allocations.get(itName)) || 0,
           (itFp && allocations.get(itFp)) || 0
         );
-        const baseline = Math.max(0, parseFloat(it?.openingStock !== undefined ? it.openingStock : (it?.physicalStock !== undefined ? it.physicalStock : 5000)) || 5000);
+        const baseline = Math.max(0, parseFloat(it?.openingStock !== undefined ? it.openingStock : 5000) || 5000);
         const newStock = Math.max(0, baseline - blocked);
         const minL = parseFloat(it?.minLevel || 20) || 20;
         const newStatus = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
 
-        if (it.stock !== newStock || it.reserved !== blocked || it.status !== newStatus) {
+        if (it.stock !== newStock || it.reserved !== blocked || it.status !== newStatus || it.openingStock !== baseline) {
+          it.openingStock = baseline;
+          it.physicalStock = baseline;
           it.stock = newStock;
           it.availableStock = newStock;
           it.reserved = blocked;

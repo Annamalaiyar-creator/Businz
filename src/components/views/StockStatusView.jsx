@@ -2254,12 +2254,20 @@ export default function StockStatusView(props) {
             let lowStockCount = 0;
             let outOfStockCount = 0;
 
-            // 1. Calculate reserved quantities from active BOMs and active Proforma Invoices (PIs)
+            // 1. Calculate reserved quantities ONLY from completed BOMs sent to dispatch (PIs never reserve stock)
             const bomReservedMap = new Map();
             if (Array.isArray(bomStore)) {
               bomStore.forEach(b => {
                 const bStatus = String(b.status || '').toLowerCase();
-                if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
+                const isSentToDispatch = Boolean(b.salesConfirmed) || [
+                  'sales confirmed - sent to dispatch',
+                  'sent to production',
+                  'confirmed',
+                  'packed & ready for dispatch',
+                  'partially packed',
+                  'closed'
+                ].some(s => bStatus.includes(s));
+                if (isSentToDispatch && !bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
                   (b.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
                     if (qty > 0) {
@@ -2277,35 +2285,6 @@ export default function StockStatusView(props) {
                 }
               });
             }
-
-            // Also reserve stock for active Proforma Invoices that are not cancelled or converted to BOM
-            try {
-              const piSaved = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_procurement_pi_store');
-              let localPIs = [];
-              if (piSaved) {
-                const parsed = JSON.parse(piSaved);
-                if (Array.isArray(parsed)) localPIs = parsed;
-              }
-              localPIs.forEach(pi => {
-                const piStatus = String(pi.status || '').toLowerCase();
-                if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom && !pi.isConverted) {
-                  (pi.items || []).forEach(pItem => {
-                    const qty = parseFloat(pItem.qty || pItem.quantity || 0) || 0;
-                    if (qty > 0) {
-                      const resCode = resolveProductCode(pItem).toLowerCase().trim();
-                      const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
-                      const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
-                      const norm = normalizeProductName(pName);
-                      const pFp = wordFingerprint(pName);
-                      if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
-                      if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
-                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
-                      if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
-                    }
-                  });
-                }
-              });
-            } catch (_) {}
 
             let localRawMats = [];
             try {
@@ -2486,12 +2465,20 @@ export default function StockStatusView(props) {
           {(() => {
             const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
 
-            // 1. Calculate reserved quantities from active BOMs and active Proforma Invoices (PIs)
+            // 1. Calculate reserved quantities ONLY from completed BOMs sent to dispatch (PIs never reserve stock)
             const bomReservedMap = new Map();
             if (Array.isArray(bomStore)) {
               bomStore.forEach(b => {
                 const bStatus = String(b.status || '').toLowerCase();
-                if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored') && bStatus !== 'delivered') {
+                const isSentToDispatch = Boolean(b.salesConfirmed) || [
+                  'sales confirmed - sent to dispatch',
+                  'sent to production',
+                  'confirmed',
+                  'packed & ready for dispatch',
+                  'partially packed',
+                  'closed'
+                ].some(s => bStatus.includes(s));
+                if (isSentToDispatch && !bStatus.includes('cancelled') && !bStatus.includes('stock restored') && bStatus !== 'delivered') {
                   (b.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
                     if (qty > 0) {
@@ -2507,35 +2494,6 @@ export default function StockStatusView(props) {
                 }
               });
             }
-
-            // Also reserve stock for active Proforma Invoices that are not cancelled or converted to BOM
-            try {
-              const piSaved = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_procurement_pi_store');
-              let localPIs = [];
-              if (piSaved) {
-                const parsed = JSON.parse(piSaved);
-                if (Array.isArray(parsed)) localPIs = parsed;
-              }
-              localPIs.forEach(pi => {
-                const piStatus = String(pi.status || '').toLowerCase();
-                if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom && !pi.isConverted) {
-                  (pi.items || []).forEach(pItem => {
-                    const qty = parseFloat(pItem.qty || pItem.quantity || 0) || 0;
-                    if (qty > 0) {
-                      const resCode = resolveProductCode(pItem).toLowerCase().trim();
-                      const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
-                      const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
-                      const norm = normalizeProductName(pName);
-                      const pFp = wordFingerprint(pName);
-                      if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
-                      if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
-                      if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
-                      if (pFp) bomReservedMap.set(pFp, (bomReservedMap.get(pFp) || 0) + qty);
-                    }
-                  });
-                }
-              });
-            } catch (_) {}
 
             // 2. Read latest raw materials store for overrides
             let localRawMats = [];

@@ -4737,6 +4737,7 @@ export default function BomOrdersView(props) {
                     salesConfirmedAt: new Date().toISOString(),
                     stockBlocked: true,
                     stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
+                    stockDeducted: true,
                     addressProofReuploadRequested: false,
                     subTotal: cleanNum(confirmingBomModal.subTotal, orderSubTotal),
                     gstAmount: cleanNum(confirmingBomModal.gstAmount, orderGstAmount),

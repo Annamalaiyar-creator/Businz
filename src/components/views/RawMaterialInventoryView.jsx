@@ -545,7 +545,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           });
         }
       });
-      // 4. Authoritative Live BOM Allocations: Deduct quantities for all items in active/completed BOMs
+      // 4. Authoritative Live BOM Allocations: Deduct quantities ONLY for items in completed BOMs sent to dispatch
       let bomsList = [];
       try {
         const bRaw = localStorage.getItem('controlroom_bom_store');
@@ -556,7 +556,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       if (Array.isArray(bomsList)) {
         bomsList.forEach(b => {
           const st = String(b.status || '').toLowerCase();
-          if (!st.includes('cancel') && !st.includes('restored')) {
+          const isSentToDispatch = Boolean(b.salesConfirmed) || [
+            'sales confirmed - sent to dispatch',
+            'sent to production',
+            'confirmed',
+            'packed & ready for dispatch',
+            'partially packed',
+            'closed',
+            'dispatch packing verified - sent to accounts',
+            'awaiting vehicle loading & dispatch'
+          ].some(s => st.includes(s));
+          if (isSentToDispatch && !st.includes('cancel') && !st.includes('restored')) {
             (b.items || []).forEach(it => {
               const q = parseFloat(it.qty || it.bomQty || 0) || 0;
               if (q > 0) {
@@ -581,22 +591,20 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const allocated = Math.max(
           (mCode && bomAllocations.get(mCode)) || 0,
           (mNorm && bomAllocations.get(mNorm)) || 0,
-          (mFp && bomAllocations.get(mFp)) || 0,
-          Number(m.reserved) || 0,
-          Number(m.blockedForBom) || 0
+          (mFp && bomAllocations.get(mFp)) || 0
         );
 
-        if (allocated > 0) {
-          const base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : 5000)) || 5000);
-          const grnQty = Number(m.goodsReceived || 0);
-          const rem = Math.max(0, base + grnQty - allocated);
-          m.stock = rem;
-          m.availableStock = rem;
-          m.reserved = allocated;
-          m.blockedForBom = allocated;
-          const minL = Number(m.minLevel || 50);
-          m.status = rem === 0 ? 'Out of Stock' : (rem <= minL ? 'Low Stock' : 'In Stock');
-        }
+        const base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : 5000) || 5000);
+        const grnQty = Number(m.goodsReceived || 0);
+        const rem = Math.max(0, base + grnQty - allocated);
+        m.openingStock = base;
+        m.physicalStock = base;
+        m.stock = rem;
+        m.availableStock = rem;
+        m.reserved = allocated;
+        m.blockedForBom = allocated;
+        const minL = Number(m.minLevel || 50);
+        m.status = rem === 0 ? 'Out of Stock' : (rem <= minL ? 'Low Stock' : 'In Stock');
       });
 
       const filteredMaterials = Array.from(matMap.values()).filter(m => {

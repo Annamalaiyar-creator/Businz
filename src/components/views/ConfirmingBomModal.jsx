@@ -146,6 +146,9 @@ export default function ConfirmingBomModal({
                   items: finalizedItems,
                   dispatchPacking: packingItems,
                   status: 'Sent to Production',
+                  stockBlocked: true,
+                  stockBlockedAt: confirmingBomModal.stockBlockedAt || new Date().toISOString(),
+                  stockDeducted: true,
                   subTotal: confirmingBomModal.subTotal || orderSubTotal,
                   gstAmount: confirmingBomModal.gstAmount || orderGstAmount,
                   grandTotal: confirmingBomModal.grandTotal || orderGrandTotal

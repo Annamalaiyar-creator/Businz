@@ -467,9 +467,15 @@ class CentralInventoryStore {
     this.notifyChange();
   }
 
-  // Deduct Inventory immediately upon BOM Creation or Verification
+  // Deduct Inventory immediately upon BOM Verification & Sent to Dispatch
   deductStockForBOM(bomCode, itemsList = [], user = 'Production Admin') {
     if (!Array.isArray(itemsList) || itemsList.length === 0) return;
+    if (!this.deductedBomCodes) this.deductedBomCodes = new Set();
+    if (bomCode && this.deductedBomCodes.has(bomCode)) {
+      console.log(`[Central Store] BOM ${bomCode} stock already deducted. Skipping duplicate deduction.`);
+      return;
+    }
+    if (bomCode) this.deductedBomCodes.add(bomCode);
     const timestamp = new Date().toISOString();
 
     // Read current raw materials store to keep in sync
@@ -505,11 +511,14 @@ class CentralInventoryStore {
       const targetUnit = (item && item.uom) || pItem.uom || pItem.unit || 'Nos';
 
       if (item) {
-        const curStock = Math.max(0, parseFloat(item.stock !== undefined ? item.stock : (item.physicalStock || item.openingStock || 5000)) || 0);
-        const newStock = Math.max(0, curStock - qty);
+        const baseStock = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : 5000) || 5000);
+        item.openingStock = baseStock;
+        const curBlocked = (parseFloat(item.reserved) || 0) + qty;
+        const newStock = Math.max(0, baseStock - curBlocked);
         item.stock = newStock;
-        item.physicalStock = newStock;
+        item.physicalStock = baseStock;
         item.available = newStock;
+        item.reserved = curBlocked;
       }
 
       // Add to reservations
@@ -549,13 +558,15 @@ class CentralInventoryStore {
         return (pCode && mCode === pCode) || (normPName && mNorm === normPName) || (targetCode && mCode === targetCode);
       });
       if (mMatch) {
-        const curM = Math.max(0, parseFloat(mMatch.stock !== undefined ? mMatch.stock : (mMatch.physicalStock || 5000)) || 0);
-        const nextM = Math.max(0, curM - qty);
+        const baseM = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : 5000) || 5000);
+        mMatch.openingStock = baseM;
+        const newReserved = (parseFloat(mMatch.reserved) || 0) + qty;
+        const nextM = Math.max(0, baseM - newReserved);
         mMatch.stock = nextM;
         mMatch.availableStock = nextM;
-        mMatch.physicalStock = nextM;
-        mMatch.reserved = (parseFloat(mMatch.reserved) || 0) + qty;
-        mMatch.blockedForBom = (mMatch.blockedForBom || 0) + qty;
+        mMatch.physicalStock = baseM;
+        mMatch.reserved = newReserved;
+        mMatch.blockedForBom = newReserved;
         mMatch.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (mMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
       } else {
         const nextM = Math.max(0, 5000 - qty);
@@ -566,7 +577,8 @@ class CentralInventoryStore {
           unit: targetUnit,
           stock: nextM,
           availableStock: nextM,
-          physicalStock: nextM,
+          physicalStock: 5000,
+          openingStock: 5000,
           reserved: qty,
           blockedForBom: qty,
           status: nextM <= 0 ? 'Out of Stock' : 'In Stock'

@@ -1892,11 +1892,16 @@ export default function CreateBomFormPage(props) {
                       }
                     }
 
-                    // Deduct / Reserve Stock in Central Inventory & Raw Materials Stores immediately
-                    try {
-                      centralInventoryStore.deductStockForBOM(finalAssignedCode, sanitizedNewBom.items, sanitizedNewBom.salesPerson || 'Sales Executive');
-                    } catch (cErr) {
-                      console.warn('Central store deduction error in CreateBomFormPage:', cErr);
+                    // Deduct / Reserve Stock in Central Inventory & Raw Materials Stores ONLY if sent to dispatch (never for drafts)
+                    if (!isDraft) {
+                      try {
+                        centralInventoryStore.deductStockForBOM(finalAssignedCode, sanitizedNewBom.items, sanitizedNewBom.salesPerson || 'Sales Executive');
+                        sanitizedNewBom.stockBlocked = true;
+                        sanitizedNewBom.stockBlockedAt = new Date().toISOString();
+                        sanitizedNewBom.stockDeducted = true;
+                      } catch (cErr) {
+                        console.warn('Central store deduction error in CreateBomFormPage:', cErr);
+                      }
                     }
 
                     // If BOM originates from a converted Proforma Invoice, mark the PI as converted to avoid double-allocation
