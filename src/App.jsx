@@ -283,12 +283,19 @@ function App() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
       try {
-        const [poData, itemsData] = await Promise.all([
+        const [poData, itemsData, branding, rawData] = await Promise.all([
           getSafeZohoPOs(),
           getSafeZohoItems(),
-          fetchMasterBranding()
+          fetchMasterBranding(),
+          fetch('/api/raw-materials').then(r => r.json()).catch(() => [])
         ]);
         
+        if (Array.isArray(rawData) && rawData.length > 0) {
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawData));
+          } catch (_) {}
+        }
+
         if (Array.isArray(poData)) {
           setPurchaseOrders(poData);
         }
