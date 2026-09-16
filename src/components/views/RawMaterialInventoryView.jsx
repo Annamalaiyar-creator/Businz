@@ -836,8 +836,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   user: b.salesPerson || b.createdBy || 'Sales Executive',
                   role: 'Sales Department',
                   reason: isSentToDispatch
-                    ? `Deducted ${qty.toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Sales Confirmed - Forwarded to Dispatch).`
-                    : `Allocated ${qty.toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code}.`,
+                    ? `Deducted ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Sales Confirmed - Forwarded to Dispatch).`
+                    : `Allocated ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code}.`,
                   source: b.companyName || b.customerName || 'Sales Order',
                   location: selectedMat.store || 'Finished Goods Bay'
                 });
@@ -890,7 +890,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   newStock: selectedMat.stock,
                   user: g.inspectedBy || g.verifiedBy || 'Store In-Charge',
                   role: 'Warehouse Receiving',
-                  reason: `Inwarded ${recQty.toLocaleString()} ${git.unit || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
+                  reason: `Inwarded ${(Number(recQty) || 0).toLocaleString()} ${git.unit || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
                   source: g.vendorName || g.supplier || 'Procurement Order',
                   location: selectedMat.store || 'Main Store'
                 });
@@ -952,7 +952,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       newStock: initialBase,
       user: 'Central Inventory Master',
       role: 'System Setup',
-      reason: `Initial ready physical stock balance of ${initialBase.toLocaleString()} ${selectedMat.unit || 'NOS'} provisioned for active sales dispatch and manufacturing assembly.`,
+      reason: `Initial ready physical stock balance of ${(Number(initialBase) || 0).toLocaleString()} ${selectedMat.unit || 'NOS'} provisioned for active sales dispatch and manufacturing assembly.`,
       source: 'Central Finished Goods Registry',
       location: selectedMat.store || 'Finished Goods Bay'
     });
@@ -2302,7 +2302,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Physical Warehouse Stock
               </div>
               <div style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A' }}>
-                {physicalStockVal.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
+                {(Number(physicalStockVal) || 0).toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: '#64748B' }}>
                 Physical count & opening balance baseline
@@ -2315,7 +2315,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Allocated / In Dispatch
               </div>
               <div style={{ fontSize: '24px', fontWeight: '800', color: '#D97706' }}>
-                {reservedVal > 0 ? `-${reservedVal.toLocaleString()}` : '0'} <span style={{ fontSize: '13px', fontWeight: '600', color: '#B45309' }}>{selectedMat.unit || 'NOS'}</span>
+                {reservedVal > 0 ? `-${(Number(reservedVal) || 0).toLocaleString()}` : '0'} <span style={{ fontSize: '13px', fontWeight: '600', color: '#B45309' }}>{selectedMat.unit || 'NOS'}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: '#92400E' }}>
                 Blocked for confirmed sales BOMs
@@ -2328,7 +2328,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Live Available Free Stock
               </div>
               <div style={{ fontSize: '24px', fontWeight: '800', color: '#0E7490' }}>
-                {availableVal.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>{selectedMat.unit || 'NOS'}</span>
+                {(Number(availableVal) || 0).toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>{selectedMat.unit || 'NOS'}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: '#155E75', fontWeight: '600' }}>
                 Ready for immediate sales dispatch booking
@@ -2341,7 +2341,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Min. Reorder Threshold
               </div>
               <div style={{ fontSize: '24px', fontWeight: '800', color: '#334155' }}>
-                {minLevelVal.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
+                {(Number(minLevelVal) || 0).toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: availableVal <= minLevelVal ? '#DC2626' : '#16A34A', fontWeight: '600' }}>
                 {availableVal <= minLevelVal ? '⚠️ Below safety reorder level' : '✓ Stock is above minimum threshold'}
@@ -2533,7 +2533,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                               fontFamily: 'monospace',
                               display: 'inline-block'
                             }}>
-                              {isAddition ? `+${log.qty.toLocaleString()}` : log.qty.toLocaleString()} {log.unit}
+                              {isAddition ? `+${(Number(log.qty) || 0).toLocaleString()}` : (Number(log.qty) || 0).toLocaleString()} {log.unit}
                             </span>
                           </td>
 
@@ -2547,7 +2547,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                               fontSize: '11.5px',
                               fontWeight: '700'
                             }}>
-                              {log.previousStock !== undefined ? log.previousStock.toLocaleString() : '—'} → <strong style={{ color: '#0E7490' }}>{log.newStock !== undefined ? log.newStock.toLocaleString() : availableVal.toLocaleString()}</strong>
+                              {log.previousStock !== undefined ? (Number(log.previousStock) || 0).toLocaleString() : '—'} → <strong style={{ color: '#0E7490' }}>{log.newStock !== undefined ? (Number(log.newStock) || 0).toLocaleString() : (Number(availableVal) || 0).toLocaleString()}</strong>
                             </span>
                           </td>
 
@@ -2728,12 +2728,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px' }}>
                           <div>
                             <span style={{ color: '#64748B' }}>Baseline Before: </span>
-                            <strong>{log.previousStock !== undefined ? log.previousStock.toLocaleString() : '—'} {log.unit}</strong>
+                            <strong>{log.previousStock !== undefined ? (Number(log.previousStock) || 0).toLocaleString() : '—'} {log.unit}</strong>
                           </div>
                           <span>→</span>
                           <div>
                             <span style={{ color: '#64748B' }}>New Balance: </span>
-                            <strong style={{ color: '#0E7490' }}>{log.newStock !== undefined ? log.newStock.toLocaleString() : availableVal.toLocaleString()} {log.unit}</strong>
+                            <strong style={{ color: '#0E7490' }}>{log.newStock !== undefined ? (Number(log.newStock) || 0).toLocaleString() : (Number(availableVal) || 0).toLocaleString()} {log.unit}</strong>
                           </div>
                         </div>
 
@@ -2747,7 +2747,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                           fontWeight: '800',
                           fontFamily: 'monospace'
                         }}>
-                          {isAddition ? `+${log.qty.toLocaleString()}` : log.qty.toLocaleString()} {log.unit}
+                          {isAddition ? `+${(Number(log.qty) || 0).toLocaleString()}` : (Number(log.qty) || 0).toLocaleString()} {log.unit}
                         </div>
                       </div>
 
