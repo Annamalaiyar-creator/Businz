@@ -135,6 +135,9 @@ const saveDatabaseStore = async (key, storeData) => {
     } else if (key === 'item_store' && Array.isArray(storeData)) {
       const itemPath = getStoreFilePath('item_store.json');
       fs.writeFileSync(itemPath, JSON.stringify(storeData, null, 2), 'utf8');
+    } else if (key === 'po_store' && Array.isArray(storeData)) {
+      const poPath = getStoreFilePath('po_store.json');
+      fs.writeFileSync(poPath, JSON.stringify(storeData, null, 2), 'utf8');
     }
   } catch (diskErr) {
     console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
@@ -4474,7 +4477,8 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
 
   try {
     const accessToken = await getZohoAccessToken();
-    const data = await fetchZohoPurchaseOrderDetail(accessToken, poNo);
+    const realPoId = await resolveZohoPOId(accessToken, poNo);
+    const data = await fetchZohoPurchaseOrderDetail(accessToken, realPoId || poNo);
     
     if (data.purchaseorder) {
       const po = data.purchaseorder;
@@ -4664,6 +4668,20 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         paymentDetails: matchedLocalPO ? matchedLocalPO.paymentDetails : undefined,
         proceedDetails: matchedLocalPO ? matchedLocalPO.proceedDetails : undefined
       };
+
+      // Cache this fully loaded PO record into po_store.json & Supabase cloud store
+      try {
+        const localPOs = loadLocalPOs();
+        const lpIdx = localPOs.findIndex(p => p.id === translated.id || p.poNo === translated.poNo);
+        if (lpIdx !== -1) {
+          localPOs[lpIdx] = { ...localPOs[lpIdx], ...translated };
+        } else {
+          localPOs.unshift(translated);
+        }
+        saveLocalPOs(localPOs);
+        saveDatabaseStore('po_store', localPOs).catch(() => {});
+      } catch (_) {}
+
       res.json(translated);
     } else {
       throw new Error(data.message || 'Failed to fetch purchase order details from Zoho.');

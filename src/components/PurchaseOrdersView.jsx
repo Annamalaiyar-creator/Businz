@@ -995,16 +995,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     populateFormStates(po);
     setViewMode('edit');
     setActiveDropdownIdx(null);
-    if (po.id) {
+    const targetId = po.id || po.poNo || po.zohoId;
+    if (targetId) {
       setPoDetailLoading(true);
       try {
-        const res = await fetch(`/api/zoho/purchaseorders/${po.id}`);
+        const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
           if (detail && detail.items && Array.isArray(detail.items) && detail.items.length > 0) {
             populateFormStates({ ...po, ...detail });
+            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
           } else if (detail && detail.poNo) {
             populateFormStates({ ...po, ...detail, items: (po.items && po.items.length > 0) ? po.items : (detail.items || []) });
+            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
           }
         }
       } catch (err) {
@@ -1019,16 +1022,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     populateFormStates(po);
     setViewMode('view');
     setActiveDropdownIdx(null);
-    if (po.id) {
+    const targetId = po.id || po.poNo || po.zohoId;
+    if (targetId) {
       setPoDetailLoading(true);
       try {
-        const res = await fetch(`/api/zoho/purchaseorders/${po.id}`);
+        const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
           if (detail && detail.items && Array.isArray(detail.items) && detail.items.length > 0) {
             populateFormStates({ ...po, ...detail });
+            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
           } else if (detail && detail.poNo) {
             populateFormStates({ ...po, ...detail, items: (po.items && po.items.length > 0) ? po.items : (detail.items || []) });
+            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
           }
         }
       } catch (err) {
@@ -1061,10 +1067,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setViewMode('create');
 
-    if (po.id) {
+    const targetId = po.id || po.poNo || po.zohoId;
+    if (targetId) {
       setPoDetailLoading(true);
       try {
-        const res = await fetch(`/api/zoho/purchaseorders/${po.id}`);
+        const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
           if (detail && detail.items && Array.isArray(detail.items) && detail.items.length > 0) {
@@ -1921,7 +1928,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           return;
                         }
                         const target = (selectedPOs && selectedPOs.length > 0)
-                          ? (poList.find(p => p.poNo === selectedPOs[0]) || { poNo: selectedPOs[0], vendor: 'Vendor Reference' })
+                          ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
                           : (poList[0] || null);
                         if (target) {
                           handleStartView(target);
@@ -2042,7 +2049,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           return;
                         }
                         const target = (selectedPOs && selectedPOs.length > 0)
-                          ? (poList.find(p => p.poNo === selectedPOs[0]) || { poNo: selectedPOs[0], vendor: 'Vendor Reference' })
+                          ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
                           : (poList[0] || null);
                         if (target) {
                           handleStartView(target);
