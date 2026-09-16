@@ -560,7 +560,7 @@
     "store": "Bay #1 - Extrusion Yard",
     "location": "Bay #1 - Extrusion Yard",
     "hsn": "7604",
-    "minLevel": 15,
+    "minLevel": 50,
     "reorderLevel": 50,
     "id": "RM-ALU-LEN-2414MM",
     "description": "Aluminium Length 2414 mm for Solar Structure",
