@@ -32,13 +32,22 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     try {
       if (typeof prodModuleEngine !== 'undefined' && prodModuleEngine.getInventory) {
         const inv = prodModuleEngine.getInventory();
-        if (inv && inv['RM-ALU-2414'] !== undefined) return Number(inv['RM-ALU-2414']);
+        if (Array.isArray(inv)) {
+          const match = inv.find(i => i.code === 'ALU-LEN-2414MM' || i.code === 'RM-ALU-2414');
+          if (match && (match.availableStock !== undefined || match.physicalStock !== undefined || match.stock !== undefined)) {
+            const val = Number(match.availableStock ?? match.physicalStock ?? match.stock);
+            if (val > 0) return val;
+          }
+        } else if (inv && (inv['ALU-LEN-2414MM'] !== undefined || inv['RM-ALU-2414'] !== undefined)) {
+          const val = Number(inv['ALU-LEN-2414MM'] ?? inv['RM-ALU-2414']);
+          if (val > 0) return val;
+        }
       }
       const saved = localStorage.getItem('controlroom_raw_materials_store');
       if (saved) {
         const parsed = JSON.parse(saved);
-        const found = parsed.find(m => m.code === 'RM-ALU-2414' || m.code === 'MR100N');
-        if (found && found.stock !== undefined) return Number(found.stock);
+        const found = parsed.find(m => m.code === 'ALU-LEN-2414MM' || m.code === 'RM-ALU-2414' || m.code === 'MR100N');
+        if (found && found.stock !== undefined && Number(found.stock) > 0) return Number(found.stock);
       }
     } catch (e) {}
     return 250;
@@ -151,9 +160,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
   const [materials, setMaterials] = useState(() => {
     const currentEngineStock = getEngineAluStock();
-    const defaultAluLength = { code: 'RM-ALU-2414', name: 'Aluminum Length (2414 mm)', cat: 'Aluminium', category: 'Aluminium', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 100, status: 'Out of Stock', store: 'Main Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Length', stock: currentEngineStock, lengthMm: '2414', minLevel: 15, status: currentEngineStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngineStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
-    matMap.set('RM-ALU-2414', defaultAluLength);
+    matMap.set('ALU-LEN-2414MM', defaultAluLength);
 
     // 1. Seed all official VRM standardized catalog products (285 items)
     (VRM_PRODUCTS || []).forEach(p => {
@@ -336,8 +345,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
       const currentEngStock = getEngineAluStock();
-      const defaultAluLength = { code: 'RM-ALU-2414', name: 'Aluminum Length (2414 mm)', cat: 'Aluminium', unit: 'Length', stock: currentEngStock, lengthMm: '2414', minLevel: 100, status: 'In Stock', store: 'Main Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-      matMap.set('RM-ALU-2414', defaultAluLength);
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Length', stock: currentEngStock, lengthMm: '2414', minLevel: 15, status: currentEngStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      matMap.set('ALU-LEN-2414MM', defaultAluLength);
       // 1. Seed all official VRM standardized catalog products (285 items)
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
@@ -403,8 +412,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
       // Overlay live engine inventory updates (e.g. WO stock deductions & FG additions)
       (engineInv || []).forEach(item => {
-        const mappedCode = item.code === 'ALU-LEN-2414MM' ? 'RM-ALU-2414' : item.code;
-        const displayCode = mappedCode;
+        const displayCode = item.code === 'RM-ALU-2414' ? 'ALU-LEN-2414MM' : item.code;
         const mapKey = String(displayCode).toUpperCase().trim();
 
         const existing = matMap.get(mapKey) || {};

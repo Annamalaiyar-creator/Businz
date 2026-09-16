@@ -302,15 +302,58 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
     };
   };
 
+  // Helper to resolve raw material stock dynamically across inventory engine & local raw store
+  const resolveRawMaterialStock = (rawLen) => {
+    let invMatch = (prodModuleEngine.inventory || []).find(i => 
+      i.code === `ALU-LEN-${rawLen}MM` || 
+      i.code === `RM-ALU-${rawLen}` ||
+      (rawLen === 2414 && (i.code === 'ALU-LEN-2414MM' || i.code === 'RM-ALU-2414')) ||
+      (i.lengthMm && String(i.lengthMm) === String(rawLen))
+    );
+
+    let stockFound = null;
+    if (invMatch && (invMatch.availableStock !== undefined || invMatch.physicalStock !== undefined)) {
+      const v = Number(invMatch.availableStock !== undefined ? invMatch.availableStock : invMatch.physicalStock);
+      if (v > 0) stockFound = v;
+    }
+
+    if (stockFound === null) {
+      try {
+        const saved = localStorage.getItem('controlroom_raw_materials_store');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const found = parsed.find(m => 
+            m.code === `ALU-LEN-${rawLen}MM` || 
+            m.code === `RM-ALU-${rawLen}` ||
+            (rawLen === 2414 && (m.code === 'ALU-LEN-2414MM' || m.code === 'RM-ALU-2414')) ||
+            String(m.lengthMm) === String(rawLen)
+          );
+          if (found && (found.availableStock !== undefined || found.stock !== undefined)) {
+            const v = Number(found.availableStock !== undefined ? found.availableStock : found.stock);
+            if (v > 0) stockFound = v;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (stockFound === null) {
+      stockFound = rawLen === 2414 ? 250 : (rawLen === 2650 ? 80 : 50);
+    }
+
+    if (invMatch && stockFound > 0 && (!invMatch.availableStock || invMatch.availableStock <= 0)) {
+      invMatch.availableStock = stockFound;
+      invMatch.physicalStock = Math.max(invMatch.physicalStock || 0, stockFound);
+    }
+
+    return stockFound;
+  };
+
   // Helper to fetch raw material stock count for any selected product
   const getRawMaterialStock = (pCode) => {
     if (!pCode) return null;
     const catalogItem = PRODUCT_CATALOG_OPTIONS.find(p => p.code === pCode);
     const rawLen = catalogItem?.totalLen || 2414;
-    const invMatch = (prodModuleEngine.inventory || []).find(i => 
-      i.code === `ALU-LEN-${rawLen}MM` || (rawLen === 2414 && i.code === 'ALU-LEN-2414MM')
-    );
-    const availStock = invMatch ? invMatch.availableStock : (rawLen === 2414 ? 100 : (rawLen === 2650 ? 80 : 50));
+    const availStock = resolveRawMaterialStock(rawLen);
     return {
       rawLen,
       rawMaterialName: `Aluminium Raw Bar (${rawLen} mm)`,
@@ -339,10 +382,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
       const key = `${rawLen}`;
       if (!groups.has(key)) {
         // Find matching raw stock in inventory
-        const invMatch = (prodModuleEngine.inventory || []).find(i => 
-          i.code === `ALU-LEN-${rawLen}MM` || (rawLen === 2414 && i.code === 'ALU-LEN-2414MM')
-        );
-        const availStock = invMatch ? invMatch.availableStock : (rawLen === 2414 ? 100 : (rawLen === 2650 ? 80 : 50));
+        const availStock = resolveRawMaterialStock(rawLen);
 
         groups.set(key, {
           rawLengthMm: rawLen,

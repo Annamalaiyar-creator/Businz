@@ -52,7 +52,7 @@
     "items": [
       {
         "id": "PO-ITEM-0",
-        "code": "RM-ALU-2414",
+        "code": "ALU-LEN-2414MM",
         "name": "Aluminum Length (2414 mm)",
         "category": "Raw Material",
         "itemType": "Raw Material",

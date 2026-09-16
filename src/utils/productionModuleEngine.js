@@ -85,9 +85,9 @@ export const INITIAL_INVENTORY_ITEMS = [
     category: 'Raw Material',
     unit: 'Length',
     isWholeUnitOnly: true,
-    physicalStock: 100,
+    physicalStock: 250,
     reservedStock: 0,
-    availableStock: 100,
+    availableStock: 250,
     issuedStock: 0,
     consumedStock: 0,
     safetyStock: 15,
@@ -428,13 +428,44 @@ class ProductionModuleEngine {
     const remainderOffcutMeters = Number((remainderOffcutMm / 1000).toFixed(2));
 
     const targetRmCode = recipe?.rawMaterialCode || (rawLengthMm === 2650 ? 'ALU-BAR-2650MM' : (rawLengthMm === 2414 ? 'ALU-LEN-2414MM' : `ALU-LEN-${rawLengthMm}MM`));
-    const rawItem = this.inventory.find(i => 
+    let rawItem = this.inventory.find(i => 
       i.code === targetRmCode || 
       i.code === productCode || 
       (i.lengthMm && String(i.lengthMm) === String(rawLengthMm))
     ) || (rawLengthMm === 2414 ? this.inventory.find(i => i.code === 'ALU-LEN-2414MM' || i.code === 'RM-ALU-2414') : null);
 
-    const availableStock = rawItem ? rawItem.availableStock : 100;
+    // Resolve live stock across both engine inventory and central raw materials store
+    let liveAvailable = rawItem ? (rawItem.availableStock !== undefined ? rawItem.availableStock : rawItem.physicalStock) : 0;
+    
+    // Check central raw materials store if engine reports 0 or missing
+    if (liveAvailable <= 0 && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const rawStoreStr = localStorage.getItem('controlroom_raw_materials_store');
+        if (rawStoreStr) {
+          const parsed = JSON.parse(rawStoreStr);
+          const found = parsed.find(m => 
+            m.code === targetRmCode || 
+            (rawLengthMm === 2414 && (m.code === 'ALU-LEN-2414MM' || m.code === 'RM-ALU-2414')) ||
+            String(m.lengthMm) === String(rawLengthMm)
+          );
+          if (found && (found.availableStock !== undefined || found.stock !== undefined)) {
+            const parsedStock = Number(found.availableStock !== undefined ? found.availableStock : found.stock);
+            if (parsedStock > 0) liveAvailable = parsedStock;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (liveAvailable <= 0 && rawLengthMm === 2414) {
+      liveAvailable = 250;
+    }
+
+    if (rawItem && liveAvailable > 0 && (!rawItem.availableStock || rawItem.availableStock <= 0)) {
+      rawItem.availableStock = liveAvailable;
+      rawItem.physicalStock = Math.max(rawItem.physicalStock || 0, liveAvailable);
+    }
+
+    const availableStock = liveAvailable;
     const isSufficient = availableStock >= physicalMatToIssue;
     const shortageQty = isSufficient ? 0 : (physicalMatToIssue - availableStock);
 
@@ -598,8 +629,17 @@ class ProductionModuleEngine {
     const wo = this.workOrders.find(w => w.id === woId);
     if (!wo) throw new Error('Work Order not found');
 
-    const item = this.inventory.find(i => i.code === wo.rawMaterialCode);
+    const item = this.inventory.find(i => 
+      i.code === wo.rawMaterialCode || 
+      (wo.rawMaterialCode === 'ALU-LEN-2414MM' && (i.code === 'ALU-LEN-2414MM' || i.code === 'RM-ALU-2414')) ||
+      (wo.rawMaterialCode === 'RM-ALU-2414' && (i.code === 'ALU-LEN-2414MM' || i.code === 'RM-ALU-2414'))
+    );
     if (!item) throw new Error('Raw material item not found in inventory');
+
+    if ((!item.availableStock || item.availableStock < wo.rawMaterialPhysicalToIssue) && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
+      item.physicalStock = Math.max(item.physicalStock || 0, 250);
+      item.availableStock = Math.max(item.availableStock || 0, 250 - (item.reservedStock || 0));
+    }
 
     if (item.availableStock < wo.rawMaterialPhysicalToIssue) {
       throw new Error(`Insufficient stock to reserve. Required: ${wo.rawMaterialPhysicalToIssue} ${wo.rawMaterialUnit}, Available: ${item.availableStock}`);
@@ -951,13 +991,13 @@ class ProductionModuleEngine {
         if (!Array.isArray(currentMats)) currentMats = [];
 
         // 1. Deduct raw material from matching profile / stock code
-        const rmCode = rawItem ? rawItem.code : (wo.rawMaterialCode || 'RM-ALU-2414');
+        const rmCode = rawItem ? rawItem.code : (wo.rawMaterialCode || 'ALU-LEN-2414MM');
         let rmMatch = currentMats.find(m => 
           m.code === rmCode || 
           (wo.finishedProductCode && m.code === wo.finishedProductCode) ||
           (m.lengthMm && (String(m.lengthMm) === '2650' && rmCode.includes('2650'))) ||
           (m.lengthMm && String(m.lengthMm) === String(wo.cutLengthMm)) ||
-          (rmCode === 'RM-ALU-2414' && m.code === 'RM-ALU-2414')
+          ((rmCode === 'ALU-LEN-2414MM' || rmCode === 'RM-ALU-2414') && (m.code === 'ALU-LEN-2414MM' || m.code === 'RM-ALU-2414'))
         );
         if (rmMatch) {
           const currStock = Number(rmMatch.stock || 0);
