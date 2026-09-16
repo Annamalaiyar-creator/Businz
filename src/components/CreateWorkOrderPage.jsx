@@ -62,6 +62,54 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
     { id: 1, productCode: '', cutLength: '', targetQty: '' }
   ]);
 
+  // Helper to dynamically resolve person names for assigned heads from login session or registered database
+  const getAssignedHeadPersonName = (roleType) => {
+    if (typeof window === 'undefined') return roleType;
+    const currentRole = localStorage.getItem('controlroom_user_role') || '';
+    const currentName = localStorage.getItem('controlroom_logged_user_name') || '';
+
+    // 1. If active logged-in user holds this role, prioritize their active name
+    if (currentName && !currentName.includes('@') && currentName !== 'undefined' && currentName !== 'null') {
+      if (roleType === 'Floor Supervisor' && (currentRole === 'Floor Supervisor' || currentRole.toLowerCase().includes('supervisor'))) {
+        return currentName;
+      }
+      if (roleType === 'Dispatch Head' && (currentRole === 'Dispatch Head' || currentRole.toLowerCase().includes('dispatch'))) {
+        return currentName;
+      }
+    }
+
+    // 2. Look up in registered employees from local storage or cloud store
+    try {
+      const stored = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudStored = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(stored) ? stored : []), ...(Array.isArray(cloudStored) ? cloudStored : [])];
+
+      const match = allEmps.find(e => {
+        if (!e) return false;
+        const r = String(e.role || '').toLowerCase();
+        if (roleType === 'Floor Supervisor') {
+          return r === 'floor supervisor' || r.includes('supervisor');
+        }
+        if (roleType === 'Dispatch Head') {
+          return r === 'dispatch head' || r.includes('dispatch');
+        }
+        return false;
+      });
+
+      if (match) {
+        const empName = match.employee_name || match.name;
+        if (empName && !empName.includes('@') && empName !== 'undefined' && empName !== 'null') {
+          return empName;
+        }
+      }
+    } catch (e) {}
+
+    // Fallbacks
+    if (roleType === 'Dispatch Head') return 'Kalpana';
+    if (roleType === 'Floor Supervisor') return 'Floor Supervisor';
+    return roleType;
+  };
+
   // Creator details dynamically derived from active logged-in session account
   const resolveLoggedPersonName = () => {
     if (typeof window === 'undefined') return 'Production Head';
@@ -92,8 +140,8 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
     // Fallbacks mapped by role
     if (userRole === 'Production Head') return 'Senthil Kumar';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
-    if (userRole === 'Dispatch Head') return 'Karthik Raja';
-    if (userRole === 'Floor Supervisor') return 'Murugan';
+    if (userRole === 'Dispatch Head') return getAssignedHeadPersonName('Dispatch Head');
+    if (userRole === 'Floor Supervisor') return getAssignedHeadPersonName('Floor Supervisor');
     if (userRole === 'Floor Employee') return 'Ramesh';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Accounts Executive') return 'Priya';
@@ -176,6 +224,8 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
 
   const [assignedEmployee, setAssignedEmployee] = useState('');
   const [assignedHeads, setAssignedHeads] = useState(['Floor Supervisor', 'Dispatch Head']);
+  const floorSupervisorName = getAssignedHeadPersonName('Floor Supervisor');
+  const dispatchHeadName = getAssignedHeadPersonName('Dispatch Head');
 
   const [priority, setPriority] = useState('');
   const [productionLocation, setProductionLocation] = useState('');
@@ -940,7 +990,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                   style={{ accentColor: '#0E7490', width: '17px', height: '17px' }}
                 />
                 <div>
-                  <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>Murugan (Floor Supervisor)</strong>
+                  <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>{floorSupervisorName} (Floor Supervisor)</strong>
                   <span style={{ fontSize: '11.5px', color: '#64748B' }}>Floor line operations, machine stations & cutting jobs</span>
                 </div>
               </label>
@@ -971,7 +1021,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                   style={{ accentColor: '#0E7490', width: '17px', height: '17px' }}
                 />
                 <div>
-                  <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>Karthik Raja (Dispatch Head)</strong>
+                  <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>{dispatchHeadName} (Dispatch Head)</strong>
                   <span style={{ fontSize: '11.5px', color: '#64748B' }}>Packing verification, staging & dispatch readiness</span>
                 </div>
               </label>
@@ -980,7 +1030,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
             <div style={{ fontSize: '11.5px', color: '#475569', backgroundColor: '#FFFFFF', border: '1px dashed #CBD5E1', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Info size={15} style={{ color: '#0E7490', flexShrink: 0 }} />
               <span>
-                <strong>Redundancy & Fail-Safe:</strong> If either Murugan or Karthik Raja is absent, the other can immediately accept, start, or report output on mobile. A single update confirms the step for both accounts so floor production never stops.
+                <strong>Redundancy & Fail-Safe:</strong> If either {floorSupervisorName} or {dispatchHeadName} is absent, the other can immediately accept, start, or report output on mobile. A single update confirms the step for both accounts so floor production never stops.
               </span>
             </div>
           </div>

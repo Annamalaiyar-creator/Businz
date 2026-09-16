@@ -1020,9 +1020,10 @@ export default function WorkOrdersView({
                 <button
                   onClick={() => {
                     try {
-                      prodModuleEngine.acceptWorkOrder(selectedWoForAcceptanceModal.id);
+                      const empName = localStorage.getItem('controlroom_logged_user_name') || userRole || 'Floor Supervisor';
+                      prodModuleEngine.acceptWorkOrder(selectedWoForAcceptanceModal.id, empName);
                       setEngineTick(t => t + 1);
-                      alert(`✅ Work Order ${selectedWoForAcceptanceModal.id} has been ACCEPTED by Floor Employee! Status is now ACCEPTED.`);
+                      alert(`✅ Work Order ${selectedWoForAcceptanceModal.id} has been ACCEPTED by ${empName}! Status is now ACCEPTED.`);
                       setSelectedWoForAcceptanceModal(null);
                       setSelectedRows([]);
                     } catch (err) {

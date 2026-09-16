@@ -235,12 +235,19 @@ export default function DashboardFullReference({ userRole }) {
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em', wordBreak: 'break-word' }}>
               Welcome back, {(() => {
                 const storedName = localStorage.getItem('controlroom_logged_user_name');
-                if (storedName) return storedName;
+                if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
+                try {
+                  const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+                  const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+                  const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+                  const match = allEmps.find(e => e && (e.role === userRole || (userRole.includes('Supervisor') && String(e.role).includes('Supervisor')) || (userRole.includes('Dispatch') && String(e.role).includes('Dispatch'))));
+                  if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+                } catch(e) {}
                 if (userRole === 'Production Head') return 'Senthil Kumar';
                 if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
-                if (userRole === 'Dispatch Head') return 'Karthik Raja';
-                if (userRole === 'Floor Supervisor') return 'Murugan';
-                if (userRole === 'Floor Employee') return 'Ramesh';
+                if (userRole === 'Dispatch Head') return 'Kalpana';
+                if (userRole === 'Floor Supervisor') return 'Floor Supervisor';
+                if (userRole === 'Floor Employee') return 'Floor Employee';
                 if (userRole === 'Accounts Head') return 'Venkatesh';
                 if (userRole === 'Accounts Executive') return 'Priya';
                 if (userRole === 'Sales Head') return 'Vijay';

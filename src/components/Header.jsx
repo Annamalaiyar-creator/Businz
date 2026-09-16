@@ -147,13 +147,24 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
 
   // Map userRole or logged_user_name to person's actual name
   const storedName = localStorage.getItem('controlroom_logged_user_name');
-  let userName = storedName;
+  let userName = (storedName && storedName !== 'undefined' && storedName !== 'null') ? storedName : '';
+  if (!userName) {
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && (e.role === userRole || (userRole.includes('Supervisor') && String(e.role).includes('Supervisor')) || (userRole.includes('Dispatch') && String(e.role).includes('Dispatch'))));
+      if (match && (match.employee_name || match.name)) {
+        userName = match.employee_name || match.name;
+      }
+    } catch(e) {}
+  }
   if (!userName) {
     if (userRole === 'Production Head') userName = 'Senthil Kumar';
     else if (userRole === 'Technical Administrator' || userRole === 'CEO') userName = 'Annamalaiyar';
     else if (userRole === 'Dispatch Head') userName = 'Kalpana';
-    else if (userRole === 'Floor Supervisor') userName = 'Murugan';
-    else if (userRole === 'Floor Employee') userName = 'Ramesh';
+    else if (userRole === 'Floor Supervisor') userName = 'Floor Supervisor';
+    else if (userRole === 'Floor Employee') userName = 'Floor Employee';
     else if (userRole === 'Accounts Head') userName = 'Venkatesh';
     else if (userRole === 'Accounts Executive') userName = 'Priya';
     else if (userRole === 'Sales Head') userName = 'Vijay';
