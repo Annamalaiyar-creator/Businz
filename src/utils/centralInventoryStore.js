@@ -13,8 +13,8 @@ export const INITIAL_CENTRAL_ITEMS = VRM_PRODUCTS.map((p, idx) => ({
   maxLevel: 10000,
   location: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
   unitRate: p.price || (1200 + (idx * 50) % 2500),
-  openingStock: 5000,
-  stock: 5000
+  openingStock: 0,
+  stock: 0
 }));
 
 // Transaction Types
@@ -255,8 +255,8 @@ class CentralInventoryStore {
   // ----------------------------------------------------
   getInventoryItems() {
     return this.items.map(item => {
-      // Base physical opening stock (defaults to 5000 if not set)
-      const baseOpening = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : (item.stock !== undefined ? item.stock : 5000)) || 5000);
+      // Base physical opening stock (defaults to 0 if not set)
+      const baseOpening = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : (item.stock !== undefined ? item.stock : 0)) || 0);
 
       // Calculate Stock IN & Stock OUT from append-only ledger
       const txs = this.transactions.filter(t => t.itemCode === item.code);
@@ -511,7 +511,7 @@ class CentralInventoryStore {
       const targetUnit = (item && item.uom) || pItem.uom || pItem.unit || 'Nos';
 
       if (item) {
-        const baseStock = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : 5000) || 5000);
+        const baseStock = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : 0) || 0);
         item.openingStock = baseStock;
         const curBlocked = (parseFloat(item.reserved) || 0) + qty;
         const newStock = Math.max(0, baseStock - curBlocked);
@@ -558,7 +558,7 @@ class CentralInventoryStore {
         return (pCode && mCode === pCode) || (normPName && mNorm === normPName) || (targetCode && mCode === targetCode);
       });
       if (mMatch) {
-        const baseM = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : 5000) || 5000);
+        const baseM = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : 0) || 0);
         mMatch.openingStock = baseM;
         const newReserved = (parseFloat(mMatch.reserved) || 0) + qty;
         const nextM = Math.max(0, baseM - newReserved);
@@ -569,7 +569,7 @@ class CentralInventoryStore {
         mMatch.blockedForBom = newReserved;
         mMatch.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (mMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
       } else {
-        const nextM = Math.max(0, 5000 - qty);
+        const nextM = 0;
         currentMats.push({
           code: targetCode,
           name: targetName,
@@ -577,11 +577,11 @@ class CentralInventoryStore {
           unit: targetUnit,
           stock: nextM,
           availableStock: nextM,
-          physicalStock: 5000,
-          openingStock: 5000,
+          physicalStock: 0,
+          openingStock: 0,
           reserved: qty,
           blockedForBom: qty,
-          status: nextM <= 0 ? 'Out of Stock' : 'In Stock'
+          status: 'Out of Stock'
         });
       }
     });
@@ -611,7 +611,7 @@ class CentralInventoryStore {
             return (pCode && itCode === pCode) || (normPName && itNorm === normPName) || (pName && it.name && it.name.toLowerCase() === pName.toLowerCase());
           });
           if (itMatch) {
-            const basePhysical = Math.max(0, parseFloat(itMatch.physicalStock !== undefined ? itMatch.physicalStock : (itMatch.openingStock || 5000)) || 5000);
+            const basePhysical = Math.max(0, parseFloat(itMatch.physicalStock !== undefined ? itMatch.physicalStock : (itMatch.openingStock || 0)) || 0);
             itMatch.physicalStock = basePhysical;
             itMatch.reserved = (parseFloat(itMatch.reserved) || 0) + qty;
             const newSt = Math.max(0, basePhysical - itMatch.reserved);
@@ -1076,7 +1076,47 @@ class CentralInventoryStore {
       reserved: 0
     }));
     this.reservations = [];
+    try {
+      localStorage.removeItem(this.storageKeyReservations);
+    } catch (_) {}
     this.saveItems();
+    try {
+      saveCloudStore('item_store', this.items);
+    } catch (_) {}
+
+    const rawMaterials0 = this.items.map(item => ({
+      code: item.code,
+      name: item.name,
+      cat: item.cat || 'Structure Assemblies',
+      category: item.cat || 'Structure Assemblies',
+      unit: item.uom || 'Nos',
+      stock: 0,
+      physicalStock: 0,
+      availableStock: 0,
+      minLevel: item.minLevel || 50,
+      reorderLevel: item.reorderLevel || 100,
+      status: 'Out of Stock',
+      store: item.location || 'Main Store',
+      hsn: '7604',
+      lastUpdated: 'Stock Set to 0',
+      reserved: 0,
+      openingStock: 0,
+      goodsReceived: 0,
+      issuedProd: 0,
+      matReturn: 0,
+      stockAdj: 0
+    }));
+
+    try {
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMaterials0));
+      saveCloudStore('raw_materials_store', rawMaterials0);
+    } catch (_) {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+      window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_raw_materials_store' } }));
+    } catch (_) {}
+
     this.notifyChange();
     return this.items;
   }

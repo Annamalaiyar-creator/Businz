@@ -2316,7 +2316,7 @@ export default function StockStatusView(props) {
               const itFp = wordFingerprint(nameKey);
               const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (itNorm && rawMatMap.get(itNorm)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
 
-              const physicalBase = Math.max(0, Number(matchedMat?.physicalStock || matchedMat?.openingStock || it.physicalStock || it.openingStock || 5000));
+              const physicalBase = Math.max(0, Number(matchedMat?.physicalStock ?? matchedMat?.openingStock ?? it.physicalStock ?? it.openingStock ?? 0));
               const activeBlocked = Math.max(
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
                 (itNorm && bomReservedMap.get(itNorm)) || 0,
@@ -2565,7 +2565,7 @@ export default function StockStatusView(props) {
               const itFp = wordFingerprint(nameKey);
               const matchedMat = (codeKey && rawMatMap.get(codeKey)) || (itNorm && rawMatMap.get(itNorm)) || (nameKey && rawMatMap.get(nameKey)) || (itFp && rawMatMap.get(itFp));
 
-              const physicalBase = Math.max(0, Number(matchedMat?.physicalStock || matchedMat?.openingStock || it.physicalStock || it.openingStock || 5000));
+              const physicalBase = Math.max(0, Number(matchedMat?.physicalStock ?? matchedMat?.openingStock ?? it.physicalStock ?? it.openingStock ?? 0));
               const activeBlocked = Math.max(
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
                 (itNorm && bomReservedMap.get(itNorm)) || 0,

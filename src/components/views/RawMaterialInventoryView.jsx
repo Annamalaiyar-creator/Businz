@@ -101,39 +101,39 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
 
   const ALUMINUM_PROFILES = [
-    { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Aluminium', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 150, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 220, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 180, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR100O', name: 'MINI RAIL 100mm (300mm) OLD', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 260, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR100N', name: 'MINI RAIL 100mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: getEngineAluStock(), minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR125', name: 'MINI RAIL 125mm (300mm)', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 180, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'LC', name: 'Locking Nut (LC)', cat: 'Aluminium', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 140, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR60', name: 'Mini Rail 60mm (MR60)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '60 mm', stock: 190, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR60N', name: 'MINI RAIL 60mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 190, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR40', name: 'Mini Rail 40mm (MR40)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '40 mm', stock: 210, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MR40N', name: 'MINI RAIL 40mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 210, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 175, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 160, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Aluminium', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 130, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'TOP-2M', name: 'Top Section 2 Mtr (TOP-2M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 240, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'BOT-2M', name: 'Bottom Section 2 Mtr (BOT-2M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 230, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'TOP-1.5M', name: 'Top Section 1.5 Mtr (TOP-1.5M)', cat: 'Aluminium', unit: 'Length', lengthMm: '1500', cutLength: '1500 mm', stock: 210, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'BOT-2.4M', name: 'Bottom Section 2.4 Mtr (BOT-2.4M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2400', cutLength: '2400 mm', stock: 195, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MC35', name: 'Mid Clamp 35mm (MC35)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 320, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'MC30', name: 'Mid Clamp 30mm (MC30)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '30 mm', stock: 310, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'T10', name: 'T Nut 10mm (T10)', cat: 'Aluminium', unit: 'Length', lengthMm: '2562', cutLength: '10 mm', stock: 280, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'UM', name: 'Mid Clamp Universal (UM)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 250, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'UE', name: 'End Clamp 35mm New (UE)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 340, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'EC35', name: 'End Clamp 35mm (EC35)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 300, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'ALB', name: 'L Bracket (ALB)', cat: 'Aluminium', unit: 'Length', lengthMm: '2050', cutLength: '2050 mm', stock: 260, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
-    { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Aluminium', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 290, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' }
+    { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Aluminium', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR100O', name: 'MINI RAIL 100mm (300mm) OLD', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR100N', name: 'MINI RAIL 100mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR125', name: 'MINI RAIL 125mm (300mm)', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'LC', name: 'Locking Nut (LC)', cat: 'Aluminium', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR60', name: 'Mini Rail 60mm (MR60)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '60 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR60N', name: 'MINI RAIL 60mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR40', name: 'Mini Rail 40mm (MR40)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '40 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR40N', name: 'MINI RAIL 40mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 0, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 0, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Aluminium', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 0, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'TOP-2M', name: 'Top Section 2 Mtr (TOP-2M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'BOT-2M', name: 'Bottom Section 2 Mtr (BOT-2M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'TOP-1.5M', name: 'Top Section 1.5 Mtr (TOP-1.5M)', cat: 'Aluminium', unit: 'Length', lengthMm: '1500', cutLength: '1500 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'BOT-2.4M', name: 'Bottom Section 2.4 Mtr (BOT-2.4M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2400', cutLength: '2400 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MC35', name: 'Mid Clamp 35mm (MC35)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MC30', name: 'Mid Clamp 30mm (MC30)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '30 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'T10', name: 'T Nut 10mm (T10)', cat: 'Aluminium', unit: 'Length', lengthMm: '2562', cutLength: '10 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'UM', name: 'Mid Clamp Universal (UM)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'UE', name: 'End Clamp 35mm New (UE)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'EC35', name: 'End Clamp 35mm (EC35)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'ALB', name: 'L Bracket (ALB)', cat: 'Aluminium', unit: 'Length', lengthMm: '2050', cutLength: '2050 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Aluminium', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' }
   ];
 
   const initialMaterials = useMemo(() => ALUMINUM_PROFILES.map(p => ({
     ...p,
     lastUpdated: 'Live Store',
     reserved: 0,
-    openingStock: p.stock,
+    openingStock: 0,
     goodsReceived: 0,
     issuedProd: 0,
     matReturn: 0,
@@ -151,7 +151,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
   const [materials, setMaterials] = useState(() => {
     const currentEngineStock = getEngineAluStock();
-    const defaultAluLength = { code: 'RM-ALU-2414', name: 'Aluminum Length (2414 mm)', cat: 'Aluminium', category: 'Aluminium', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 100, status: 'In Stock', store: 'Main Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'RM-ALU-2414', name: 'Aluminum Length (2414 mm)', cat: 'Aluminium', category: 'Aluminium', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 100, status: 'Out of Stock', store: 'Main Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('RM-ALU-2414', defaultAluLength);
 
@@ -165,15 +165,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         unit: p.uom || 'Nos',
-        stock: 5000,
+        stock: 0,
         minLevel: 50,
         reorderLevel: 100,
-        status: 'In Stock',
+        status: 'Out of Stock',
         store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
         hsn: '7604',
         lastUpdated: 'Live Store',
         reserved: 0,
-        openingStock: 5000,
+        openingStock: 0,
         goodsReceived: 0,
         issuedProd: 0,
         matReturn: 0,
@@ -184,12 +184,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     (initialMaterials || []).forEach(m => {
       const key = String(m.code).toUpperCase().trim();
       const existing = matMap.get(key) || {};
-      const sVal = m.stock !== undefined ? Number(m.stock) : 5000;
+      const sVal = m.stock !== undefined ? Number(m.stock) : 0;
       matMap.set(key, {
         ...existing,
         ...m,
         stock: sVal,
-        openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 5000,
+        openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 0,
         status: sVal > 0 ? 'In Stock' : 'Out of Stock'
       });
     });
@@ -203,7 +203,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const upperName = it.name ? String(it.name).toUpperCase() : '';
         const grnReceived = completedGrnMapInitial.get(upperKey) || (upperName ? completedGrnMapInitial.get(upperName) : null);
         const recQty = grnReceived ? Number(grnReceived.receivedQty || 0) : 0;
-        const itStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 5000;
+        const itStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 0;
 
         if (matMap.has(upperKey)) {
           const existing = matMap.get(upperKey);
@@ -211,7 +211,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             ...existing,
             name: it.name || existing.name,
             stock: itStock,
-            openingStock: it.openingStock !== undefined ? Number(it.openingStock) : 5000,
+            openingStock: it.openingStock !== undefined ? Number(it.openingStock) : 0,
             goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
             status: itStock > 0 ? 'In Stock' : 'Out of Stock',
             lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
@@ -233,7 +233,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           hsn: '7604',
           lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
           reserved: 0,
-          openingStock: 5000,
+          openingStock: 0,
           goodsReceived: recQty,
           issuedProd: 0,
           matReturn: 0,
@@ -252,14 +252,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           savedMats.forEach(sm => {
             const mapKey = String(sm.code || sm.name).toUpperCase().trim();
             const existing = matMap.get(mapKey) || {};
-            const smStock = sm.stock !== undefined ? Number(sm.stock) : 5000;
+            const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
             matMap.set(mapKey, {
               ...existing,
               ...sm,
               code: sm.code || existing.code || mapKey,
               name: sm.name || existing.name,
               stock: smStock,
-              openingStock: (sm.openingStock !== undefined && Number(sm.openingStock) >= 5000) ? Number(sm.openingStock) : 5000,
+              openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
               status: smStock > 0 ? 'In Stock' : 'Out of Stock'
             });
           });
@@ -348,15 +348,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           unit: p.uom || 'Nos',
-          stock: 5000,
+          stock: 0,
           minLevel: 50,
           reorderLevel: 100,
-          status: 'In Stock',
+          status: 'Out of Stock',
           store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
           hsn: '7604',
           lastUpdated: 'Live Store',
           reserved: 0,
-          openingStock: 5000,
+          openingStock: 0,
           goodsReceived: 0,
           issuedProd: 0,
           matReturn: 0,
@@ -367,12 +367,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       (initialMaterials || []).forEach(m => {
         const key = String(m.code).toUpperCase().trim();
         const existing = matMap.get(key) || {};
-        const mStock = m.stock !== undefined ? Number(m.stock) : 5000;
+        const mStock = m.stock !== undefined ? Number(m.stock) : 0;
         matMap.set(key, {
           ...existing,
           ...m,
           stock: mStock,
-          openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 5000,
+          openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 0,
           status: mStock > 0 ? 'In Stock' : 'Out of Stock'
         });
       });
@@ -386,14 +386,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             savedMats.forEach(sm => {
               const mapKey = String(sm.code || sm.name).toUpperCase().trim();
               const existing = matMap.get(mapKey) || {};
-              const smStock = sm.stock !== undefined ? Number(sm.stock) : 5000;
+              const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
               matMap.set(mapKey, {
                 ...existing,
                 ...sm,
                 code: sm.code || existing.code || mapKey,
                 name: sm.name || existing.name,
                 stock: smStock,
-                openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 5000,
+                openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
                 status: smStock > 0 ? 'In Stock' : 'Out of Stock'
               });
             });
@@ -411,7 +411,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const engineStock = item.physicalStock !== undefined ? Number(item.physicalStock) : null;
         const stockVal = engineStock !== null
           ? engineStock
-          : (existing.stock !== undefined ? Number(existing.stock) : 5000);
+          : (existing.stock !== undefined ? Number(existing.stock) : 0);
         const minLvl = Number(item.safetyStock || existing.minLevel || 50);
         let statusText = 'In Stock';
         if (stockVal === 0) statusText = 'Out of Stock';
@@ -444,17 +444,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           if (matMap.has(upperKey)) {
             const existing = matMap.get(upperKey);
             const existingStock = existing.stock !== undefined ? existing.stock : null;
-            const isExistingReduced = existingStock !== null && existingStock < (existing.openingStock || 5000);
+            const isExistingReduced = existingStock !== null && existingStock < (existing.openingStock || 0);
             const incomingStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : null;
             const finalStock = isExistingReduced
               ? existingStock
-              : (incomingStock !== null ? incomingStock : (existingStock ?? 5000));
+              : (incomingStock !== null ? incomingStock : (existingStock ?? 0));
 
             matMap.set(upperKey, {
               ...existing,
               name: it.name || existing.name,
               stock: finalStock,
-              openingStock: existing.openingStock || 5000,
+              openingStock: existing.openingStock || 0,
               goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
               status: finalStock === 0 ? 'Out of Stock' : (finalStock <= (existing.minLevel || 50) ? 'Low Stock' : 'In Stock'),
               lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
@@ -469,14 +469,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             cat: it.category || it.material || 'General',
             category: it.category || it.material || 'General',
             unit: it.unit || it.uom || 'Nos',
-            stock: (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 5000,
+            stock: (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 0,
             minLevel: 50,
             status: ((it.stock !== undefined && Number(it.stock) === 0) ? 'Out of Stock' : 'In Stock'),
             store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
             hsn: '7604',
             lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
             reserved: 0,
-            openingStock: 5000,
+            openingStock: 0,
             goodsReceived: recQty,
             issuedProd: 0,
             matReturn: 0,
@@ -599,7 +599,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           (mFp && bomAllocations.get(mFp)) || 0
         );
 
-        const base = Math.max(0, parseFloat(m.openingStock !== undefined && Number(m.openingStock) >= 5000 ? m.openingStock : (m.physicalStock && Number(m.physicalStock) >= 5000 ? m.physicalStock : 5000)) || 5000);
+        const base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0);
         const grnQty = Number(m.goodsReceived || 0);
 
         // If the item already has an authoritative stock and reserved count from server / cloud
@@ -791,7 +791,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   }
                 } catch (_) {}
 
-                const baseStock = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 5000)) || 5000);
+                const baseStock = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
                 const afterStock = Math.max(0, baseStock - qty);
 
                 logs.push({
@@ -910,7 +910,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     } catch (_) {}
 
     // 4. Initial Physical Stock Baseline Setup
-    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 5000)) || 5000);
+    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
     logs.push({
       id: `INIT-${selectedMat.code}`,
       timestamp: 'Initial Setup Baseline',
@@ -2104,7 +2104,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const stFg = isOut ? '#B91C1C' : isLow ? '#C2410C' : '#15803D';
     const stBorder = isOut ? '1px solid #FEE2E2' : isLow ? '1px solid #FFEDD5' : '1px solid #DCFCE7';
 
-    const physicalStockVal = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 5000)) || 5000);
+    const physicalStockVal = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
     const reservedVal = Math.max(0, parseFloat(selectedMat.reserved !== undefined ? selectedMat.reserved : (selectedMat.blockedForBom || 0)) || 0);
     const availableVal = selectedMat.stock !== undefined ? selectedMat.stock : Math.max(0, physicalStockVal - reservedVal);
     const minLevelVal = parseFloat(selectedMat.minLevel || 50) || 50;

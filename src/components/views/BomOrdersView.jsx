@@ -684,7 +684,7 @@ export default function BomOrdersView(props) {
         });
 
         if (match) {
-          const basePhysical = Math.max(0, parseFloat(String(match.physicalStock || match.openingStock || 5000).replace(/,/g, '')) || 5000);
+          const basePhysical = Math.max(0, parseFloat(String(match.physicalStock ?? match.openingStock ?? 0).replace(/,/g, '')) || 0);
           match.physicalStock = basePhysical;
           match.reserved = Math.max(0, (parseFloat(match.reserved) || 0) - qtyToRestore);
           match.blockedForBom = Math.max(0, (match.blockedForBom || 0) - qtyToRestore);
@@ -704,7 +704,7 @@ export default function BomOrdersView(props) {
           return false;
         });
         if (itemMatch) {
-          const baseItemPhysical = Math.max(0, parseFloat(String(itemMatch.physicalStock || itemMatch.openingStock || 5000).replace(/,/g, '')) || 5000);
+          const baseItemPhysical = Math.max(0, parseFloat(String(itemMatch.physicalStock ?? itemMatch.openingStock ?? 0).replace(/,/g, '')) || 0);
           itemMatch.physicalStock = baseItemPhysical;
           itemMatch.reserved = Math.max(0, (parseFloat(itemMatch.reserved) || 0) - qtyToRestore);
           const newItemStock = Math.max(0, baseItemPhysical - itemMatch.reserved);

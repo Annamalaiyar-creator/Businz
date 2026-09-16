@@ -75,9 +75,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     // Live stock balance lookup:
     // 1. Raw materials store (Authoritative inventory store)
     // 2. Central inventory store
-    // 3. 5000 baseline
+    // 3. 0 baseline
     let realStock = null;
-    let baseStock = 5000;
+    let baseStock = 0;
 
     const findInStore = (store) => {
       if (codeKey && store.has(codeKey)) return Number(store.get(codeKey));
@@ -97,8 +97,8 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       realStock = Math.max(0, centralBal);
       baseStock = realStock;
     } else {
-      realStock = 5000;
-      baseStock = 5000;
+      realStock = 0;
+      baseStock = 0;
     }
 
     const itemRecord = {

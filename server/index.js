@@ -6100,6 +6100,150 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
   }
 });
 
+// Universal Stock Reset to ZERO Endpoint: Sets EVERY single item's stock to 0
+app.all('/api/inventory/reset-to-zero', async (req, res) => {
+  try {
+    const localItems = loadLocalItems();
+    const existingRaw = supabaseMemoryStore.raw_materials_store || [];
+    
+    const itemMap = new Map();
+
+    (VRM_PRODUCTS || []).forEach(p => {
+      const code = p.code || resolveProductCode(p) || p.name;
+      const key = String(code).toUpperCase().trim();
+      itemMap.set(key, {
+        code: p.code || code,
+        sku: p.code || code,
+        itemId: p.code || code,
+        name: p.name,
+        cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
+        category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
+        unit: p.uom || 'Nos',
+        uom: p.uom || 'Nos',
+        price: p.price || p.rate || 0,
+        rate: p.price || p.rate || 0,
+        gstRate: p.gst || '18%',
+        status: 'Out of Stock',
+        productType: 'goods',
+        store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
+        location: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
+        hsn: '7604',
+        minLevel: 50,
+        reorderLevel: 100
+      });
+    });
+
+    (existingRaw || []).forEach(rm => {
+      const code = rm.code || rm.sku || rm.itemId || rm.name;
+      if (!code) return;
+      const key = String(code).toUpperCase().trim();
+      const existing = itemMap.get(key) || {};
+      itemMap.set(key, {
+        ...existing,
+        ...rm,
+        code: rm.code || existing.code || code,
+        name: rm.name || existing.name,
+        cat: rm.cat || rm.category || existing.cat || 'Aluminium',
+        category: rm.cat || rm.category || existing.cat || 'Aluminium',
+        unit: rm.unit || rm.uom || existing.unit || 'Nos'
+      });
+    });
+
+    (localItems || []).forEach(it => {
+      const code = it.code || it.sku || it.itemId || it.name;
+      if (!code) return;
+      const key = String(code).toUpperCase().trim();
+      const existing = itemMap.get(key) || {};
+      itemMap.set(key, {
+        ...existing,
+        ...it,
+        code: it.code || it.sku || existing.code || code,
+        name: it.name || existing.name,
+        cat: it.category || it.material || existing.cat || 'General',
+        category: it.category || it.material || existing.cat || 'General',
+        unit: it.unit || it.uom || existing.unit || 'Nos'
+      });
+    });
+
+    // Reset ALL stock to exactly 0
+    const zeroList = Array.from(itemMap.values()).map(item => ({
+      ...item,
+      stock: 0,
+      openingStock: 0,
+      physicalStock: 0,
+      availableStock: 0,
+      stockOnHand: 0,
+      reserved: 0,
+      blockedForBom: 0,
+      goodsReceived: 0,
+      issuedProd: 0,
+      matReturn: 0,
+      stockAdj: 0,
+      status: 'Out of Stock',
+      lastUpdated: 'Stock Set to 0'
+    }));
+
+    // Persist to raw_materials_store
+    const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+    try {
+      fs.writeFileSync(rawMatsPath, JSON.stringify(zeroList, null, 2), 'utf8');
+    } catch (_) {}
+    supabaseMemoryStore.raw_materials_store = zeroList;
+    await saveDatabaseStore('raw_materials_store', zeroList);
+
+    // Persist to item_store
+    const itemsPath = getStoreFilePath('item_store.json');
+    try {
+      fs.writeFileSync(itemsPath, JSON.stringify(zeroList, null, 2), 'utf8');
+    } catch (_) {}
+    supabaseMemoryStore.item_store = zeroList;
+    await saveDatabaseStore('item_store', zeroList);
+
+    // Persist to vrm_prod_inventory
+    const vrmPath = getStoreFilePath('vrm_prod_inventory.json');
+    let vrmItems = [];
+    try {
+      if (fs.existsSync(vrmPath)) {
+        vrmItems = JSON.parse(fs.readFileSync(vrmPath, 'utf8'));
+      }
+    } catch (_) {}
+    if (Array.isArray(vrmItems) && vrmItems.length > 0) {
+      vrmItems = vrmItems.map(vi => ({
+        ...vi,
+        physicalStock: 0,
+        availableStock: 0,
+        reservedStock: 0,
+        issuedStock: 0,
+        consumedStock: 0,
+        stock: 0,
+        openingStock: 0,
+        status: 'Out of Stock'
+      }));
+      try {
+        fs.writeFileSync(vrmPath, JSON.stringify(vrmItems, null, 2), 'utf8');
+      } catch (_) {}
+      supabaseMemoryStore.vrm_prod_inventory = vrmItems;
+      await saveDatabaseStore('vrm_prod_inventory', vrmItems);
+    }
+
+    // Broadcast update to all connected clients immediately
+    broadcastRealtimeEvent('inventory_updated', { rawMaterials: zeroList });
+    broadcastRealtimeEvent('item_store_updated', { items: zeroList });
+    broadcastRealtimeEvent('vrm_inventory_updated', { inventory: vrmItems });
+    broadcastRealtimeEvent('stock_reset_0', { timestamp: new Date().toISOString() });
+
+    console.log(`✅ [STOCK RESET TO 0] All ${zeroList.length} items set to exactly 0 stock!`);
+    res.json({
+      success: true,
+      count: zeroList.length,
+      message: `Successfully set every item stock to 0 across all stores.`
+    });
+  } catch (err) {
+    console.error('Error during stock reset to 0:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // ==========================================
 // 📱 META WHATSAPP CLOUD API & CRM BACKEND
