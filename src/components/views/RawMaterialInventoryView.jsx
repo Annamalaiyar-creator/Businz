@@ -945,7 +945,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   }, [selectedMat]);
 
   const filteredMaterials = useMemo(() => {
-    const isRawMaterialDirectory = activeTab === 'Raw Material Directory';
+    const isRawMaterialDirectory = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
     
     return materials.filter(m => {
       const mName = String(m.name || '').trim();
@@ -956,17 +956,32 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       // Filter out invalid items or blank rows upfront
       if (!mCode || !mName || mCode === '—' || mCodeLower.includes('item') || mCodeLower === 'rm-vrm' || mCodeLower === 'mr100' || mNameLower === 'mini rail') return false;
 
+      // Identify whether an item is raw material
+      const isRawMaterial = (
+        mCodeLower === 'rm-alu-2414' ||
+        mCodeLower.startsWith('alu-len') ||
+        mCodeLower.startsWith('alu-bar') ||
+        mCodeLower.startsWith('alu-coil') ||
+        mCodeLower.startsWith('rm-') ||
+        mNameLower.includes('aluminum length') ||
+        mNameLower.includes('aluminium length') ||
+        mNameLower.includes('raw bar') ||
+        mNameLower.includes('raw alu') ||
+        mNameLower.includes('strip coil') ||
+        m.cat === 'Raw Material' ||
+        m.category === 'Raw Material' ||
+        m.itemType === 'Raw Material' ||
+        m.productType === 'raw_material' ||
+        m.unit === 'Raw Bars' ||
+        (m.unit === 'Length' && !mNameLower.includes('rail') && !mNameLower.includes('purlin') && !mNameLower.includes('leg') && !mNameLower.includes('bracket') && !mNameLower.includes('section'))
+      );
+
       if (isRawMaterialDirectory) {
-        // Raw Material Directory strictly shows ONLY Aluminum Length alone
-        const isAluLength = (
-          mCodeLower === 'rm-alu-2414' ||
-          mCodeLower.startsWith('alu-len') ||
-          mNameLower.startsWith('aluminum length') ||
-          mNameLower.startsWith('aluminium length') ||
-          mNameLower === 'aluminum length' ||
-          mNameLower === 'aluminium length'
-        );
-        if (!isAluLength) return false;
+        // Raw Material Directory strictly shows ONLY raw material items
+        if (!isRawMaterial) return false;
+      } else {
+        // Inventory Stores strictly shows ONLY finished goods / non-raw-materials (NEVER show raw materials)
+        if (isRawMaterial) return false;
       }
 
       const q = (searchQuery || '').toLowerCase().trim();
@@ -1696,10 +1711,22 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     const searchFilter = (receiptItems[0]?.material || '').trim().toLowerCase();
                     const availableList = materials.filter(m => {
                       const mCode = String(m.code || '').toLowerCase();
-                      if (!m.code || m.code === '—' || mCode.includes('item') || mCode === 'rm-vrm' || mCode === 'mr100') return false;
-                      if (activeTab === 'Raw Material Directory') {
-                        const isAlu = mCode === 'rm-alu-2414' || mCode.startsWith('alu-len') || (m.name || '').toLowerCase().includes('aluminum length') || (m.name || '').toLowerCase().includes('aluminium length');
-                        if (!isAlu) return false;
+                      const isRawDir = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
+                      const isRaw = (
+                        mCode === 'rm-alu-2414' ||
+                        mCode.startsWith('alu-len') ||
+                        mCode.startsWith('alu-bar') ||
+                        mCode.startsWith('alu-coil') ||
+                        mCode.startsWith('rm-') ||
+                        (m.name || '').toLowerCase().includes('aluminum length') ||
+                        (m.name || '').toLowerCase().includes('aluminium length') ||
+                        m.cat === 'Raw Material' ||
+                        m.category === 'Raw Material'
+                      );
+                      if (isRawDir) {
+                        if (!isRaw) return false;
+                      } else {
+                        if (isRaw) return false;
                       }
                       if (searchFilter) {
                         return (m.name || '').toLowerCase().includes(searchFilter) || mCode.includes(searchFilter);
@@ -1893,7 +1920,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     );
   }
 
-  const isRawMaterialDirectory = activeTab === 'Raw Material Directory';
+  const isRawMaterialDirectory = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
 
   const pageConfig = {
     title: isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores',
