@@ -147,6 +147,8 @@ const saveDatabaseStore = async (key, storeData) => {
       broadcastRealtimeEvent('inventory_updated', { rawMaterials: storeData });
     } else if (key === 'item_store' || key === 'vrm_prod_inventory') {
       broadcastRealtimeEvent('item_store_updated', { items: storeData });
+    } else if (key === 'bom_store') {
+      broadcastRealtimeEvent('bom_updated', { bomList: storeData });
     }
   } catch (_) {}
   const employeeKey = key.toUpperCase();
@@ -3236,6 +3238,15 @@ app.post('/api/boms', async (req, res) => {
         } catch (rErr) {
           console.error('Error reconciling inventory after BOM save:', rErr);
         }
+
+        // Real-time sub-second push to all connected browsers/devices immediately
+        try {
+          broadcastRealtimeEvent('bom_updated', { bom, bomList: mergedList });
+          broadcastRealtimeEvent('inventory_updated', { rawMaterials: supabaseMemoryStore.raw_materials_store });
+          broadcastRealtimeEvent('item_store_updated', { items: supabaseMemoryStore.item_store });
+          broadcastRealtimeEvent('store_updated', { key: 'raw_materials_store', storeData: supabaseMemoryStore.raw_materials_store });
+          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: mergedList });
+        } catch (_) {}
 
         // Await cloud sync to Supabase before sending response so state is never lost
         try {

@@ -300,7 +300,29 @@ function App() {
           setPurchaseOrders(poData);
         }
         if (Array.isArray(itemsData)) {
-          setItemsList(itemsData);
+          let mergedItems = [...itemsData];
+          if (Array.isArray(rawData) && rawData.length > 0) {
+            const rawMap = new Map();
+            rawData.forEach(rm => {
+              const k = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
+              rawMap.set(k, rm);
+            });
+            mergedItems = mergedItems.map(it => {
+              const k = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
+              const rm = rawMap.get(k);
+              if (rm) {
+                return {
+                  ...it,
+                  stock: rm.stock !== undefined ? rm.stock : it.stock,
+                  availableStock: rm.availableStock !== undefined ? rm.availableStock : it.availableStock,
+                  physicalStock: rm.physicalStock !== undefined ? rm.physicalStock : it.physicalStock,
+                  reserved: rm.reserved !== undefined ? rm.reserved : it.reserved
+                };
+              }
+              return it;
+            });
+          }
+          setItemsList(mergedItems);
           try {
             window.dispatchEvent(new Event('central_inventory_updated'));
           } catch (e) {}
@@ -313,6 +335,40 @@ function App() {
     };
 
     fetchDashboardData();
+
+    // Listen to real-time inventory updates so all logged-in employees see stock updates with 0s latency
+    const handleRawUpdate = (e) => {
+      const updated = e?.detail?.rawMaterials || e?.detail?.storeData;
+      if (Array.isArray(updated) && updated.length > 0) {
+        setItemsList(prev => {
+          if (!Array.isArray(prev)) return prev;
+          const rawMap = new Map();
+          updated.forEach(rm => {
+            const k = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
+            rawMap.set(k, rm);
+          });
+          return prev.map(it => {
+            const k = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
+            const rm = rawMap.get(k);
+            if (rm) {
+              return {
+                ...it,
+                stock: rm.stock !== undefined ? rm.stock : it.stock,
+                availableStock: rm.availableStock !== undefined ? rm.availableStock : it.availableStock,
+                physicalStock: rm.physicalStock !== undefined ? rm.physicalStock : it.physicalStock,
+                reserved: rm.reserved !== undefined ? rm.reserved : it.reserved
+              };
+            }
+            return it;
+          });
+        });
+      }
+    };
+
+    window.addEventListener('controlroom_raw_materials_update', handleRawUpdate);
+    return () => {
+      window.removeEventListener('controlroom_raw_materials_update', handleRawUpdate);
+    };
   }, []);
 
   if (!isAuthenticated || !userRole) {

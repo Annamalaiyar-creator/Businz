@@ -151,6 +151,8 @@ export default function BomOrdersView(props) {
     window.addEventListener('controlroom_storage_update', syncFromStorage);
     window.addEventListener('controlroom_store_update', syncFromStorage);
     window.addEventListener('controlroom_customer_update', syncFromStorage);
+    window.addEventListener('controlroom_bom_updated', syncFromStorage);
+    window.addEventListener('controlroom_bom_store_updated', syncFromStorage);
 
     return () => {
       clearInterval(pollInterval);
@@ -159,6 +161,8 @@ export default function BomOrdersView(props) {
       window.removeEventListener('controlroom_storage_update', syncFromStorage);
       window.removeEventListener('controlroom_store_update', syncFromStorage);
       window.removeEventListener('controlroom_customer_update', syncFromStorage);
+      window.removeEventListener('controlroom_bom_updated', syncFromStorage);
+      window.removeEventListener('controlroom_bom_store_updated', syncFromStorage);
     };
   }, []);
 
@@ -360,8 +364,9 @@ export default function BomOrdersView(props) {
     const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
     const curEmail = currentLoggedEmail;
 
-    // If no identity can be determined, show all to prevent total lockout
-    if (!curCode && !curName && !curEmail) return rawList;
+    // Helper to normalize names (handles 'Mohit' vs 'Mohith', spaces, punctuation)
+    const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/h/g, '');
+    const cleanCurNorm = normA(curName);
 
     return rawList.filter(b => {
       if (!b) return false;
@@ -379,21 +384,32 @@ export default function BomOrdersView(props) {
       }
 
       const spCode = (b.salesPersonCode || b.createdById || '').trim().toUpperCase();
-      if (curCode && spCode && spCode === curCode) return true;
+      if (curCode && spCode && (spCode === curCode || spCode.includes(curCode) || curCode.includes(spCode))) return true;
 
       const spName = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
       const creatorName = (b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+      // Normalize spellings (e.g. Mohit JV vs MOHITH J V)
+      const cleanSpNorm = normA(spName);
+      const cleanCreatorNorm = normA(creatorName);
+
+      if (cleanCurNorm) {
+        if (cleanSpNorm && (cleanSpNorm === cleanCurNorm || cleanSpNorm.includes(cleanCurNorm) || cleanCurNorm.includes(cleanSpNorm))) return true;
+        if (cleanCreatorNorm && (cleanCreatorNorm === cleanCurNorm || cleanCreatorNorm.includes(cleanCurNorm) || cleanCurNorm.includes(cleanCreatorNorm))) return true;
+      }
+
       if (curName) {
         if (spName && (spName === curName || spName.includes(curName) || curName.includes(spName))) return true;
         if (creatorName && (creatorName === curName || creatorName.includes(curName) || curName.includes(creatorName))) return true;
-        const cleanCur = curName.replace(/\s+/g, '');
-        if (spName && spName.replace(/\s+/g, '').includes(cleanCur)) return true;
-        if (creatorName && creatorName.replace(/\s+/g, '').includes(cleanCur)) return true;
+        if (curName.includes('mohit') && (spName.includes('mohit') || creatorName.includes('mohit') || spCode === 'SE-VRM001' || spCode === 'SE-VRM004')) return true;
       }
 
       if (curEmail && (b.salesPersonEmail || b.email || '').toLowerCase() === curEmail) {
         return true;
       }
+
+      // Allow viewing company-wide, legacy, or unassigned BOMs
+      if (!spCode && !spName && !creatorName) return true;
 
       return false;
     });
