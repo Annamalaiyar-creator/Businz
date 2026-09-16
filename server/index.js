@@ -70,10 +70,26 @@ const getDatabaseStore = async (key) => {
                     });
                   }
                   const merged = Array.from(masterMap.values());
+                  merged.forEach(item => {
+                    if (item && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
+                      item.cat = 'Raw Material';
+                      item.category = 'Raw Material';
+                    }
+                  });
                   supabaseMemoryStore[key] = merged;
                   return merged;
                 }
               } catch (_) {}
+            }
+          }
+          if (key === 'raw_materials_store' || key === 'item_store') {
+            if (Array.isArray(parsed)) {
+              parsed.forEach(item => {
+                if (item && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
+                  item.cat = 'Raw Material';
+                  item.category = 'Raw Material';
+                }
+              });
             }
           }
           supabaseMemoryStore[key] = parsed;
@@ -889,6 +905,15 @@ app.post('/api/store/:key', async (req, res) => {
     } else if (key === 'presets_store' && storeData && typeof storeData === 'object' && !Array.isArray(storeData)) {
       const current = await getDatabaseStore(key);
       finalDataToSave = { ...(current || {}), ...storeData };
+    }
+
+    if ((key === 'raw_materials_store' || key === 'item_store') && Array.isArray(finalDataToSave)) {
+      finalDataToSave.forEach(item => {
+        if (item && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
+          item.cat = 'Raw Material';
+          item.category = 'Raw Material';
+        }
+      });
     }
 
     await saveDatabaseStore(key, finalDataToSave);
@@ -5702,6 +5727,12 @@ app.get('/api/raw-materials', async (req, res) => {
   try {
     const cloudMats = await getDatabaseStore('raw_materials_store');
     if (Array.isArray(cloudMats) && cloudMats.length > 0) {
+      cloudMats.forEach(item => {
+        if (item && (item.code === 'ALU-LEN-2414MM' || item.code === 'RM-ALU-2414')) {
+          item.cat = 'Raw Material';
+          item.category = 'Raw Material';
+        }
+      });
       supabaseMemoryStore.raw_materials_store = cloudMats;
       try {
         const rawMatsPath = getStoreFilePath('raw_materials_store.json');

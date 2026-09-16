@@ -160,7 +160,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
   const [materials, setMaterials] = useState(() => {
     const currentEngineStock = getEngineAluStock();
-    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Length', stock: currentEngineStock, lengthMm: '2414', minLevel: 15, status: currentEngineStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngineStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: currentEngineStock, lengthMm: '2414', minLevel: 15, status: currentEngineStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngineStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
 
@@ -262,11 +262,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             const mapKey = String(sm.code || sm.name).toUpperCase().trim();
             const existing = matMap.get(mapKey) || {};
             const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
+            const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
             matMap.set(mapKey, {
               ...existing,
               ...sm,
               code: sm.code || existing.code || mapKey,
               name: sm.name || existing.name,
+              cat: isAlu2414 ? 'Raw Material' : (sm.cat || sm.category || existing.cat || 'General'),
+              category: isAlu2414 ? 'Raw Material' : (sm.category || sm.cat || existing.category || 'General'),
               stock: smStock,
               openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
               status: smStock > 0 ? 'In Stock' : 'Out of Stock'
@@ -345,7 +348,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
       const currentEngStock = getEngineAluStock();
-      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Length', stock: currentEngStock, lengthMm: '2414', minLevel: 15, status: currentEngStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: currentEngStock, lengthMm: '2414', minLevel: 15, status: currentEngStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       // 1. Seed all official VRM standardized catalog products (285 items)
       (VRM_PRODUCTS || []).forEach(p => {
@@ -396,11 +399,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               const mapKey = String(sm.code || sm.name).toUpperCase().trim();
               const existing = matMap.get(mapKey) || {};
               const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
+              const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
               matMap.set(mapKey, {
                 ...existing,
                 ...sm,
                 code: sm.code || existing.code || mapKey,
                 name: sm.name || existing.name,
+                cat: isAlu2414 ? 'Raw Material' : (sm.cat || sm.category || existing.cat || 'General'),
+                category: isAlu2414 ? 'Raw Material' : (sm.category || sm.cat || existing.category || 'General'),
                 stock: smStock,
                 openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
                 status: smStock > 0 ? 'In Stock' : 'Out of Stock'
@@ -425,11 +431,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         if (stockVal === 0) statusText = 'Out of Stock';
         else if (stockVal <= minLvl) statusText = 'Low Stock';
 
+        const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
         matMap.set(mapKey, {
           ...existing,
           code: displayCode,
           name: item.name || existing.name,
-          cat: item.category || existing.cat || 'Finished Goods',
+          cat: isAlu2414 ? 'Raw Material' : (item.category || existing.cat || 'Finished Goods'),
+          category: isAlu2414 ? 'Raw Material' : (item.category || existing.category || 'Finished Goods'),
           unit: item.unit || existing.unit || 'Pieces',
           stock: stockVal,
           minLevel: minLvl,
@@ -956,31 +964,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       // Filter out invalid items or blank rows upfront
       if (!mCode || !mName || mCode === '—' || mCodeLower.includes('item') || mCodeLower === 'rm-vrm' || mCodeLower === 'mr100' || mNameLower === 'mini rail') return false;
 
-      // Identify whether an item is raw material
-      const isRawMaterial = (
-        mCodeLower === 'rm-alu-2414' ||
-        mCodeLower.startsWith('alu-len') ||
-        mCodeLower.startsWith('alu-bar') ||
-        mCodeLower.startsWith('alu-coil') ||
-        mCodeLower.startsWith('rm-') ||
-        mNameLower.includes('aluminum length') ||
-        mNameLower.includes('aluminium length') ||
-        mNameLower.includes('raw bar') ||
-        mNameLower.includes('raw alu') ||
-        mNameLower.includes('strip coil') ||
-        m.cat === 'Raw Material' ||
-        m.category === 'Raw Material' ||
-        m.itemType === 'Raw Material' ||
-        m.productType === 'raw_material' ||
-        m.unit === 'Raw Bars' ||
-        (m.unit === 'Length' && !mNameLower.includes('rail') && !mNameLower.includes('purlin') && !mNameLower.includes('leg') && !mNameLower.includes('bracket') && !mNameLower.includes('section'))
-      );
+      // Identify whether an item is raw material strictly based on Category
+      const itemCat = String(m.category || m.cat || '').trim().toLowerCase();
+      const isRawMaterial = itemCat === 'raw material' || itemCat === 'raw materials' || mCodeLower === 'alu-len-2414mm' || mCodeLower === 'rm-alu-2414';
 
       if (isRawMaterialDirectory) {
-        // Raw Material Directory strictly shows ONLY raw material items
+        // Raw Material Directory strictly shows ONLY items where Category is 'Raw Material'
         if (!isRawMaterial) return false;
       } else {
-        // Inventory Stores strictly shows ONLY finished goods / non-raw-materials (NEVER show raw materials)
+        // Inventory Stores strictly shows ALL OTHER categories (NEVER show raw materials)
         if (isRawMaterial) return false;
       }
 
@@ -1145,7 +1137,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           const code = String(findVal('Item Code', 'Material Code', 'Code', 'SKU', 'Part Number', 'Part No') || `ITEM-${Date.now()}-${idx + 1}`).trim();
           const name = String(findVal('Item Name', 'Material Description', 'Description', 'Product Name', 'Name') || code).trim();
-          const cat = String(findVal('Category', 'Cat', 'Department', 'Group') || (activeTab === 'Raw Material Directory' ? 'Aluminium' : 'Finished Goods')).trim();
+          const cat = String(findVal('Category', 'Cat', 'Department', 'Group') || (activeTab === 'Raw Material Directory' ? 'Raw Material' : 'Finished Goods')).trim();
           const unit = String(findVal('Unit', 'UOM', 'Unit of Measure') || 'Length').trim();
           const stock = Number(String(findVal('Physical Stock', 'Current Stock', 'Stock', 'Quantity', 'Qty') || '0').replace(/[^0-9.-]+/g, '')) || 0;
           const minLevel = Number(String(findVal('Min Level', 'Safety Stock', 'Reorder Level', 'Min. Level') || '50').replace(/[^0-9.-]+/g, '')) || 50;
@@ -1301,7 +1293,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           const code = String(findVal('Item Code', 'Material Code', 'Code', 'SKU', 'Part Number', 'Part No') || `ITEM-${Date.now()}-${idx + 1}`).trim();
           const name = String(findVal('Item Name', 'Material Description', 'Description', 'Product Name', 'Name') || code).trim();
-          const cat = String(findVal('Category', 'Cat', 'Department', 'Group') || (activeTab === 'Raw Material Directory' ? 'Aluminium' : 'Finished Goods')).trim();
+          const cat = String(findVal('Category', 'Cat', 'Department', 'Group') || (activeTab === 'Raw Material Directory' ? 'Raw Material' : 'Finished Goods')).trim();
           const unit = String(findVal('Unit', 'UOM', 'Unit of Measure') || 'Length').trim();
           const stock = Number(String(findVal('Physical Stock', 'Current Stock', 'Stock', 'Quantity', 'Qty') || '0').replace(/[^0-9.-]+/g, '')) || 0;
           const minLevel = Number(String(findVal('Min Level', 'Safety Stock', 'Reorder Level', 'Min. Level') || '50').replace(/[^0-9.-]+/g, '')) || 50;
@@ -1712,17 +1704,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     const availableList = materials.filter(m => {
                       const mCode = String(m.code || '').toLowerCase();
                       const isRawDir = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
-                      const isRaw = (
-                        mCode === 'rm-alu-2414' ||
-                        mCode.startsWith('alu-len') ||
-                        mCode.startsWith('alu-bar') ||
-                        mCode.startsWith('alu-coil') ||
-                        mCode.startsWith('rm-') ||
-                        (m.name || '').toLowerCase().includes('aluminum length') ||
-                        (m.name || '').toLowerCase().includes('aluminium length') ||
-                        m.cat === 'Raw Material' ||
-                        m.category === 'Raw Material'
-                      );
+                      const itemCat = String(m.category || m.cat || '').trim().toLowerCase();
+                      const isRaw = itemCat === 'raw material' || itemCat === 'raw materials' || String(m.code || '').toLowerCase() === 'alu-len-2414mm' || String(m.code || '').toLowerCase() === 'rm-alu-2414';
                       if (isRawDir) {
                         if (!isRaw) return false;
                       } else {
