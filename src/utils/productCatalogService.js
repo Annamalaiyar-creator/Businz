@@ -62,57 +62,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     }
   } catch (_) {}
 
-  // 1.5 Calculate active allocations from active BOMs and active Proforma Invoices (PIs)
-  const bomReservedMap = new Map();
-  const registerAllocation = (pItem) => {
-    const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 0) || 0;
-    if (qty <= 0) return;
-    const resCode = resolveProductCode(pItem).toLowerCase().trim();
-    const pCode = String(resCode || pItem.code || '').toLowerCase().trim();
-    const pName = String(pItem.name || pItem.description || '').toLowerCase().trim();
-    const norm = normalizeProductName(pName);
-    const fp = wordFingerprint(pName);
-    if (pCode) bomReservedMap.set(pCode, (bomReservedMap.get(pCode) || 0) + qty);
-    if (pName) bomReservedMap.set(pName, (bomReservedMap.get(pName) || 0) + qty);
-    if (norm) bomReservedMap.set(norm, (bomReservedMap.get(norm) || 0) + qty);
-    if (fp) bomReservedMap.set(fp, (bomReservedMap.get(fp) || 0) + qty);
-  };
-
-  try {
-    const bomSaved = localStorage.getItem('controlroom_bom_store');
-    let localBOMs = [];
-    if (bomSaved) {
-      const parsed = JSON.parse(bomSaved);
-      if (Array.isArray(parsed)) localBOMs = parsed;
-    }
-    localBOMs.forEach(b => {
-      const bStatus = String(b.status || '').toLowerCase();
-      if (!bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
-        (b.items || []).forEach(pItem => {
-          registerAllocation(pItem);
-        });
-      }
-    });
-  } catch (_) {}
-
-  try {
-    const piSaved = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_procurement_pi_store');
-    let localPIs = [];
-    if (piSaved) {
-      const parsed = JSON.parse(piSaved);
-      if (Array.isArray(parsed)) localPIs = parsed;
-    }
-    localPIs.forEach(pi => {
-      const piStatus = String(pi.status || '').toLowerCase();
-      if (piStatus !== 'cancelled' && piStatus !== 'declined' && piStatus !== 'converted to bom' && !pi.convertedToBom && !pi.isConverted) {
-        (pi.items || []).forEach(pItem => {
-          registerAllocation(pItem);
-        });
-      }
-    });
-  } catch (_) {}
-
-  // 2. Map all 285 VRM standardized products with true reduced available stock
+  // 2. Map all 285 VRM standardized products with true live inventory stock
   const catalogMap = new Map();
 
   (VRM_PRODUCTS || []).forEach(p => {
@@ -122,54 +72,33 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     const normKey = normalizeProductName(p.name);
     const fpKey = wordFingerprint(nameKey);
 
-    // Determine baseline stock before allocations
-    let baseStock = null;
-    if (codeKey && stockMap.has(codeKey)) {
-      baseStock = Number(stockMap.get(codeKey));
-    } else if (normKey && stockMap.has(normKey)) {
-      baseStock = Number(stockMap.get(normKey));
-    } else if (nameKey && stockMap.has(nameKey)) {
-      baseStock = Number(stockMap.get(nameKey));
-    } else if (fpKey && stockMap.has(fpKey)) {
-      baseStock = Number(stockMap.get(fpKey));
-    } else if (codeKey && rawStoreMap.has(codeKey)) {
-      baseStock = Number(rawStoreMap.get(codeKey));
-    } else if (normKey && rawStoreMap.has(normKey)) {
-      baseStock = Number(rawStoreMap.get(normKey));
-    } else if (nameKey && rawStoreMap.has(nameKey)) {
-      baseStock = Number(rawStoreMap.get(nameKey));
-    } else if (fpKey && rawStoreMap.has(fpKey)) {
-      baseStock = Number(rawStoreMap.get(fpKey));
-    }
+    // Live stock balance lookup:
+    // 1. Raw materials store (Authoritative inventory store)
+    // 2. Central inventory store
+    // 3. 5000 baseline
+    let realStock = null;
+    let baseStock = 5000;
 
-    if (baseStock === null || isNaN(baseStock)) {
+    const findInStore = (store) => {
+      if (codeKey && store.has(codeKey)) return Number(store.get(codeKey));
+      if (normKey && store.has(normKey)) return Number(store.get(normKey));
+      if (nameKey && store.has(nameKey)) return Number(store.get(nameKey));
+      if (fpKey && store.has(fpKey)) return Number(store.get(fpKey));
+      return null;
+    };
+
+    const rawBal = findInStore(rawStoreMap);
+    const centralBal = findInStore(stockMap);
+
+    if (rawBal !== null && !isNaN(rawBal)) {
+      realStock = Math.max(0, rawBal);
+      baseStock = realStock;
+    } else if (centralBal !== null && !isNaN(centralBal)) {
+      realStock = Math.max(0, centralBal);
+      baseStock = realStock;
+    } else {
+      realStock = 5000;
       baseStock = 5000;
-    }
-
-    // Active allocations for this item from active BOMs and active PIs
-    const blockedQty = Math.max(
-      (codeKey && bomReservedMap.get(codeKey)) || 0,
-      (normKey && bomReservedMap.get(normKey)) || 0,
-      (nameKey && bomReservedMap.get(nameKey)) || 0,
-      (fpKey && bomReservedMap.get(fpKey)) || 0
-    );
-    let realStock = Math.max(0, baseStock - blockedQty);
-
-    // If raw materials store has explicit stock adjustment, honor it (including legitimate 0)
-    const rawStock = (codeKey && rawStoreMap.has(codeKey))
-      ? rawStoreMap.get(codeKey)
-      : ((normKey && rawStoreMap.has(normKey))
-        ? rawStoreMap.get(normKey)
-        : ((nameKey && rawStoreMap.has(nameKey))
-          ? rawStoreMap.get(nameKey)
-          : ((fpKey && rawStoreMap.has(fpKey))
-            ? rawStoreMap.get(fpKey)
-            : null)));
-
-    if (rawStock !== null && !isNaN(rawStock)) {
-      const explicitRaw = Number(rawStock);
-      // Honor the explicit balance directly from the Inventory Store
-      realStock = Math.max(0, explicitRaw);
     }
 
     const itemRecord = {
@@ -183,7 +112,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       stock: realStock,
       availableStock: realStock,
       physicalStock: baseStock,
-      reservedStock: blockedQty
+      reservedStock: 0
     };
 
     const itemKey = codeKey || nameKey;

@@ -1003,7 +1003,10 @@ class ProductionModuleEngine {
         }
 
         localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
+        saveCloudStore('raw_materials_store', currentMats);
         window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+        window.dispatchEvent(new Event('central_inventory_updated'));
+        window.dispatchEvent(new Event('controlroom_storage_update'));
       }
     } catch (e) {
       console.warn('Error syncing to controlroom_raw_materials_store:', e);

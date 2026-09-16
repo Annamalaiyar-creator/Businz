@@ -168,6 +168,33 @@ export default function ConfirmingBomModal({
                   return updated;
                 });
 
+                // 2.1 If BOM originated from a PI, mark the PI as Converted
+                const srcPi = confirmingBomModal.sourcePiNo || confirmingBomModal.piNo;
+                if (srcPi) {
+                  const updatePiList = (storeKey) => {
+                    try {
+                      const raw = localStorage.getItem(storeKey);
+                      if (raw) {
+                        const list = JSON.parse(raw);
+                        if (Array.isArray(list)) {
+                          const updated = list.map(pi => (pi.piNo === srcPi || pi.id === srcPi) ? {
+                            ...pi,
+                            status: 'Converted to BOM',
+                            convertedToBom: true,
+                            isConverted: true,
+                            convertedBomCode: confirmingBomModal.bomCode,
+                            convertedDate: new Date().toISOString()
+                          } : pi);
+                          localStorage.setItem(storeKey, JSON.stringify(updated));
+                          saveCloudStore('sales_pi_store', updated);
+                        }
+                      }
+                    } catch (_) {}
+                  };
+                  updatePiList('controlroom_sales_pi_store');
+                  updatePiList('controlroom_procurement_pi_store');
+                }
+
                 // 3. Post to backend and trigger server reconciliation
                 try {
                   fetch('/api/boms', {

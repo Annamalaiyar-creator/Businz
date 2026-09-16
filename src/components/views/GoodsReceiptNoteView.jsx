@@ -856,8 +856,23 @@ export default function GoodsReceiptNoteView(props) {
             localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
             localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
             window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
+            window.dispatchEvent(new Event('central_inventory_updated'));
+            window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+            window.dispatchEvent(new Event('controlroom_storage_update'));
             window.dispatchEvent(new CustomEvent('storage'));
           } catch (_) {}
+
+          // Refresh raw materials cache from server
+          fetch('/api/raw-materials')
+            .then(res => res.json())
+            .then(rawList => {
+              if (Array.isArray(rawList) && rawList.length > 0) {
+                try { localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawList)); } catch (_) {}
+                window.dispatchEvent(new Event('central_inventory_updated'));
+                window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+              }
+            })
+            .catch(() => {});
 
           fetch('/api/grns')
             .then(res => res.json())

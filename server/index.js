@@ -127,6 +127,19 @@ const saveDatabaseStore = async (key, storeData) => {
   if (storeData === undefined || storeData === null) return storeData;
   supabaseMemoryStore[key] = storeData;
 
+  // Persist to disk files for raw_materials_store and item_store
+  try {
+    if (key === 'raw_materials_store' && Array.isArray(storeData)) {
+      const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+      fs.writeFileSync(rawMatsPath, JSON.stringify(storeData, null, 2), 'utf8');
+    } else if (key === 'item_store' && Array.isArray(storeData)) {
+      const itemPath = getStoreFilePath('item_store.json');
+      fs.writeFileSync(itemPath, JSON.stringify(storeData, null, 2), 'utf8');
+    }
+  } catch (diskErr) {
+    console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
+  }
+
   // Real-time broadcast to all connected users immediately
   try {
     broadcastRealtimeEvent('store_updated', { key, storeData });
@@ -4971,7 +4984,7 @@ app.post('/api/grns', async (req, res) => {
     console.error('Failed to update PO status in po_store:', err);
   }
 
-  // Auto-update central item stock in item_store.json upon GRN receipt
+  // Auto-update central item stock in item_store.json and raw_materials_store.json upon GRN receipt
   try {
     const localItems = loadLocalItems();
     if (Array.isArray(localItems) && localItems.length > 0) {
@@ -5012,6 +5025,8 @@ app.post('/api/grns', async (req, res) => {
           return { 
             ...item, 
             stock: newStock,
+            availableStock: newStock,
+            physicalStock: (Number(item.physicalStock) || currentStock) + addedQty,
             category: grnCategory || item.category || 'Raw Material',
             cat: grnCategory || item.cat || item.category || 'Raw Material'
           };
@@ -5021,6 +5036,55 @@ app.post('/api/grns', async (req, res) => {
 
       if (itemsUpdated) {
         saveLocalItems(updatedItems);
+      }
+    }
+
+    // Synchronously update raw_materials_store.json so Sales, Procurement, and Production see live inwarded stock
+    const localRawMats = loadLocalRawMaterials();
+    if (Array.isArray(localRawMats) && localRawMats.length > 0) {
+      let rawUpdated = false;
+      const updatedRaw = localRawMats.map(rm => {
+        const rmNameClean = String(rm.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rmCodeClean = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        let addedQty = 0;
+        (newGRN.items || []).forEach(grnItem => {
+          const grnItemNameClean = String(grnItem.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const grnItemCodeClean = String(grnItem.code || grnItem.sku || grnItem.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          const isNameMatch = rmNameClean && grnItemNameClean && (rmNameClean === grnItemNameClean || rmNameClean.includes(grnItemNameClean) || grnItemNameClean.includes(rmNameClean));
+          const isCodeMatch = rmCodeClean && grnItemCodeClean && (rmCodeClean === grnItemCodeClean || rmCodeClean.includes(grnItemCodeClean) || grnItemCodeClean.includes(rmCodeClean));
+
+          if (isNameMatch || isCodeMatch) {
+            const qty = Number(grnItem.accepted !== undefined ? grnItem.accepted : (grnItem.now || 0));
+            if (qty > 0) addedQty += qty;
+          }
+        });
+
+        if (addedQty > 0) {
+          rawUpdated = true;
+          const currentStock = Number(rm.stock || 0);
+          const newStock = currentStock + addedQty;
+          console.log(`[RAW MATERIAL INWARD] Material: ${rm.name} | Old: ${currentStock} | Inwarded: +${addedQty} | New: ${newStock}`);
+          return {
+            ...rm,
+            stock: newStock,
+            availableStock: newStock,
+            physicalStock: (Number(rm.physicalStock) || currentStock) + addedQty,
+            goodsReceived: (Number(rm.goodsReceived) || 0) + addedQty,
+            status: newStock > (rm.minLevel || 50) ? 'In Stock' : 'Low Stock',
+            lastUpdated: `Inwarded from GRN ${newGRN.grnNo}`
+          };
+        }
+        return rm;
+      });
+
+      if (rawUpdated) {
+        const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+        fs.writeFileSync(rawMatsPath, JSON.stringify(updatedRaw, null, 2), 'utf8');
+        supabaseMemoryStore.raw_materials_store = updatedRaw;
+        pushStoreToSupabase('raw_materials_store', updatedRaw).catch(() => {});
+        broadcastRealtimeEvent('inventory_updated', { rawMaterials: updatedRaw });
       }
     }
   } catch (err) {
