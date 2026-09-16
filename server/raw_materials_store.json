@@ -60,18 +60,18 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 5000,
+    "stock": 4800,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 5000,
+    "availableStock": 4800,
     "stockOnHand": 5000,
-    "reserved": 0,
-    "blockedForBom": 0,
+    "reserved": 200,
+    "blockedForBom": 200,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Blocked for BOM-716 (200 Units)"
   },
   {
     "code": "L900",

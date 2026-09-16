@@ -5563,6 +5563,15 @@ app.get('/api/zoho/items', async (req, res) => {
 // Endpoint to retrieve live reconciled Raw Materials inventory
 app.get('/api/raw-materials', async (req, res) => {
   try {
+    const cloudMats = await getDatabaseStore('raw_materials_store');
+    if (Array.isArray(cloudMats) && cloudMats.length > 0) {
+      supabaseMemoryStore.raw_materials_store = cloudMats;
+      try {
+        const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+        fs.writeFileSync(rawMatsPath, JSON.stringify(cloudMats, null, 2), 'utf8');
+      } catch (_) {}
+      return res.json(cloudMats);
+    }
     const rawMats = loadLocalRawMaterials();
     res.json(rawMats);
   } catch (err) {

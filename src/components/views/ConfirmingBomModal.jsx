@@ -151,11 +151,13 @@ export default function ConfirmingBomModal({
                   grandTotal: confirmingBomModal.grandTotal || orderGrandTotal
                 };
 
-                // 1. Deduct / Reserve inventory across all stores
-                try {
-                  centralInventoryStore.deductStockForBOM(confirmingBomModal.bomCode, finalizedItems, 'Sales BOM Verification');
-                } catch (cErr) {
-                  console.warn('Inventory deduction error on BOM confirmation:', cErr);
+                // 1. Deduct / Reserve inventory across all stores (only if not already blocked on creation)
+                if (!confirmingBomModal.stockBlocked && !confirmingBomModal.stockDeducted) {
+                  try {
+                    centralInventoryStore.deductStockForBOM(confirmingBomModal.bomCode, finalizedItems, 'Sales BOM Verification');
+                  } catch (cErr) {
+                    console.warn('Inventory deduction error on BOM confirmation:', cErr);
+                  }
                 }
 
                 // 2. Update React State and persist locally & to cloud

@@ -610,101 +610,13 @@ export default function BomOrdersView(props) {
     'Billing', 'Invoice Executive', 'Accounts Head', 'Accounts Executive'
   ].includes(userRole);
 
-  // Helper to Block / Deduct Inventory immediately upon BOM Creation or Verification
+  // Helper to Block / Deduct Inventory immediately upon BOM Creation or Verification (Deducts ONCE)
   const blockInventoryForBom = (bomItems = [], bomCode = '') => {
     if (!Array.isArray(bomItems) || bomItems.length === 0) return;
     try {
-      // 1. Deduct in Central Inventory Store (Ledger & Reservations)
-      try {
-        centralInventoryStore.deductStockForBOM(bomCode, bomItems, userRole || 'Sales Executive');
-      } catch (cErr) {
-        console.warn('Central store deduction notice:', cErr);
-      }
+      // Deduct exactly once via Central Inventory Store (Ledger, Raw Materials & Cloud Sync)
+      centralInventoryStore.deductStockForBOM(bomCode, bomItems, userRole || 'Sales Executive');
 
-      // 2. Update controlroom_raw_materials_store
-      const rawStoreStr = localStorage.getItem('controlroom_raw_materials_store');
-      let currentMats = [];
-      if (rawStoreStr) {
-        try { currentMats = JSON.parse(rawStoreStr); } catch (_) {}
-      }
-      if (!Array.isArray(currentMats)) currentMats = [];
-
-      // 3. Update controlroom_items_list
-      const itemsListStr = localStorage.getItem('controlroom_items_list');
-      let currentItems = [];
-      if (itemsListStr) {
-        try { currentItems = JSON.parse(itemsListStr); } catch (_) {}
-      }
-      if (!Array.isArray(currentItems)) currentItems = [];
-
-      bomItems.forEach(pItem => {
-        const qtyToBlock = parseFloat(pItem.qty || pItem.bomQty || 1) || 0;
-        const pCode = (pItem.code || '').toUpperCase().trim();
-        const pName = (pItem.name || pItem.description || '').toLowerCase().trim();
-
-        // Match in raw materials store
-        let match = currentMats.find(m => {
-          const mCode = (m.code || '').toUpperCase().trim();
-          const mName = (m.name || '').toLowerCase().trim();
-          if (pCode && mCode === pCode) return true;
-          if (pName && (mName === pName || mName.includes(pName) || pName.includes(mName))) return true;
-          return false;
-        });
-
-        if (match) {
-          const basePhysical = Math.max(0, parseFloat(String(match.physicalStock || match.openingStock || 5000).replace(/,/g, '')) || 5000);
-          match.physicalStock = basePhysical;
-          match.reserved = (parseFloat(match.reserved) || 0) + qtyToBlock;
-          match.blockedForBom = (match.blockedForBom || 0) + qtyToBlock;
-          const newStock = Math.max(0, basePhysical - match.reserved);
-          match.stock = newStock;
-          match.availableStock = newStock;
-          const minL = parseFloat(String(match.minLevel || '100').replace(/,/g, '')) || 100;
-          match.status = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
-          match.lastUpdated = `Blocked for BOM ${bomCode}`;
-        } else if (pName) {
-          // If not existing in current store, register it with 5000 physical baseline and calculated available balance
-          const initPhysical = 5000;
-          const newStock = Math.max(0, initPhysical - qtyToBlock);
-          currentMats.push({
-            code: pCode || `FG-${Date.now().toString().slice(-4)}`,
-            name: pItem.name || 'Finished Good Item',
-            cat: pItem.category || 'Finished Goods',
-            unit: pItem.uom || 'Nos',
-            physicalStock: initPhysical,
-            stock: newStock,
-            availableStock: newStock,
-            reserved: qtyToBlock,
-            blockedForBom: qtyToBlock,
-            minLevel: 10,
-            status: newStock === 0 ? 'Out of Stock' : (newStock <= 10 ? 'Low Stock' : 'In Stock'),
-            store: 'Main Store',
-            lastUpdated: `Blocked for BOM ${bomCode}`
-          });
-        }
-
-        // Match in items list
-        let itemMatch = currentItems.find(it => {
-          const itCode = (it.code || '').toUpperCase().trim();
-          const itName = (it.name || '').toLowerCase().trim();
-          if (pCode && itCode === pCode) return true;
-          if (pName && (itName === pName || itName.includes(pName) || pName.includes(itName))) return true;
-          return false;
-        });
-        if (itemMatch) {
-          const baseItemPhysical = Math.max(0, parseFloat(String(itemMatch.physicalStock || itemMatch.openingStock || 5000).replace(/,/g, '')) || 5000);
-          itemMatch.physicalStock = baseItemPhysical;
-          itemMatch.reserved = (parseFloat(itemMatch.reserved) || 0) + qtyToBlock;
-          const newItemStock = Math.max(0, baseItemPhysical - itemMatch.reserved);
-          itemMatch.stock = newItemStock;
-          itemMatch.availableStock = newItemStock;
-          itemMatch.status = newItemStock === 0 ? 'Out of Stock' : (newItemStock <= (itemMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
-        }
-      });
-
-      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
-      if (currentItems.length > 0) localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
-      saveCloudStore('raw_materials_store', currentMats);
       window.dispatchEvent(new Event('controlroom_raw_materials_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
       window.dispatchEvent(new Event('central_inventory_updated'));
@@ -713,7 +625,7 @@ export default function BomOrdersView(props) {
       // Guarantee backend disk reconciliation
       fetch('/api/inventory/reconcile-boms', { method: 'POST' }).catch(() => {});
     } catch (err) {
-      console.error('Error blocking inventory for BOM:', err);
+      console.warn('Block inventory error:', err);
     }
   };
 
@@ -4294,6 +4206,9 @@ export default function BomOrdersView(props) {
                         setBomSubmitStage('reserving');
                         if (!isDraft && Array.isArray(sanitizedNewBom.items) && sanitizedNewBom.items.length > 0) {
                           blockInventoryForBom(sanitizedNewBom.items, finalAssignedCode);
+                          sanitizedNewBom.stockBlocked = true;
+                          sanitizedNewBom.stockBlockedAt = new Date().toISOString();
+                          sanitizedNewBom.stockDeducted = true;
                         }
 
                         // Stage: Saving to cloud & local storage
@@ -4801,7 +4716,7 @@ export default function BomOrdersView(props) {
                     }));
 
                   // Ensure inventory is blocked upon verification if not already blocked
-                  if (!confirmingBomModal.stockBlocked) {
+                  if (!confirmingBomModal.stockBlocked && !confirmingBomModal.stockDeducted) {
                     blockInventoryForBom(finalizedItems, confirmingBomModal.bomCode);
                   }
 
