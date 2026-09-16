@@ -252,14 +252,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           savedMats.forEach(sm => {
             const mapKey = String(sm.code || sm.name).toUpperCase().trim();
             const existing = matMap.get(mapKey) || {};
-            const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
+            const smStock = sm.stock !== undefined ? Number(sm.stock) : 5000;
             matMap.set(mapKey, {
               ...existing,
               ...sm,
               code: sm.code || existing.code || mapKey,
               name: sm.name || existing.name,
               stock: smStock,
-              openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
+              openingStock: (sm.openingStock !== undefined && Number(sm.openingStock) >= 5000) ? Number(sm.openingStock) : 5000,
               status: smStock > 0 ? 'In Stock' : 'Out of Stock'
             });
           });
@@ -553,8 +553,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       } catch (_) {}
 
       const bomAllocations = new Map();
+      const seenBomIds = new Set();
       if (Array.isArray(bomsList)) {
         bomsList.forEach(b => {
+          const bomKey = String(b.bomNumber || b.bomNo || b.id || '').toUpperCase().trim();
+          if (bomKey && seenBomIds.has(bomKey)) return;
+          if (bomKey) seenBomIds.add(bomKey);
+
           const st = String(b.status || '').toLowerCase();
           const isSentToDispatch = Boolean(b.salesConfirmed) || [
             'sales confirmed - sent to dispatch',
@@ -594,15 +599,27 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           (mFp && bomAllocations.get(mFp)) || 0
         );
 
-        const base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : 5000) || 5000);
+        const base = Math.max(0, parseFloat(m.openingStock !== undefined && Number(m.openingStock) >= 5000 ? m.openingStock : (m.physicalStock && Number(m.physicalStock) >= 5000 ? m.physicalStock : 5000)) || 5000);
         const grnQty = Number(m.goodsReceived || 0);
-        const rem = Math.max(0, base + grnQty - allocated);
+
+        // If the item already has an authoritative stock and reserved count from server / cloud
+        // (e.g. stock: 4800, reserved: 200, physical: 5000), prioritize that authoritative state directly
+        // rather than double-recalculating from un-synchronized local storage.
+        let rem;
+        let finalReserved = allocated;
+        if (m.stock !== undefined && m.reserved !== undefined && Number(m.stock) + Number(m.reserved) === base + grnQty) {
+          rem = Number(m.stock);
+          finalReserved = Number(m.reserved);
+        } else {
+          rem = Math.max(0, base + grnQty - allocated);
+        }
+
         m.openingStock = base;
         m.physicalStock = base;
         m.stock = rem;
         m.availableStock = rem;
-        m.reserved = allocated;
-        m.blockedForBom = allocated;
+        m.reserved = finalReserved;
+        m.blockedForBom = finalReserved;
         const minL = Number(m.minLevel || 50);
         m.status = rem === 0 ? 'Out of Stock' : (rem <= minL ? 'Low Stock' : 'In Stock');
       });
@@ -656,6 +673,19 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             })
             .catch(() => {});
         });
+
+      // Synchronize BOM store to prevent local duplicates
+      fetch('/api/boms')
+        .then(res => res.json())
+        .then(resData => {
+          const bData = resData?.data || resData;
+          if (Array.isArray(bData) && bData.length > 0) {
+            try {
+              localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
+            } catch (_) {}
+          }
+        })
+        .catch(() => {});
     };
 
     fetchDatabaseInventory();
