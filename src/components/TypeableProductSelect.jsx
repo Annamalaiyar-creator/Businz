@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search, Check, AlertCircle, Package, Plus } from 'lucide-react';
-import { normalizeProductName } from '../utils/vrmProductsData';
+import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
+import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 
 /**
  * TypeableProductSelect
@@ -24,7 +25,13 @@ export default function TypeableProductSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(value || '');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0, width: 360 });
+  const [menuCoords, setMenuCoords] = useState({
+    top: 'auto',
+    bottom: 'auto',
+    left: 0,
+    width: 380,
+    maxHeight: 280
+  });
 
   const containerRef = useRef(null);
   const inputRef = useRef(null);
@@ -35,30 +42,58 @@ export default function TypeableProductSelect({
     setSearchQuery(value || '');
   }, [value]);
 
-  // Update floating dropdown coordinates
+  // Update floating dropdown coordinates directly anchored to input element
   const updateMenuPosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const menuHeight = 280;
-    const fitsBelow = spaceBelow >= menuHeight || spaceBelow > rect.top;
 
-    setMenuCoords({
-      top: fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4),
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - Math.max(rect.width, 360) - 16)),
-      width: Math.max(rect.width, 380),
-      maxHeight: Math.min(320, fitsBelow ? spaceBelow - 16 : rect.top - 16)
-    });
+    // If input is scrolled out of viewport, close dropdown
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      setIsOpen(false);
+      return;
+    }
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Prefer opening downward directly under the input.
+    // Only flip upward if space below is genuinely constrained (< 120px) and space above is larger.
+    const openUpward = spaceBelow < 120 && spaceAbove > spaceBelow;
+
+    const menuWidth = Math.max(rect.width, 380);
+    let left = rect.left;
+    if (left + menuWidth > window.innerWidth - 12) {
+      left = Math.max(12, window.innerWidth - menuWidth - 12);
+    }
+    if (left < 12) left = 12;
+
+    if (openUpward) {
+      setMenuCoords({
+        top: 'auto',
+        bottom: Math.round(window.innerHeight - rect.top + 4),
+        left: Math.round(left),
+        width: Math.round(menuWidth),
+        maxHeight: Math.min(320, Math.max(120, spaceAbove - 16))
+      });
+    } else {
+      setMenuCoords({
+        top: Math.round(rect.bottom + 4),
+        bottom: 'auto',
+        left: Math.round(left),
+        width: Math.round(menuWidth),
+        maxHeight: Math.min(320, Math.max(140, spaceBelow - 16))
+      });
+    }
   };
 
   useEffect(() => {
     if (isOpen) {
       updateMenuPosition();
       const handleScrollOrResize = () => updateMenuPosition();
-      window.addEventListener('scroll', handleScrollOrResize, true);
-      window.addEventListener('resize', handleScrollOrResize);
+      window.addEventListener('scroll', handleScrollOrResize, { capture: true, passive: true });
+      window.addEventListener('resize', handleScrollOrResize, { passive: true });
       return () => {
-        window.removeEventListener('scroll', handleScrollOrResize, true);
+        window.removeEventListener('scroll', handleScrollOrResize, { capture: true });
         window.removeEventListener('resize', handleScrollOrResize);
       };
     }
@@ -80,40 +115,47 @@ export default function TypeableProductSelect({
     }
   }, [isOpen]);
 
+  // Resolved active items list with fallback to full products catalog
+  const activeItemsList = useMemo(() => {
+    if (Array.isArray(itemsList) && itemsList.length > 0) return itemsList;
+    try {
+      return getFullProductsCatalogWithStock();
+    } catch (_) {
+      return [];
+    }
+  }, [itemsList]);
+
   // Filter items based on query
+  // Filter items based on query (displays ALL catalog products without artificial cutoffs)
   const filteredItems = useMemo(() => {
-    const list = Array.isArray(itemsList) ? itemsList : [];
+    const list = activeItemsList;
     const q = (searchQuery || '').toLowerCase().trim();
-    if (!q) return list.slice(0, 100);
+    if (!q) return list;
     const normQ = normalizeProductName(q);
+    const resQ = resolveProductCode({ name: q }).toLowerCase();
 
     return list.filter(item => {
       const name = String(item.name || '').toLowerCase();
       const code = String(item.code || '').toLowerCase();
+      const resCode = resolveProductCode(item).toLowerCase();
       const cat = String(item.category || item.description || '').toLowerCase();
       const normName = normalizeProductName(item.name);
-      return name.includes(q) || code.includes(q) || cat.includes(q) ||
+      return name.includes(q) || code.includes(q) || (resQ && (code === resQ || resCode === resQ)) || cat.includes(q) ||
         (normQ && normName.includes(normQ));
-    }).slice(0, 100);
-  }, [itemsList, searchQuery]);
+    });
+  }, [activeItemsList, searchQuery]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
     setSearchQuery(val);
     if (!isOpen) setIsOpen(true);
-    setHighlightedIndex(0);
+    setHighlightedIndex(-1);
+    updateMenuPosition();
 
-    // Call onChange with typed text and matched item if exact or normalized
-    const vLow = val.toLowerCase().trim();
-    const vNorm = normalizeProductName(val);
-    const matched = (itemsList || []).find(it => {
-      const itName = (it.name || '').toLowerCase().trim();
-      const itCode = (it.code || '').toLowerCase().trim();
-      const itNorm = normalizeProductName(it.name);
-      return itName === vLow || itCode === vLow || (vNorm && itNorm === vNorm);
-    });
+    // Keep user's typed text in state without auto-forcing a product selection
+    // The user will click an item from the dropdown or use arrows + Enter when they want to select
     if (onChange) {
-      onChange(val, matched || null);
+      onChange(val, null);
     }
   };
 
@@ -259,7 +301,8 @@ export default function TypeableProductSelect({
           ref={dropdownRef}
           style={{
             position: 'fixed',
-            top: `${menuCoords.top}px`,
+            top: menuCoords.top !== 'auto' ? `${menuCoords.top}px` : 'auto',
+            bottom: menuCoords.bottom !== 'auto' ? `${menuCoords.bottom}px` : 'auto',
             left: `${menuCoords.left}px`,
             width: `${menuCoords.width}px`,
             maxHeight: `${menuCoords.maxHeight || 280}px`,
@@ -269,8 +312,7 @@ export default function TypeableProductSelect({
             boxShadow: '0 12px 28px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
             zIndex: 99999999,
             overflowY: 'auto',
-            fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-            animation: 'fadeInMenu 0.15s ease-out forwards'
+            fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
           }}
         >
           {/* Header info badge */}

@@ -33,6 +33,8 @@ export const initRealtimeSync = () => {
             }
             window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', { detail: payload }));
             window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+            window.dispatchEvent(new Event('central_inventory_updated'));
+            window.dispatchEvent(new Event('controlroom_storage_update'));
           }
 
           // 2. Finished Goods & Component Catalog
@@ -45,6 +47,8 @@ export const initRealtimeSync = () => {
             }
             window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: payload }));
             window.dispatchEvent(new Event('controlroom_items_update'));
+            window.dispatchEvent(new Event('central_inventory_updated'));
+            window.dispatchEvent(new Event('controlroom_storage_update'));
           }
 
           // 3. BOM Orders & Routing

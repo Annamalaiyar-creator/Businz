@@ -3,7 +3,7 @@ import {
   Plus, Check, Trash2, FileText, AlertCircle, CheckCircle,
   CheckSquare, Truck, Package, Upload, Camera, Video
 } from "lucide-react";
-import { normalizePaymentTerm, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
+import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache } from "../../utils/otherViewsShared";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 
@@ -786,71 +786,77 @@ export default function ConfirmingBomModal({
 
               {hasMedia ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '4px' }}>
-                  {packPhotos.map((ph, pIdx) => (
-                    <div
-                      key={pIdx}
-                      onClick={() => setActiveMediaPreviewModal({ type: 'image', url: ph.dataUrl, name: ph.name || `Packed Item Photo ${pIdx + 1}` })}
-                      style={{
-                        height: '84px',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        border: '1.5px solid #CBD5E1',
-                        backgroundColor: '#0F172A',
-                        position: 'relative',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                        transition: 'transform 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      <img src={ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0,
-                        backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
-                        padding: '2px 6px', fontSize: '10px', fontWeight: '700',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                      }}>
-                        <span>📷 View Photo</span>
-                        <span>›</span>
+                  {packPhotos.map((ph, pIdx) => {
+                    const photoUrl = (ph.url && !ph.url.startsWith('blob:')) ? ph.url : (ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '') || ph.url || '');
+                    return (
+                      <div
+                        key={ph.id || pIdx}
+                        onClick={() => setActiveMediaPreviewModal({ type: 'image', url: photoUrl, name: ph.name || `Packed Item Photo ${pIdx + 1}` })}
+                        style={{
+                          height: '84px',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          border: '1.5px solid #CBD5E1',
+                          backgroundColor: '#0F172A',
+                          position: 'relative',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                          transition: 'transform 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0,
+                          backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
+                          padding: '2px 6px', fontSize: '10px', fontWeight: '700',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                        }}>
+                          <span>📷 View Photo</span>
+                          <span>›</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {packVideos.map((vd, vIdx) => (
-                    <div
-                      key={vIdx}
-                      onClick={() => setActiveMediaPreviewModal({ type: 'video', url: vd.dataUrl, name: vd.name || `Packed Item Video ${vIdx + 1}` })}
-                      style={{
-                        height: '84px',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        border: '1.5px solid #CBD5E1',
-                        backgroundColor: '#0F172A',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        position: 'relative',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                        transition: 'transform 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      <Video size={22} style={{ color: '#38BDF8' }} />
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0,
-                        backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
-                        padding: '2px 6px', fontSize: '10px', fontWeight: '700',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                      }}>
-                        <span>🎥 Watch Video</span>
-                        <span>›</span>
+                    );
+                  })}
+                  {packVideos.map((vd, vIdx) => {
+                    const videoUrl = (vd.url && !vd.url.startsWith('blob:')) ? vd.url : (vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || (vd.name ? `/api/uploads/${vd.name}` : '') || vd.url || '');
+                    return (
+                      <div
+                        key={vd.id || vIdx}
+                        onClick={() => setActiveMediaPreviewModal({ type: 'video', url: videoUrl, name: vd.name || `Packed Item Video ${vIdx + 1}` })}
+                        style={{
+                          height: '84px',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          border: '1.5px solid #CBD5E1',
+                          backgroundColor: '#0F172A',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          position: 'relative',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                          transition: 'transform 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        <Video size={22} style={{ color: '#38BDF8' }} />
+                        <div style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0,
+                          backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
+                          padding: '2px 6px', fontSize: '10px', fontWeight: '700',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                        }}>
+                          <span>🎥 Watch Video</span>
+                          <span>›</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div style={{ fontSize: '12px', color: '#94A3B8', fontStyle: 'italic', padding: '6px 0' }}>

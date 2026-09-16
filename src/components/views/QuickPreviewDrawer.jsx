@@ -311,7 +311,9 @@ export default function QuickPreviewDrawer({
             {hasMedia ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                 {(packPhotos || []).map((ph, pIdx) => {
-                  const photoUrl = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                  const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                    ? ph.url
+                    : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                   return (
                     <div
                       key={pIdx}
@@ -324,7 +326,24 @@ export default function QuickPreviewDrawer({
                       }}
                       style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
                     >
-                      <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img
+                        src={photoUrl || ph.dataUrl}
+                        alt={ph.name}
+                        onError={(e) => {
+                          if (!e.currentTarget.dataset.retried && ph.name) {
+                            e.currentTarget.dataset.retried = 'true';
+                            fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                              .then(r => r.json())
+                              .then(data => {
+                                if (data?.found && data?.url) {
+                                  e.currentTarget.src = data.url;
+                                  saveMediaToCache(ph.name, data.url);
+                                }
+                              }).catch(() => {});
+                          }
+                        }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
                       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
                         <span>📷 Photo</span>
                         <span>›</span>
@@ -333,7 +352,9 @@ export default function QuickPreviewDrawer({
                   );
                 })}
                 {packVideos.map((vd, vIdx) => {
-                  const videoUrl = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
+                  const videoUrl = (vd.url && !vd.url.startsWith('blob:'))
+                    ? vd.url
+                    : ((vd.dataUrl && !vd.dataUrl.startsWith('blob:')) ? vd.dataUrl : (getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || (vd.name ? `/api/uploads/${vd.name}` : '')));
                   return (
                     <div
                       key={vIdx}

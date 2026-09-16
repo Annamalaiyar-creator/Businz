@@ -13,7 +13,7 @@ export const INITIAL_ITEM_MASTER = VRM_PRODUCTS.map((p, idx) => ({
   name: p.name,
   category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Component' : 'Aluminium Profile',
   uom: p.uom || 'Nos',
-  stock: 250 + (idx * 15) % 800,
+  stock: 5000,
   safetyStock: 50,
   unitRate: 1200 + (idx * 50) % 2500,
   location: p.material === 'HDG' ? 'Warehouse Bay #1 (HDG)' : p.material === 'GAL' ? 'Warehouse Bay #2 (GAL)' : 'Warehouse Bay #3 (Aluminium)',

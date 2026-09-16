@@ -7,7 +7,8 @@ import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
-import { normalizeProductName } from '../utils/vrmProductsData';
+import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
+import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
 
@@ -696,12 +697,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const refreshCatalog = () => {
       setItemsList(getFullProductsCatalogWithStock());
     };
+
+    // Ensure all 312 products from server master are loaded immediately
+    fetch('/api/raw-materials')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(data));
+          } catch (_) {}
+          setItemsList(getFullProductsCatalogWithStock());
+        }
+      })
+      .catch(() => {});
+
     window.addEventListener('central_inventory_updated', refreshCatalog);
     window.addEventListener('controlroom_storage_update', refreshCatalog);
+    window.addEventListener('controlroom_raw_materials_update', refreshCatalog);
+    window.addEventListener('controlroom_items_update', refreshCatalog);
     window.addEventListener('storage', refreshCatalog);
     return () => {
       window.removeEventListener('central_inventory_updated', refreshCatalog);
       window.removeEventListener('controlroom_storage_update', refreshCatalog);
+      window.removeEventListener('controlroom_raw_materials_update', refreshCatalog);
+      window.removeEventListener('controlroom_items_update', refreshCatalog);
       window.removeEventListener('storage', refreshCatalog);
     };
   }, []);
@@ -710,20 +729,68 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (!itemName && !itemCode) return null;
     const cleanName = (itemName || '').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
+    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
     const normName = normalizeProductName(itemName);
 
+    // 1. Search in itemsList
     const found = (itemsList || []).find(p => {
       const pCode = (p.code || '').toLowerCase().trim();
+      const pResCode = resolveProductCode(p).toLowerCase().trim();
       const pName = (p.name || '').toLowerCase().trim();
       const pNorm = normalizeProductName(p.name);
-      return (cleanCode && pCode === cleanCode) ||
+      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
+        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
         (normName && pNorm === normName) ||
         (cleanName && pName === cleanName) ||
         (cleanName && pName.includes(cleanName)) ||
         (normName && pNorm.includes(normName));
     });
-    if (!found) return null;
-    return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
+    if (found) {
+      return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
+    }
+
+    // 2. Direct fallback from raw materials store in localStorage
+    try {
+      const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawSaved) {
+        const rawList = JSON.parse(rawSaved);
+        if (Array.isArray(rawList)) {
+          const rawFound = rawList.find(rm => {
+            const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
+            const rmResCode = resolveProductCode(rm).toLowerCase().trim();
+            const rmName = (rm.name || '').toLowerCase().trim();
+            const rmNorm = normalizeProductName(rm.name);
+            return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
+              (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
+              (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName))) ||
+              (normName && (rmNorm === normName || rmNorm.includes(normName) || normName.includes(rmNorm)));
+          });
+          if (rawFound) {
+            return Number(rawFound.stock !== undefined ? rawFound.stock : (rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.physicalStock || 0)));
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fallback from central inventory store
+    try {
+      const cItems = centralInventoryStore.getInventoryItems();
+      if (Array.isArray(cItems)) {
+        const cFound = cItems.find(ci => {
+          const ciCode = (ci.code || '').toLowerCase().trim();
+          const ciResCode = resolveProductCode(ci).toLowerCase().trim();
+          const ciName = (ci.name || '').toLowerCase().trim();
+          return (resolvedCode && (ciCode === resolvedCode || ciResCode === resolvedCode)) ||
+            (cleanCode && (ciCode === cleanCode || ciResCode === cleanCode)) ||
+            (cleanName && (ciName === cleanName || ciName.includes(cleanName) || cleanName.includes(ciName)));
+        });
+        if (cFound) {
+          return Number(cFound.available !== undefined ? cFound.available : (cFound.onHand !== undefined ? cFound.onHand : (cFound.stock || 0)));
+        }
+      }
+    } catch (_) {}
+
+    return null;
   };
 
   // Form Fields State
@@ -1017,8 +1084,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const newItems = targetPreset.items.map(it => {
       const baseQ = parseFloat(it.qty) || 1;
+      const resCode = resolveProductCode(it);
       return {
         ...it,
+        code: it.code || resCode,
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
@@ -3225,14 +3294,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   placeholder="Type or select product / item..."
                                   accentColor="#0E7490"
                                   onChange={(val, matched) => {
-                                    const pName = matched ? matched.name : val;
-                                    const pCat = matched ? (matched.category || matched.description || item.category) : item.category;
+                                    if (!matched) {
+                                      setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                                      return;
+                                    }
+                                    const pName = matched.name;
+                                    const pCat = matched.category || matched.description || item.category;
+                                    const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
                                     const isSolar5 = is5PctSolarProduct(pName, pCat);
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? {
                                       ...mat,
+                                      code: pCode || mat.code,
                                       name: pName,
-                                      rate: matched ? String(matched.price || matched.rate || mat.rate) : mat.rate,
-                                      uom: matched ? (matched.uom || matched.unit || mat.uom) : mat.uom,
+                                      rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
+                                      uom: matched.uom || matched.unit || mat.uom,
                                       category: pCat,
                                       gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
                                     } : mat));

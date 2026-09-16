@@ -3454,6 +3454,33 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
   const rawName = String(item.name || item.description || '').trim();
   if (!rawName) return direct || '';
 
+  // Pattern-based resolution for common aliases (e.g. Mini Rails, Adhesive Rails, Double C Rails)
+  const cleanStr = rawName.toLowerCase();
+  const mrMatch = cleanStr.match(/mini\s*rail\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*mini\s*rail/i);
+  if (mrMatch) {
+    const mm = mrMatch[1];
+    if (cleanStr.includes('old')) return ('MR' + mm + 'O').toUpperCase();
+    return ('MR' + mm).toUpperCase();
+  }
+  const arMatch = cleanStr.match(/adhesive\s*rail\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*adhesive\s*rail/i);
+  if (arMatch) {
+    return ('AR' + arMatch[1]).toUpperCase();
+  }
+  const ccMatch = cleanStr.match(/double\s*c\s*rail\s*([\d.]+)/i);
+  if (ccMatch) {
+    const len = ccMatch[1];
+    if (cleanStr.includes('new')) return ('CC' + len + 'N').toUpperCase();
+    if (cleanStr.includes('old')) return ('CC' + len + 'O').toUpperCase();
+    return ('CC' + len).toUpperCase();
+  }
+  const srMatch = cleanStr.match(/struct\s*rail\s*([\d.]+)/i);
+  if (srMatch) {
+    return ('SR' + srMatch[1]).toUpperCase();
+  }
+  if (/hand\s*rail/i.test(cleanStr)) {
+    return 'HR';
+  }
+
   const normRaw = normalizeProductName(rawName);
 
   // 1. Direct or normalized name match in products catalog
@@ -3470,15 +3497,31 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
     if (fpMatch && fpMatch.code) return fpMatch.code.toUpperCase();
   }
 
-  // 3. Fallback: check if normalized names or codes include each other
-  const subMatch = productsList.find(p => {
-    const pNorm = normalizeProductName(p.name);
-    const pCode = String(p.code || '').toLowerCase();
-    return (pCode && normRaw.includes(pCode)) ||
-           (pNorm && (normRaw.includes(pNorm) || pNorm.includes(normRaw)));
-  });
-  if (subMatch && subMatch.code) return subMatch.code.toUpperCase();
+  // 3. Clean parenthetical variations (e.g. "(300mm)", "(100mm)", "new", "old")
+  const strippedName = rawName.replace(/\([^)]*\)/g, '').replace(/\b(new|old|nos|mm)\b/gi, '').trim();
+  if (strippedName && strippedName.length >= 3) {
+    const normStripped = normalizeProductName(strippedName);
+    if (normStripped && normStripped.length >= 3) {
+      const stripMatch = productsList.find(p => {
+        const pNorm = normalizeProductName(p.name.replace(/\([^)]*\)/g, '').replace(/\b(new|old|nos|mm)\b/gi, ''));
+        return pNorm && normStripped && (pNorm === normStripped || (normStripped.length >= 5 && (pNorm.includes(normStripped) || normStripped.includes(pNorm))));
+      });
+      if (stripMatch && stripMatch.code) return stripMatch.code.toUpperCase();
+    }
+  }
+
+  // 4. Fallback: check if normalized names or codes match for meaningful queries (length >= 3)
+  if (normRaw && normRaw.length >= 3) {
+    const subMatch = productsList.find(p => {
+      const pNorm = normalizeProductName(p.name);
+      const pCode = String(p.code || '').toLowerCase();
+      return (pCode && pCode.length >= 2 && normRaw === pCode) ||
+             (pNorm && normRaw.length >= 5 && (normRaw.includes(pNorm) || pNorm.includes(normRaw)));
+    });
+    if (subMatch && subMatch.code) return subMatch.code.toUpperCase();
+  }
 
   return direct || '';
 };
+
 

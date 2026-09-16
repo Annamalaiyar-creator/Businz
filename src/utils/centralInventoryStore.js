@@ -998,23 +998,6 @@ class CentralInventoryStore {
 
   // Complete Stock Reset: sets stock to 0, clears allocations, and sets every stock to 5000
   resetAllStockTo5000() {
-    // 1. Remove all stock (start from 0)
-    this.items = (this.items || []).map(item => ({
-      ...item,
-      stock: 0,
-      openingStock: 0,
-      physicalStock: 0,
-      available: 0,
-      reserved: 0
-    }));
-
-    // 2. Wipe reservations
-    this.reservations = [];
-    try {
-      localStorage.removeItem(this.storageKeyReservations);
-    } catch (_) {}
-
-    // 3. Set every stock to exactly 5,000
     this.items = INITIAL_CENTRAL_ITEMS.map(item => ({
       ...item,
       stock: 5000,
@@ -1024,12 +1007,16 @@ class CentralInventoryStore {
       reserved: 0
     }));
 
+    this.reservations = [];
+    try {
+      localStorage.removeItem(this.storageKeyReservations);
+    } catch (_) {}
+
     this.saveItems();
     try {
       saveCloudStore('item_store', this.items);
     } catch (_) {}
 
-    // 4. Update raw materials store for Inventory Stores with all items having 5,000 stock
     const rawMaterials5000 = this.items.map(item => ({
       code: item.code,
       name: item.name,
@@ -1044,7 +1031,7 @@ class CentralInventoryStore {
       status: 'In Stock',
       store: item.location || 'Main Store',
       hsn: '7604',
-      lastUpdated: 'Stock Reset to 5,000',
+      lastUpdated: 'Stock Set to 5,000',
       reserved: 0,
       openingStock: 5000,
       goodsReceived: 0,
@@ -1063,6 +1050,21 @@ class CentralInventoryStore {
       window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_raw_materials_store' } }));
     } catch (_) {}
 
+    this.notifyChange();
+    return this.items;
+  }
+
+  resetAllStockTo0() {
+    this.items = INITIAL_CENTRAL_ITEMS.map(item => ({
+      ...item,
+      stock: 0,
+      openingStock: 0,
+      physicalStock: 0,
+      available: 0,
+      reserved: 0
+    }));
+    this.reservations = [];
+    this.saveItems();
     this.notifyChange();
     return this.items;
   }

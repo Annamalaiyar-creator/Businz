@@ -184,12 +184,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     (initialMaterials || []).forEach(m => {
       const key = String(m.code).toUpperCase().trim();
       const existing = matMap.get(key) || {};
+      const sVal = m.stock !== undefined ? Number(m.stock) : 5000;
       matMap.set(key, {
         ...existing,
         ...m,
-        stock: 5000,
-        openingStock: 5000,
-        status: 'In Stock'
+        stock: sVal,
+        openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 5000,
+        status: sVal > 0 ? 'In Stock' : 'Out of Stock'
       });
     });
 
@@ -202,16 +203,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const upperName = it.name ? String(it.name).toUpperCase() : '';
         const grnReceived = completedGrnMapInitial.get(upperKey) || (upperName ? completedGrnMapInitial.get(upperName) : null);
         const recQty = grnReceived ? Number(grnReceived.receivedQty || 0) : 0;
+        const itStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 5000;
 
         if (matMap.has(upperKey)) {
           const existing = matMap.get(upperKey);
           matMap.set(upperKey, {
             ...existing,
             name: it.name || existing.name,
-            stock: 5000,
-            openingStock: 5000,
+            stock: itStock,
+            openingStock: it.openingStock !== undefined ? Number(it.openingStock) : 5000,
             goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
-            status: 'In Stock',
+            status: itStock > 0 ? 'In Stock' : 'Out of Stock',
             lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
             grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
           });
@@ -224,9 +226,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           cat: it.category || it.material || 'General',
           category: it.category || it.material || 'General',
           unit: it.unit || it.uom || 'Nos',
-          stock: 5000,
+          stock: itStock,
           minLevel: 50,
-          status: 'In Stock',
+          status: itStock > 0 ? 'In Stock' : 'Out of Stock',
           store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
           hsn: '7604',
           lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
@@ -250,14 +252,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           savedMats.forEach(sm => {
             const mapKey = String(sm.code || sm.name).toUpperCase().trim();
             const existing = matMap.get(mapKey) || {};
+            const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
             matMap.set(mapKey, {
               ...existing,
               ...sm,
               code: sm.code || existing.code || mapKey,
               name: sm.name || existing.name,
-              stock: sm.stock !== undefined ? Number(sm.stock) : 5000,
-              openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 5000,
-              status: 'In Stock'
+              stock: smStock,
+              openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
+              status: smStock > 0 ? 'In Stock' : 'Out of Stock'
             });
           });
         }
@@ -364,12 +367,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       (initialMaterials || []).forEach(m => {
         const key = String(m.code).toUpperCase().trim();
         const existing = matMap.get(key) || {};
+        const mStock = m.stock !== undefined ? Number(m.stock) : 5000;
         matMap.set(key, {
           ...existing,
           ...m,
-          stock: m.stock !== undefined ? Number(m.stock) : 5000,
+          stock: mStock,
           openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 5000,
-          status: 'In Stock'
+          status: mStock > 0 ? 'In Stock' : 'Out of Stock'
         });
       });
 
@@ -382,14 +386,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             savedMats.forEach(sm => {
               const mapKey = String(sm.code || sm.name).toUpperCase().trim();
               const existing = matMap.get(mapKey) || {};
+              const smStock = sm.stock !== undefined ? Number(sm.stock) : 5000;
               matMap.set(mapKey, {
                 ...existing,
                 ...sm,
                 code: sm.code || existing.code || mapKey,
                 name: sm.name || existing.name,
-                stock: sm.stock !== undefined ? Number(sm.stock) : 5000,
+                stock: smStock,
                 openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 5000,
-                status: 'In Stock'
+                status: smStock > 0 ? 'In Stock' : 'Out of Stock'
               });
             });
           }
@@ -443,7 +448,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             const incomingStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : null;
             const finalStock = isExistingReduced
               ? existingStock
-              : (incomingStock !== null && incomingStock < 5000 ? incomingStock : (existingStock ?? 5000));
+              : (incomingStock !== null ? incomingStock : (existingStock ?? 5000));
 
             matMap.set(upperKey, {
               ...existing,
@@ -466,7 +471,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             unit: it.unit || it.uom || 'Nos',
             stock: (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 5000,
             minLevel: 50,
-            status: 'In Stock',
+            status: ((it.stock !== undefined && Number(it.stock) === 0) ? 'Out of Stock' : 'In Stock'),
             store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
             hsn: '7604',
             lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',

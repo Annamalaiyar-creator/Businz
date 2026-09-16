@@ -1,4 +1,4 @@
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabaseClient.js';
 
 // Preserve local browser caches for zero-data-loss protection per project guidelines
 

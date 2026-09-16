@@ -95,6 +95,11 @@ export default function AccountsVerificationModal({
       proofDocData: verifiedBOM.payments?.proofDocData || verifiedBOM.paymentProofDoc?.dataUrl || null,
       status: 'Accounts Verified & Passed to Invoice'
     };
+    delete updatedBomData.c2;
+    delete updatedBomData.c3;
+    delete updatedBomData.c4;
+    delete updatedBomData.c5;
+    delete updatedBomData.c6;
 
     setBomStore(prev => {
       const updated = (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === verifiedBOM.id) ? updatedBomData : b);

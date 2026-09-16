@@ -284,7 +284,7 @@ export default function ProductionTableView({
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c3 || row.date1}</td>
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4 || row.date2}</td>
                       {row.c5 !== undefined && <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: row.c5?.toString()?.includes('₹') ? 'right' : 'left' }}>{row.c5 || row.value}</td>}
-                      {row.c6 !== undefined && activeTab !== 'Customer Management' && (
+                      {row.c6 !== undefined && activeTab !== 'Customer Management' && activeTab !== 'Dispatch Orders' && pageConfig.headers.length > 6 && (
                         <td style={{ padding: '12px 14px', color: '#475569' }}>
                           {activeTab === 'Invoice Management' ? (
                             <span style={{

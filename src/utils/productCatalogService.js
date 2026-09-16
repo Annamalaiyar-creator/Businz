@@ -15,7 +15,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     const centralItems = centralInventoryStore.getInventoryItems();
     if (Array.isArray(centralItems)) {
       centralItems.forEach(ci => {
-        const codeKey = String(ci.code || '').toLowerCase().trim();
+        const resCode = resolveProductCode(ci);
+        const codeKey = String(resCode || ci.code || '').toLowerCase().trim();
+        const origCode = String(ci.code || '').toLowerCase().trim();
         const nameKey = String(ci.name || '').toLowerCase().trim();
         const normKey = normalizeProductName(ci.name);
         const fpKey = wordFingerprint(ci.name);
@@ -24,6 +26,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
           : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock !== undefined ? ci.stock : 0));
         
         if (codeKey) stockMap.set(codeKey, st);
+        if (origCode) stockMap.set(origCode, st);
         if (nameKey) stockMap.set(nameKey, st);
         if (normKey) stockMap.set(normKey, st);
         if (fpKey) stockMap.set(fpKey, st);
@@ -33,19 +36,24 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     console.warn('[CATALOG] Central store stock query notice:', e.message);
   }
 
-  // Also check raw materials store from localStorage for any live line adjustments
+  // Also check raw materials store from localStorage for live inventory store stock
+  let parsedRawMats = [];
   try {
     const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
     if (rawSaved) {
       const parsed = JSON.parse(rawSaved);
       if (Array.isArray(parsed)) {
+        parsedRawMats = parsed;
         parsed.forEach(rm => {
-          const codeKey = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
+          const resCode = resolveProductCode(rm);
+          const codeKey = String(resCode || rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
+          const origCode = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
           const nameKey = String(rm.name || '').toLowerCase().trim();
           const normKey = normalizeProductName(rm.name);
           const fpKey = wordFingerprint(rm.name);
           const st = Number(rm.stock !== undefined ? rm.stock : (rm.availableStock !== undefined ? rm.availableStock : (rm.physicalStock || 0)));
           if (codeKey) rawStoreMap.set(codeKey, st);
+          if (origCode) rawStoreMap.set(origCode, st);
           if (nameKey) rawStoreMap.set(nameKey, st);
           if (normKey) rawStoreMap.set(normKey, st);
           if (fpKey) rawStoreMap.set(fpKey, st);
@@ -178,47 +186,62 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       reservedStock: blockedQty
     };
 
-    catalogMap.set(nameKey, itemRecord);
-    if (normKey && !catalogMap.has(normKey)) {
-      catalogMap.set(normKey, itemRecord);
+    const itemKey = codeKey || nameKey;
+    catalogMap.set(itemKey, itemRecord);
+    if (nameKey && !catalogMap.has(nameKey)) {
+      catalogMap.set(nameKey, itemRecord);
     }
   });
 
 
-  // 3. Include any items from Zoho or custom item store
+  // 3. Include any items from Zoho, custom item store, or raw materials store
   const mergeExtraItems = (items) => {
     if (!Array.isArray(items)) return;
     items.forEach(ci => {
+      const rawCode = String(ci.code || ci.sku || ci.itemId || ci.id || '').trim();
       const nameKey = String(ci.name || '').toLowerCase().trim();
-      const codeKey = String(ci.code || ci.sku || ci.itemId || ci.id || '').toLowerCase().trim();
+      const resCode = resolveProductCode(ci);
+      const itemKey = rawCode ? rawCode.toLowerCase() : nameKey;
+      const lookupCode = (rawCode || resCode || '').toLowerCase();
 
       let realStock = 0;
-      if (codeKey && stockMap.has(codeKey)) realStock = stockMap.get(codeKey);
+      if (lookupCode && rawStoreMap.has(lookupCode)) realStock = rawStoreMap.get(lookupCode);
+      else if (lookupCode && stockMap.has(lookupCode)) realStock = stockMap.get(lookupCode);
+      else if (nameKey && rawStoreMap.has(nameKey)) realStock = rawStoreMap.get(nameKey);
       else if (nameKey && stockMap.has(nameKey)) realStock = stockMap.get(nameKey);
-      else realStock = Number(ci.stock !== undefined ? ci.stock : (ci.availableStock !== undefined ? ci.availableStock : 0));
+      else realStock = Number(ci.stock !== undefined ? ci.stock : (ci.availableStock !== undefined ? ci.availableStock : (ci.physicalStock || 0)));
 
-      if (nameKey) {
-        const existing = catalogMap.get(nameKey);
+      if (itemKey) {
+        const existing = catalogMap.get(itemKey);
         if (!existing) {
-          catalogMap.set(nameKey, {
-            code: ci.code || ci.sku || '',
+          catalogMap.set(itemKey, {
+            code: rawCode || ci.code || ci.sku || resCode || '',
             name: ci.name,
-            category: ci.category || ci.description || 'Raw Material',
+            category: ci.category || ci.cat || ci.description || 'Raw Material',
             uom: ci.uom || ci.unit || 'NOS',
             rate: String(ci.rate || ci.price || '0'),
             price: String(ci.rate || ci.price || '0'),
-            gstRate: ci.gstRate || '18%',
+            gstRate: ci.gstRate || ci.gst || '18%',
             stock: realStock,
             availableStock: realStock
           });
-        } else if (ci.rate || ci.price) {
-          // If price is specified from Zoho, keep updated
-          existing.rate = String(ci.rate || ci.price || existing.rate);
-          existing.price = existing.rate;
+        } else {
+          if (ci.rate || ci.price) {
+            existing.rate = String(ci.rate || ci.price || existing.rate);
+            existing.price = existing.rate;
+          }
+          if (realStock !== undefined && !isNaN(realStock)) {
+            existing.stock = realStock;
+            existing.availableStock = realStock;
+          }
         }
       }
     });
   };
+
+  if (Array.isArray(parsedRawMats) && parsedRawMats.length > 0) {
+    mergeExtraItems(parsedRawMats);
+  }
 
   if (Array.isArray(directItems) && directItems.length > 0) {
     mergeExtraItems(directItems);
@@ -234,7 +257,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   // Deduplicate items so fullList only contains unique items
   const uniqueItemsMap = new Map();
   for (const it of catalogMap.values()) {
-    const uKey = String(it.name || it.code || '').toLowerCase().trim();
+    const uKey = String(it.code || it.name || '').toLowerCase().trim();
     if (uKey && !uniqueItemsMap.has(uKey)) {
       uniqueItemsMap.set(uKey, it);
     }

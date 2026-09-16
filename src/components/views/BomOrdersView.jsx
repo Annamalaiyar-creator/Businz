@@ -1367,19 +1367,24 @@ export default function BomOrdersView(props) {
 
     let resolvedData = null;
     if (typeof rawDoc === 'string') {
-      if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
+      if (rawDoc.startsWith('blob:')) {
+        resolvedData = null;
+      } else if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
         resolvedData = rawDoc;
       } else {
-        resolvedData = getMediaFromCache(rawDoc);
+        const cached = getMediaFromCache(rawDoc);
+        resolvedData = (cached && !cached.startsWith('blob:')) ? cached : null;
       }
     } else if (rawDoc && typeof rawDoc === 'object') {
-      resolvedData = rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
-      if (!resolvedData && rawDoc.id) {
-        resolvedData = getMediaFromCache(rawDoc.id);
-      }
-      if (!resolvedData && docName) {
-        resolvedData = getMediaFromCache(docName);
-      }
+      const u = (rawDoc.url && !rawDoc.url.startsWith('blob:')) ? rawDoc.url : null;
+      const d = (rawDoc.dataUrl && !rawDoc.dataUrl.startsWith('blob:')) ? rawDoc.dataUrl : null;
+      const f = (rawDoc.fileData && !rawDoc.fileData.startsWith('blob:')) ? rawDoc.fileData : null;
+      const p = (rawDoc.proofDocData && !rawDoc.proofDocData.startsWith('blob:')) ? rawDoc.proofDocData : null;
+      const c1 = rawDoc.name ? getMediaFromCache(rawDoc.name) : null;
+      const c2 = rawDoc.id ? getMediaFromCache(rawDoc.id) : null;
+      const cacheVal = (c1 && !c1.startsWith('blob:')) ? c1 : ((c2 && !c2.startsWith('blob:')) ? c2 : null);
+
+      resolvedData = u || d || f || p || cacheVal;
       if (!resolvedData && rawDoc instanceof Blob) {
         try {
           resolvedData = URL.createObjectURL(rawDoc);
@@ -1390,14 +1395,16 @@ export default function BomOrdersView(props) {
     // Auto-fetch from server if not found in local memory/IndexedDB
     if (!resolvedData && docName && typeof window !== 'undefined') {
       const isMediaFile = /\.(mp4|webm|mov|mkv|avi|jpg|jpeg|png|webp|gif|pdf)($|\?)/i.test(docName);
-      if (isMediaFile && !rawDoc._fetchingServer) {
-        rawDoc._fetchingServer = true;
+      if (isMediaFile && !rawDoc?._fetchingServer) {
+        if (typeof rawDoc === 'object' && rawDoc) rawDoc._fetchingServer = true;
         fetch(`/api/media/find/${encodeURIComponent(docName)}`)
           .then(r => r.json())
           .then(data => {
             if (data?.found && data?.url) {
               saveMediaToCache(docName, data.url);
-              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url, _fetchingServer: false } } : null);
+            } else {
+              if (typeof rawDoc === 'object' && rawDoc) rawDoc._fetchingServerDone = true;
             }
           })
           .catch(() => {});
@@ -1495,15 +1502,66 @@ export default function BomOrdersView(props) {
           </div>
           <div style={{ padding: '20px', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '340px', backgroundColor: '#0F172A' }}>
             {!resolvedData ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
-                <FileText size={48} style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-                <p style={{ fontSize: '14px', fontWeight: '700', margin: 0, color: '#F1F5F9' }}>No visual preview available</p>
-                <p style={{ fontSize: '12px', marginTop: '6px' }}>Attached file: {docName}</p>
-              </div>
+              rawDoc?._fetchingServer && !rawDoc?._fetchingServerDone ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
+                  <div style={{ width: '36px', height: '36px', border: '3px solid #0E7490', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 14px', animation: 'spin 0.8s linear infinite' }} />
+                  <p style={{ fontSize: '14px', fontWeight: '800', margin: 0, color: '#F1F5F9' }}>Loading visual preview from server...</p>
+                  <p style={{ fontSize: '12px', marginTop: '6px', color: '#94A3B8' }}>{docName}</p>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '36px 20px', color: '#94A3B8', maxWidth: '480px' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '14px', backgroundColor: 'rgba(14,116,144,0.15)', color: '#38BDF8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                    {isVid ? <Video size={28} /> : <FileText size={28} />}
+                  </div>
+                  <h4 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: '#F1F5F9' }}>Dispatch Packing Proof Attached</h4>
+                  <p style={{ fontSize: '12px', marginTop: '8px', color: '#CBD5E1', lineHeight: '1.5' }}>
+                    This {isVid ? 'video' : 'photo'} was registered by Dispatch Fulfillment Team during packing verification.
+                  </p>
+                  <div style={{ marginTop: '16px', padding: '10px 14px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '10px', fontSize: '11px', color: '#94A3B8', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div><strong style={{ color: '#E2E8F0' }}>File:</strong> {docName}</div>
+                    {rawDoc?.size && <div><strong style={{ color: '#E2E8F0' }}>Size:</strong> {rawDoc.size}</div>}
+                    {rawDoc?.uploadedAt && <div><strong style={{ color: '#E2E8F0' }}>Time:</strong> {rawDoc.uploadedAt}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data?.found && data?.url) {
+                            saveMediaToCache(docName, data.url);
+                            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+                          } else {
+                            alert(`File "${docName}" is attached to the BOM packing record. For visual playback, please ensure the dispatch device has synced with the server.`);
+                          }
+                        }).catch(() => {});
+                    }}
+                    style={{
+                      marginTop: '16px', backgroundColor: '#0E7490', color: '#FFFFFF', border: 'none',
+                      padding: '8px 18px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
+                    }}
+                  >
+                    Retry Server Lookup
+                  </button>
+                </div>
+              )
             ) : isImg ? (
               <img
                 src={resolvedData}
                 alt={docName}
+                onError={(e) => {
+                  if (!e.currentTarget.dataset.retried && docName) {
+                    e.currentTarget.dataset.retried = 'true';
+                    fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                      .then(r => r.json())
+                      .then(data => {
+                        if (data?.found && data?.url) {
+                          saveMediaToCache(docName, data.url);
+                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+                        }
+                      }).catch(() => {});
+                  }
+                }}
                 style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
               />
             ) : isVid ? (
@@ -1512,6 +1570,19 @@ export default function BomOrdersView(props) {
                 autoPlay
                 playsInline
                 src={resolvedData}
+                onError={(e) => {
+                  if (!e.currentTarget.dataset.retried && docName) {
+                    e.currentTarget.dataset.retried = 'true';
+                    fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                      .then(r => r.json())
+                      .then(data => {
+                        if (data?.found && data?.url) {
+                          saveMediaToCache(docName, data.url);
+                          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url } } : null);
+                        }
+                      }).catch(() => {});
+                  }
+                }}
                 style={{ maxWidth: '100%', maxHeight: '68vh', borderRadius: '8px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
               >
                 Your browser does not support playing this video.
@@ -3186,15 +3257,19 @@ export default function BomOrdersView(props) {
                                 placeholder="Type or select product / item..."
                                 accentColor="#0E7490"
                                 onChange={(val, matched) => {
-                                  const pName = matched ? matched.name : val;
-                                  const pCat = matched ? (matched.category || matched.description || item.category) : item.category;
+                                  if (!matched) {
+                                    setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                                    return;
+                                  }
+                                  const pName = matched.name;
+                                  const pCat = matched.category || matched.description || item.category;
                                   const isSolar5 = is5PctSolarProduct(pName, pCat);
                                   setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? {
                                     ...mat,
                                     name: pName,
-                                    code: matched ? (matched.code || mat.code || '') : (mat.code || ''),
-                                    rate: matched ? String(matched.price || matched.rate || mat.rate) : mat.rate,
-                                    uom: matched ? (matched.uom || matched.unit || mat.uom) : mat.uom,
+                                    code: matched.code || mat.code || '',
+                                    rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
+                                    uom: matched.uom || matched.unit || mat.uom,
                                     category: pCat,
                                     gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
                                   } : mat));
@@ -5336,7 +5411,9 @@ export default function BomOrdersView(props) {
                 {hasMedia ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '4px' }}>
                     {packPhotos.map((ph, pIdx) => {
-                      const photoUrl = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                      const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                        ? ph.url
+                        : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                       return (
                         <div
                           key={pIdx}
@@ -5355,7 +5432,24 @@ export default function BomOrdersView(props) {
                           onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
                           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                         >
-                          <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img
+                            src={photoUrl || ph.dataUrl}
+                            alt={ph.name}
+                            onError={(e) => {
+                              if (!e.currentTarget.dataset.retried && ph.name) {
+                                e.currentTarget.dataset.retried = 'true';
+                                fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    if (data?.found && data?.url) {
+                                      e.currentTarget.src = data.url;
+                                      saveMediaToCache(ph.name, data.url);
+                                    }
+                                  }).catch(() => {});
+                              }
+                            }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
                           <div style={{
                             position: 'absolute', bottom: 0, left: 0, right: 0,
                             backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
@@ -5369,7 +5463,9 @@ export default function BomOrdersView(props) {
                       );
                     })}
                     {packVideos.map((vd, vIdx) => {
-                      const videoUrl = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
+                      const videoUrl = (vd.url && !vd.url.startsWith('blob:'))
+                        ? vd.url
+                        : ((vd.dataUrl && !vd.dataUrl.startsWith('blob:')) ? vd.dataUrl : (getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || (vd.name ? `/api/uploads/${vd.name}` : '')));
                       return (
                         <div
                           key={vIdx}
@@ -5608,15 +5704,20 @@ export default function BomOrdersView(props) {
                             placeholder="Type or select product / item..."
                             accentColor="#0E7490"
                             onChange={(val, matched) => {
-                              const pName = matched ? matched.name : val;
-                              const pCat = matched ? (matched.category || matched.description || item.category) : item.category;
+                              if (!matched) {
+                                const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, name: val } : it);
+                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                return;
+                              }
+                              const pName = matched.name;
+                              const pCat = matched.category || matched.description || item.category;
                               const isSolar5 = is5PctSolarProduct(pName, pCat);
                               const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? {
                                 ...it,
                                 name: pName,
-                                code: matched ? (matched.code || it.code || '') : (it.code || ''),
-                                rate: matched ? Number(matched.price || matched.rate || it.rate) : it.rate,
-                                uom: matched ? (matched.uom || matched.unit || it.uom) : it.uom,
+                                code: matched.code || it.code || '',
+                                rate: matched.price || matched.rate ? Number(matched.price || matched.rate) : it.rate,
+                                uom: matched.uom || matched.unit || it.uom,
                                 category: pCat,
                                 gstRate: isSolar5 ? '5%' : (it.gstRate || '18%')
                               } : it);
@@ -6799,14 +6900,33 @@ export default function BomOrdersView(props) {
                   {hasMedia ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                       {packPhotos.map((ph, pIdx) => {
-                        const photoUrl = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                        const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                          ? ph.url
+                          : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
                         return (
                           <div
                             key={pIdx}
                             onClick={() => setPreviewDocModal({ title: ph.name || `Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
                             style={{ height: '76px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #CBD5E1', backgroundColor: '#0F172A', position: 'relative' }}
                           >
-                            <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img
+                              src={photoUrl || ph.dataUrl}
+                              alt={ph.name}
+                              onError={(e) => {
+                                if (!e.currentTarget.dataset.retried && ph.name) {
+                                  e.currentTarget.dataset.retried = 'true';
+                                  fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                                    .then(r => r.json())
+                                    .then(data => {
+                                      if (data?.found && data?.url) {
+                                        e.currentTarget.src = data.url;
+                                        saveMediaToCache(ph.name, data.url);
+                                      }
+                                    }).catch(() => {});
+                                }
+                              }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
                             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
                               <span>📷 Photo</span>
                               <span>›</span>
@@ -6815,7 +6935,9 @@ export default function BomOrdersView(props) {
                         );
                       })}
                       {packVideos.map((vd, vIdx) => {
-                        const videoUrl = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
+                        const videoUrl = (vd.url && !vd.url.startsWith('blob:'))
+                          ? vd.url
+                          : ((vd.dataUrl && !vd.dataUrl.startsWith('blob:')) ? vd.dataUrl : (getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || (vd.name ? `/api/uploads/${vd.name}` : '')));
                         return (
                           <div
                             key={vIdx}

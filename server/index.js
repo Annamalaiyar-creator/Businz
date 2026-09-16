@@ -47,6 +47,35 @@ const getDatabaseStore = async (key) => {
       if (primaryRecord.reason) {
         try {
           const parsed = JSON.parse(primaryRecord.reason);
+          // If disk file has more items than cloud record for inventory stores (e.g. 309 vs 37), merge with disk master
+          if (key === 'raw_materials_store' || key === 'item_store') {
+            const diskPath = getStoreFilePath(key + '.json');
+            if (fs.existsSync(diskPath)) {
+              try {
+                const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+                if (Array.isArray(diskData) && diskData.length > (Array.isArray(parsed) ? parsed.length : 0)) {
+                  const masterMap = new Map();
+                  diskData.forEach(d => {
+                    const k = String(d.code || d.name || '').toUpperCase().trim();
+                    if (k) masterMap.set(k, { ...d });
+                  });
+                  if (Array.isArray(parsed)) {
+                    parsed.forEach(p => {
+                      const k = String(p.code || p.name || '').toUpperCase().trim();
+                      if (k && masterMap.has(k)) {
+                        masterMap.set(k, { ...masterMap.get(k), ...p });
+                      } else if (k) {
+                        masterMap.set(k, { ...p });
+                      }
+                    });
+                  }
+                  const merged = Array.from(masterMap.values());
+                  supabaseMemoryStore[key] = merged;
+                  return merged;
+                }
+              } catch (_) {}
+            }
+          }
           supabaseMemoryStore[key] = parsed;
           return parsed;
         } catch (e) {
@@ -208,7 +237,7 @@ app.use(cookieParser());
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-file-name', 'X-File-Name']
 }));
 app.use(express.json({ limit: '150mb' }));
 app.use(express.urlencoded({ limit: '150mb', extended: true }));
@@ -224,7 +253,7 @@ app.use('/api/uploads', express.static(uploadsDir, { acceptRanges: true }));
 // 🎥 MEDIA UPLOAD API (High-performance streaming binary upload for large videos)
 app.post('/api/media/upload-raw', (req, res) => {
   try {
-    const rawFileName = req.headers['x-file-name'] || `media_${Date.now()}`;
+    const rawFileName = req.query.filename || req.query.name || req.headers['x-file-name'] || `media_${Date.now()}`;
     const decodedName = decodeURIComponent(rawFileName);
     const ext = path.extname(decodedName) || '.mp4';
     const safeBase = path.basename(decodedName, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -671,37 +700,77 @@ const saveLocalCustomers = (customers) => {
 };
 
 const loadLocalItems = () => {
-  if (supabaseMemoryStore.item_store && Array.isArray(supabaseMemoryStore.item_store) && supabaseMemoryStore.item_store.length > 0) {
-    return supabaseMemoryStore.item_store;
-  }
   const itemsPath = getStoreFilePath('item_store.json');
+  let diskItems = [];
   if (fs.existsSync(itemsPath)) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(itemsPath, 'utf8'));
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        supabaseMemoryStore.item_store = parsed;
-        return parsed;
-      }
+      diskItems = JSON.parse(fs.readFileSync(itemsPath, 'utf8')) || [];
     } catch (_) {}
   }
-  return [];
+  const memItems = supabaseMemoryStore.item_store;
+  if (Array.isArray(memItems) && memItems.length >= diskItems.length && memItems.length > 0) {
+    return memItems;
+  }
+  if (Array.isArray(diskItems) && diskItems.length > 0) {
+    if (Array.isArray(memItems) && memItems.length > 0) {
+      const map = new Map();
+      diskItems.forEach(d => {
+        const k = String(d.code || d.name || '').toUpperCase().trim();
+        if (k) map.set(k, { ...d });
+      });
+      memItems.forEach(m => {
+        const k = String(m.code || m.name || '').toUpperCase().trim();
+        if (k && map.has(k)) {
+          map.set(k, { ...map.get(k), ...m });
+        } else if (k) {
+          map.set(k, { ...m });
+        }
+      });
+      const unified = Array.from(map.values());
+      supabaseMemoryStore.item_store = unified;
+      return unified;
+    }
+    supabaseMemoryStore.item_store = diskItems;
+    return diskItems;
+  }
+  return memItems || [];
 };
 
 const loadLocalRawMaterials = () => {
-  if (supabaseMemoryStore.raw_materials_store && Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0) {
-    return supabaseMemoryStore.raw_materials_store;
-  }
   const rawPath = getStoreFilePath('raw_materials_store.json');
+  let diskMats = [];
   if (fs.existsSync(rawPath)) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(rawPath, 'utf8'));
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        supabaseMemoryStore.raw_materials_store = parsed;
-        return parsed;
-      }
+      diskMats = JSON.parse(fs.readFileSync(rawPath, 'utf8')) || [];
     } catch (_) {}
   }
-  return [];
+  const memMats = supabaseMemoryStore.raw_materials_store;
+  if (Array.isArray(memMats) && memMats.length >= diskMats.length && memMats.length > 0) {
+    return memMats;
+  }
+  if (Array.isArray(diskMats) && diskMats.length > 0) {
+    if (Array.isArray(memMats) && memMats.length > 0) {
+      const map = new Map();
+      diskMats.forEach(d => {
+        const k = String(d.code || d.name || '').toUpperCase().trim();
+        if (k) map.set(k, { ...d });
+      });
+      memMats.forEach(m => {
+        const k = String(m.code || m.name || '').toUpperCase().trim();
+        if (k && map.has(k)) {
+          map.set(k, { ...map.get(k), ...m });
+        } else if (k) {
+          map.set(k, { ...m });
+        }
+      });
+      const unified = Array.from(map.values());
+      supabaseMemoryStore.raw_materials_store = unified;
+      return unified;
+    }
+    supabaseMemoryStore.raw_materials_store = diskMats;
+    return diskMats;
+  }
+  return memMats || [];
 };
 
 const saveLocalItems = (items) => {

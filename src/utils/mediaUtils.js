@@ -59,6 +59,8 @@ if (typeof window !== 'undefined' && window.indexedDB) {
 
 export const saveMediaToCache = (docKey, dataUrl) => {
   if (!docKey || !dataUrl) return;
+  // Never cache temporary blob: URLs that cannot be shared across logins or survive page reloads
+  if (typeof dataUrl === 'string' && dataUrl.startsWith('blob:')) return;
 
   // 1. Save to global memory map
   if (typeof window !== 'undefined' && window.__CR_MEDIA_MAP__) {
@@ -197,16 +199,27 @@ export const getMediaFromCacheAsync = async (docKey) => {
 export const uploadMediaFile = async (file, originalName) => {
   if (!file) return null;
   const fileName = originalName || file.name || `media_${Date.now()}`;
+  const encodedName = encodeURIComponent(fileName);
+
+  // If a temporary blob: URL string was passed, convert it to a Blob so it streams to server
+  let actualFile = file;
+  if (typeof file === 'string' && file.startsWith('blob:')) {
+    try {
+      actualFile = await fetch(file).then(r => r.blob());
+    } catch (bErr) {
+      console.warn('[uploadMediaFile blob: fetch failed]:', bErr);
+    }
+  }
 
   // 1. If native File or Blob, stream upload directly without base64 overhead
-  if (file instanceof Blob || (typeof File !== 'undefined' && file instanceof File)) {
+  if (actualFile instanceof Blob || (typeof File !== 'undefined' && actualFile instanceof File)) {
     try {
-      const res = await fetch('/api/media/upload-raw', {
+      const res = await fetch(`/api/media/upload-raw?filename=${encodedName}`, {
         method: 'POST',
-        body: file,
+        body: actualFile,
         headers: {
-          'x-file-name': encodeURIComponent(fileName),
-          'Content-Type': file.type || 'application/octet-stream'
+          'x-file-name': encodedName,
+          'Content-Type': actualFile.type || 'application/octet-stream'
         }
       });
       if (res.ok) {
@@ -217,11 +230,37 @@ export const uploadMediaFile = async (file, originalName) => {
         }
       }
     } catch (err) {
-      console.warn('[uploadMediaFile raw stream failed]:', err);
+      console.warn('[uploadMediaFile raw stream failed, falling back to base64]:', err);
+    }
+
+    // Fallback if raw stream failed: convert file/blob to base64 and upload via JSON
+    try {
+      const b64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result || null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+      if (b64 && typeof b64 === 'string') {
+        const res = await fetch('/api/media/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: fileName, dataUrl: b64, mimeType: file.type })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.url) {
+            saveMediaToCache(fileName, data.url);
+            return data;
+          }
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn('[uploadMediaFile base64 fallback failed]:', fallbackErr);
     }
   }
 
-  // 2. Fallback: Base64 JSON upload
+  // 2. Base64 JSON upload
   if (typeof file === 'string' && file.startsWith('data:')) {
     try {
       const res = await fetch('/api/media/upload', {
@@ -237,7 +276,7 @@ export const uploadMediaFile = async (file, originalName) => {
         }
       }
     } catch (err2) {
-      console.warn('[uploadMediaFile base64 fallback failed]:', err2);
+      console.warn('[uploadMediaFile base64 JSON upload failed]:', err2);
     }
   }
 
@@ -259,13 +298,37 @@ export const stripDataUrlsFromRecord = (obj) => {
       if (target.proofDocData) saveMediaToCache(docIdentifier, target.proofDocData);
     }
 
-    if (target.dataUrl) delete target.dataUrl;
-    if (target.fileData) delete target.fileData;
-    if (target.proofDocData) delete target.proofDocData;
+    // Never keep session-only blob: URLs in stored records
+    if (typeof target.url === 'string' && target.url.startsWith('blob:')) {
+      delete target.url;
+    }
+
+    // If target has a permanent server URL (/api/uploads/ or http), strip heavy base64
+    if (target.url && (target.url.startsWith('/api/uploads/') || target.url.startsWith('/uploads/') || target.url.startsWith('http://') || target.url.startsWith('https://'))) {
+      if (target.dataUrl) delete target.dataUrl;
+      if (target.fileData) delete target.fileData;
+      if (target.proofDocData) delete target.proofDocData;
+    } else {
+      // If no server URL is set yet, preserve lightweight compressed images (< 150KB) so other views can preview
+      if (target.dataUrl && target.dataUrl.length > 150000) {
+        delete target.dataUrl;
+      }
+      if (target.fileData && target.fileData.length > 150000) {
+        delete target.fileData;
+      }
+      if (target.proofDocData && target.proofDocData.length > 150000) {
+        delete target.proofDocData;
+      }
+    }
 
     Object.keys(target).forEach((k) => {
-      if (typeof target[k] === 'string' && (target[k].startsWith('data:') || (target[k].length > 1000 && /^[A-Za-z0-9+/=]+$/.test(target[k].slice(0, 100))))) {
+      if (k === 'dataUrl' || k === 'fileData' || k === 'proofDocData') return;
+      if (typeof target[k] === 'string' && target[k].startsWith('blob:')) {
         delete target[k];
+      } else if (typeof target[k] === 'string' && (target[k].startsWith('data:') || (target[k].length > 1000 && /^[A-Za-z0-9+/=]+$/.test(target[k].slice(0, 100))))) {
+        if (target[k].length > 150000) {
+          delete target[k];
+        }
       } else if (target[k] && typeof target[k] === 'object') {
         removeDataUrl(target[k]);
       }

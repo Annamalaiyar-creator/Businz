@@ -9,6 +9,8 @@ import {
 } from "../../utils/otherViewsShared";
 import { saveCloudStoreImmediate } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
+import { getFullProductsCatalogWithStock } from "../../utils/productCatalogService";
+import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
 
@@ -34,6 +36,77 @@ export default function CreateBomFormPage(props) {
     bomConfirmModal, setBomConfirmModal, showCustomAlert
   } = props;
   const [newBomPartialAmount, setNewBomPartialAmount] = React.useState(props.newBomPartialAmount || '');
+
+  // Live unified catalog with real-time stock balances
+  const [itemsList, setItemsList] = React.useState(() => {
+    return Array.isArray(props.itemsList) && props.itemsList.length > 0
+      ? props.itemsList
+      : getFullProductsCatalogWithStock();
+  });
+
+  React.useEffect(() => {
+    const refreshCatalog = () => {
+      setItemsList(getFullProductsCatalogWithStock());
+    };
+    window.addEventListener('central_inventory_updated', refreshCatalog);
+    window.addEventListener('controlroom_raw_materials_update', refreshCatalog);
+    window.addEventListener('controlroom_storage_update', refreshCatalog);
+    window.addEventListener('storage', refreshCatalog);
+    return () => {
+      window.removeEventListener('central_inventory_updated', refreshCatalog);
+      window.removeEventListener('controlroom_raw_materials_update', refreshCatalog);
+      window.removeEventListener('controlroom_storage_update', refreshCatalog);
+      window.removeEventListener('storage', refreshCatalog);
+    };
+  }, []);
+
+  const getItemStock = (itemName, itemCode) => {
+    if (!itemName && !itemCode) return null;
+    const cleanName = (itemName || '').toLowerCase().trim();
+    const cleanCode = (itemCode || '').toLowerCase().trim();
+    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    const normName = normalizeProductName(itemName);
+
+    // 1. Search in itemsList
+    const found = (itemsList || []).find(p => {
+      const pCode = (p.code || '').toLowerCase().trim();
+      const pResCode = resolveProductCode(p).toLowerCase().trim();
+      const pName = (p.name || '').toLowerCase().trim();
+      const pNorm = normalizeProductName(p.name);
+      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
+        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
+        (normName && pNorm === normName) ||
+        (cleanName && pName === cleanName) ||
+        (cleanName && pName.includes(cleanName)) ||
+        (normName && pNorm.includes(normName));
+    });
+    if (found) {
+      return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
+    }
+
+    // 2. Direct fallback from raw materials store in localStorage
+    try {
+      const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawSaved) {
+        const rawList = JSON.parse(rawSaved);
+        if (Array.isArray(rawList)) {
+          const rawFound = rawList.find(rm => {
+            const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
+            const rmResCode = resolveProductCode(rm).toLowerCase().trim();
+            const rmName = (rm.name || '').toLowerCase().trim();
+            return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
+              (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
+              (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName)));
+          });
+          if (rawFound) {
+            return Number(rawFound.stock !== undefined ? rawFound.stock : (rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.physicalStock || 0)));
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  };
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
     const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;
@@ -1016,15 +1089,21 @@ export default function CreateBomFormPage(props) {
                         placeholder="Type or select product..."
                         accentColor="#4F46E5"
                         onChange={(val, matched) => {
-                          const pName = matched ? matched.name : val;
-                          const pCat = matched ? (matched.description || matched.category || item.category) : item.category;
+                          if (!matched) {
+                            setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                            return;
+                          }
+                          const pName = matched.name;
+                          const pCat = matched.description || matched.category || item.category;
+                          const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
                           const isSolar5 = is5PctSolarProduct(pName, pCat);
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? {
                             ...mat,
+                            code: pCode || mat.code,
                             name: pName,
-                            rate: matched ? String(matched.price || matched.rate || mat.rate) : mat.rate,
-                            uom: matched ? (matched.uom || matched.unit || mat.uom) : mat.uom,
-                            mm: matched ? (matched.sections || mat.mm) : mat.mm,
+                            rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
+                            uom: matched.uom || matched.unit || mat.uom,
+                            mm: matched.sections || mat.mm || '',
                             category: pCat,
                             gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
                           } : mat));
@@ -1067,7 +1146,7 @@ export default function CreateBomFormPage(props) {
                         <option value="PAIR" />
                       </datalist>
                     </td>
-                    <td style={{ padding: '12px 10px' }}>
+                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                       <input
                         type="number"
                         value={item.qty}
@@ -1076,8 +1155,33 @@ export default function CreateBomFormPage(props) {
                           const val = e.target.value;
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                         }}
-                        style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box' }}
+                        style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box' }}
                       />
+                      {(() => {
+                        const avail = getItemStock(item.name, item.code);
+                        if (avail === null || avail === undefined) return null;
+                        const isOut = avail <= 0;
+                        return (
+                          <div style={{ marginTop: '3px' }}>
+                            <span
+                              title={`Available Inventory Stock: ${avail.toLocaleString()} ${item.uom || 'NOS'}`}
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: '800',
+                                padding: '1px 6px',
+                                borderRadius: '6px',
+                                backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
+                                color: isOut ? '#DC2626' : '#059669',
+                                border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
+                                display: 'inline-block',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {isOut ? 'Stock: 0' : `Stock: ${avail.toLocaleString()}`}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       {selectedPreset && (item.isPresetItem || parseFloat(item.rate || 0) === 0) ? (

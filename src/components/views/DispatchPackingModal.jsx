@@ -24,9 +24,75 @@ export default function DispatchPackingModal({
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
   const [dispatchCameraError, setDispatchCameraError] = useState('');
   const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const dispatchCameraStreamRef = useRef(null);
   const dispatchCameraVideoRef = useRef(null);
   const dispatchCameraCanvasRef = useRef(null);
+
+  const targetCode = dispatchPackingModal?.bomCode || dispatchPackingModal?.code || dispatchPackingModal?.id;
+
+  const syncBOMMediaItem = (itemType, itemId, permanentUrl) => {
+    if (!targetCode || !permanentUrl) return;
+
+    // 1. Update React state immediately
+    if (typeof setBomStore === 'function') {
+      setBomStore(prev => {
+        return (prev || []).map(b => {
+          if (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) {
+            const rawMedia = b.dispatchPackingMedia || { photos: [], videos: [] };
+            let updatedPhotos = rawMedia.photos || [];
+            let updatedVideos = rawMedia.videos || [];
+            if (itemType === 'photo') {
+              updatedPhotos = updatedPhotos.map(p => (p.id === itemId || p.name === itemId) ? { ...p, url: permanentUrl, dataUrl: permanentUrl } : p);
+            } else if (itemType === 'video') {
+              updatedVideos = updatedVideos.map(v => (v.id === itemId || v.name === itemId) ? { ...v, url: permanentUrl, dataUrl: permanentUrl, uploading: false } : v);
+            }
+            return {
+              ...b,
+              dispatchPackingMedia: { ...rawMedia, photos: updatedPhotos, videos: updatedVideos }
+            };
+          }
+          return b;
+        });
+      });
+    }
+
+    // 2. Persist to localStorage & Server
+    try {
+      const raw = localStorage.getItem('controlroom_bom_store');
+      if (raw) {
+        const localList = JSON.parse(raw);
+        let matchedBom = null;
+        const updatedLocal = localList.map(b => {
+          if (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) {
+            const rawMedia = b.dispatchPackingMedia || { photos: [], videos: [] };
+            let updatedPhotos = rawMedia.photos || [];
+            let updatedVideos = rawMedia.videos || [];
+            if (itemType === 'photo') {
+              updatedPhotos = updatedPhotos.map(p => (p.id === itemId || p.name === itemId) ? { ...p, url: permanentUrl, dataUrl: permanentUrl } : p);
+            } else if (itemType === 'video') {
+              updatedVideos = updatedVideos.map(v => (v.id === itemId || v.name === itemId) ? { ...v, url: permanentUrl, dataUrl: permanentUrl, uploading: false } : v);
+            }
+            matchedBom = {
+              ...b,
+              dispatchPackingMedia: { ...rawMedia, photos: updatedPhotos, videos: updatedVideos }
+            };
+            return matchedBom;
+          }
+          return b;
+        });
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
+        if (matchedBom) {
+          fetch('/api/boms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bom: stripDataUrlsFromRecord(matchedBom), isUpdate: true })
+          }).catch(() => {});
+          window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: matchedBom } }));
+        }
+      }
+    } catch (_) {}
+  };
 
   const handleMediaPreview = (media) => {
     if (typeof setActiveMediaPreviewModal === 'function') {
@@ -77,6 +143,10 @@ export default function DispatchPackingModal({
   const isPartial = packedItemsCount > 0 && !allItemsPacked;
 
   const savePackingData = () => {
+    if (uploadingCount > 0) {
+      alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
+      return;
+    }
     const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
     const nextStatus = allItemsPacked
       ? (isWhileDispatch ? 'Packed & Awaiting Dispatch Payment' : 'Packed & Ready for Dispatch')
@@ -87,10 +157,37 @@ export default function DispatchPackingModal({
       ? dispatchPackingModal.accountsVerification
       : (allItemsPacked ? { paymentStatus: isWhileDispatch ? 'Awaiting Sales Payment Slip' : null, hardCopyReceived: false, softCopyReceived: false, verified: false } : (dispatchPackingModal.accountsVerification || {}));
 
+    const rawMedia = dispatchPackingModal.dispatchPackingMedia;
+    const cleanMedia = rawMedia ? {
+      photos: (rawMedia.photos || []).map(p => {
+        const bestUrl = (p.url && !p.url.startsWith('blob:'))
+          ? p.url
+          : (getMediaFromCache(p.id) || getMediaFromCache(p.name) || (p.dataUrl && !p.dataUrl.startsWith('blob:') ? p.dataUrl : (p.name ? `/api/uploads/${p.name}` : '')));
+        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : undefined;
+        return {
+          ...p,
+          url: cleanBestUrl,
+          dataUrl: (p.dataUrl && !p.dataUrl.startsWith('blob:')) ? p.dataUrl : cleanBestUrl
+        };
+      }),
+      videos: (rawMedia.videos || []).map(v => {
+        const bestUrl = (v.url && !v.url.startsWith('blob:'))
+          ? v.url
+          : (getMediaFromCache(v.id) || getMediaFromCache(v.name) || (v.dataUrl && !v.dataUrl.startsWith('blob:') ? v.dataUrl : (v.name ? `/api/uploads/${v.name}` : '')));
+        const cleanBestUrl = (bestUrl && !bestUrl.startsWith('blob:')) ? bestUrl : undefined;
+        return {
+          ...v,
+          url: cleanBestUrl,
+          dataUrl: (v.dataUrl && !v.dataUrl.startsWith('blob:')) ? v.dataUrl : cleanBestUrl,
+          uploading: false
+        };
+      })
+    } : null;
+
     const updatedPackedBom = {
       ...dispatchPackingModal,
       dispatchPacking: itemsToPack,
-      dispatchPackingMedia: dispatchPackingModal.dispatchPackingMedia || null,
+      dispatchPackingMedia: cleanMedia,
       status: nextStatus,
       pendingSalesDispatchPayment: needsSalesPaymentNotification,
       reissuedByAccounts: false,
@@ -98,6 +195,11 @@ export default function DispatchPackingModal({
       accountsVerification: accountsVerificationData,
       isUpdate: true
     };
+    delete updatedPackedBom.c2;
+    delete updatedPackedBom.c3;
+    delete updatedPackedBom.c4;
+    delete updatedPackedBom.c5;
+    delete updatedPackedBom.c6;
 
     const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
 
@@ -328,19 +430,20 @@ export default function DispatchPackingModal({
           {!isPackedAndReady && !isCancelled && (
             <button
               onClick={savePackingData}
+              disabled={uploadingCount > 0}
               style={{
                 border: 'none',
-                backgroundColor: '#FFFFFF',
-                color: allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF',
+                backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
+                color: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF'),
                 height: '42px', padding: '0 22px',
                 borderRadius: '10px', fontSize: '13px', fontWeight: '900',
-                cursor: 'pointer',
+                cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                 display: 'flex', alignItems: 'center', gap: '8px'
               }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
-              Save Verification
+              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : 'Save Verification'}
             </button>
           )}
         </div>
@@ -694,22 +797,27 @@ export default function DispatchPackingModal({
                                 };
                               });
                               // Asynchronously stream photo to backend server disk
+                              setUploadingCount(prev => prev + 1);
                               uploadMediaFile(f).then(uRes => {
                                 if (uRes && uRes.url) {
                                   saveMediaToCache(docMeta.name, uRes.url);
                                   saveMediaToCache(photoId, uRes.url);
                                   setDispatchPackingModal(prev => {
+                                    if (!prev) return prev;
                                     const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
                                     const updatedPhotos = (existingMedia.photos || []).map(p =>
-                                      p.id === photoId ? { ...p, url: uRes.url } : p
+                                      p.id === photoId ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
                                     );
                                     return {
                                       ...prev,
                                       dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
                                     };
                                   });
+                                  syncBOMMediaItem('photo', photoId, uRes.url);
                                 }
-                              }).catch(() => {});
+                              }).catch(() => {}).finally(() => {
+                                setUploadingCount(prev => Math.max(0, prev - 1));
+                              });
                             }
                           });
                         });
@@ -748,11 +856,6 @@ export default function DispatchPackingModal({
                           uploading: true
                         };
 
-                        if (localUrl) {
-                          saveMediaToCache(file.name, localUrl);
-                          saveMediaToCache(vItemId, localUrl);
-                        }
-
                         setDispatchPackingModal(prev => {
                           const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
                           return {
@@ -762,23 +865,28 @@ export default function DispatchPackingModal({
                         });
 
                         // 🎥 Stream large video directly to backend server disk so sales and accounts can view it
+                        setUploadingCount(prev => prev + 1);
                         uploadMediaFile(file).then(res => {
                           if (res && res.url) {
                             saveMediaToCache(file.name, res.url);
                             saveMediaToCache(vItemId, res.url);
                             setDispatchPackingModal(prev => {
+                              if (!prev) return prev;
                               const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
                               const updatedVideos = (existingMedia.videos || []).map(v =>
-                                v.id === vItemId ? { ...v, url: res.url, uploading: false } : v
+                                v.id === vItemId ? { ...v, url: res.url, dataUrl: res.url, uploading: false } : v
                               );
                               return {
                                 ...prev,
                                 dispatchPackingMedia: { ...existingMedia, videos: updatedVideos }
                               };
                             });
+                            syncBOMMediaItem('video', vItemId, res.url);
                           }
                         }).catch(err => {
                           console.warn('[DispatchPackingModal video upload error]:', err);
+                        }).finally(() => {
+                          setUploadingCount(prev => Math.max(0, prev - 1));
                         });
                       }
                     }}
@@ -904,15 +1012,15 @@ export default function DispatchPackingModal({
               })}
 
               {(dispatchPackingModal.dispatchPackingMedia?.videos || []).map((vd, vdIdx) => {
-                const videoSrc = vd.url || vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id);
+                const videoSrc = (vd.url && !vd.url.startsWith('blob:')) ? vd.url : (vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || (vd.name ? `/api/uploads/${vd.name}` : ''));
                 return (
                   <div key={vd.id || vdIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     <div
-                      onClick={() => handleMediaPreview({ type: 'video', url: videoSrc, name: vd.name })}
-                      style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
+                      onClick={() => !vd.uploading && handleMediaPreview({ type: 'video', url: videoSrc, name: vd.name })}
+                      style={{ height: '90px', backgroundColor: '#0F172A', cursor: vd.uploading ? 'wait' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
                     >
-                      <Video size={24} style={{ color: '#38BDF8' }} />
-                      <span style={{ fontSize: '10px' }}>Play Video</span>
+                      <Video size={24} style={{ color: vd.uploading ? '#F59E0B' : '#38BDF8' }} />
+                      <span style={{ fontSize: '10px', color: vd.uploading ? '#FDE68A' : '#FFFFFF' }}>{vd.uploading ? 'Uploading to server...' : 'Play Video'}</span>
                     </div>
                   <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
@@ -950,45 +1058,36 @@ export default function DispatchPackingModal({
           )}
         </div>
 
-        {/* Table Footer */}
+        {/* Action Buttons Footer */}
         <div style={{
-          padding: '14px 24px', borderTop: '1px solid #F1F5F9',
-          background: '#FAFBFC',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          padding: '16px 24px', backgroundColor: '#FFFFFF', borderTop: '1px solid #E2E8F0',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px'
         }}>
-          <span style={{ fontSize: '12px', color: isCancelled ? '#DC2626' : '#64748B', fontWeight: isCancelled ? '700' : '400' }}>
-            {isCancelled
-              ? 'Status: Cancelled & Stock Restored (View Only)'
-              : (isPackedAndReady ? 'Status: Closed / Dispatched' : 'Click any row to toggle packing status')}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Items Packed:</span>
+            <span style={{
+              fontSize: '13px', fontWeight: '900',
+              color: allItemsPacked ? '#059669' : isPartial ? '#D97706' : '#2563EB',
+              backgroundColor: allItemsPacked ? '#ECFDF5' : isPartial ? '#FFFBEB' : '#EFF6FF',
+              padding: '2px 8px', borderRadius: '6px'
+            }}>
+              {packedItemsCount} / {totalItemsCount} ({progressPercent}%)
+            </span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {!isPackedAndReady && !isCancelled && (
+            {canCancelBom && !isCancelled && (
               <button
+                type="button"
                 onClick={() => {
-                  const packAll = itemsToPack.map(pi => ({ ...pi, packed: true }));
-                  setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: packAll });
+                  handleCancelBomOrder(dispatchPackingModal);
+                  setDispatchPackingModal(null);
                 }}
                 style={{
-                  border: '1px solid #CBD5E1',
-                  background: '#FFFFFF',
-                  color: '#1E293B', height: '40px', padding: '0 16px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '700',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-              >
-                <CheckSquare style={{ width: '14px', height: '14px' }} /> Pack All Items
-              </button>
-            )}
-            {canCancelBom && !isCancelled && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
-              <button
-                onClick={() => handleCancelBomOrder(dispatchPackingModal)}
-                style={{
-                  border: '1px solid #FECACA',
+                  border: '1px solid #FCA5A5',
                   background: '#FEF2F2',
-                  color: '#DC2626', height: '40px', padding: '0 18px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                  boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
+                  color: '#DC2626', height: '40px', padding: '0 16px',
+                  borderRadius: '10px', fontSize: '12px', fontWeight: '800',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
                 }}
                 title="Cancel BOM and restore blocked stock back into inventory"
               >
@@ -1011,18 +1110,19 @@ export default function DispatchPackingModal({
             {!isPackedAndReady && !isCancelled && (
               <button
                 onClick={savePackingData}
+                disabled={uploadingCount > 0}
                 style={{
                   border: 'none',
-                  background: allItemsPacked ? 'linear-gradient(135deg, #059669, #10B981)' : 'linear-gradient(135deg, #1E40AF, #2563EB)',
+                  background: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? 'linear-gradient(135deg, #059669, #10B981)' : 'linear-gradient(135deg, #1E40AF, #2563EB)'),
                   color: '#FFFFFF', height: '40px', padding: '0 24px',
                   borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                  cursor: 'pointer',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
                   boxShadow: allItemsPacked ? '0 4px 12px rgba(16,185,129,0.35)' : '0 4px 12px rgba(37,99,235,0.3)',
                   display: 'flex', alignItems: 'center', gap: '8px'
                 }}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {allItemsPacked ? 'Save & Confirm Packing (Send to Accounts)' : 'Save Packing Progress'}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Save & Confirm Packing (Send to Accounts)' : 'Save Packing Progress')}
               </button>
             )}
           </div>
@@ -1141,22 +1241,27 @@ export default function DispatchPackingModal({
                     });
 
                     // Asynchronously upload camera snapshot to server
+                    setUploadingCount(prev => prev + 1);
                     uploadMediaFile(photoUrl, capturedName).then(uRes => {
                       if (uRes && uRes.url) {
                         saveMediaToCache(capturedName, uRes.url);
                         saveMediaToCache(capturedId, uRes.url);
                         setDispatchPackingModal(prev => {
+                          if (!prev) return prev;
                           const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
                           const updatedPhotos = (existingMedia.photos || []).map(p =>
-                            p.id === capturedId ? { ...p, url: uRes.url } : p
+                            p.id === capturedId ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
                           );
                           return {
                             ...prev,
                             dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
                           };
                         });
+                        syncBOMMediaItem('photo', capturedId, uRes.url);
                       }
-                    }).catch(() => {});
+                    }).catch(() => {}).finally(() => {
+                      setUploadingCount(prev => Math.max(0, prev - 1));
+                    });
 
                     if (dispatchCameraStreamRef.current) {
                       dispatchCameraStreamRef.current.getTracks().forEach(t => t.stop());

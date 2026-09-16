@@ -1155,6 +1155,7 @@ export default function ProductionViewsEngine(props) {
                 setShowBOMForm={setShowBOMForm}
                 setShowCustomerForm={setShowCustomerForm}
                 customerList={customerList}
+                itemsList={props.itemsList || []}
                 setBomStore={setBomStore}
                 newBomCode={newBomCode}
                 setNewBomCode={setNewBomCode}
@@ -1239,7 +1240,7 @@ export default function ProductionViewsEngine(props) {
                   dispStatus = 'Pending Packing';
                 }
               }
-              return {
+              const rowObj = {
                 ...b,
                 code: b.bomCode || 'REF-001',
                 c2: b.customerName || 'Customer',
@@ -1252,6 +1253,8 @@ export default function ProductionViewsEngine(props) {
                 stBorder: dispStatus === 'Pending Packing' ? '1px solid #fed7aa' : '1px solid #bfdbfe',
                 tabGroup: 'All'
               };
+              delete rowObj.c6;
+              return rowObj;
             })
           };
 

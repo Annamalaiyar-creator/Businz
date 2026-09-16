@@ -373,7 +373,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 const totalAmt = b.grandTotal || b.subTotal || b.totalAmount || 0;
                 const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
-                return {
+                const rowObj = {
                   ...b,
                   code: b.bomCode,
                   c2: b.customerName,
@@ -388,6 +388,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   stBorder: stBorder,
                   tabGroup: tabGroup
                 };
+                delete rowObj.c6;
+                return rowObj;
               })
             },
             'Production Orders': {

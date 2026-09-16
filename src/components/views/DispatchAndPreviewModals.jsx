@@ -159,28 +159,108 @@ import { getMediaFromCache } from "../../utils/otherViewsShared";
 
 export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
   if (!activeMediaPreviewModal) return null;
-  const rawUrl = activeMediaPreviewModal.url || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id);
+
+  const initialUrl = (activeMediaPreviewModal.url && !activeMediaPreviewModal.url.startsWith('blob:'))
+    ? activeMediaPreviewModal.url
+    : (activeMediaPreviewModal.dataUrl || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id) || activeMediaPreviewModal.url || '');
+
+  const [mediaUrl, setMediaUrl] = React.useState(initialUrl);
+
+  React.useEffect(() => {
+    const direct = (activeMediaPreviewModal.url && !activeMediaPreviewModal.url.startsWith('blob:'))
+      ? activeMediaPreviewModal.url
+      : (activeMediaPreviewModal.dataUrl || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id) || '');
+    if (direct) {
+      setMediaUrl(direct);
+      return;
+    }
+
+    const docName = activeMediaPreviewModal.name || activeMediaPreviewModal.id;
+    if (docName) {
+      fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.found && data.url) {
+            saveMediaToCache(docName, data.url);
+            setMediaUrl(data.url);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeMediaPreviewModal]);
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100005 }}>
-      <div style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-          <span style={{ color: '#FFFFFF', fontSize: '14px', fontWeight: '700' }}>{activeMediaPreviewModal.name || 'Media Preview'}</span>
-          <button
-            type="button"
-            onClick={() => onClose()}
-            style={{ backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: '#FFFFFF', padding: '6px 14px', cursor: 'pointer', fontWeight: '700' }}
-          >
-            Close ✕
-          </button>
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100005 }}>
+      <div style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '850px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ color: '#FFFFFF', fontSize: '15px', fontWeight: '800' }}>{activeMediaPreviewModal.name || 'Media Preview'}</span>
+            <span style={{ color: '#94A3B8', fontSize: '11px' }}>Captured by Dispatch Packing Team</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {mediaUrl && (
+              <a
+                href={mediaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={activeMediaPreviewModal.name || 'dispatch_media'}
+                style={{
+                  backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC',
+                  borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700',
+                  textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                <Download size={13} /> Open / Download
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => onClose()}
+              style={{ backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: '#FFFFFF', padding: '6px 14px', cursor: 'pointer', fontWeight: '700' }}
+            >
+              Close ✕
+            </button>
+          </div>
         </div>
-        {activeMediaPreviewModal.type === 'video' ? (
-          <video controls autoPlay playsInline src={rawUrl} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: '12px' }}>
-            Your browser does not support playing this video.
-          </video>
-        ) : (
-          <img src={rawUrl} alt="Full Preview" style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: '12px' }} />
-        )}
+
+        <div style={{ width: '100%', maxWidth: '850px', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '320px', backgroundColor: '#0B1329', borderRadius: '14px', padding: '12px', overflow: 'hidden', border: '1px solid #334155' }}>
+          {!mediaUrl ? (
+            <div style={{ textAlign: 'center', color: '#94A3B8', padding: '40px 20px' }}>
+              <FileText size={48} style={{ margin: '0 auto 12px', opacity: 0.6 }} />
+              <p style={{ fontSize: '14px', fontWeight: '700', margin: 0, color: '#F1F5F9' }}>Searching for media on server...</p>
+              <p style={{ fontSize: '12px', marginTop: '6px' }}>{activeMediaPreviewModal.name || 'Dispatch Media'}</p>
+            </div>
+          ) : activeMediaPreviewModal.type === 'video' ? (
+            <video
+              controls
+              autoPlay
+              playsInline
+              src={mediaUrl}
+              style={{ maxWidth: '100%', maxHeight: '72vh', borderRadius: '10px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
+            >
+              Your browser does not support playing this video.
+            </video>
+          ) : (
+            <img
+              src={mediaUrl}
+              alt={activeMediaPreviewModal.name || "Full Preview"}
+              onError={(e) => {
+                const docName = activeMediaPreviewModal.name;
+                if (docName && !e.currentTarget.dataset.retried) {
+                  e.currentTarget.dataset.retried = 'true';
+                  fetch(`/api/media/find/${encodeURIComponent(docName)}`)
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data && data.found && data.url) {
+                        setMediaUrl(data.url);
+                      }
+                    }).catch(() => {});
+                }
+              }}
+              style={{ maxWidth: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: '10px', boxShadow: '0 8px 24px -4px rgba(0,0,0,0.5)' }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
