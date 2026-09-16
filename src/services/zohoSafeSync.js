@@ -14,26 +14,63 @@ import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
 // 1. PURCHASE ORDERS (PO)
 // ---------------------------
 export async function getSafeZohoPOs() {
-  // 1. Fetch from live Zoho backend
+  // 1. Fetch current cloud list from Supabase first
+  let cloudList = [];
+  try {
+    cloudList = await fetchCloudStore('po_store', []);
+  } catch (_) {}
+
+  // 2. Fetch from live Zoho backend
   try {
     const res = await fetch('/api/zoho/purchaseorders');
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
-        saveCloudStore('po_store', data);
-        return data;
+        const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+        const merged = data.map(zohoPo => {
+          const zNo = normalize(zohoPo.poNo);
+          const zId = normalize(zohoPo.id);
+          const cloudMatch = Array.isArray(cloudList) && cloudList.find(c => {
+            const cNo = normalize(c.poNo);
+            const cId = normalize(c.id);
+            const cZohoId = normalize(c.zohoId);
+            return (zNo && (cNo === zNo || cId === zNo)) || (zId && (cId === zId || cZohoId === zId));
+          });
+          if (cloudMatch) {
+            return {
+              ...zohoPo,
+              ...cloudMatch,
+              status: zohoPo.status || cloudMatch.status,
+              statusType: zohoPo.statusType || cloudMatch.statusType,
+              items: (cloudMatch.items && cloudMatch.items.length > 0) ? cloudMatch.items : (zohoPo.items || []),
+              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—') ? cloudMatch.deliveryAddress : (zohoPo.deliveryAddress || '—'),
+              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—') ? cloudMatch.billingAddress : (zohoPo.billingAddress || '—'),
+              paymentTerms: (cloudMatch.paymentTerms && cloudMatch.paymentTerms !== 'Net 30 Days') ? cloudMatch.paymentTerms : (zohoPo.paymentTerms || 'Net 30 Days'),
+            };
+          }
+          return zohoPo;
+        });
+
+        // Also preserve any newly created local/cloud POs not yet returned by Zoho list
+        if (Array.isArray(cloudList) && cloudList.length > 0) {
+          const mergedPoNos = new Set(merged.map(p => normalize(p.poNo || p.id)));
+          cloudList.forEach(c => {
+            const cKey = normalize(c.poNo || c.id);
+            if (cKey && !mergedPoNos.has(cKey)) {
+              merged.push(c);
+            }
+          });
+        }
+
+        saveCloudStore('po_store', merged);
+        return merged;
       }
     }
   } catch (_) {}
 
-  // 2. Fallback to Supabase cloud store
-  try {
-    const cloudData = await fetchCloudStore('po_store', []);
-    if (Array.isArray(cloudData) && cloudData.length > 0) {
-      return cloudData;
-    }
-  } catch (err) {
-    console.warn('[getSafeZohoPOs] Supabase fetch notice:', err);
+  // 3. Fallback to Supabase cloud store
+  if (Array.isArray(cloudList) && cloudList.length > 0) {
+    return cloudList;
   }
 
   return [];

@@ -3407,11 +3407,16 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         );
 
         const localPOs = loadLocalPOs();
-        const lpMatch = localPOs.find(p => 
-          (p.poNo && po.purchaseorder_number && p.poNo.trim().toLowerCase() === po.purchaseorder_number.trim().toLowerCase()) ||
-          (p.id && po.purchaseorder_id && p.id === po.purchaseorder_id) ||
-          (p.zohoId && po.purchaseorder_id && p.zohoId === po.purchaseorder_id)
-        );
+        const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+        const pNoClean = normalize(po.purchaseorder_number);
+        const pIdClean = normalize(po.purchaseorder_id);
+        const lpMatch = localPOs.find(p => {
+          const lpNoClean = normalize(p.poNo);
+          const lpIdClean = normalize(p.id);
+          const lpZohoId = normalize(p.zohoId);
+          return (pNoClean && (lpNoClean === pNoClean || lpIdClean === pNoClean)) ||
+                 (pIdClean && (lpIdClean === pIdClean || lpZohoId === pIdClean || lpNoClean === pIdClean));
+        });
 
         const isNoApproval = lpMatch && String(lpMatch.approvalRequired).toUpperCase() === 'NO';
 
