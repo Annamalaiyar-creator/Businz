@@ -40,6 +40,7 @@ export async function getSafeZohoPOs() {
             return {
               ...zohoPo,
               ...cloudMatch,
+              vendor: (cloudMatch.vendor && cloudMatch.vendor !== 'Vendor' && cloudMatch.vendor !== 'Annamalaiyar') ? cloudMatch.vendor : (zohoPo.vendor || 'Vendor'),
               status: zohoPo.status || cloudMatch.status,
               statusType: zohoPo.statusType || cloudMatch.statusType,
               items: (cloudMatch.items && cloudMatch.items.length > 0) ? cloudMatch.items : (zohoPo.items || []),

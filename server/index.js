@@ -2428,17 +2428,29 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
       }
     }
 
-    // If no vendorId matched, create new vendor in Zoho on-the-fly or fallback to first contact
+    // If no vendorId matched, create new vendor in Zoho on-the-fly or search by name
     if (!vendorId) {
       if (req.body.vendor && req.body.vendor.trim() !== '' && req.body.vendor !== 'Fresh Vendor') {
         try {
           const newV = await createZohoVendor(accessToken, {
             contact_name: req.body.vendor.trim(),
             company_name: req.body.vendor.trim(),
-            contact_type: 'vendor'
+            contact_type: 'vendor',
+            email: req.body.email && req.body.email !== '—' ? req.body.email : undefined,
+            phone: req.body.contactNo && req.body.contactNo !== '—' ? req.body.contactNo : undefined,
+            currency_code: 'INR'
           });
           if (newV && newV.contact) {
             vendorId = newV.contact.contact_id;
+          } else if (newV && (newV.code === 3062 || String(newV.message || '').includes('already exists'))) {
+            const vClean = req.body.vendor.trim().toLowerCase();
+            const existingContact = contacts.find(c => 
+              (c.contact_name && c.contact_name.toLowerCase() === vClean) ||
+              (c.company_name && c.company_name.toLowerCase() === vClean)
+            );
+            if (existingContact) {
+              vendorId = existingContact.contact_id;
+            }
           }
         } catch (e) {
           console.warn('Failed to auto-create vendor for PO:', e);
@@ -2720,6 +2732,9 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
         localPOObj.zohoId = createdPo.purchaseorder_id;
         localPOObj.id = createdPo.purchaseorder_id || localPOObj.id;
         localPOObj.poNo = createdPo.purchaseorder_number || localPOObj.poNo;
+        if (req.body.vendor && req.body.vendor.trim() !== '' && req.body.vendor !== 'Fresh Vendor') {
+          localPOObj.vendor = req.body.vendor.trim();
+        }
       }
 
       if (isNoApproval) {
@@ -3466,24 +3481,24 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         return {
           id: po.purchaseorder_id,
           poNo: po.purchaseorder_number,
-          vendor: po.vendor_name,
+          vendor: (lpMatch && lpMatch.vendor && lpMatch.vendor !== 'Fresh Vendor') ? lpMatch.vendor : (po.vendor_name || 'Vendor'),
           branch: (lpMatch && lpMatch.branch) ? lpMatch.branch : (po.branch_name || ''),
           contactPerson: (lpMatch && lpMatch.contactPerson) ? lpMatch.contactPerson : (po.contact_person_name || ''),
           contactNo: (lpMatch && lpMatch.contactNo) ? lpMatch.contactNo : (po.phone || ''),
           email: (lpMatch && lpMatch.email) ? lpMatch.email : (po.email || ''),
           gstNo: effectiveGst,
-          deliveryAddress: (lpMatch && lpMatch.deliveryAddress) ? lpMatch.deliveryAddress : '—',
-          billingAddress: (lpMatch && lpMatch.billingAddress) ? lpMatch.billingAddress : '—',
+          deliveryAddress: (lpMatch && lpMatch.deliveryAddress && lpMatch.deliveryAddress !== '—' && lpMatch.deliveryAddress !== '') ? lpMatch.deliveryAddress : '—',
+          billingAddress: (lpMatch && lpMatch.billingAddress && lpMatch.billingAddress !== '—' && lpMatch.billingAddress !== '') ? lpMatch.billingAddress : '—',
           poDate: po.date,
           deliveryDate: po.delivery_date || (lpMatch ? lpMatch.deliveryDate : '—'),
-          paymentTerms: (lpMatch && lpMatch.paymentTerms) ? lpMatch.paymentTerms : (po.payment_terms_label || 'Net 30 Days'),
-          purchaser: (lpMatch && lpMatch.purchaser) ? lpMatch.purchaser : '—',
+          paymentTerms: (lpMatch && lpMatch.paymentTerms && lpMatch.paymentTerms !== 'Net 30 Days') ? lpMatch.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
+          purchaser: (lpMatch && lpMatch.purchaser) ? lpMatch.purchaser : (po.purchaser_name || '—'),
           amount: calcTotalWithGst,
           status: statusText,
           statusType: statusType,
           grnCount: matchingGRNs.length,
           totalReceived,
-          items: (lpMatch && lpMatch.items) ? lpMatch.items : []
+          items: (lpMatch && lpMatch.items && Array.isArray(lpMatch.items) && lpMatch.items.length > 0) ? lpMatch.items : []
         };
       });
 
@@ -4607,12 +4622,12 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
             : (item.tax_percentage > 0 ? Number(item.tax_percentage) : 18));
 
         return {
-          name: item.name || item.itemName || 'Material Item',
-          description: item.description || item.desc || '',
+          name: (localItem && localItem.name) ? localItem.name : (item.name || item.itemName || 'Material Item'),
+          description: (localItem && localItem.description) ? localItem.description : (item.description || item.desc || ''),
           account: item.account || item.account_name || (localItem ? localItem.account : 'Cost of Goods Sold'),
           qty: ordered,
           unit: item.unit || (localItem ? localItem.unit : 'NOS'),
-          rate: Number(item.rate !== undefined ? item.rate : (item.unitPrice || 0)),
+          rate: Number(item.rate !== undefined ? item.rate : (item.unitPrice || (localItem ? localItem.rate : 0))),
           tax: effectiveTax,
           previouslyReceived: prevReceived,
           remainingQty: remaining
@@ -4699,7 +4714,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
       const translated = {
         id: po.purchaseorder_id,
         poNo: po.purchaseorder_number,
-        vendor: po.vendor_name,
+        vendor: (matchedLocalPO && matchedLocalPO.vendor && matchedLocalPO.vendor !== 'Fresh Vendor') ? matchedLocalPO.vendor : (po.vendor_name || 'Vendor'),
         branch: po.branch_name || (matchedLocalPO ? matchedLocalPO.branch : ''),
         contactPerson: po.contact_person_name || (matchedLocalPO ? matchedLocalPO.contactPerson : ''),
         contactNo: (matchedLocalPO && matchedLocalPO.contactNo) ? matchedLocalPO.contactNo : (po.phone || po.mobile || ''),
@@ -4709,7 +4724,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         billingAddress: billAddrFormatted || '—',
         poDate: po.date,
         deliveryDate: po.delivery_date || (matchedLocalPO ? matchedLocalPO.deliveryDate : '—'),
-        paymentTerms: (matchedLocalPO && matchedLocalPO.paymentTerms) ? matchedLocalPO.paymentTerms : (po.payment_terms_label || 'Net 30 Days'),
+        paymentTerms: (matchedLocalPO && matchedLocalPO.paymentTerms && matchedLocalPO.paymentTerms !== 'Net 30 Days') ? matchedLocalPO.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
         purchaser: po.purchaser_name || (matchedLocalPO ? matchedLocalPO.purchaser : '—'),
         shipmentPref: po.shipment_preference || (matchedLocalPO ? matchedLocalPO.shipmentPref : 'Road Transport'),
         currency: po.currency_code || 'INR',

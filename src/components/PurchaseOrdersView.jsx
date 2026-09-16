@@ -561,12 +561,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
 
     let effectiveItems = validItems.map(it => ({
-      name: it.name,
-      account: it.account || 'Raw Material',
-      qty: Number(it.qty),
+      name: String(it.name || it.itemName || '').trim(),
+      description: String(it.description || it.desc || '').trim(),
+      account: it.account || 'Cost of Goods Sold',
+      qty: Number(it.qty || 1),
       unit: it.unit || 'NOS',
-      rate: Number(it.rate) > 0 ? Number(it.rate) : 1000,
-      tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
+      rate: Number(it.rate) > 0 ? Number(it.rate) : 0,
+      tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18,
+      sku: it.sku || ''
     }));
 
     setFormErrors({});
@@ -597,19 +599,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       email: email || '',
       gstNo: safeGstNo,
       deliveryType: deliveryType,
-      deliveryAddress: deliveryAddress || '',
-      billingAddress: billingAddress || '',
+      deliveryAddress: (deliveryAddress || '').trim(),
+      billingAddress: (billingAddress || '').trim(),
       poDate: editIdx !== null ? poList[editIdx].poDate : formattedDate,
       deliveryDate: formatDelivery,
-      paymentTerms: paymentTerms,
-      purchaser: purchaser,
+      paymentTerms: paymentTerms || 'Due on Receipt',
+      purchaser: purchaser || loggedInUserName,
       shipmentPref: shipmentPref,
       currency: currency,
       project: project,
       priority: priority,
       scope: scope,
       transportName: shipmentPref === 'Transport' ? transportName : '',
-      items: [...items],
+      items: effectiveItems,
       shippingCharges: shippingCharges,
       otherCharges: otherCharges,
       discountPct: discountPct,
@@ -639,8 +641,17 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (data.success && data.po) {
-            setPoList(prev => prev.map(p => (p.poNo === newPO.poNo || p.id === newPO.id) ? { ...p, ...data.po } : p));
-            saveSafeZohoPO({ ...newPO, ...data.po });
+            const mergedSavedPO = {
+              ...newPO,
+              ...data.po,
+              vendor: newPO.vendor,
+              deliveryAddress: newPO.deliveryAddress,
+              billingAddress: newPO.billingAddress,
+              paymentTerms: newPO.paymentTerms,
+              items: (newPO.items && newPO.items.length > 0) ? newPO.items : (data.po.items || [])
+            };
+            setPoList(prev => prev.map(p => (p.poNo === newPO.poNo || p.id === newPO.id) ? { ...p, ...mergedSavedPO } : p));
+            saveSafeZohoPO(mergedSavedPO);
             showCustomAlert(data.message || 'Purchase Order created successfully in Zoho Books!', 'PO Created', 'success');
           } else if (data.message) {
             showCustomAlert(data.message, 'Zoho Sync Notice', 'warning');
@@ -979,8 +990,21 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       ? po.items
       : (po.line_items && Array.isArray(po.line_items) && po.line_items.length > 0 ? po.line_items : []);
 
-    if (incomingItems.length > 0) {
-      const sanitizedItems = incomingItems.map(it => ({
+    let finalItems = incomingItems;
+    if (finalItems.length === 0 && (po.poNo || po.id)) {
+      const targetRef = String(po.poNo || po.id || '').toLowerCase().replace(/[/_\-\s]/g, '');
+      const listMatch = poList.find(p => {
+        const pNo = String(p.poNo || '').toLowerCase().replace(/[/_\-\s]/g, '');
+        const pId = String(p.id || '').toLowerCase().replace(/[/_\-\s]/g, '');
+        return targetRef && (pNo === targetRef || pId === targetRef);
+      });
+      if (listMatch && listMatch.items && Array.isArray(listMatch.items) && listMatch.items.length > 0) {
+        finalItems = listMatch.items;
+      }
+    }
+
+    if (finalItems.length > 0) {
+      const sanitizedItems = finalItems.map(it => ({
         ...it,
         name: it.name || it.item_name || 'Material Item',
         description: it.description || it.desc || '',
@@ -991,7 +1015,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : (it.tax_percentage > 0 ? Number(it.tax_percentage) : 18)
       }));
       setItems(sanitizedItems);
-    } else if (Array.isArray(po.items) && po.items.length === 0 && !po.id && !po.poNo) {
+    } else {
       setItems([]);
     }
 
@@ -1009,7 +1033,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   const handleStartEdit = async (po, idx) => {
     setEditIdx(idx);
-    populateFormStates(po);
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const poTargetNo = normalize(po.poNo || po.id);
+    const enrichedPo = poList.find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      return (poTargetNo && (pNo === poTargetNo || pId === poTargetNo)) && ((p.items && p.items.length > 0) || (p.deliveryAddress && p.deliveryAddress !== '—'));
+    }) || po;
+
+    populateFormStates(enrichedPo);
     setViewMode('edit');
     setActiveDropdownIdx(null);
     const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
@@ -1018,17 +1050,25 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         ? po.zohoId 
         : (po.id || po.poNo || po.zohoId));
     if (targetId) {
-      setPoDetailLoading(true);
+      if (!enrichedPo.items || enrichedPo.items.length === 0) {
+        setPoDetailLoading(true);
+      }
       try {
         const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
-          if (detail && detail.items && Array.isArray(detail.items) && detail.items.length > 0) {
-            populateFormStates({ ...po, ...detail });
-            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
-          } else if (detail && detail.poNo) {
-            populateFormStates({ ...po, ...detail, items: (po.items && po.items.length > 0) ? po.items : (detail.items || []) });
-            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
+          if (detail && detail.poNo) {
+            const merged = {
+              ...enrichedPo,
+              ...detail,
+              vendor: (enrichedPo.vendor && enrichedPo.vendor !== 'Vendor' && enrichedPo.vendor !== 'Annamalaiyar') ? enrichedPo.vendor : (detail.vendor || enrichedPo.vendor),
+              deliveryAddress: (enrichedPo.deliveryAddress && enrichedPo.deliveryAddress !== '—' && enrichedPo.deliveryAddress !== '') ? enrichedPo.deliveryAddress : (detail.deliveryAddress || '—'),
+              billingAddress: (enrichedPo.billingAddress && enrichedPo.billingAddress !== '—' && enrichedPo.billingAddress !== '') ? enrichedPo.billingAddress : (detail.billingAddress || '—'),
+              paymentTerms: (enrichedPo.paymentTerms && enrichedPo.paymentTerms !== 'Net 30 Days') ? enrichedPo.paymentTerms : (detail.paymentTerms || 'Net 30 Days'),
+              items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (enrichedPo.items || [])
+            };
+            populateFormStates(merged);
+            setPoList(prev => prev.map(p => (p.poNo === (merged.poNo || po.poNo) || p.id === (merged.id || po.id)) ? { ...p, ...merged } : p));
           }
         }
       } catch (err) {
@@ -1040,7 +1080,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const handleStartView = async (po) => {
-    populateFormStates(po);
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const poTargetNo = normalize(po.poNo || po.id);
+    const enrichedPo = poList.find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      return (poTargetNo && (pNo === poTargetNo || pId === poTargetNo)) && ((p.items && p.items.length > 0) || (p.deliveryAddress && p.deliveryAddress !== '—'));
+    }) || po;
+
+    populateFormStates(enrichedPo);
     setViewMode('view');
     setActiveDropdownIdx(null);
     const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
@@ -1049,17 +1097,25 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         ? po.zohoId 
         : (po.id || po.poNo || po.zohoId));
     if (targetId) {
-      setPoDetailLoading(true);
+      if (!enrichedPo.items || enrichedPo.items.length === 0) {
+        setPoDetailLoading(true);
+      }
       try {
         const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
-          if (detail && detail.items && Array.isArray(detail.items) && detail.items.length > 0) {
-            populateFormStates({ ...po, ...detail });
-            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
-          } else if (detail && detail.poNo) {
-            populateFormStates({ ...po, ...detail, items: (po.items && po.items.length > 0) ? po.items : (detail.items || []) });
-            setPoList(prev => prev.map(p => (p.poNo === (detail.poNo || po.poNo) || p.id === (detail.id || po.id)) ? { ...p, ...detail } : p));
+          if (detail && detail.poNo) {
+            const merged = {
+              ...enrichedPo,
+              ...detail,
+              vendor: (enrichedPo.vendor && enrichedPo.vendor !== 'Vendor' && enrichedPo.vendor !== 'Annamalaiyar') ? enrichedPo.vendor : (detail.vendor || enrichedPo.vendor),
+              deliveryAddress: (enrichedPo.deliveryAddress && enrichedPo.deliveryAddress !== '—' && enrichedPo.deliveryAddress !== '') ? enrichedPo.deliveryAddress : (detail.deliveryAddress || '—'),
+              billingAddress: (enrichedPo.billingAddress && enrichedPo.billingAddress !== '—' && enrichedPo.billingAddress !== '') ? enrichedPo.billingAddress : (detail.billingAddress || '—'),
+              paymentTerms: (enrichedPo.paymentTerms && enrichedPo.paymentTerms !== 'Net 30 Days') ? enrichedPo.paymentTerms : (detail.paymentTerms || 'Net 30 Days'),
+              items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (enrichedPo.items || [])
+            };
+            populateFormStates(merged);
+            setPoList(prev => prev.map(p => (p.poNo === (merged.poNo || po.poNo) || p.id === (merged.id || po.id)) ? { ...p, ...merged } : p));
           }
         }
       } catch (err) {
@@ -1073,7 +1129,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const handleStartClone = async (po) => {
     setActiveDropdownIdx(null);
     setEditIdx(null);
-    populateFormStates(po);
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const poTargetNo = normalize(po.poNo || po.id);
+    const enrichedPo = poList.find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      return (poTargetNo && (pNo === poTargetNo || pId === poTargetNo)) && ((p.items && p.items.length > 0) || (p.deliveryAddress && p.deliveryAddress !== '—'));
+    }) || po;
+
+    populateFormStates(enrichedPo);
 
     const todayStr = new Date().toISOString().split('T')[0];
     setPoDate(todayStr);
@@ -1098,15 +1162,24 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         ? po.zohoId 
         : (po.id || po.poNo || po.zohoId));
     if (targetId) {
-      setPoDetailLoading(true);
+      if (!enrichedPo.items || enrichedPo.items.length === 0) {
+        setPoDetailLoading(true);
+      }
       try {
         const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
-          if (detail && detail.items && Array.isArray(detail.items) && detail.items.length > 0) {
-            populateFormStates({ ...po, ...detail });
-          } else if (detail && detail.poNo) {
-            populateFormStates({ ...po, ...detail, items: (po.items && po.items.length > 0) ? po.items : (detail.items || []) });
+          if (detail && detail.poNo) {
+            const merged = {
+              ...enrichedPo,
+              ...detail,
+              vendor: (enrichedPo.vendor && enrichedPo.vendor !== 'Vendor' && enrichedPo.vendor !== 'Annamalaiyar') ? enrichedPo.vendor : (detail.vendor || enrichedPo.vendor),
+              deliveryAddress: (enrichedPo.deliveryAddress && enrichedPo.deliveryAddress !== '—' && enrichedPo.deliveryAddress !== '') ? enrichedPo.deliveryAddress : (detail.deliveryAddress || '—'),
+              billingAddress: (enrichedPo.billingAddress && enrichedPo.billingAddress !== '—' && enrichedPo.billingAddress !== '') ? enrichedPo.billingAddress : (detail.billingAddress || '—'),
+              paymentTerms: (enrichedPo.paymentTerms && enrichedPo.paymentTerms !== 'Net 30 Days') ? enrichedPo.paymentTerms : (detail.paymentTerms || 'Net 30 Days'),
+              items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (enrichedPo.items || [])
+            };
+            populateFormStates(merged);
           }
           setPoDate(todayStr);
           const nextRes = await fetch('/api/zoho/next-po-number');
