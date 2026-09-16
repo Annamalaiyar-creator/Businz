@@ -688,6 +688,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const [selectedStatus, setSelectedStatus] = useState('All Status');
   const [currentPage, setCurrentPage] = useState(1);
   const [showTxModal, setShowTxModal] = useState(false);
+  const [auditViewMode, setAuditViewMode] = useState('table'); // 'table' | 'timeline'
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [auditTypeFilter, setAuditTypeFilter] = useState('ALL');
   const [showAdjModal, setShowAdjModal] = useState(false);
   const [adjType, setAdjType] = useState('Add');
   const [adjQty, setAdjQty] = useState('');
@@ -705,142 +708,202 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     return base;
   }, [materials, selectedCode]);
 
-  // Item-specific live audit logs calculation
+  // Item-specific authoritative audit logs & traceability engine
   const itemAuditLogs = useMemo(() => {
     if (!selectedMat) return [];
 
-    const engineLedger = prodModuleEngine.getLedger() || [];
-    const engineWOs = prodModuleEngine.getWorkOrders() || [];
+    const sCode = String(selectedMat.code || '').toLowerCase().trim();
+    const sName = String(selectedMat.name || '').toLowerCase().trim();
+    const sNorm = normalizeProductName(selectedMat.name || '');
+    const sFp = wordFingerprint(selectedMat.name || '');
 
-    // Match ledger entries for selectedMat code or name
-    const matchedLedger = engineLedger.filter(entry => {
-      const eCode = String(entry.itemCode || '').toUpperCase();
-      const sCode = String(selectedMat.code || '').toUpperCase();
-      const eName = String(entry.itemName || '').toLowerCase();
-      const sName = String(selectedMat.name || '').toLowerCase();
-      return eCode === sCode || 
-        (sName.includes('300') && (eName.includes('300') || eCode.includes('300'))) || 
-        (sCode === 'RM-ALU-2414' && (eCode === 'ALU-LEN-2414MM' || eCode === 'RM-ALU-2414' || (eCode.includes('2414') && eName.includes('aluminum'))));
-    });
+    const logs = [];
 
-    // Match completed work orders
-    const woEntries = engineWOs.filter(wo => {
-      const isCompleted = wo.status === 'APPROVED_CLOSED' || wo.status === 'COMPLETED_PENDING_VERIFICATION';
-      if (!isCompleted) return false;
-      const pCode = String(wo.finishedProductCode || '').toUpperCase();
-      const sCode = String(selectedMat.code || '').toUpperCase();
-      const pName = String(wo.finishedProductName || '').toLowerCase();
-      const sName = String(selectedMat.name || '').toLowerCase();
-      return pCode === sCode || pName.includes(sName) || (sName.includes('300') && pName.includes('300'));
-    }).map(wo => ({
-      id: `WO-AUDIT-${wo.id}`,
-      timestamp: wo.verifiedAt || wo.completedAt || '30 Aug 2026, 04:30 PM',
-      type: 'PRODUCTION_RECEIPT',
-      woId: wo.id,
+    // 1. Authoritative Sales BOM Allocations & Dispatch Deductions
+    try {
+      const bRaw = localStorage.getItem('controlroom_bom_store');
+      let boms = [];
+      if (bRaw) boms = JSON.parse(bRaw);
+      if (Array.isArray(boms)) {
+        boms.forEach(b => {
+          const st = String(b?.status || '').toLowerCase();
+          if (st.includes('cancel') || st.includes('stock restored')) return;
+          const isSentToDispatch = Boolean(b?.salesConfirmed) || [
+            'sales confirmed - sent to dispatch',
+            'sent to production',
+            'confirmed',
+            'packed & ready for dispatch',
+            'partially packed',
+            'closed',
+            'dispatch packing verified - sent to accounts',
+            'awaiting vehicle loading & dispatch'
+          ].some(s => st.includes(s));
+
+          (b?.items || []).forEach(it => {
+            const itRes = resolveProductCode(it).toLowerCase().trim();
+            const itCode = String(itRes || it.code || '').toLowerCase().trim();
+            const itName = String(it.name || it.description || '').toLowerCase().trim();
+            const itNorm = normalizeProductName(it.name || '');
+            const itFp = wordFingerprint(it.name || '');
+
+            const isMatch = (sCode && itCode === sCode) || (sName && itName === sName) || (sNorm && itNorm === sNorm) || (sFp && itFp === sFp);
+            if (isMatch) {
+              const qty = parseFloat(it.qty || it.bomQty || 0) || 0;
+              if (qty > 0) {
+                const rawDate = b.salesConfirmedAt || b.createdAt || b.date;
+                let formattedDate = 'Recent Order';
+                try {
+                  if (rawDate) {
+                    const d = new Date(rawDate);
+                    formattedDate = !isNaN(d.getTime())
+                      ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+                      : String(rawDate);
+                  }
+                } catch (_) {}
+
+                const baseStock = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 5000)) || 5000);
+                const afterStock = Math.max(0, baseStock - qty);
+
+                logs.push({
+                  id: `BOM-LOG-${b.bomCode || b.code || b.id}-${itCode}`,
+                  timestamp: formattedDate,
+                  type: isSentToDispatch ? 'BOM_DISPATCH' : 'BOM_RESERVATION',
+                  typeName: isSentToDispatch ? 'BOM Dispatch Deduction' : 'BOM Order Allocation',
+                  typeColor: isSentToDispatch ? '#DC2626' : '#D97706',
+                  typeBg: isSentToDispatch ? '#FEF2F2' : '#FFFBEB',
+                  typeBorder: isSentToDispatch ? '#FEE2E2' : '#FEF3C7',
+                  referenceDoc: b.bomCode || b.code || b.id || 'BOM Order',
+                  itemCode: selectedMat.code,
+                  itemName: selectedMat.name,
+                  qty: -qty,
+                  unit: it.uom || selectedMat.unit || 'NOS',
+                  previousStock: baseStock,
+                  newStock: isSentToDispatch ? afterStock : baseStock,
+                  user: b.salesPerson || b.createdBy || 'Sales Executive',
+                  role: 'Sales Department',
+                  reason: isSentToDispatch
+                    ? `Deducted ${qty.toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Sales Confirmed - Forwarded to Dispatch).`
+                    : `Allocated ${qty.toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code}.`,
+                  source: b.companyName || b.customerName || 'Sales Order',
+                  location: selectedMat.store || 'Finished Goods Bay'
+                });
+              }
+            }
+          });
+        });
+      }
+    } catch (_) {}
+
+    // 2. Authoritative Goods Receipts (GRN Inwarding from Procurement)
+    try {
+      const gRaw = localStorage.getItem('controlroom_grn_store');
+      let grns = [];
+      if (gRaw) grns = JSON.parse(gRaw);
+      if (Array.isArray(grns)) {
+        grns.forEach(g => {
+          (g.items || []).forEach(git => {
+            const gCode = String(git.materialCode || git.itemCode || git.code || '').toLowerCase().trim();
+            const gName = String(git.materialName || git.name || '').toLowerCase().trim();
+            const isMatch = (sCode && gCode === sCode) || (sName && gName === sName);
+            if (isMatch) {
+              const recQty = parseFloat(git.receivedQty || git.acceptedQty || git.qty || 0) || 0;
+              if (recQty > 0) {
+                const rawDate = g.createdAt || g.grnDate;
+                let formattedDate = 'Recent Receipt';
+                try {
+                  if (rawDate) {
+                    const d = new Date(rawDate);
+                    formattedDate = !isNaN(d.getTime())
+                      ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+                      : String(rawDate);
+                  }
+                } catch (_) {}
+
+                logs.push({
+                  id: `GRN-LOG-${g.grnNo || g.id}-${gCode}`,
+                  timestamp: formattedDate,
+                  type: 'GOODS_RECEIPT',
+                  typeName: 'Goods Receipt Note (GRN)',
+                  typeColor: '#0E7490',
+                  typeBg: '#ECFEFF',
+                  typeBorder: '#CFFAFE',
+                  referenceDoc: g.grnNo || g.id || 'GRN',
+                  itemCode: selectedMat.code,
+                  itemName: selectedMat.name,
+                  qty: +recQty,
+                  unit: git.unit || selectedMat.unit || 'NOS',
+                  previousStock: selectedMat.stock - recQty,
+                  newStock: selectedMat.stock,
+                  user: g.inspectedBy || g.verifiedBy || 'Store In-Charge',
+                  role: 'Warehouse Receiving',
+                  reason: `Inwarded ${recQty.toLocaleString()} ${git.unit || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
+                  source: g.vendorName || g.supplier || 'Procurement Order',
+                  location: selectedMat.store || 'Main Store'
+                });
+              }
+            }
+          });
+        });
+      }
+    } catch (_) {}
+
+    // 3. Central Ledger & Production Work Orders
+    try {
+      const engineLedger = (typeof prodModuleEngine !== 'undefined' && prodModuleEngine.getLedger) ? prodModuleEngine.getLedger() : [];
+      (engineLedger || []).forEach(entry => {
+        const eCode = String(entry.itemCode || '').toUpperCase().trim();
+        const eName = String(entry.itemName || '').toLowerCase().trim();
+        if (eCode === sCode.toUpperCase() || eName === sName) {
+          logs.push({
+            id: entry.id || `TX-${Date.now()}`,
+            timestamp: entry.dateTime || entry.timestamp || 'Production Log',
+            type: entry.type || 'PRODUCTION_LOG',
+            typeName: entry.type === 'PRODUCTION_RECEIPT' ? 'Production Output Inward' : (entry.type === 'PRODUCTION_CONSUMPTION' ? 'Raw Material Consumption' : 'Inventory Transaction'),
+            typeColor: entry.type === 'PRODUCTION_RECEIPT' ? '#16A34A' : '#4F46E5',
+            typeBg: entry.type === 'PRODUCTION_RECEIPT' ? '#F0FDF4' : '#EEF2FF',
+            typeBorder: entry.type === 'PRODUCTION_RECEIPT' ? '#DCFCE7' : '#E0E7FF',
+            referenceDoc: entry.refNo || entry.sourceDoc || 'WO-Record',
+            itemCode: selectedMat.code,
+            itemName: selectedMat.name,
+            qty: entry.direction === 'IN' ? +(entry.qty || 0) : -(entry.qty || 0),
+            unit: entry.unit || selectedMat.unit || 'NOS',
+            previousStock: entry.previousStock,
+            newStock: entry.newStock,
+            user: entry.user || 'Production Head',
+            role: entry.department || 'Production & Quality',
+            reason: entry.remarks || `Production operation entry for ${selectedMat.name}.`,
+            source: entry.sourceDoc || 'Production Floor',
+            location: entry.warehouse || selectedMat.store || 'Plant Bay'
+          });
+        }
+      });
+    } catch (_) {}
+
+    // 4. Initial Physical Stock Baseline Setup
+    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 5000)) || 5000);
+    logs.push({
+      id: `INIT-${selectedMat.code}`,
+      timestamp: 'Initial Setup Baseline',
+      type: 'OPENING_STOCK',
+      typeName: 'Initial Opening Stock',
+      typeColor: '#2563EB',
+      typeBg: '#EFF6FF',
+      typeBorder: '#DBEAFE',
+      referenceDoc: 'SETUP-BASE',
       itemCode: selectedMat.code,
       itemName: selectedMat.name,
-      qty: +(wo.actualGoodOutput || wo.targetQty || 8),
-      unit: wo.unit || selectedMat.unit || 'Pieces',
-      user: wo.productionHead || 'Senthil Kumar (Production Head)',
-      employee: wo.assignedEmployee || 'Karthi (Operator)',
-      reason: `${wo.assignedEmployee || 'Karthi'} manufactured ${wo.actualGoodOutput || 8} ${wo.unit || 'Pieces'} of ${selectedMat.name} under Work Order ${wo.id} (Verified and approved into FG Inventory Store by ${wo.productionHead || 'Senthil Kumar'})`,
-      referenceDoc: wo.id
-    }));
+      qty: +initialBase,
+      unit: selectedMat.unit || 'NOS',
+      previousStock: 0,
+      newStock: initialBase,
+      user: 'Central Inventory Master',
+      role: 'System Setup',
+      reason: `Initial ready physical stock balance of ${initialBase.toLocaleString()} ${selectedMat.unit || 'NOS'} provisioned for active sales dispatch and manufacturing assembly.`,
+      source: 'Central Finished Goods Registry',
+      location: selectedMat.store || 'Finished Goods Bay'
+    });
 
-    const combined = [...matchedLedger, ...woEntries];
-
-    if (combined.length === 0) {
-      const isRaw = selectedMat.cat?.toLowerCase().includes('raw') || selectedMat.code?.includes('RM-') || selectedMat.unit === 'Length';
-      if (isRaw) {
-        return [
-          {
-            id: 'TXN-2026-98101',
-            timestamp: '30 Aug 2026, 04:30 PM',
-            type: 'PRODUCTION_CONSUMPTION',
-            woId: 'WO-VRM-101',
-            itemCode: selectedMat.code,
-            itemName: selectedMat.name,
-            qty: -1,
-            unit: selectedMat.unit || 'Length',
-            previousStock: (selectedMat.stock || 100) + 1,
-            newStock: selectedMat.stock || 100,
-            user: 'Senthil Kumar (Production Head)',
-            employee: 'Karthi (Operator)',
-            reason: `1 ${selectedMat.unit || 'Length'} issued and reduced by Karthi for Work Order WO-VRM-101 (Manufacturing 8 Pcs Mini Rail 300 mm).`,
-            referenceDoc: 'WO-VRM-101'
-          },
-          {
-            id: 'TXN-2026-87410',
-            timestamp: '25 Aug 2026, 11:15 AM',
-            type: 'GOODS_RECEIPT',
-            woId: 'GRN-2026-089',
-            itemCode: selectedMat.code,
-            itemName: selectedMat.name,
-            qty: +100,
-            unit: selectedMat.unit || 'Length',
-            previousStock: 0,
-            newStock: 100,
-            user: 'Store Manager',
-            employee: 'Receiving In-Charge',
-            reason: `Goods Received GRN-2026-089 from Jindal Aluminium Ltd (PO-00042). Approved by Store Manager.`,
-            referenceDoc: 'GRN-2026-089'
-          }
-        ];
-      } else {
-        return [
-          {
-            id: 'TXN-2026-99201',
-            timestamp: '30 Aug 2026, 04:30 PM',
-            type: 'PRODUCTION_RECEIPT',
-            woId: 'WO-VRM-101',
-            itemCode: selectedMat.code,
-            itemName: selectedMat.name,
-            qty: +8,
-            unit: selectedMat.unit || 'Pieces',
-            previousStock: Math.max(0, (selectedMat.stock || 50) - 8),
-            newStock: selectedMat.stock || 50,
-            user: 'Senthil Kumar (Production Head)',
-            employee: 'Karthi (Operator)',
-            reason: `Karthi cut and manufactured 8 Pieces of ${selectedMat.name} under Work Order WO-VRM-101. Verified and received into FG Store Bay #4 by Senthil Kumar.`,
-            referenceDoc: 'WO-VRM-101'
-          },
-          {
-            id: 'TXN-2026-91402',
-            timestamp: '28 Aug 2026, 02:45 PM',
-            type: 'PRODUCTION_RECEIPT',
-            woId: 'WO-VRM-095',
-            itemCode: selectedMat.code,
-            itemName: selectedMat.name,
-            qty: +12,
-            unit: selectedMat.unit || 'Pieces',
-            previousStock: Math.max(0, (selectedMat.stock || 50) - 20),
-            newStock: Math.max(0, (selectedMat.stock || 50) - 8),
-            user: 'Senthil Kumar (Production Head)',
-            employee: 'Ramesh (Machine Operator)',
-            reason: `Ramesh manufactured 12 Pieces under Work Order WO-VRM-095. Verified and approved by Senthil Kumar.`,
-            referenceDoc: 'WO-VRM-095'
-          },
-          {
-            id: 'TXN-2026-88120',
-            timestamp: '26 Aug 2026, 10:00 AM',
-            type: 'STOCK_ADJUSTMENT',
-            woId: 'ADJ-004',
-            itemCode: selectedMat.code,
-            itemName: selectedMat.name,
-            qty: +5,
-            unit: selectedMat.unit || 'Pieces',
-            previousStock: Math.max(0, (selectedMat.stock || 50) - 25),
-            newStock: Math.max(0, (selectedMat.stock || 50) - 20),
-            user: 'Senthil Kumar (Production Head)',
-            employee: 'Inventory Auditor',
-            reason: `Physical stock count correction (+5 Surplus). Approved by Production Head.`,
-            referenceDoc: 'ADJ-004'
-          }
-        ];
-      }
-    }
-
-    return combined;
+    return logs;
   }, [selectedMat]);
 
   const filteredMaterials = useMemo(() => {
@@ -2003,19 +2066,44 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     );
   }
 
-  // FULL PAGE VIEW 2: Item Audit Log & Production Traceability (Matching Create Work Order Page Layout)
+  // FULL PAGE VIEW 2: Item Audit Log & Production Traceability (Executive Dual-View Interface)
   if (showTxModal && selectedMat) {
+    const isOut = selectedMat.status === 'Out of Stock';
+    const isLow = selectedMat.status === 'Low Stock';
+    const stBg = isOut ? '#FEF2F2' : isLow ? '#FFF7ED' : '#F0FDF4';
+    const stFg = isOut ? '#B91C1C' : isLow ? '#C2410C' : '#15803D';
+    const stBorder = isOut ? '1px solid #FEE2E2' : isLow ? '1px solid #FFEDD5' : '1px solid #DCFCE7';
+
+    const physicalStockVal = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 5000)) || 5000);
+    const reservedVal = Math.max(0, parseFloat(selectedMat.reserved !== undefined ? selectedMat.reserved : (selectedMat.blockedForBom || 0)) || 0);
+    const availableVal = selectedMat.stock !== undefined ? selectedMat.stock : Math.max(0, physicalStockVal - reservedVal);
+    const minLevelVal = parseFloat(selectedMat.minLevel || 50) || 50;
+
+    const filteredLogs = itemAuditLogs.filter(log => {
+      if (auditTypeFilter === 'OUTFLOW' && log.qty >= 0) return false;
+      if (auditTypeFilter === 'INFLOW' && log.qty <= 0) return false;
+      if (auditTypeFilter === 'BOM' && !String(log.type || '').startsWith('BOM')) return false;
+      if (auditTypeFilter === 'GRN' && log.type !== 'GOODS_RECEIPT') return false;
+
+      if (auditSearchQuery.trim()) {
+        const q = auditSearchQuery.toLowerCase().trim();
+        const str = `${log.referenceDoc} ${log.reason} ${log.typeName} ${log.user} ${log.role} ${log.source}`.toLowerCase();
+        if (!str.includes(q)) return false;
+      }
+      return true;
+    });
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
         
-        {/* Top Header Card matching Create Work Order Page */}
+        {/* Top Breadcrumb & Actions Bar */}
         <div style={{
           backgroundColor: '#FFFFFF',
-          padding: '18px 24px',
+          padding: '16px 24px',
           borderRadius: '14px',
           border: '1px solid #E2E8F0',
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           width: '100%',
           boxSizing: 'border-box',
@@ -2023,12 +2111,19 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           gap: '16px'
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <h1 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#0F172A' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
+              <span>BUSINZ</span>
+              <span>/</span>
+              <span>{isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}</span>
+              <span>/</span>
+              <span style={{ color: '#0E7490' }}>Item Audit Log & Traceability</span>
+            </div>
+            <h1 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '10px' }}>
               Item Audit Log & Production Traceability
+              <span style={{ fontSize: '12px', fontWeight: '700', padding: '3px 10px', borderRadius: '20px', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
+                Live Inventory Ledger
+              </span>
             </h1>
-            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0', lineHeight: '1.4' }}>
-              Material Description: <strong style={{ color: '#0F172A' }}>{selectedMat.name}</strong> | Item Code: <strong style={{ color: '#2563EB' }}>{selectedMat.code}</strong>
-            </p>
           </div>
 
           <button
@@ -2037,7 +2132,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             style={{
               border: '1px solid #CBD5E1',
               backgroundColor: '#FFFFFF',
-              color: '#475569',
+              color: '#334155',
               padding: '9px 18px',
               borderRadius: '8px',
               fontSize: '13px',
@@ -2045,173 +2140,576 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               cursor: 'pointer',
               flexShrink: 0,
               whiteSpace: 'nowrap',
-              marginLeft: 'auto'
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              transition: 'all 0.15s ease'
             }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#94A3B8'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
           >
-            ← Back to {isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}
+            <ArrowLeft size={16} /> Back to {isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}
           </button>
         </div>
 
-        {/* TIMELINE ACTIVITY FEED (MATCHING USER REFERENCE DESIGN) */}
-        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '16px' }}>
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: '#0F172A' }}>
-                Movement & Production Audit Activity Feed ({itemAuditLogs.length} Events)
-              </h3>
-              <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
-                Real-time timeline trail of operator completions, material issues, receipts, and supervisor approvals.
-              </p>
+        {/* Executive Material Identity Banner & KPI Summary Cards */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '16px',
+          padding: '22px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+        }}>
+          {/* Material Identity Header Row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ backgroundColor: '#0E7490', color: '#FFFFFF', padding: '4px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '800', letterSpacing: '0.5px' }}>
+                  {selectedMat.code}
+                </span>
+                <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                  {selectedMat.name}
+                </h2>
+                <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: stFg }}></span>
+                  {selectedMat.status || 'In Stock'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px', color: '#64748B', flexWrap: 'wrap' }}>
+                <span>Category: <strong style={{ color: '#1E293B' }}>{selectedMat.cat || selectedMat.category || 'General'}</strong></span>
+                <span>•</span>
+                <span>UOM: <strong style={{ color: '#1E293B' }}>{selectedMat.unit || 'NOS'}</strong></span>
+                <span>•</span>
+                <span>Warehouse Location: <strong style={{ color: '#0E7490' }}>{selectedMat.store || 'Finished Goods Bay'}</strong></span>
+                <span>•</span>
+                <span>HSN Code: <strong style={{ color: '#1E293B' }}>{selectedMat.hsn || '7604'}</strong></span>
+              </div>
             </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', backgroundColor: '#F1F5F9', color: '#475569', padding: '4px 12px', borderRadius: '20px', border: '1px solid #E2E8F0' }}>
-              Timeline ({itemAuditLogs.length} Events)
-            </span>
+
+            {/* View Mode Toggle Switcher (Table vs Timeline) */}
+            <div style={{ display: 'inline-flex', padding: '3px', backgroundColor: '#F1F5F9', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              <button
+                type="button"
+                onClick={() => setAuditViewMode('table')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: auditViewMode === 'table' ? '#FFFFFF' : 'transparent',
+                  color: auditViewMode === 'table' ? '#0F172A' : '#64748B',
+                  boxShadow: auditViewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                📋 Audit Ledger Table
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuditViewMode('timeline')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: auditViewMode === 'timeline' ? '#FFFFFF' : 'transparent',
+                  color: auditViewMode === 'timeline' ? '#0F172A' : '#64748B',
+                  boxShadow: auditViewMode === 'timeline' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                ⏱️ Activity Timeline
+              </button>
+            </div>
           </div>
 
-          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '28px', paddingLeft: '8px' }}>
+          {/* 4 Executive Stock KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             
-            {/* Continuous Vertical Connector Line */}
-            <div style={{ position: 'absolute', top: '16px', bottom: '16px', left: '23px', width: '2px', backgroundColor: '#E2E8F0', zIndex: 1 }}></div>
+            {/* KPI 1: Physical Stock Baseline */}
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Physical Warehouse Stock
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A' }}>
+                {physicalStockVal.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                Physical count & opening balance baseline
+              </div>
+            </div>
 
-            {itemAuditLogs.map((log, idx) => {
-              const isAddition = log.qty > 0 || log.type === 'PRODUCTION_RECEIPT' || log.type === 'GOODS_RECEIPT';
-              const isAdj = log.type === 'STOCK_ADJUSTMENT';
-              const isReceipt = log.type === 'GOODS_RECEIPT';
+            {/* KPI 2: Reserved for Orders */}
+            <div style={{ backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Allocated / In Dispatch
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#D97706' }}>
+                {reservedVal > 0 ? `-${reservedVal.toLocaleString()}` : '0'} <span style={{ fontSize: '13px', fontWeight: '600', color: '#B45309' }}>{selectedMat.unit || 'NOS'}</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#92400E' }}>
+                Blocked for confirmed sales BOMs
+              </div>
+            </div>
 
-              const iconBg = isReceipt ? '#ECFEFF' : isAddition ? '#F0FDF4' : isAdj ? '#FFF7ED' : '#EFF6FF';
-              const iconColor = isReceipt ? '#0E7490' : isAddition ? '#16A34A' : isAdj ? '#EA580C' : '#2563EB';
-              const cardAccentBorder = isReceipt ? '#0E7490' : isAddition ? '#16A34A' : isAdj ? '#EA580C' : '#2563EB';
+            {/* KPI 3: Live Available Stock */}
+            <div style={{ backgroundColor: '#ECFEFF', border: '1.5px solid #0E7490', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 2px 6px rgba(14, 116, 144, 0.08)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Live Available Free Stock
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#0E7490' }}>
+                {availableVal.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>{selectedMat.unit || 'NOS'}</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#155E75', fontWeight: '600' }}>
+                Ready for immediate sales dispatch booking
+              </div>
+            </div>
 
-              const isInvoiceOutflow = log.reason && log.reason.toLowerCase().includes('invoiced');
-              const eventAction = log.type === 'PRODUCTION_RECEIPT'
-                ? 'manufactured and added finished goods'
-                : isInvoiceOutflow
-                ? 'completed sales invoice & deducted inventory'
-                : log.type === 'PRODUCTION_CONSUMPTION'
-                ? 'issued and reduced raw material'
-                : log.type === 'GOODS_RECEIPT'
-                ? 'processed goods receipt GRN'
-                : 'performed stock adjustment';
+            {/* KPI 4: Minimum Threshold & Safety Buffer */}
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Min. Reorder Threshold
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#334155' }}>
+                {minLevelVal.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: availableVal <= minLevelVal ? '#DC2626' : '#16A34A', fontWeight: '600' }}>
+                {availableVal <= minLevelVal ? '⚠️ Below safety reorder level' : '✓ Stock is above minimum threshold'}
+              </div>
+            </div>
 
-              return (
-                <div key={idx} style={{ position: 'relative', zIndex: 2, display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                  
-                  {/* Left Timeline Icon Avatar */}
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: iconBg, border: `2px solid ${cardAccentBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '800', color: iconColor }}>
-                      {(log.employee || log.user || 'K').charAt(0).toUpperCase()}
-                    </span>
-                  </div>
+          </div>
 
-                  {/* Right Content Card Container */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Search & Filter Toolbar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingTop: '4px' }}>
+            {/* Search input */}
+            <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+              <input
+                type="text"
+                placeholder="Search by document #, user, reason..."
+                value={auditSearchQuery}
+                onChange={(e) => setAuditSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  padding: '0 12px 0 34px',
+                  fontSize: '12.5px',
+                  color: '#0F172A',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {auditSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setAuditSearchQuery('')}
+                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94A3B8' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {[
+                { id: 'ALL', label: `All Events (${itemAuditLogs.length})` },
+                { id: 'OUTFLOW', label: 'Dispatches & Deductions' },
+                { id: 'INFLOW', label: 'Receipts & Additions' },
+                { id: 'BOM', label: 'Sales BOMs' },
+                { id: 'GRN', label: 'GRN Inwarding' }
+              ].map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setAuditTypeFilter(f.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    border: auditTypeFilter === f.id ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                    backgroundColor: auditTypeFilter === f.id ? '#ECFEFF' : '#FFFFFF',
+                    color: auditTypeFilter === f.id ? '#0E7490' : '#64748B',
+                    fontSize: '11.5px',
+                    fontWeight: auditTypeFilter === f.id ? '800' : '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* AUDIT LOG DATA DISPLAY: TABLE MODE OR TIMELINE MODE */}
+        {auditViewMode === 'table' ? (
+          /* ======================== 1. DETAILED AUDIT LEDGER TABLE ======================== */
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '16px',
+            overflow: 'hidden',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+          }}>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', tableLayout: 'auto' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '150px' }}>Date & Time</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '180px' }}>Event Category</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '130px' }}>Ref Document</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800' }}>Activity Description / Narrative</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'right', width: '120px' }}>Impact Qty</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'center', width: '140px' }}>Stock Balance</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '160px' }}>Authorized By</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '140px' }}>Warehouse Bay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '48px 24px', textAlign: 'center', color: '#94A3B8' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <Info size={28} style={{ color: '#CBD5E1' }} />
+                          <strong style={{ color: '#475569', fontSize: '14px' }}>No audit transactions found</strong>
+                          <span style={{ fontSize: '12px' }}>Try clearing the search query or adjusting the category filter.</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLogs.map((log, idx) => {
+                      const isAddition = log.qty > 0;
+                      const isZero = log.qty === 0;
+                      const qtyColor = isAddition ? '#16A34A' : isZero ? '#64748B' : '#DC2626';
+                      const qtyBg = isAddition ? '#F0FDF4' : isZero ? '#F8FAFC' : '#FEF2F2';
+                      const qtyBorder = isAddition ? '#DCFCE7' : isZero ? '#E2E8F0' : '#FEE2E2';
+
+                      return (
+                        <tr
+                          key={log.id || idx}
+                          style={{
+                            borderBottom: '1px solid #F1F5F9',
+                            backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                            transition: 'background-color 0.15s ease'
+                          }}
+                          className="table-row-hover"
+                        >
+                          {/* Date & Time */}
+                          <td style={{ padding: '14px 16px', fontWeight: '600', color: '#334155', whiteSpace: 'nowrap', fontSize: '12.5px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Calendar size={13} style={{ color: '#94A3B8' }} />
+                              <span>{log.timestamp}</span>
+                            </div>
+                          </td>
+
+                          {/* Event Category Badge */}
+                          <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              backgroundColor: log.typeBg || '#F1F5F9',
+                              color: log.typeColor || '#334155',
+                              border: `1px solid ${log.typeBorder || '#E2E8F0'}`,
+                              padding: '3px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              {log.typeName || log.type}
+                            </span>
+                          </td>
+
+                          {/* Reference Document */}
+                          <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              backgroundColor: '#F8FAFC',
+                              border: '1px solid #CBD5E1',
+                              color: '#0F172A',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              fontFamily: 'monospace'
+                            }}>
+                              {log.referenceDoc}
+                            </span>
+                          </td>
+
+                          {/* Activity Description */}
+                          <td style={{ padding: '14px 16px', color: '#1E293B', lineHeight: '1.5', minWidth: '260px' }}>
+                            <div style={{ fontWeight: '500' }}>{log.reason}</div>
+                            {log.source && (
+                              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                Source Entity: <strong>{log.source}</strong>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Impact Quantity */}
+                          <td style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              backgroundColor: qtyBg,
+                              color: qtyColor,
+                              border: `1px solid ${qtyBorder}`,
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              fontSize: '12.5px',
+                              fontWeight: '800',
+                              fontFamily: 'monospace',
+                              display: 'inline-block'
+                            }}>
+                              {isAddition ? `+${log.qty.toLocaleString()}` : log.qty.toLocaleString()} {log.unit}
+                            </span>
+                          </td>
+
+                          {/* Stock Balance Movement */}
+                          <td style={{ padding: '14px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              backgroundColor: '#F1F5F9',
+                              color: '#0F172A',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: '700'
+                            }}>
+                              {log.previousStock !== undefined ? log.previousStock.toLocaleString() : '—'} → <strong style={{ color: '#0E7490' }}>{log.newStock !== undefined ? log.newStock.toLocaleString() : availableVal.toLocaleString()}</strong>
+                            </span>
+                          </td>
+
+                          {/* Authorized By */}
+                          <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '12.5px' }}>
+                              {log.user || 'Production Head'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>
+                              {log.role || 'Production & Logistics'}
+                            </div>
+                          </td>
+
+                          {/* Warehouse Location */}
+                          <td style={{ padding: '14px 16px', whiteSpace: 'nowrap', color: '#64748B', fontSize: '12px' }}>
+                            <span style={{ backgroundColor: '#F8FAFC', padding: '3px 8px', borderRadius: '4px', border: '1px solid #E2E8F0', fontWeight: '600' }}>
+                              {log.location || selectedMat.store || 'Finished Goods Bay'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Table Footer Summary */}
+            <div style={{
+              padding: '12px 20px',
+              backgroundColor: '#F8FAFC',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '12.5px',
+              color: '#64748B'
+            }}>
+              <span>Showing <strong>{filteredLogs.length}</strong> of <strong>{itemAuditLogs.length}</strong> verified events</span>
+              <span style={{ color: '#0E7490', fontWeight: '700' }}>Authoritative BUSINZ Material Traceability Trail</span>
+            </div>
+          </div>
+        ) : (
+          /* ======================== 2. VISUAL ACTIVITY TIMELINE ======================== */
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '16px',
+            padding: '28px 32px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: '#0F172A' }}>
+                  Sequential Traceability Trail ({filteredLogs.length} Events)
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
+                  Chronological lifecycle progression from initial stock setup, supplier inwarding, to sales dispatch allocations.
+                </p>
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: '700', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '4px 12px', borderRadius: '20px', border: '1px solid #CFFAFE' }}>
+                {filteredLogs.length} Logged Events
+              </span>
+            </div>
+
+            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '26px', paddingLeft: '12px' }}>
+              
+              {/* Perfectly Centered Vertical Connector Line */}
+              <div style={{
+                position: 'absolute',
+                top: '20px',
+                bottom: '20px',
+                left: '29px',
+                width: '2px',
+                backgroundColor: '#E2E8F0',
+                zIndex: 1
+              }}></div>
+
+              {filteredLogs.map((log, idx) => {
+                const isAddition = log.qty > 0;
+                const isZero = log.qty === 0;
+                const accentColor = log.typeColor || (isAddition ? '#16A34A' : '#DC2626');
+                const avatarBg = log.typeBg || (isAddition ? '#F0FDF4' : '#FEF2F2');
+                const avatarBorder = log.typeBorder || (isAddition ? '#DCFCE7' : '#FEE2E2');
+
+                return (
+                  <div key={log.id || idx} style={{ position: 'relative', zIndex: 2, display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
                     
-                    {/* Header Line: User Name + Action + Tag Pill + Time */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '13.5px' }}>
-                      <strong style={{ color: '#0F172A', fontWeight: '800' }}>{log.employee || log.user || 'Karthi (Operator)'}</strong>
-                      <span style={{ color: '#64748B' }}>{eventAction}</span>
-                      
-                      {log.referenceDoc && (
-                        <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', color: '#475569', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          {log.referenceDoc} ↗
-                        </span>
-                      )}
-
-                      <span style={{ color: '#94A3B8', fontSize: '12px', marginLeft: 'auto' }}>
-                        • {log.timestamp}
+                    {/* Left Center Avatar */}
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      backgroundColor: avatarBg,
+                      border: `2px solid ${accentColor}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.06)'
+                    }}>
+                      <span style={{ fontSize: '13px', fontWeight: '800', color: accentColor }}>
+                        {isAddition ? '+' : (isZero ? '•' : '−')}
                       </span>
                     </div>
 
-                    {/* Nested Details Card Box (Matching User Reference Image) */}
+                    {/* Right Timeline Card */}
                     <div style={{
+                      flex: 1,
                       backgroundColor: '#FFFFFF',
                       border: '1px solid #E2E8F0',
                       borderRadius: '12px',
-                      padding: '16px 20px',
-                      boxShadow: '0 2px 6px -2px rgba(0, 0, 0, 0.04)',
-                      borderLeft: `4px solid ${cardAccentBorder}`,
+                      padding: '18px 22px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                      borderLeft: `4px solid ${accentColor}`,
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '12px'
                     }}>
-                      
-                      {/* Impact Quantity & Reason Narrative */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                        <p style={{ margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.6', fontWeight: '500' }}>
-                          {log.reason}
-                        </p>
+                      {/* Top Header of Card */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            backgroundColor: log.typeBg || '#F1F5F9',
+                            color: log.typeColor || '#334155',
+                            border: `1px solid ${log.typeBorder || '#E2E8F0'}`,
+                            padding: '3px 9px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: '800'
+                          }}>
+                            {log.typeName || log.type}
+                          </span>
+                          <span style={{
+                            backgroundColor: '#F8FAFC',
+                            border: '1px solid #CBD5E1',
+                            color: '#0F172A',
+                            padding: '2px 8px',
+                            borderRadius: '5px',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            fontFamily: 'monospace'
+                          }}>
+                            {log.referenceDoc}
+                          </span>
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>
+                            Authorized by: <strong style={{ color: '#0F172A' }}>{log.user}</strong> ({log.role})
+                          </span>
+                        </div>
+
+                        {/* Timestamp */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#94A3B8', fontWeight: '600' }}>
+                          <Calendar size={13} />
+                          <span>{log.timestamp}</span>
+                        </div>
+                      </div>
+
+                      {/* Narrative Reason */}
+                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', fontWeight: '500' }}>
+                        {log.reason}
+                      </div>
+
+                      {/* Movement Metric Banner */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        padding: '10px 16px',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12.5px' }}>
+                          <div>
+                            <span style={{ color: '#64748B' }}>Baseline Before: </span>
+                            <strong>{log.previousStock !== undefined ? log.previousStock.toLocaleString() : '—'} {log.unit}</strong>
+                          </div>
+                          <span>→</span>
+                          <div>
+                            <span style={{ color: '#64748B' }}>New Balance: </span>
+                            <strong style={{ color: '#0E7490' }}>{log.newStock !== undefined ? log.newStock.toLocaleString() : availableVal.toLocaleString()} {log.unit}</strong>
+                          </div>
+                        </div>
 
                         <div style={{
                           backgroundColor: isAddition ? '#F0FDF4' : '#FEF2F2',
                           color: isAddition ? '#166534' : '#991B1B',
                           border: isAddition ? '1px solid #DCFCE7' : '1px solid #FEE2E2',
                           padding: '4px 12px',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           fontSize: '13px',
                           fontWeight: '800',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0
+                          fontFamily: 'monospace'
                         }}>
-                          {isAddition ? `+${log.qty}` : log.qty} {log.unit || selectedMat.unit}
+                          {isAddition ? `+${log.qty.toLocaleString()}` : log.qty.toLocaleString()} {log.unit}
                         </div>
                       </div>
 
-                      {/* Stock Movement Summary Metrics Grid */}
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, 1fr)',
-                        gap: '10px',
-                        backgroundColor: '#F8FAFC',
-                        borderRadius: '8px',
-                        padding: '10px 14px',
-                        border: '1px solid #E2E8F0'
-                      }}>
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748B', textTransform: 'uppercase' }}>Stock Before</div>
-                          <strong style={{ fontSize: '13.5px', color: '#334155', fontWeight: '800' }}>
-                            {log.previousStock !== undefined ? log.previousStock : (selectedMat.openingStock || selectedMat.stock)} {log.unit || selectedMat.unit}
-                          </strong>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: '600', color: isAddition ? '#166534' : '#991B1B', textTransform: 'uppercase' }}>
-                            {isAddition ? 'Quantity Added' : 'Quantity Reduced'}
-                          </div>
-                          <strong style={{ fontSize: '13.5px', color: isAddition ? '#15803D' : '#DC2626', fontWeight: '800' }}>
-                            {isAddition ? `+${log.qty}` : log.qty} {log.unit || selectedMat.unit}
-                          </strong>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: '600', color: '#0E7490', textTransform: 'uppercase' }}>Total Stock Now</div>
-                          <strong style={{ fontSize: '13.5px', color: '#0F172A', fontWeight: '800' }}>
-                            {log.newStock !== undefined ? log.newStock : selectedMat.stock} {log.unit || selectedMat.unit}
-                          </strong>
-                        </div>
+                      {/* Footer entity info */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B', paddingTop: '4px' }}>
+                        <span>Source / Order: <strong style={{ color: '#0F172A' }}>{log.source || 'Warehouse Inventory Store'}</strong></span>
+                        <span>Bay: <strong style={{ color: '#0E7490' }}>{log.location || selectedMat.store || 'Finished Goods Bay'}</strong></span>
                       </div>
-
-                      {/* Sub-Card Footer Badge (Supervisor Verification & Store Location) */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px', marginTop: '4px', fontSize: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748B' }}>
-                          <span style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#E2E8F0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '800', color: '#334155' }}>
-                            S
-                          </span>
-                          <span>Authorized & Verified by: <strong style={{ color: '#0F172A' }}>{log.user || 'Senthil Kumar (Production Head)'}</strong></span>
-                        </div>
-
-                        <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #A5F3FC' }}>
-                          Location: {selectedMat.store || 'Main Store'}
-                        </span>
-                      </div>
-
                     </div>
 
                   </div>
+                );
+              })}
 
-                </div>
-              );
-            })}
-
+            </div>
           </div>
-        </div>
+        )}
+
       </div>
     );
   }
