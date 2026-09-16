@@ -1,10 +1,10 @@
 [
   {
-    "id": "4080449000000469002",
-    "poNo": "PO-00114",
+    "id": "4080449000000481001",
+    "poNo": "PO-00117",
     "vendor": "Annamalaiyar",
     "poDate": "2026-09-16",
-    "deliveryDate": "2026-09-16",
+    "deliveryDate": "2026-09-17",
     "amount": "₹12,25,000.00",
     "total": 1225000,
     "status": "Draft / Pending Approval",
@@ -34,8 +34,43 @@
     "totalRemainingQty": 5000,
     "receivingProgressPct": "0.0",
     "grnHistory": [],
-    "notes": "Note",
     "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost."
+  },
+  {
+    "id": "4080449000000478007",
+    "poNo": "PO-00116",
+    "vendor": "Annamalaiyar",
+    "poDate": "2026-09-16",
+    "deliveryDate": "2026-09-17",
+    "amount": "₹12,25,000.00",
+    "total": 1225000,
+    "status": "Draft / Pending Approval",
+    "statusType": "pending",
+    "items": []
+  },
+  {
+    "id": "4080449000000480001",
+    "poNo": "PO-00115",
+    "vendor": "Annamalaiyar",
+    "poDate": "2026-09-16",
+    "deliveryDate": "2026-09-17",
+    "amount": "₹12,25,000.00",
+    "total": 1225000,
+    "status": "Draft / Pending Approval",
+    "statusType": "pending",
+    "items": []
+  },
+  {
+    "id": "4080449000000469002",
+    "poNo": "PO-00114",
+    "vendor": "Annamalaiyar",
+    "poDate": "2026-09-16",
+    "deliveryDate": "2026-09-16",
+    "amount": "₹12,25,000.00",
+    "total": 1225000,
+    "status": "Draft / Pending Approval",
+    "statusType": "pending",
+    "items": []
   },
   {
     "id": "4080449000000472007",

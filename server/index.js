@@ -2001,11 +2001,68 @@ const resolveZohoPOId = async (accessToken, poRefOrId) => {
   if (!poRefOrId) return null;
   if (/^\d{15,}$/.test(String(poRefOrId))) return String(poRefOrId);
 
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const targetClean = normalize(poRefOrId);
+
+  // 1. Check local PO store first for instant zero-latency match (< 1ms)
+  try {
+    const localPOs = loadLocalPOs();
+    const localMatch = localPOs.find(p => 
+      normalize(p.poNo) === targetClean || 
+      normalize(p.id) === targetClean || 
+      normalize(p.zohoId) === targetClean ||
+      normalize(p.purchaseorder_number) === targetClean
+    );
+    if (localMatch) {
+      if (localMatch.id && /^\d{15,}$/.test(String(localMatch.id))) return String(localMatch.id);
+      if (localMatch.zohoId && /^\d{15,}$/.test(String(localMatch.zohoId))) return String(localMatch.zohoId);
+      if (localMatch.purchaseorder_id && /^\d{15,}$/.test(String(localMatch.purchaseorder_id))) return String(localMatch.purchaseorder_id);
+    }
+  } catch (_) {}
+
+  // 2. Query Zoho Books API directly by purchaseorder_number (single fast HTTP request ~200ms)
+  try {
+    const singleLookup = await new Promise((resolve) => {
+      const options = {
+        hostname: 'www.zohoapis.in',
+        port: 443,
+        path: `/books/v3/purchaseorders?organization_id=${zohoSession.orgId}&purchaseorder_number=${encodeURIComponent(poRefOrId)}`,
+        method: 'GET',
+        headers: {
+          'Authorization': `Zoho-oauthtoken ${accessToken}`
+        }
+      };
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+      req.end();
+    });
+
+    if (singleLookup && Array.isArray(singleLookup.purchaseorders) && singleLookup.purchaseorders.length > 0) {
+      const match = singleLookup.purchaseorders.find(p => 
+        normalize(p.purchaseorder_number) === targetClean ||
+        normalize(p.purchaseorder_id) === targetClean
+      ) || singleLookup.purchaseorders[0];
+      if (match && match.purchaseorder_id) return match.purchaseorder_id;
+    }
+  } catch (lookupErr) {
+    console.warn('[resolveZohoPOId direct lookup notice]:', lookupErr?.message);
+  }
+
+  // 3. Fallback: paginate all orders if not found in single query
   try {
     const data = await fetchZohoPurchaseOrders(accessToken);
     if (data && data.purchaseorders) {
-      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-      const targetClean = normalize(poRefOrId);
       const match = data.purchaseorders.find(p => 
         normalize(p.purchaseorder_number) === targetClean || 
         normalize(p.purchaseorder_id) === targetClean ||
@@ -4516,9 +4573,13 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
                (cleanPoNo && (lpNo === cleanPoNo || lpId === cleanPoNo));
       });
 
-      const items = (po.line_items || []).map((item, idx) => {
+      const rawLineItems = (po.line_items && Array.isArray(po.line_items) && po.line_items.length > 0)
+        ? po.line_items
+        : (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0 ? matchedLocalPO.items : (po.line_items || []));
+
+      const items = rawLineItems.map((item, idx) => {
         const idKey = item.id || item.itemId || item.line_item_id;
-        const nameKey = String(item.name || '').trim().toLowerCase();
+        const nameKey = String(item.name || item.itemName || '').trim().toLowerCase();
         let prevReceived = 0;
         if (idKey && itemReceivedTotals[idKey] !== undefined) {
           prevReceived = itemReceivedTotals[idKey];
@@ -4527,24 +4588,26 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         } else if (itemReceivedTotals[`IDX-${idx}`] !== undefined) {
           prevReceived = itemReceivedTotals[`IDX-${idx}`];
         }
-        const ordered = item.quantity || 0;
+        const ordered = Number(item.qty !== undefined ? item.qty : (item.quantity || 0));
         const remaining = Math.max(0, ordered - prevReceived);
 
         totalOrderedQty += ordered;
         totalReceivedQty += prevReceived;
 
         const localItem = matchedLocalPO && matchedLocalPO.items && matchedLocalPO.items[idx];
-        const effectiveTax = (localItem && localItem.tax !== undefined && localItem.tax !== '')
-          ? Number(localItem.tax)
-          : (item.tax_percentage > 0 ? Number(item.tax_percentage) : 18);
+        const effectiveTax = (item.tax !== undefined && item.tax !== '' && !isNaN(Number(item.tax)))
+          ? Number(item.tax)
+          : ((localItem && localItem.tax !== undefined && localItem.tax !== '')
+            ? Number(localItem.tax)
+            : (item.tax_percentage > 0 ? Number(item.tax_percentage) : 18));
 
         return {
-          name: item.name,
-          description: item.description || '',
-          account: item.account_name || (localItem ? localItem.account : 'Raw Material'),
+          name: item.name || item.itemName || 'Material Item',
+          description: item.description || item.desc || '',
+          account: item.account || item.account_name || (localItem ? localItem.account : 'Cost of Goods Sold'),
           qty: ordered,
           unit: item.unit || (localItem ? localItem.unit : 'NOS'),
-          rate: item.rate,
+          rate: Number(item.rate !== undefined ? item.rate : (item.unitPrice || 0)),
           tax: effectiveTax,
           previouslyReceived: prevReceived,
           remainingQty: remaining
@@ -4692,7 +4755,16 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
     const matchingGRNs = localGRNs.filter(g => g.poRef === poNo || g.poNo === poNo || g.id === poNo);
     
     const localPOs = loadLocalPOs();
-    const matchedLocalPO = localPOs.find(p => p.id === poNo || p.poNo === poNo || (p.poNo && poNo.includes(p.poNo)));
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const targetClean = normalize(poNo);
+    const matchedLocalPO = localPOs.find(p => 
+      normalize(p.id) === targetClean || 
+      normalize(p.poNo) === targetClean || 
+      normalize(p.zohoId) === targetClean ||
+      normalize(p.purchaseorder_number) === targetClean ||
+      (p.poNo && normalize(p.poNo).includes(targetClean)) ||
+      (targetClean && normalize(p.poNo).length > 0 && targetClean.includes(normalize(p.poNo)))
+    );
     
     let sampleItems = [];
     if (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0) {

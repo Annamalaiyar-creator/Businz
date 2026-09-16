@@ -939,16 +939,17 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const populateFormStates = (po) => {
-    setPoNumber(po.poNo);
-    setVendorName(po.vendor || '');
-    setBranch(po.branch || '');
-    setContactPerson(po.contactPerson || '');
-    setContactNo(po.contactNo || '');
+    if (!po) return;
+    setPoNumber(po.poNo || po.purchaseorder_number || '');
+    setVendorName(po.vendor || po.vendor_name || '');
+    setBranch(po.branch || po.branch_name || '');
+    setContactPerson(po.contactPerson || po.contact_person_name || '');
+    setContactNo(po.contactNo || po.phone || po.mobile || '');
     setEmail(po.email || '');
-    setGstNo(po.gstNo || '');
+    setGstNo(po.gstNo || po.gstin || po.tax_registration_number || '');
     setDeliveryType(po.deliveryType || 'Organization');
-    setDeliveryAddress(po.deliveryAddress || '');
-    setBillingAddress(po.billingAddress || '');
+    setDeliveryAddress(po.deliveryAddress || po.delivery_address || '');
+    setBillingAddress(po.billingAddress || po.billing_address || '');
     setSameAsDelivery(po.deliveryAddress === po.billingAddress);
 
     const parseDateToInputFormat = (dateStr) => {
@@ -962,25 +963,41 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       }
     };
 
-    setPoDate(parseDateToInputFormat(po.poDate));
-    setDeliveryDate(parseDateToInputFormat(po.deliveryDate));
-    setPaymentTerms(po.paymentTerms || 'Net 30 Days');
-    setPurchaser(po.purchaser || loggedInUserName);
-    setShipmentPref(po.shipmentPref || 'Transport');
-    setCurrency(po.currency || 'INR - Indian Rupee');
-    setProject(po.project || '');
+    setPoDate(parseDateToInputFormat(po.poDate || po.date));
+    setDeliveryDate(parseDateToInputFormat(po.deliveryDate || po.delivery_date));
+    setPaymentTerms(po.paymentTerms || po.payment_terms_label || 'Net 30 Days');
+    setPurchaser(po.purchaser || po.purchaser_name || loggedInUserName);
+    setShipmentPref(po.shipmentPref || po.shipment_preference || 'Transport');
+    setCurrency(po.currency || po.currency_code || 'INR - Indian Rupee');
+    setProject(po.project || po.project_name || '');
     setPriority(po.priority || 'High');
     setScope(po.scope || 'Vendor Scope');
     setTransportName(po.transportName || '');
     setViewingPoStatus(po.status || 'OPEN');
-    const sanitizedItems = (po.items || []).map(it => ({
-      ...it,
-      tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
-    }));
-    setItems(sanitizedItems);
-    setShippingCharges(po.shippingCharges || 0);
-    setOtherCharges(po.otherCharges || 0);
-    setDiscountPct(po.discountPct !== undefined ? po.discountPct : 0);
+
+    const incomingItems = (po.items && Array.isArray(po.items) && po.items.length > 0)
+      ? po.items
+      : (po.line_items && Array.isArray(po.line_items) && po.line_items.length > 0 ? po.line_items : []);
+
+    if (incomingItems.length > 0) {
+      const sanitizedItems = incomingItems.map(it => ({
+        ...it,
+        name: it.name || it.item_name || 'Material Item',
+        description: it.description || it.desc || '',
+        account: it.account || it.account_name || 'Cost of Goods Sold',
+        qty: Number(it.qty !== undefined ? it.qty : (it.quantity || 1)),
+        unit: it.unit || 'NOS',
+        rate: Number(it.rate !== undefined ? it.rate : (it.unitPrice || 0)),
+        tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : (it.tax_percentage > 0 ? Number(it.tax_percentage) : 18)
+      }));
+      setItems(sanitizedItems);
+    } else if (Array.isArray(po.items) && po.items.length === 0 && !po.id && !po.poNo) {
+      setItems([]);
+    }
+
+    setShippingCharges(po.shippingCharges || po.shipping_charge || 0);
+    setOtherCharges(po.otherCharges || po.adjustment || 0);
+    setDiscountPct(po.discountPct !== undefined ? po.discountPct : (po.discount_percent || 0));
     setNotes(po.notes || '');
     setTerms(po.terms || `1. Material should be as per the agreed specification and quality.
 2. Delivery should be made on or before the delivery date.
@@ -995,7 +1012,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     populateFormStates(po);
     setViewMode('edit');
     setActiveDropdownIdx(null);
-    const targetId = po.id || po.poNo || po.zohoId;
+    const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
+      ? po.id 
+      : ((/^\d{15,}$/.test(String(po.zohoId || ''))) 
+        ? po.zohoId 
+        : (po.id || po.poNo || po.zohoId));
     if (targetId) {
       setPoDetailLoading(true);
       try {
@@ -1022,7 +1043,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     populateFormStates(po);
     setViewMode('view');
     setActiveDropdownIdx(null);
-    const targetId = po.id || po.poNo || po.zohoId;
+    const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
+      ? po.id 
+      : ((/^\d{15,}$/.test(String(po.zohoId || ''))) 
+        ? po.zohoId 
+        : (po.id || po.poNo || po.zohoId));
     if (targetId) {
       setPoDetailLoading(true);
       try {
@@ -1067,7 +1092,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setViewMode('create');
 
-    const targetId = po.id || po.poNo || po.zohoId;
+    const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
+      ? po.id 
+      : ((/^\d{15,}$/.test(String(po.zohoId || ''))) 
+        ? po.zohoId 
+        : (po.id || po.poNo || po.zohoId));
     if (targetId) {
       setPoDetailLoading(true);
       try {
