@@ -5,17 +5,17 @@
     "category": "Raw Material",
     "unit": "Length",
     "isWholeUnitOnly": true,
-    "physicalStock": 250,
+    "physicalStock": 0,
     "reservedStock": 0,
-    "availableStock": 250,
+    "availableStock": 0,
     "issuedStock": 0,
     "consumedStock": 0,
     "safetyStock": 15,
     "unitRate": 580,
     "bayLocation": "Bay #1 - Extrusion Yard",
-    "stock": 250,
-    "openingStock": 250,
-    "status": "In Stock"
+    "stock": 0,
+    "openingStock": 0,
+    "status": "Out of Stock"
   },
   {
     "code": "ALU-COIL-1.5",

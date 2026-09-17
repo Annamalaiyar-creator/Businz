@@ -5831,7 +5831,7 @@ app.get('/api/zoho/items', async (req, res) => {
 
           const calculatedStock = (localMatch?.stock !== undefined && localMatch.stock !== null)
             ? Number(localMatch.stock)
-            : 5000;
+            : 0;
 
           return {
             id: item.item_id || item.id,
@@ -5851,7 +5851,7 @@ app.get('/api/zoho/items', async (req, res) => {
             material: localMatch?.material || 'General Component',
             category: localMatch?.category || 'General',
             stock: calculatedStock,
-            openingStock: (localMatch?.openingStock !== undefined && localMatch.openingStock !== null) ? Number(localMatch.openingStock) : 5000,
+            openingStock: (localMatch?.openingStock !== undefined && localMatch.openingStock !== null) ? Number(localMatch.openingStock) : 0,
             reorderLevel: localMatch?.reorderLevel || 100
           };
         });
@@ -5859,8 +5859,8 @@ app.get('/api/zoho/items', async (req, res) => {
         const zohoKeys = new Set(translatedZoho.map(z => String(z.sku || z.itemId || z.name).toLowerCase()));
         const uniqueLocal = localItems.filter(l => !zohoKeys.has(String(l.sku || l.itemId || l.name).toLowerCase())).map(l => ({
           ...l,
-          stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 5000,
-          openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 5000
+          stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 0,
+          openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 0
         }));
         const mergedAll = [...uniqueLocal, ...translatedZoho];
 
@@ -5875,8 +5875,8 @@ app.get('/api/zoho/items', async (req, res) => {
   }
   const guaranteedItems = (localItems || []).map(l => ({
     ...l,
-    stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 5000,
-    openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 5000
+    stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 0,
+    openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 0
   }));
   res.json(guaranteedItems);
 });

@@ -48,10 +48,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       if (saved) {
         const parsed = JSON.parse(saved);
         const found = parsed.find(m => m.code === 'ALU-LEN-2414MM' || m.code === 'RM-ALU-2414' || m.code === 'MR100N');
-        if (found && found.stock !== undefined && Number(found.stock) > 0) return Number(found.stock);
+        if (found && found.stock !== undefined) return Number(found.stock);
       }
     } catch (e) {}
-    return 250;
+    return 0;
   };
 
   const getCompletedGrnItems = () => {
@@ -161,9 +161,38 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   };
 
   const [materials, setMaterials] = useState(() => {
-    const currentEngineStock = getEngineAluStock();
-    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: currentEngineStock, lengthMm: '2414', minLevel: 15, status: currentEngineStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngineStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 2000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 2000, physicalStock: 2000, availableStock: 2000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    // One-time client migration to ensure all stock counts are initialized to 0
+    try {
+      const stockZeroKey = 'controlroom_stock_zero_reset_v3';
+      if (localStorage.getItem(stockZeroKey) !== 'true') {
+        localStorage.setItem(stockZeroKey, 'true');
+        ['controlroom_raw_materials_store', 'controlroom_central_items_v2'].forEach(key => {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const list = JSON.parse(raw);
+              if (Array.isArray(list)) {
+                const zeroed = list.map(item => ({
+                  ...item,
+                  stock: 0,
+                  availableStock: 0,
+                  physicalStock: 0,
+                  openingStock: 0,
+                  reserved: 0,
+                  blockedForBom: 0,
+                  goodsReceived: 0,
+                  status: 'Out of Stock'
+                }));
+                localStorage.setItem(key, JSON.stringify(zeroed));
+              }
+            } catch (_) {}
+          }
+        });
+      }
+    } catch (_) {}
+
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 15, status: 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 0, lengthMm: '300', minLevel: 50, status: 'Out of Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
     matMap.set('MR-300MM', defaultMiniRail);
@@ -359,9 +388,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const deletedCodes = getDeletedMaterialCodes();
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
-      const currentEngStock = getEngineAluStock();
-      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: currentEngStock, lengthMm: '2414', minLevel: 15, status: currentEngStock > 0 ? 'In Stock' : 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: currentEngStock, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 2000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 2000, physicalStock: 2000, availableStock: 2000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 15, status: 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 0, lengthMm: '300', minLevel: 50, status: 'Out of Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       matMap.set('MR-300MM', defaultMiniRail);
       // 1. Seed all official VRM standardized catalog products (285 items)
@@ -641,7 +669,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
 
         let base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0);
-        if (isMr300Only && base === 0) base = 2000;
         const grnQty = Number(m.goodsReceived || 0);
 
         // If the item already has an authoritative stock and reserved count from server / cloud
