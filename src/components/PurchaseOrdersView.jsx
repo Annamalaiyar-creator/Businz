@@ -92,23 +92,26 @@ const TERMS_PRESETS = [
 export default function PurchaseOrdersView({ userRole = 'Procurement Head', targetPoNo, clearTargetPo, targetPoTab, clearTargetPoTab, onNavigateTab }) {
   const storedRole = localStorage.getItem('controlroom_user_role') || userRole || '';
   const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').toLowerCase();
-  const isExecutiveOrMD = 
-    userRole === 'CEO' || 
-    userRole === 'Managing Director' || 
-    userRole === 'MD' || 
+  const isAdminOrTech = 
     userRole === 'Admin' || 
-    userRole === 'Technical Administrator' ||
-    userRole === 'Procurement Head' ||
-    storedRole === 'CEO' || 
-    storedRole === 'Managing Director' || 
-    storedRole === 'MD' || 
+    userRole === 'Technical Administrator' || 
     storedRole === 'Admin' || 
-    storedRole === 'Technical Administrator' ||
-    storedRole === 'Procurement Head' ||
-    storedEmail.includes('maniskremo') ||
-    storedEmail.includes('annamalai') ||
-    storedEmail.includes('ceo') ||
-    storedEmail.includes('velmurugan');
+    storedRole === 'Technical Administrator' || 
+    storedEmail.includes('annamalai');
+
+  const isMDOnly = 
+    (userRole === 'CEO' || 
+     userRole === 'Managing Director' || 
+     userRole === 'MD' || 
+     storedRole === 'CEO' || 
+     storedRole === 'Managing Director' || 
+     storedRole === 'MD' || 
+     storedEmail.includes('maniskremo') || 
+     storedEmail.includes('ceo') || 
+     storedEmail.includes('velmurugan')) && !isAdminOrTech;
+
+  const isExecutiveOrMD = isMDOnly;
+  const canApproveAsMD = isMDOnly || isAdminOrTech;
   
   const getLoggedInUserName = () => {
     const storedName = localStorage.getItem('controlroom_logged_user_name');
@@ -187,7 +190,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const isAccounts = userRole.includes('Accounts');
-  const isProcurementHead = !isAccounts && !isExecutiveOrMD;
+  const isProcurementRole = userRole.includes('Procurement') || storedRole.includes('Procurement');
+  const isProcurementHead = isProcurementRole || isAdminOrTech || isAccounts;
   const [statusFilter, setStatusFilter] = useState('All');
   const [filterDate, setFilterDate] = useState('');
   const [poTab, setPoTab] = useState(isExecutiveOrMD ? 'Draft' : isAccounts ? 'MD_APPROVED' : 'All');
@@ -2215,13 +2219,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       }
 
                       if (st === 'Payment Processed' || target.statusType === 'payment_processed') {
-                        if (!isProcurementHead) {
-                          return (
+                        return (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <div style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '6px',
-                              padding: '5px 12px',
+                              gap: '5px',
+                              padding: '5px 10px',
                               borderRadius: '8px',
                               backgroundColor: '#ECFDF5',
                               color: '#065F46',
@@ -2229,36 +2233,36 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                               fontWeight: '700',
                               border: '1px solid #A7F3D0'
                             }}>
-                              <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed
+                              <CheckCircle size={12} style={{ color: '#059669' }} /> Payment Processed
                             </div>
-                          );
-                        }
-                        return (
-                          <button
-                            onClick={() => {
-                              setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
-                              setProceedingPo(target);
-                            }}
-                            style={{
-                              backgroundColor: '#0E7490',
-                              border: 'none',
-                              color: '#FFFFFF',
-                              borderRadius: '10px',
-                              padding: '6px 14px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 1px 2px rgba(14, 116, 144, 0.25)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                          >
-                            <Send size={14} style={{ color: '#FFFFFF' }} /> Proceed PO (Ready for GRN)
-                          </button>
+                            {isProcurementHead && (
+                              <button
+                                onClick={() => {
+                                  setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                                  setProceedingPo(target);
+                                }}
+                                style={{
+                                  backgroundColor: '#0E7490',
+                                  border: 'none',
+                                  color: '#FFFFFF',
+                                  borderRadius: '10px',
+                                  padding: '6px 14px',
+                                  fontSize: '12px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  boxShadow: '0 1px 2px rgba(14, 116, 144, 0.25)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                              >
+                                <Send size={14} style={{ color: '#FFFFFF' }} /> Proceed PO (Ready for GRN)
+                              </button>
+                            )}
+                          </div>
                         );
                       }
 
@@ -2373,7 +2377,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       <FileCode size={14} style={{ color: '#D97706' }} /> Export to Tally
                     </button>
                   </>
-                ) : isExecutiveOrMD ? (
+                ) : canApproveAsMD ? (
                   <>
                     {selectedPOs.length === 1 && (() => {
                       const target = poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]);
@@ -2749,8 +2753,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     }
 
                     if (isPaymentProcessed) {
-                      if (!isProcurementHead) {
-                        return (
+                      return (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -2758,26 +2762,26 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             backgroundColor: '#ECFDF5',
                             border: '1px solid #A7F3D0',
                             borderRadius: '8px',
-                            padding: '6px 14px',
+                            padding: '6px 12px',
                             fontSize: '12px',
                             fontWeight: '700',
                             color: '#065F46'
                           }}>
-                            <CheckCircle size={15} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
+                            <CheckCircle size={14} style={{ color: '#059669' }} /> Payment Processed
                           </div>
-                        );
-                      }
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setProceedEmailInput(currentPoObj?.email || email || (currentPoObj?.vendor ? `contact@${currentPoObj.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
-                            setProceedingPo(currentPoObj);
-                          }}
-                          style={{ backgroundColor: '#0E7490', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '700', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
-                        >
-                          <Send style={{ width: '15px', height: '15px' }} /> Proceed PO (Ready for GRN)
-                        </button>
+                          {isProcurementHead && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProceedEmailInput(currentPoObj?.email || email || (currentPoObj?.vendor ? `contact@${currentPoObj.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                                setProceedingPo(currentPoObj);
+                              }}
+                              style={{ backgroundColor: '#0E7490', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '12px', fontWeight: '700', color: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
+                            >
+                              <Send style={{ width: '14px', height: '14px' }} /> Proceed PO (Ready for GRN)
+                            </button>
+                          )}
+                        </div>
                       );
                     }
 
@@ -2812,7 +2816,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     }
 
                     if (isDraftOrPending) {
-                      if (isExecutiveOrMD) {
+                      if (canApproveAsMD) {
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
@@ -3564,7 +3568,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       </div>
 
                       {isDraftOrPending ? (
-                        isExecutiveOrMD ? (
+                        canApproveAsMD ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
                               Decision for PO <strong>{poNumber}</strong>:
