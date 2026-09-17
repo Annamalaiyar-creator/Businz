@@ -1,5 +1,43 @@
 [
   {
+    "id": "4080449000000518001",
+    "poNo": "PO-00132",
+    "zohoId": "4080449000000518001",
+    "vendor": "Annamalaiyar",
+    "poDate": "2026-09-17",
+    "amount": "₹24,00,000.00",
+    "status": "Draft",
+    "items": [
+      {
+        "name": "MINI RAIL 100mm (300mm) NEW",
+        "description": "",
+        "account": "Cost of Goods Sold",
+        "qty": 2000,
+        "unit": "NOS",
+        "rate": 1200,
+        "tax": 18,
+        "previouslyReceived": 0,
+        "remainingQty": 2000
+      }
+    ],
+    "contactNo": "",
+    "email": "",
+    "gstNo": "",
+    "deliveryAddress": "Tamil Nadu, India",
+    "billingAddress": "Annamalaiyar, Main Road, Industrial Estate, Tamil Nadu - 600028, India",
+    "deliveryDate": "2026-09-18",
+    "paymentTerms": "Due on Receipt",
+    "currency": "INR",
+    "totalOrderedQty": 2000,
+    "totalReceivedQty": 0,
+    "totalRemainingQty": 2000,
+    "receivingProgressPct": "0.0",
+    "grnHistory": [],
+    "notes": "Good",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "statusType": "draft"
+  },
+  {
     "id": "4080449000000512005",
     "poNo": "PO-00131",
     "vendor": "Annamalaiyar",
@@ -54,8 +92,8 @@
     "contactNo": "",
     "email": "",
     "gstNo": "33ABCDE1234F1Z5",
-    "deliveryAddress": "—",
-    "billingAddress": "—",
+    "deliveryAddress": "Tamil Nadu, India",
+    "billingAddress": "Annamalaiyar, Main Road, Industrial Estate, Tamil Nadu - 600028, India",
     "poDate": "2026-09-17",
     "deliveryDate": "2026-09-18",
     "paymentTerms": "Due on Receipt",
@@ -80,7 +118,8 @@
       }
     ],
     "total": 31500000,
-    "zohoId": "4080449000000502001"
+    "zohoId": "4080449000000502001",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost."
   },
   {
     "id": "4080449000000501001",
@@ -91,8 +130,8 @@
     "contactNo": "",
     "email": "",
     "gstNo": "33ABCDE1234F1Z5",
-    "deliveryAddress": "—",
-    "billingAddress": "—",
+    "deliveryAddress": "Tamil Nadu, India",
+    "billingAddress": "Annamalaiyar, Main Road, Industrial Estate, Tamil Nadu - 600028, India",
     "poDate": "2026-09-17",
     "deliveryDate": "2026-09-18",
     "paymentTerms": "Due on Receipt",
@@ -117,7 +156,8 @@
       }
     ],
     "total": 31500000,
-    "zohoId": "4080449000000501001"
+    "zohoId": "4080449000000501001",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost."
   },
   {
     "id": "4080449000000500001",
@@ -167,7 +207,8 @@
     "approvalRequired": "Yes",
     "approver": "Velmurugan Rathinam (CEO)",
     "approvalPriority": "High",
-    "pdfName": "purchase_order.pdf"
+    "pdfName": "purchase_order.pdf",
+    "zohoId": "4080449000000500001"
   },
   {
     "id": "4080449000000493001",

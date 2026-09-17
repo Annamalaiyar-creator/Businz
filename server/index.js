@@ -741,6 +741,12 @@ const loadLocalPOs = () => {
 
 const saveLocalPOs = (pos) => {
   supabaseMemoryStore.po_store = pos;
+  try {
+    const diskPath = getStoreFilePath('po_store.json');
+    fs.writeFileSync(diskPath, JSON.stringify(pos, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('Failed to write po_store.json to disk:', err.message);
+  }
   saveDatabaseStore('po_store', pos);
 };
 
@@ -3556,11 +3562,12 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
                    (rIdClean && (lpIdClean === rIdClean || lpZohoId === rIdClean || lpNoClean === rIdClean));
           });
 
-          if (!matchedLp || !Array.isArray(matchedLp.items) || matchedLp.items.length === 0) {
+          if (!matchedLp || !Array.isArray(matchedLp.items) || matchedLp.items.length === 0 || !matchedLp.deliveryAddress || matchedLp.deliveryAddress === '—' || !matchedLp.notes) {
             try {
               const poDetailRes = await fetchZohoPurchaseOrderDetail(accessToken, rpo.purchaseorder_id);
               if (poDetailRes && poDetailRes.purchaseorder && Array.isArray(poDetailRes.purchaseorder.line_items) && poDetailRes.purchaseorder.line_items.length > 0) {
-                const fetchedItems = poDetailRes.purchaseorder.line_items.map(li => ({
+                const zpo = poDetailRes.purchaseorder;
+                const fetchedItems = zpo.line_items.map(li => ({
                   name: li.name || li.item_name || 'Material Item',
                   sku: li.sku || '',
                   description: li.description || '',
@@ -3572,9 +3579,34 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
                   previouslyReceived: 0,
                   remainingQty: Number(li.quantity || 1)
                 }));
+
+                const buildAddrStr = (addrObj) => {
+                  if (!addrObj) return '';
+                  if (typeof addrObj === 'string') return addrObj;
+                  const parts = [
+                    addrObj.address,
+                    addrObj.address1,
+                    addrObj.street2,
+                    addrObj.city,
+                    addrObj.state,
+                    addrObj.zip,
+                    addrObj.country
+                  ].filter(p => p && String(p).trim().length > 0);
+                  return parts.join(', ');
+                };
+
+                const delAddr = buildAddrStr(zpo.delivery_address);
+                const billAddr = buildAddrStr(zpo.billing_address);
+
                 if (matchedLp) {
-                  matchedLp.items = fetchedItems;
+                  matchedLp.items = (Array.isArray(matchedLp.items) && matchedLp.items.length > 0) ? matchedLp.items : fetchedItems;
                   matchedLp.zohoId = rpo.purchaseorder_id;
+                  if (!matchedLp.deliveryAddress || matchedLp.deliveryAddress === '—') matchedLp.deliveryAddress = delAddr || '—';
+                  if (!matchedLp.billingAddress || matchedLp.billingAddress === '—') matchedLp.billingAddress = billAddr || '—';
+                  if (!matchedLp.notes && zpo.notes) matchedLp.notes = zpo.notes;
+                  if (!matchedLp.terms && zpo.terms) matchedLp.terms = zpo.terms;
+                  if (!matchedLp.deliveryDate && zpo.delivery_date) matchedLp.deliveryDate = zpo.delivery_date;
+                  if (!matchedLp.paymentTerms && zpo.payment_terms_label) matchedLp.paymentTerms = zpo.payment_terms_label;
                 } else {
                   localPOs.unshift({
                     id: rpo.purchaseorder_id,
@@ -3582,6 +3614,12 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
                     zohoId: rpo.purchaseorder_id,
                     vendor: rpo.vendor_name || 'Vendor',
                     poDate: rpo.date,
+                    deliveryDate: zpo.delivery_date || '',
+                    paymentTerms: zpo.payment_terms_label || 'Due on Receipt',
+                    deliveryAddress: delAddr || '—',
+                    billingAddress: billAddr || '—',
+                    notes: zpo.notes || '',
+                    terms: zpo.terms || '',
                     amount: `₹ ${Number(rpo.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
                     status: 'Draft',
                     items: fetchedItems

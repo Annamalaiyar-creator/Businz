@@ -1168,6 +1168,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             };
             populateFormStates(merged);
             setPoList(prev => prev.map(p => (p.poNo === (merged.poNo || po.poNo) || p.id === (merged.id || po.id)) ? { ...p, ...merged } : p));
+            saveSafeZohoPO(merged);
           }
         }
       } catch (err) {
@@ -1224,6 +1225,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             };
             populateFormStates(merged);
             setPoList(prev => prev.map(p => (p.poNo === (merged.poNo || po.poNo) || p.id === (merged.id || po.id)) ? { ...p, ...merged } : p));
+            saveSafeZohoPO(merged);
           }
         }
       } catch (err) {
