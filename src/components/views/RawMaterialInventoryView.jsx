@@ -347,8 +347,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   });
 
   useEffect(() => {
+    let isSyncing = false;
+    let debounceTimer = null;
+    let isFetchingDb = false;
+    let debounceDbTimer = null;
+
     const syncEngineInventory = () => {
-      const deletedCodes = getDeletedMaterialCodes();
+      if (isSyncing) return;
+      isSyncing = true;
+      try {
+        const deletedCodes = getDeletedMaterialCodes();
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
       const currentEngStock = getEngineAluStock();
@@ -669,9 +677,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       setMaterials(filteredMaterials);
       try {
         localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(filteredMaterials));
-        window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-        window.dispatchEvent(new Event('central_inventory_updated'));
       } catch (_) {}
+    } finally {
+      isSyncing = false;
+    }
+  };
+
+    const debouncedSync = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        syncEngineInventory();
+      }, 150);
     };
 
     syncEngineInventory();
@@ -685,77 +701,96 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
             localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
           } catch (_) {}
-          syncEngineInventory();
+          debouncedSync();
         }
       })
       .catch(() => {});
 
     // Authoritative Server & Cloud Database Inventory Sync
     const fetchDatabaseInventory = async () => {
-      // 1. Authoritative sync of BOMs directly from Supabase Cloud
+      if (isFetchingDb) return;
+      isFetchingDb = true;
       try {
-        let bData = await fetchCloudStore('BOM_STORE', []);
-        if (!Array.isArray(bData) || bData.length === 0) {
-          const bRes = await fetch('/api/boms');
-          if (bRes.ok) {
-            const json = await bRes.json();
-            bData = json?.data || json;
+        // 1. Authoritative sync of BOMs directly from Supabase Cloud
+        try {
+          let bData = await fetchCloudStore('BOM_STORE', []);
+          if (!Array.isArray(bData) || bData.length === 0) {
+            const bRes = await fetch('/api/boms');
+            if (bRes.ok) {
+              const json = await bRes.json();
+              bData = json?.data || json;
+            }
           }
-        }
-        if (Array.isArray(bData) && bData.length > 0) {
-          try {
-            localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
-          } catch (_) {}
-        }
-      } catch (_) {}
+          if (Array.isArray(bData) && bData.length > 0) {
+            try {
+              localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
+            } catch (_) {}
+          }
+        } catch (_) {}
 
-      // 2. Authoritative sync of RAW_MATERIALS_STORE directly from Supabase Cloud
-      try {
-        let rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []);
-        if (!Array.isArray(rawMats) || rawMats.length === 0) {
-          const rRes = await fetch('/api/raw-materials');
-          if (rRes.ok) rawMats = await rRes.json();
-        }
-        if (Array.isArray(rawMats) && rawMats.length > 0) {
-          try {
-            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
-          } catch (_) {}
-        }
-      } catch (_) {}
+        // 2. Authoritative sync of RAW_MATERIALS_STORE directly from Supabase Cloud
+        try {
+          let rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []);
+          if (!Array.isArray(rawMats) || rawMats.length === 0) {
+            const rRes = await fetch('/api/raw-materials');
+            if (rRes.ok) rawMats = await rRes.json();
+          }
+          if (Array.isArray(rawMats) && rawMats.length > 0) {
+            try {
+              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
+            } catch (_) {}
+          }
+        } catch (_) {}
 
-      syncEngineInventory();
+        debouncedSync();
+      } finally {
+        isFetchingDb = false;
+      }
+    };
+
+    const debouncedFetchDatabase = () => {
+      if (debounceDbTimer) clearTimeout(debounceDbTimer);
+      debounceDbTimer = setTimeout(() => {
+        fetchDatabaseInventory();
+      }, 250);
     };
 
     fetchDatabaseInventory();
-    const pollDbInterval = setInterval(fetchDatabaseInventory, 6000);
+    const pollDbInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchDatabaseInventory();
+      }
+    }, 30000);
 
     const unsubCloudBoms = subscribeToCloudStore('BOM_STORE', () => {
-      fetchDatabaseInventory();
+      debouncedFetchDatabase();
     });
     const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', () => {
-      fetchDatabaseInventory();
+      debouncedFetchDatabase();
     });
 
     const unsubscribe = prodModuleEngine.subscribe(() => {
-      syncEngineInventory();
+      debouncedSync();
     });
-    window.addEventListener('controlroom_raw_materials_update', syncEngineInventory);
-    window.addEventListener('controlroom_bom_store_updated', fetchDatabaseInventory);
-    window.addEventListener('controlroom_grn_completed', syncEngineInventory);
-    window.addEventListener('controlroom_storage_update', syncEngineInventory);
-    window.addEventListener('central_inventory_updated', syncEngineInventory);
-    window.addEventListener('storage', syncEngineInventory);
+    window.addEventListener('controlroom_raw_materials_update', debouncedSync);
+    window.addEventListener('controlroom_bom_store_updated', debouncedFetchDatabase);
+    window.addEventListener('controlroom_grn_completed', debouncedSync);
+    window.addEventListener('controlroom_storage_update', debouncedSync);
+    window.addEventListener('central_inventory_updated', debouncedSync);
+    window.addEventListener('storage', debouncedSync);
     return () => {
       clearInterval(pollDbInterval);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (debounceDbTimer) clearTimeout(debounceDbTimer);
       if (unsubCloudBoms && typeof unsubCloudBoms.unsubscribe === 'function') unsubCloudBoms.unsubscribe();
       if (unsubCloudRaw && typeof unsubCloudRaw.unsubscribe === 'function') unsubCloudRaw.unsubscribe();
       unsubscribe();
-      window.removeEventListener('controlroom_raw_materials_update', syncEngineInventory);
-      window.removeEventListener('controlroom_bom_store_updated', fetchDatabaseInventory);
-      window.removeEventListener('controlroom_grn_completed', syncEngineInventory);
-      window.removeEventListener('controlroom_storage_update', syncEngineInventory);
-      window.removeEventListener('central_inventory_updated', syncEngineInventory);
-      window.removeEventListener('storage', syncEngineInventory);
+      window.removeEventListener('controlroom_raw_materials_update', debouncedSync);
+      window.removeEventListener('controlroom_bom_store_updated', debouncedFetchDatabase);
+      window.removeEventListener('controlroom_grn_completed', debouncedSync);
+      window.removeEventListener('controlroom_storage_update', debouncedSync);
+      window.removeEventListener('central_inventory_updated', debouncedSync);
+      window.removeEventListener('storage', debouncedSync);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsList, initialMaterials]);
