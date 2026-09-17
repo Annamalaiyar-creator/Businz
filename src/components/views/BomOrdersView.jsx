@@ -914,22 +914,26 @@ export default function BomOrdersView(props) {
 
   // Handle Proforma Invoice (PI) to Sales BOM auto-conversion
   useEffect(() => {
-    const processConversion = async (pendingPi) => {
+    const processConversion = (pendingPi) => {
       if (!pendingPi) return;
-      setShowBOMForm(true);
-      try {
-        const code = await getAndReserveNextBomCode(false);
-        if (code) setNewBomCode(code);
-      } catch (err) {
-        console.error('Error reserving atomic BOM code on conversion:', err);
-      }
+
+      // 1. Calculate synchronous fallback BOM code immediately from local store
+      const existingNums = (bomStore || []).map(b => {
+        const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
+        return match ? parseInt(match[1], 10) : 0;
+      }).filter(n => Number.isFinite(n) && n > 0);
+      const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 658;
+      const initialCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
+      setNewBomCode(initialCode);
+
+      // 2. Sales Person
       if (pendingPi.salesPerson) {
         setNewBomSalesPerson(pendingPi.salesPerson);
       } else {
         setNewBomSalesPerson(getEffectiveSalesPerson());
       }
 
-      // Customer, Company, and Contact Person details from PI
+      // 3. Customer, Company, and Contact Person details from PI
       const custName = pendingPi.customerName || pendingPi.vendor || pendingPi.clientName || '';
       const compName = pendingPi.companyName || pendingPi.vendor || pendingPi.customerName || '';
       const cPerson = pendingPi.contactPerson || pendingPi.contact || '';
@@ -959,7 +963,7 @@ export default function BomOrdersView(props) {
       if (pendingPi.transportScope) setNewBomTransportScope(pendingPi.transportScope);
       if (pendingPi.lrNo) setNewBomLrNo(pendingPi.lrNo);
 
-      // Extract Full Billing Address from PI
+      // 4. Extract Full Billing Address from PI
       let bStreet = '', bCity = '', bState = '', bPin = '';
       const bAddr = pendingPi.billingAddress || pendingPi.billingAddressObj || null;
       if (bAddr) {
@@ -982,7 +986,7 @@ export default function BomOrdersView(props) {
       setNewBomBillingState(bState);
       setNewBomBillingPincode(bPin);
 
-      // Extract Full Delivery Address from PI
+      // 5. Extract Full Delivery Address from PI
       const isSameAsBilling = pendingPi.sameAsBilling !== false;
       setSameAsBilling(isSameAsBilling);
 
@@ -1014,7 +1018,7 @@ export default function BomOrdersView(props) {
       setNewBomDeliveryState(dState);
       setNewBomDeliveryPincode(dPin);
 
-      // Restore Preset Groups and kit configurations
+      // 6. Restore Preset Groups and kit configurations
       let restoredPresetGroups = {};
       if (pendingPi.presetGroups) {
         if (Array.isArray(pendingPi.presetGroups)) {
@@ -1048,7 +1052,6 @@ export default function BomOrdersView(props) {
         }
       }
 
-      // If preset items exist in items list but presetGroups was empty, reconstruct preset group from items metadata
       if (Object.keys(restoredPresetGroups).length === 0 && Array.isArray(pendingPi.items)) {
         pendingPi.items.forEach(it => {
           if (it.isPresetItem && (it.presetGroupId || it.presetName)) {
@@ -1085,7 +1088,7 @@ export default function BomOrdersView(props) {
         setPresetSetCount(1);
       }
 
-      // Map items: preserve preset components with rate 0 and custom single items with actual rates
+      // 7. Map items: preserve preset components with rate 0 and custom single items with actual rates
       if (Array.isArray(pendingPi.items) && pendingPi.items.length > 0) {
         setBomMaterialsList(pendingPi.items.map(it => {
           const isPreset = Boolean(it.isPresetItem || (it.presetGroupId && restoredPresetGroups[it.presetGroupId]));
@@ -1106,9 +1109,22 @@ export default function BomOrdersView(props) {
           };
         }));
       }
+
       if (pendingPi.sourcePiNo || pendingPi.piNo) {
         setNewBomSourcePiNo(pendingPi.sourcePiNo || pendingPi.piNo);
       }
+
+      // 8. Synchronously show the BOM form with all fields populated!
+      setShowBOMForm(true);
+
+      // 9. Non-blocking asynchronous refinement of atomic BOM code from server sequence
+      getAndReserveNextBomCode(false).then(reservedCode => {
+        if (reservedCode && /^BOM-\d+$/i.test(reservedCode)) {
+          setNewBomCode(reservedCode);
+        }
+      }).catch(err => {
+        console.warn('Background atomic BOM code check:', err);
+      });
     };
 
     let pendingPi = convertingPiData;
@@ -1122,26 +1138,16 @@ export default function BomOrdersView(props) {
     }
 
     if (pendingPi) {
-      const piKey = `${pendingPi.sourcePiNo || pendingPi.piNo || ''}_${pendingPi.customerName || ''}`;
-      if (lastConvertedPiRef.current !== piKey) {
-        lastConvertedPiRef.current = piKey;
-        try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (e) {}
-        processConversion(pendingPi);
-        if (typeof onClearConvertingPiData === 'function') {
-          setTimeout(() => {
-            try { onClearConvertingPiData(); } catch (_) {}
-          }, 400);
-        }
+      try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (e) {}
+      processConversion(pendingPi);
+      if (typeof onClearConvertingPiData === 'function') {
+        onClearConvertingPiData();
       }
     }
 
     const handleCustomConvert = (e) => {
       if (e && e.detail) {
-        const piKey = `${e.detail.sourcePiNo || e.detail.piNo || ''}_${e.detail.customerName || ''}`;
-        if (lastConvertedPiRef.current !== piKey) {
-          lastConvertedPiRef.current = piKey;
-          processConversion(e.detail);
-        }
+        processConversion(e.detail);
       }
     };
 
@@ -2710,40 +2716,14 @@ export default function BomOrdersView(props) {
             </div>
           </div>
 
-          {(() => {
-            const target = (newBomProductName || '').toLowerCase().trim();
-            const selCust = target ? customerList.find(c => {
-              const code = (c.code || '').toLowerCase().trim();
-              const c2 = (c.c2 || '').toLowerCase().trim();
-              const cName = (c.customerName || '').toLowerCase().trim();
-              const comp = (c.companyName || '').toLowerCase().trim();
-              return code === target || c2 === target || cName === target || comp === target ||
-                     (code && code.startsWith(target)) || (c2 && c2.startsWith(target)) ||
-                     (cName && cName.startsWith(target)) || (comp && comp.startsWith(target)) ||
-                     (c2 && c2.includes(target)) || (comp && comp.includes(target));
-            }) : null;
-
-            const displayCompany = newBomCompanyName || selCust?.c2 || selCust?.companyName || selCust?.customerName || newBomProductName || '';
-            const displayContact = newBomContactPerson || selCust?.contact || selCust?.contactPerson || selCust?.primaryContact?.name || '';
-            const displayMobile = newBomPhone || selCust?.c4 || selCust?.primaryContact?.phone || selCust?.phone || '';
-            const displayEmail = newBomEmail || selCust?.c5 || selCust?.primaryContact?.email || selCust?.email || '';
-            const displayGst = newBomGstNo || selCust?.gst || selCust?.gstNo || '';
-
-            const bObj = selCust?.billingAddressObj || {};
-            const billingStreet = newBomBillingStreet || bObj.address || selCust?.c6 || selCust?.billingAddress || selCust?.address || '';
-            const billingCity = newBomBillingCity || bObj.city || selCust?.city || '';
-            const billingState = newBomBillingState || bObj.state || selCust?.state || '';
-            const billingPincode = newBomBillingPincode || bObj.pincode || selCust?.pincode || '';
-
-            return (
-              <>
+          <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Company Name</label>
                     <input
                       type="text"
                       placeholder="Company Name..."
-                      value={newBomCompanyName || displayCompany}
+                      value={newBomCompanyName}
                       onChange={(e) => setNewBomCompanyName(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                     />
@@ -2753,7 +2733,7 @@ export default function BomOrdersView(props) {
                     <input
                       type="text"
                       placeholder="Contact Person..."
-                      value={newBomContactPerson || displayContact}
+                      value={newBomContactPerson}
                       onChange={(e) => setNewBomContactPerson(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                     />
@@ -2763,7 +2743,7 @@ export default function BomOrdersView(props) {
                     <input
                       type="text"
                       placeholder="GSTIN (e.g. 33AAAAA0000A1Z5)..."
-                      value={newBomGstNo || displayGst}
+                      value={newBomGstNo}
                       onChange={(e) => setNewBomGstNo(e.target.value.toUpperCase())}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                     />
@@ -2776,7 +2756,7 @@ export default function BomOrdersView(props) {
                     <input
                       type="text"
                       placeholder="Mobile / Phone..."
-                      value={newBomPhone || displayMobile}
+                      value={newBomPhone}
                       onChange={(e) => setNewBomPhone(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                     />
@@ -2786,7 +2766,7 @@ export default function BomOrdersView(props) {
                     <input
                       type="email"
                       placeholder="Email Address..."
-                      value={newBomEmail || displayEmail}
+                      value={newBomEmail}
                       onChange={(e) => setNewBomEmail(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                     />
@@ -2809,7 +2789,7 @@ export default function BomOrdersView(props) {
                       <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
                       <input
                         type="text"
-                        value={newBomBillingStreet || (billingStreet !== '—' ? billingStreet : '')}
+                        value={newBomBillingStreet}
                         placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
                         onChange={(e) => {
                           const val = e.target.value;
@@ -2824,7 +2804,7 @@ export default function BomOrdersView(props) {
                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
                         <input
                           type="text"
-                          value={newBomBillingCity || (billingCity !== '—' ? billingCity : '')}
+                          value={newBomBillingCity}
                           placeholder="e.g. Chennai"
                           onChange={(e) => {
                             const val = e.target.value;
@@ -2838,7 +2818,7 @@ export default function BomOrdersView(props) {
                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
                         <input
                           type="text"
-                          value={newBomBillingState || (billingState !== '—' ? billingState : '')}
+                          value={newBomBillingState}
                           placeholder="e.g. Tamil Nadu"
                           onChange={(e) => {
                             const val = e.target.value;
@@ -2852,7 +2832,7 @@ export default function BomOrdersView(props) {
                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
                         <input
                           type="text"
-                          value={newBomBillingPincode || (billingPincode !== '—' ? billingPincode : '')}
+                          value={newBomBillingPincode}
                           placeholder="e.g. 600058"
                           onChange={(e) => {
                             const val = e.target.value;
@@ -2886,14 +2866,10 @@ export default function BomOrdersView(props) {
                             const checked = e.target.checked;
                             setSameAsBilling(checked);
                             if (checked) {
-                              const effSt = newBomBillingStreet || (billingStreet !== '—' ? billingStreet : '');
-                              const effCi = newBomBillingCity || (billingCity !== '—' ? billingCity : '');
-                              const effSta = newBomBillingState || (billingState !== '—' ? billingState : '');
-                              const effPin = newBomBillingPincode || (billingPincode !== '—' ? billingPincode : '');
-                              setNewBomDeliveryStreet(effSt);
-                              setNewBomDeliveryCity(effCi);
-                              setNewBomDeliveryState(effSta);
-                              setNewBomDeliveryPincode(effPin);
+                              setNewBomDeliveryStreet(newBomBillingStreet);
+                              setNewBomDeliveryCity(newBomBillingCity);
+                              setNewBomDeliveryState(newBomBillingState);
+                              setNewBomDeliveryPincode(newBomBillingPincode);
                               setNewBomDeliveryProofDoc(null);
                             } else {
                               setNewBomDeliveryStreet('');
@@ -2914,7 +2890,7 @@ export default function BomOrdersView(props) {
                         id="field-newBomDeliveryStreet"
                         type="text"
                         placeholder="e.g. Plot No 42, SIDCO Industrial Estate, Ambattur"
-                        value={sameAsBilling ? (newBomBillingStreet || (billingStreet !== '—' ? billingStreet : '')) : newBomDeliveryStreet}
+                        value={sameAsBilling ? newBomBillingStreet : newBomDeliveryStreet}
                         disabled={sameAsBilling}
                         onChange={(e) => {
                           setNewBomDeliveryStreet(e.target.value);
@@ -2943,7 +2919,7 @@ export default function BomOrdersView(props) {
                         <input
                           type="text"
                           placeholder="e.g. Chennai"
-                          value={sameAsBilling ? (newBomBillingCity || (billingCity !== '—' ? billingCity : '')) : newBomDeliveryCity}
+                          value={sameAsBilling ? newBomBillingCity : newBomDeliveryCity}
                           disabled={sameAsBilling}
                           onChange={(e) => {
                             setNewBomDeliveryCity(e.target.value);
@@ -2969,7 +2945,7 @@ export default function BomOrdersView(props) {
                         <input
                           type="text"
                           placeholder="e.g. Tamil Nadu"
-                          value={sameAsBilling ? (newBomBillingState || (billingState !== '—' ? billingState : '')) : newBomDeliveryState}
+                          value={sameAsBilling ? newBomBillingState : newBomDeliveryState}
                           disabled={sameAsBilling}
                           onChange={(e) => setNewBomDeliveryState(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
@@ -2980,7 +2956,7 @@ export default function BomOrdersView(props) {
                         <input
                           type="text"
                           placeholder="e.g. 600058"
-                          value={sameAsBilling ? (newBomBillingPincode || (billingPincode !== '—' ? billingPincode : '')) : newBomDeliveryPincode}
+                          value={sameAsBilling ? newBomBillingPincode : newBomDeliveryPincode}
                           disabled={sameAsBilling}
                           onChange={(e) => setNewBomDeliveryPincode(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
@@ -2993,10 +2969,10 @@ export default function BomOrdersView(props) {
                       </span>
                     )}
                     {(() => {
-                      const effectiveDeliveryStreet = sameAsBilling ? (newBomBillingStreet || (billingStreet !== '—' ? billingStreet : '')) : newBomDeliveryStreet;
-                      const effectiveDeliveryCity = sameAsBilling ? (newBomBillingCity || (billingCity !== '—' ? billingCity : '')) : newBomDeliveryCity;
-                      const effectiveDeliveryState = sameAsBilling ? (newBomBillingState || (billingState !== '—' ? billingState : '')) : newBomDeliveryState;
-                      const effectiveDeliveryPincode = sameAsBilling ? (newBomBillingPincode || (billingPincode !== '—' ? billingPincode : '')) : newBomDeliveryPincode;
+                      const effectiveDeliveryStreet = sameAsBilling ? newBomBillingStreet : newBomDeliveryStreet;
+                      const effectiveDeliveryCity = sameAsBilling ? newBomBillingCity : newBomDeliveryCity;
+                      const effectiveDeliveryState = sameAsBilling ? newBomBillingState : newBomDeliveryState;
+                      const effectiveDeliveryPincode = sameAsBilling ? newBomBillingPincode : newBomDeliveryPincode;
 
                       const clean = (str) => String(str || '').trim().toLowerCase();
                       const hasEnteredDeliveryAddress = Boolean(clean(effectiveDeliveryStreet) || clean(effectiveDeliveryCity) || clean(effectiveDeliveryPincode));
@@ -3004,10 +2980,10 @@ export default function BomOrdersView(props) {
                       // Check if delivery matches billing
                       const isMatchingBilling = Boolean(sameAsBilling) || (
                         hasEnteredDeliveryAddress &&
-                        clean(effectiveDeliveryStreet) === clean(newBomBillingStreet || (billingStreet !== '—' ? billingStreet : '')) &&
-                        clean(effectiveDeliveryCity) === clean(newBomBillingCity || (billingCity !== '—' ? billingCity : '')) &&
-                        clean(effectiveDeliveryState) === clean(newBomBillingState || (billingState !== '—' ? billingState : '')) &&
-                        clean(effectiveDeliveryPincode) === clean(newBomBillingPincode || (billingPincode !== '—' ? billingPincode : ''))
+                        clean(effectiveDeliveryStreet) === clean(newBomBillingStreet) &&
+                        clean(effectiveDeliveryCity) === clean(newBomBillingCity) &&
+                        clean(effectiveDeliveryState) === clean(newBomBillingState) &&
+                        clean(effectiveDeliveryPincode) === clean(newBomBillingPincode)
                       );
 
                       // ONLY render proof uploader if addresses do NOT match AND user has specified a different delivery destination
@@ -3116,8 +3092,6 @@ export default function BomOrdersView(props) {
                   </div>
                 </div>
               </>
-            );
-          })()}
         </div>
 
         {/* SECTION 3: ORDER ITEMS & BILL OF MATERIALS */}

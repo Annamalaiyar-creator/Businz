@@ -566,15 +566,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       localStorage.setItem('controlroom_pending_pi_to_bom', JSON.stringify(stripDataUrlsFromRecord(conversionData)));
     } catch (e) {}
 
-    setTimeout(() => {
-      if (typeof onConvertToBom === 'function') {
-        onConvertToBom(conversionData);
-      } else {
-        window.dispatchEvent(new CustomEvent('controlroom_convert_pi_bom', { detail: conversionData }));
-      }
-      setIsConvertingToBom(false);
-      setConvertingPiTarget(null);
-    }, 650);
+    if (typeof onConvertToBom === 'function') {
+      onConvertToBom(conversionData);
+    } else {
+      window.dispatchEvent(new CustomEvent('controlroom_convert_pi_bom', { detail: conversionData }));
+    }
+    setIsConvertingToBom(false);
+    setConvertingPiTarget(null);
   };
 
   // Confirmation and edit states

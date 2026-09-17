@@ -525,7 +525,7 @@ function App() {
               clearTargetPi={() => setTargetPiNo(null)}
               onConvertToBom={(piData) => {
                 setConvertingPiData(piData);
-                handleTabChange('Sales BOM');
+                handleTabChange('BOM Orders');
               }} 
             />
           ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? (

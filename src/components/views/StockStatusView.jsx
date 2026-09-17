@@ -263,65 +263,7 @@ export default function StockStatusView(props) {
   const [updatePaymentFile, setUpdatePaymentFile] = useState(null);
   const [updatePaymentNotes, setUpdatePaymentNotes] = useState('');
 
-  // Handle Proforma Invoice (PI) to Sales BOM auto-conversion
-  useEffect(() => {
-    let pendingPi = convertingPiData;
-    if (!pendingPi) {
-      try {
-        const saved = localStorage.getItem('controlroom_pending_pi_to_bom');
-        if (saved) {
-          pendingPi = JSON.parse(saved);
-          localStorage.removeItem('controlroom_pending_pi_to_bom');
-        }
-      } catch (e) { }
-    }
 
-    if (pendingPi) {
-      setShowBOMForm(true);
-      const nextNum = (bomStore || []).length + 550 + Math.floor(Math.random() * 50);
-      setNewBomCode(`BOM-${nextNum}`);
-      if (pendingPi.customerName) setNewBomProductName(pendingPi.customerName);
-      setNewBomRemarks('');
-      if (Array.isArray(pendingPi.items) && pendingPi.items.length > 0) {
-        setBomMaterialsList(pendingPi.items.map(it => ({
-          name: it.name || 'Structural Steel Beams',
-          category: it.category || 'PI Converted Goods',
-          uom: it.uom || 'NOS',
-          qty: String(it.qty || '1'),
-          wastage: '0%',
-          rate: String(it.rate || '1000'),
-          gstRate: it.gstRate || '18%'
-        })));
-      }
-      if (typeof onClearConvertingPiData === 'function') onClearConvertingPiData();
-    }
-
-    const handleCustomConvert = (e) => {
-      if (e && e.detail) {
-        setShowBOMForm(true);
-        const nextNum = (bomStore || []).length + 550 + Math.floor(Math.random() * 50);
-        setNewBomCode(`BOM-${nextNum}`);
-        if (e.detail.customerName) setNewBomProductName(e.detail.customerName);
-        setNewBomRemarks('');
-        if (Array.isArray(e.detail.items) && e.detail.items.length > 0) {
-          setBomMaterialsList(e.detail.items.map(it => ({
-            name: it.name || 'Structural Steel Beams',
-            category: it.category || 'PI Converted Goods',
-            uom: it.uom || 'NOS',
-            qty: String(it.qty || '1'),
-            wastage: '0%',
-            rate: String(it.rate || '1000'),
-            gstRate: it.gstRate || '18%'
-          })));
-        }
-      }
-    };
-
-    window.addEventListener('controlroom_convert_pi_bom', handleCustomConvert);
-    return () => {
-      window.removeEventListener('controlroom_convert_pi_bom', handleCustomConvert);
-    };
-  }, [convertingPiData]);
 
   // Vehicle Loading & Final Dispatch State
   const [vehicleLoadingModal, setVehicleLoadingModal] = useState(null); // BOM object undergoing vehicle loading
