@@ -115,9 +115,9 @@ const applyAndCacheBranding = (data) => {
     }
     merged.showSignatoryStamp = true;
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    localStorage.setItem('vrm_constant_stamp', merged.customStampUrl);
-    localStorage.setItem('vrm_constant_logo', merged.logoUrl);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    } catch (_) {}
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('vrm_branding_updated', { detail: merged }));

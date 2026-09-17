@@ -42,6 +42,24 @@ export default function BomOrdersView(props) {
   const [bomCancelPromptModal, setBomCancelPromptModal] = useState(null);
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
 
+  // Safe localStorage saver that catches QuotaExceededError and trims cache to top 50 recent records per Rule 5
+  const safeSaveBomStoreToLocal = (list) => {
+    try {
+      const sanitized = (Array.isArray(list) ? list : []).map(stripDataUrlsFromRecord);
+      try {
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
+      } catch (quotaErr) {
+        console.warn('[LocalStorage Quota Exceeded] Trimming local BOM cache to recent 50 records.');
+        const trimmed = sanitized.slice(0, 50);
+        try {
+          localStorage.setItem('controlroom_bom_store', JSON.stringify(trimmed));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('[safeSaveBomStoreToLocal error]:', err);
+    }
+  };
+
   // Cache-First Instant Hydration: load immediately from localStorage with 0ms delay
   const [bomStore, setBomStore] = useState(() => {
     try {
@@ -95,6 +113,8 @@ export default function BomOrdersView(props) {
   // We avoid blanket auto-saving [bomStore] on every state tick to prevent stale browser lists from clobbering concurrent records in the cloud.
 
   // Initial cloud fetch, polling and cross-tab storage listener
+  const debounceSyncTimerRef = useRef(null);
+
   useEffect(() => {
     const syncFromCloud = async (isInitial = false) => {
       // Only show table spinner if we don't already have records in memory
@@ -136,9 +156,7 @@ export default function BomOrdersView(props) {
             });
             const cleaned = sorted.map(stripDataUrlsFromRecord);
             setBomStore(cleaned);
-            try {
-              localStorage.setItem('controlroom_bom_store', JSON.stringify(cleaned));
-            } catch (_) {}
+            safeSaveBomStoreToLocal(cleaned);
           }
         }
 
@@ -175,33 +193,53 @@ export default function BomOrdersView(props) {
     const realtimeSub = subscribeToCloudStore('bom_store', (updatedBoms) => {
       if (Array.isArray(updatedBoms)) {
         const { list: resolvedList } = resolveBomCollisions(updatedBoms, 658);
-        setBomStore(resolvedList.map(stripDataUrlsFromRecord));
+        const cleaned = resolvedList.map(stripDataUrlsFromRecord);
+        setBomStore(cleaned);
+        safeSaveBomStoreToLocal(cleaned);
         setTableLoading(false);
       }
     });
 
-    const pollInterval = setInterval(() => syncFromCloud(false), 8000);
+    const pollInterval = setInterval(() => syncFromCloud(false), 12000);
 
-    const syncFromStorage = () => {
-      syncFromCloud();
+    const debouncedSync = () => {
+      if (isSubmittingBomRef.current) return;
+      if (debounceSyncTimerRef.current) clearTimeout(debounceSyncTimerRef.current);
+      debounceSyncTimerRef.current = setTimeout(() => {
+        syncFromCloud(false);
+      }, 500);
     };
 
-    window.addEventListener('storage', syncFromStorage);
-    window.addEventListener('controlroom_storage_update', syncFromStorage);
-    window.addEventListener('controlroom_store_update', syncFromStorage);
-    window.addEventListener('controlroom_customer_update', syncFromStorage);
-    window.addEventListener('controlroom_bom_updated', syncFromStorage);
-    window.addEventListener('controlroom_bom_store_updated', syncFromStorage);
+    const handleStoreUpdate = (e) => {
+      if (isSubmittingBomRef.current) return;
+      // Only react if the event is specifically for bom_store
+      if (!e?.detail?.storeKey || e.detail.storeKey === 'bom_store') {
+        debouncedSync();
+      }
+    };
+
+    const handleStorageUpdate = () => {
+      if (isSubmittingBomRef.current) return;
+      debouncedSync();
+    };
+
+    window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener('controlroom_storage_update', handleStorageUpdate);
+    window.addEventListener('controlroom_store_update', handleStoreUpdate);
+    window.addEventListener('controlroom_customer_update', handleStorageUpdate);
+    window.addEventListener('controlroom_bom_updated', handleStorageUpdate);
+    window.addEventListener('controlroom_bom_store_updated', handleStorageUpdate);
 
     return () => {
       clearInterval(pollInterval);
+      if (debounceSyncTimerRef.current) clearTimeout(debounceSyncTimerRef.current);
       if (realtimeSub && realtimeSub.unsubscribe) realtimeSub.unsubscribe();
-      window.removeEventListener('storage', syncFromStorage);
-      window.removeEventListener('controlroom_storage_update', syncFromStorage);
-      window.removeEventListener('controlroom_store_update', syncFromStorage);
-      window.removeEventListener('controlroom_customer_update', syncFromStorage);
-      window.removeEventListener('controlroom_bom_updated', syncFromStorage);
-      window.removeEventListener('controlroom_bom_store_updated', syncFromStorage);
+      window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener('controlroom_storage_update', handleStorageUpdate);
+      window.removeEventListener('controlroom_store_update', handleStoreUpdate);
+      window.removeEventListener('controlroom_customer_update', handleStorageUpdate);
+      window.removeEventListener('controlroom_bom_updated', handleStorageUpdate);
+      window.removeEventListener('controlroom_bom_store_updated', handleStorageUpdate);
     };
   }, []);
 
@@ -220,6 +258,11 @@ export default function BomOrdersView(props) {
   const [newBomCode, setNewBomCode] = useState('');
   const [newBomDeliveryDate, setNewBomDeliveryDate] = useState('');
   const [newBomProductName, setNewBomProductName] = useState('');
+  const [newBomCompanyName, setNewBomCompanyName] = useState('');
+  const [newBomContactPerson, setNewBomContactPerson] = useState('');
+  const [newBomPhone, setNewBomPhone] = useState('');
+  const [newBomEmail, setNewBomEmail] = useState('');
+  const [newBomGstNo, setNewBomGstNo] = useState('');
   const [newBomDeliveryAddress, setNewBomDeliveryAddress] = useState('');
   const [newBomBillingStreet, setNewBomBillingStreet] = useState('');
   const [newBomBillingCity, setNewBomBillingCity] = useState('');
@@ -250,6 +293,7 @@ export default function BomOrdersView(props) {
   const [bomSubmitStage, setBomSubmitStage] = useState(''); // 'validating' | 'assigning' | 'reserving' | 'saving' | 'completed'
   const [bomSubmitAssignedCode, setBomSubmitAssignedCode] = useState('');
   const isSubmittingBomRef = useRef(false);
+  const lastConvertedPiRef = useRef(null);
   const [newBomSourcePiNo, setNewBomSourcePiNo] = useState('');
 
   // Comprehensive BOM Form Validation Helper
@@ -333,11 +377,11 @@ export default function BomOrdersView(props) {
       }
     }
 
-    // 5. Payment Proof for 100% Paid / Partial Paid Orders
+    // 5. Payment Proof for 100% Paid / Partial Paid Orders (optional if converted from authorized PI)
     const isPaidOrder = newBomPaymentType === '100% Paid';
     const isPartialOrder = newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment';
     if (!isDraft && (isPaidOrder || isPartialOrder)) {
-      if (!newBomPaymentProofDoc) {
+      if (!newBomPaymentProofDoc && !newBomSourcePiNo) {
         errors.paymentProof = 'Payment Attachment / Slip is required';
         missingList.push({
           field: 'Payment Slip / Advice',
@@ -884,7 +928,22 @@ export default function BomOrdersView(props) {
       } else {
         setNewBomSalesPerson(getEffectiveSalesPerson());
       }
-      if (pendingPi.customerName) setNewBomProductName(pendingPi.customerName);
+
+      // Customer, Company, and Contact Person details from PI
+      const custName = pendingPi.customerName || pendingPi.vendor || pendingPi.clientName || '';
+      const compName = pendingPi.companyName || pendingPi.vendor || pendingPi.customerName || '';
+      const cPerson = pendingPi.contactPerson || pendingPi.contact || '';
+      const phoneNum = pendingPi.phone || pendingPi.mobile || '';
+      const emailAddr = pendingPi.email || '';
+      const gst = pendingPi.gstNo || pendingPi.gst || '';
+
+      setNewBomProductName(custName);
+      setNewBomCompanyName(compName);
+      setNewBomContactPerson(cPerson);
+      setNewBomPhone(phoneNum);
+      setNewBomEmail(emailAddr);
+      setNewBomGstNo(gst);
+
       setNewBomRemarks('');
       const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms;
       setNewBomPaymentType(normalizePaymentTerm(effectivePiPaymentTerm));
@@ -898,6 +957,7 @@ export default function BomOrdersView(props) {
       if (pendingPi.transporterName) setNewBomTransporterName(pendingPi.transporterName);
       if (pendingPi.vehicleNo) setNewBomVehicleNo(pendingPi.vehicleNo);
       if (pendingPi.transportScope) setNewBomTransportScope(pendingPi.transportScope);
+      if (pendingPi.lrNo) setNewBomLrNo(pendingPi.lrNo);
 
       // Extract Full Billing Address from PI
       let bStreet = '', bCity = '', bState = '', bPin = '';
@@ -911,12 +971,12 @@ export default function BomOrdersView(props) {
         } else if (typeof bAddr === 'string') {
           bStreet = bAddr;
         }
-      } else {
-        bStreet = pendingPi.billingStreet || '';
-        bCity = pendingPi.billingCity || '';
-        bState = pendingPi.billingState || '';
-        bPin = pendingPi.billingPincode || '';
       }
+      if (!bStreet) bStreet = pendingPi.billingStreet || '';
+      if (!bCity) bCity = pendingPi.billingCity || '';
+      if (!bState) bState = pendingPi.billingState || '';
+      if (!bPin) bPin = pendingPi.billingPincode || '';
+
       setNewBomBillingStreet(bStreet);
       setNewBomBillingCity(bCity);
       setNewBomBillingState(bState);
@@ -943,17 +1003,17 @@ export default function BomOrdersView(props) {
           } else if (typeof dAddr === 'string') {
             dStreet = dAddr;
           }
-        } else {
-          dStreet = pendingPi.deliveryStreet || '';
-          dCity = pendingPi.deliveryCity || '';
-          dState = pendingPi.deliveryState || '';
-          dPin = pendingPi.deliveryPincode || '';
         }
+        if (!dStreet) dStreet = pendingPi.deliveryStreet || '';
+        if (!dCity) dCity = pendingPi.deliveryCity || '';
+        if (!dState) dState = pendingPi.deliveryState || '';
+        if (!dPin) dPin = pendingPi.deliveryPincode || '';
       }
       setNewBomDeliveryStreet(dStreet);
       setNewBomDeliveryCity(dCity);
       setNewBomDeliveryState(dState);
       setNewBomDeliveryPincode(dPin);
+
       // Restore Preset Groups and kit configurations
       let restoredPresetGroups = {};
       if (pendingPi.presetGroups) {
@@ -1031,6 +1091,7 @@ export default function BomOrdersView(props) {
           const isPreset = Boolean(it.isPresetItem || (it.presetGroupId && restoredPresetGroups[it.presetGroupId]));
           const rateVal = isPreset ? '0' : String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0');
           return {
+            code: it.code || it.sku || it.itemId || '',
             name: it.name || 'Structural Steel Beams',
             category: it.category || (isPreset ? 'Preset Component' : 'PI Converted Goods'),
             uom: it.uom || 'NOS',
@@ -1048,7 +1109,6 @@ export default function BomOrdersView(props) {
       if (pendingPi.sourcePiNo || pendingPi.piNo) {
         setNewBomSourcePiNo(pendingPi.sourcePiNo || pendingPi.piNo);
       }
-      if (typeof onClearConvertingPiData === 'function') onClearConvertingPiData();
     };
 
     let pendingPi = convertingPiData;
@@ -1057,18 +1117,31 @@ export default function BomOrdersView(props) {
         const saved = localStorage.getItem('controlroom_pending_pi_to_bom');
         if (saved) {
           pendingPi = JSON.parse(saved);
-          localStorage.removeItem('controlroom_pending_pi_to_bom');
         }
       } catch (e) { }
     }
 
     if (pendingPi) {
-      processConversion(pendingPi);
+      const piKey = `${pendingPi.sourcePiNo || pendingPi.piNo || ''}_${pendingPi.customerName || ''}`;
+      if (lastConvertedPiRef.current !== piKey) {
+        lastConvertedPiRef.current = piKey;
+        try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (e) {}
+        processConversion(pendingPi);
+        if (typeof onClearConvertingPiData === 'function') {
+          setTimeout(() => {
+            try { onClearConvertingPiData(); } catch (_) {}
+          }, 400);
+        }
+      }
     }
 
     const handleCustomConvert = (e) => {
       if (e && e.detail) {
-        processConversion(e.detail);
+        const piKey = `${e.detail.sourcePiNo || e.detail.piNo || ''}_${e.detail.customerName || ''}`;
+        if (lastConvertedPiRef.current !== piKey) {
+          lastConvertedPiRef.current = piKey;
+          processConversion(e.detail);
+        }
       }
     };
 
@@ -2562,6 +2635,20 @@ export default function BomOrdersView(props) {
                   });
 
                   if (chosen) {
+                    setNewBomCompanyName(chosen.c2 || chosen.companyName || chosen.customerName || chosen.code || val);
+                    if (chosen.contact || chosen.contactPerson || chosen.primaryContact?.name) {
+                      setNewBomContactPerson(chosen.contact || chosen.contactPerson || chosen.primaryContact?.name);
+                    }
+                    if (chosen.c4 || chosen.phone || chosen.mobile || chosen.primaryContact?.phone || chosen.primaryContact?.whatsapp) {
+                      setNewBomPhone(chosen.c4 || chosen.phone || chosen.mobile || chosen.primaryContact?.phone || chosen.primaryContact?.whatsapp);
+                    }
+                    if (chosen.c5 || chosen.email || chosen.primaryContact?.email) {
+                      setNewBomEmail(chosen.c5 || chosen.email || chosen.primaryContact?.email);
+                    }
+                    if (chosen.gst || chosen.gstNo) {
+                      setNewBomGstNo(chosen.gst || chosen.gstNo);
+                    }
+
                     const bObj = chosen.billingAddressObj || {};
                     const bAddr = bObj.address || chosen.c6 || chosen.billingAddress || chosen.address || '';
                     const dObj = chosen.deliveryAddressObj || {};
@@ -2636,9 +2723,11 @@ export default function BomOrdersView(props) {
                      (c2 && c2.includes(target)) || (comp && comp.includes(target));
             }) : null;
 
-            const companyName = selCust ? (selCust.c2 || selCust.companyName || selCust.customerName || selCust.code) : (newBomProductName || '—');
-            const mobileNo = selCust ? (selCust.c4 || selCust.primaryContact?.phone || selCust.phone || selCust.primaryContact?.whatsapp || '—') : '—';
-            const emailAddr = selCust ? (selCust.c5 || selCust.primaryContact?.email || selCust.email || '—') : '—';
+            const displayCompany = newBomCompanyName || selCust?.c2 || selCust?.companyName || selCust?.customerName || newBomProductName || '';
+            const displayContact = newBomContactPerson || selCust?.contact || selCust?.contactPerson || selCust?.primaryContact?.name || '';
+            const displayMobile = newBomPhone || selCust?.c4 || selCust?.primaryContact?.phone || selCust?.phone || '';
+            const displayEmail = newBomEmail || selCust?.c5 || selCust?.primaryContact?.email || selCust?.email || '';
+            const displayGst = newBomGstNo || selCust?.gst || selCust?.gstNo || '';
 
             const bObj = selCust?.billingAddressObj || {};
             const billingStreet = newBomBillingStreet || bObj.address || selCust?.c6 || selCust?.billingAddress || selCust?.address || '';
@@ -2651,15 +2740,56 @@ export default function BomOrdersView(props) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Company Name</label>
-                    <input type="text" value={companyName} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }} />
+                    <input
+                      type="text"
+                      placeholder="Company Name..."
+                      value={newBomCompanyName || displayCompany}
+                      onChange={(e) => setNewBomCompanyName(e.target.value)}
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                    />
                   </div>
                   <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Contact Person</label>
+                    <input
+                      type="text"
+                      placeholder="Contact Person..."
+                      value={newBomContactPerson || displayContact}
+                      onChange={(e) => setNewBomContactPerson(e.target.value)}
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>GST Number</label>
+                    <input
+                      type="text"
+                      placeholder="GSTIN (e.g. 33AAAAA0000A1Z5)..."
+                      value={newBomGstNo || displayGst}
+                      onChange={(e) => setNewBomGstNo(e.target.value.toUpperCase())}
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mobile Number</label>
-                    <input type="text" value={mobileNo} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }} />
+                    <input
+                      type="text"
+                      placeholder="Mobile / Phone..."
+                      value={newBomPhone || displayMobile}
+                      onChange={(e) => setNewBomPhone(e.target.value)}
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                    />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Email</label>
-                    <input type="text" value={emailAddr} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }} />
+                    <input
+                      type="email"
+                      placeholder="Email Address..."
+                      value={newBomEmail || displayEmail}
+                      onChange={(e) => setNewBomEmail(e.target.value)}
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                    />
                   </div>
                 </div>
 
@@ -4054,6 +4184,11 @@ export default function BomOrdersView(props) {
                       setNewBomDeliveryCity('');
                       setNewBomDeliveryState('');
                       setNewBomDeliveryPincode('');
+                      setNewBomCompanyName('');
+                      setNewBomContactPerson('');
+                      setNewBomPhone('');
+                      setNewBomEmail('');
+                      setNewBomGstNo('');
                       setSameAsBilling(true);
                     } else if (bomConfirmModal === 'draft' || bomConfirmModal === 'create') {
                       // MULTI-CLICK MUTEX GUARD: Drop any secondary clicks while submitting
@@ -4120,10 +4255,12 @@ export default function BomOrdersView(props) {
                           sourcePiNo: newBomSourcePiNo || null,
                           date: new Date().toISOString().split('T')[0],
                           deliveryDate: newBomDeliveryDate || null,
-                          customerName: selCust?.c2 || selCust?.code || newBomProductName || 'Customer Order',
-                          companyName: selCust?.c2 || selCust?.code || newBomProductName || '-',
-                          mobile: selCust?.c4 || '-',
-                          email: selCust?.c5 || '-',
+                          customerName: newBomProductName || newBomCompanyName || selCust?.c2 || selCust?.code || 'Customer Order',
+                          companyName: newBomCompanyName || newBomProductName || selCust?.c2 || selCust?.code || '-',
+                          contactPerson: newBomContactPerson || selCust?.contact || selCust?.contactPerson || '-',
+                          mobile: newBomPhone || selCust?.c4 || selCust?.phone || '-',
+                          email: newBomEmail || selCust?.c5 || selCust?.email || '-',
+                          gstNo: newBomGstNo || selCust?.gst || selCust?.gstNo || '-',
                           billingAddress: billingFull,
                           billingAddressObj: billingObj,
                           deliveryAddress: deliveryFull,
@@ -4282,9 +4419,7 @@ export default function BomOrdersView(props) {
                         }
 
                         // Safe browser localStorage backup per Rule 5
-                        try {
-                          localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
-                        } catch (_) {}
+                        safeSaveBomStoreToLocal(updatedList);
 
                         // If converted from a Proforma Invoice, update the PI stores so PI knows its BOM number
                         if (sanitizedNewBom.sourcePiNo) {
@@ -4379,6 +4514,11 @@ export default function BomOrdersView(props) {
                         setPresetGroups({});
                         setNewBomCode('');
                         setNewBomSourcePiNo('');
+                        setNewBomCompanyName('');
+                        setNewBomContactPerson('');
+                        setNewBomPhone('');
+                        setNewBomEmail('');
+                        setNewBomGstNo('');
                         setNewBomBillingStreet('');
                         setNewBomBillingCity('');
                         setNewBomBillingState('');
@@ -4677,9 +4817,7 @@ export default function BomOrdersView(props) {
                   } : b);
                   setBomStore(updatedList);
                   saveCloudStoreImmediate('bom_store', updatedList);
-                  try {
-                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
-                  } catch (_) {}
+                  safeSaveBomStoreToLocal(updatedList);
                   try {
                     fetch('/api/boms', {
                       method: 'POST',
@@ -4807,9 +4945,7 @@ export default function BomOrdersView(props) {
                   } : b);
                   setBomStore(updatedList);
                   saveCloudStore('bom_store', updatedList);
-                  try {
-                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
-                  } catch (_) {}
+                  safeSaveBomStoreToLocal(updatedList);
 
                   // Push to server immediately so Dispatch sees it in real time
                   try {
@@ -4992,6 +5128,26 @@ export default function BomOrdersView(props) {
               <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F0FDFA', padding: '0 12px', borderRadius: '8px', border: '1px solid #CCFBF1' }}>
                 👤 {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
               </div>
+            </div>
+          </div>
+
+          {/* Contact Details & GSTIN */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>CONTACT PERSON</span>
+              <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.contactPerson || '—'}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>PHONE</span>
+              <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.mobile || confirmingBomModal.phone || '—'}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>EMAIL</span>
+              <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700', wordBreak: 'break-all' }}>{confirmingBomModal.email || '—'}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>GSTIN</span>
+              <strong style={{ fontSize: '12.5px', color: '#0E7490', fontWeight: '800' }}>{confirmingBomModal.gstNo || confirmingBomModal.gstin || '—'}</strong>
             </div>
           </div>
 
@@ -6479,9 +6635,7 @@ export default function BomOrdersView(props) {
                   const updatedList = (bomStore || []).filter(b => !selectedRows.includes(b.bomCode || b.code));
                   setBomStore(updatedList);
                   saveCloudStoreImmediate('bom_store', updatedList);
-                  try {
-                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
-                  } catch (_) {}
+                  safeSaveBomStoreToLocal(updatedList);
                   setSelectedRows([]);
                 }
               }}
@@ -6827,6 +6981,29 @@ export default function BomOrdersView(props) {
                 </div>
               </div>
             </div>
+
+            {/* Contact Details & GST */}
+            {(quickPreviewRecord.companyName || quickPreviewRecord.contactPerson || quickPreviewRecord.phone || quickPreviewRecord.mobile || quickPreviewRecord.email || quickPreviewRecord.gstNo) && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>COMPANY NAME</span>
+                  <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700' }}>{quickPreviewRecord.companyName || quickPreviewRecord.customerName || '—'}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>CONTACT PERSON</span>
+                  <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700' }}>{quickPreviewRecord.contactPerson || '—'}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>PHONE / EMAIL</span>
+                  <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700', display: 'block' }}>{quickPreviewRecord.mobile || quickPreviewRecord.phone || '—'}</strong>
+                  {quickPreviewRecord.email && <span style={{ fontSize: '11px', color: '#64748B', wordBreak: 'break-all' }}>{quickPreviewRecord.email}</span>}
+                </div>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>GSTIN</span>
+                  <strong style={{ fontSize: '12px', color: '#0E7490', fontWeight: '800' }}>{quickPreviewRecord.gstNo || quickPreviewRecord.gstin || '—'}</strong>
+                </div>
+              </div>
+            )}
 
             {/* Structured Billing & Delivery Addresses */}
             {(() => {
@@ -7235,9 +7412,7 @@ export default function BomOrdersView(props) {
                     } : b);
                     setBomStore(updatedList);
                     saveCloudStore('bom_store', updatedList);
-                    try {
-                      localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
-                    } catch (_) {}
+                    safeSaveBomStoreToLocal(updatedList);
 
                     const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
                     if (targetBom) {

@@ -216,6 +216,16 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                 {b.companyName && b.companyName !== b.customerName && (
                   <div style={{ color: '#475569', fontWeight: '600', marginBottom: '4px', fontSize: '11.5px' }}>{b.companyName}</div>
                 )}
+                {b.contactPerson && (
+                  <div style={{ color: '#475569', fontSize: '11.5px', marginBottom: '3px' }}>
+                    <strong>Contact:</strong> {b.contactPerson}
+                  </div>
+                )}
+                {b.gstNo && (
+                  <div style={{ color: '#0E7490', fontSize: '11.5px', fontWeight: '700', marginBottom: '4px' }}>
+                    <strong>GSTIN:</strong> {b.gstNo}
+                  </div>
+                )}
                 <div style={{ color: '#334155' }}>
                   {billingLines.length > 0 ? (
                     billingLines.map((line, idx) => <div key={idx}>{line}</div>)

@@ -3426,12 +3426,15 @@ app.post('/api/boms', async (req, res) => {
           broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: mergedList });
         } catch (_) {}
 
-        // Await cloud sync to Supabase before sending response so state is never lost
-        try {
-          await pushStoreToSupabase('bom_store', mergedList);
-        } catch (e) {
+        // Update server high-speed memory cache immediately so subsequent GET requests return updated list
+        cachedBomsResult = mergedList;
+        lastBomFetchTimestamp = Date.now();
+
+        // Non-blocking background push to Supabase to guarantee 0ms latency for client
+        pushStoreToSupabase('bom_store', mergedList).catch((e) => {
           console.error('Error pushing bom_store to Supabase:', e);
-        }
+        });
+
         try {
           await supabase.from('leaves').update({
             reason: JSON.stringify({ lastNumber: serverBomSequenceCounter, updatedAt: new Date().toISOString() }),
@@ -3440,7 +3443,7 @@ app.post('/api/boms', async (req, res) => {
           }).eq('employee', 'BOM_SEQUENCE');
         } catch (_) {}
         
-        // RESPOND TO CLIENT WITH CONFIRMED BOM
+        // RESPOND TO CLIENT WITH CONFIRMED BOM IMMEDIATELY
         res.json({ success: true, bom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
         resolveOuter();
       } catch (err) {

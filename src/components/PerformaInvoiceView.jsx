@@ -489,10 +489,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const conversionData = {
       sourcePiNo: pi.piNo,
       customerName: pi.vendor || pi.customerName || '',
-      contactPerson: pi.contactPerson || '',
-      phone: pi.phone || '',
+      companyName: pi.companyName || pi.vendor || pi.customerName || '',
+      contactPerson: pi.contactPerson || pi.contact || '',
+      phone: pi.phone || pi.mobile || '',
       email: pi.email || '',
-      gstNo: pi.gstNo || '',
+      gstNo: pi.gstNo || pi.gst || '',
       productName: pi.productName || 'Solar Mounting Rails & Accessories',
       billingAddress: billingObj,
       billingAddressObj: billingObj,
@@ -511,6 +512,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       transporterName: pi.transporterName || '',
       vehicleNo: pi.vehicleNo || '',
       transportScope: pi.transportScope || 'VRM Structures',
+      lrNo: pi.lrNo || '',
       paymentType: normalizePaymentTerm(pi.paymentType || pi.paymentTerms || '100% Paid'),
       paymentTerms: normalizePaymentTerm(pi.paymentType || pi.paymentTerms || '100% Paid'),
       paymentProofDoc: pi.paymentProofDoc || pi.proofDoc || pi.paymentSlip || pi.paymentDoc || null,
@@ -561,7 +563,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     };
 
     try {
-      localStorage.setItem('controlroom_pending_pi_to_bom', JSON.stringify(conversionData));
+      localStorage.setItem('controlroom_pending_pi_to_bom', JSON.stringify(stripDataUrlsFromRecord(conversionData)));
     } catch (e) {}
 
     setTimeout(() => {
