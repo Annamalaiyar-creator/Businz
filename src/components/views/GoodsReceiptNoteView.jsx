@@ -553,12 +553,14 @@ export default function GoodsReceiptNoteView(props) {
   }, []);
 
   useEffect(() => {
+    handlePendingPushToGrn(livePOs);
     fetchLivePOs();
   }, [fetchLivePOs]);
 
   // Also check whenever activeTab switches to Goods Receipt Note
   useEffect(() => {
     if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
+      handlePendingPushToGrn(livePOs);
       fetchLivePOs();
     }
   }, [activeTab, fetchLivePOs]);

@@ -125,6 +125,30 @@ const getDatabaseStore = async (key) => {
               } catch (_) {}
             }
           }
+          if (key === 'grn_store') {
+            const diskPath = getStoreFilePath('grn_store.json');
+            if (fs.existsSync(diskPath)) {
+              try {
+                const diskGRNs = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+                if (Array.isArray(diskGRNs) && diskGRNs.length > 0) {
+                  const grnMap = new Map();
+                  diskGRNs.forEach(g => {
+                    const id = g.id || g.grnNo;
+                    if (id) grnMap.set(id, g);
+                  });
+                  if (Array.isArray(parsed)) {
+                    parsed.forEach(p => {
+                      const id = p.id || p.grnNo;
+                      if (id) grnMap.set(id, { ...(grnMap.get(id) || {}), ...p });
+                    });
+                  }
+                  const merged = Array.from(grnMap.values());
+                  supabaseMemoryStore[key] = merged;
+                  return merged;
+                }
+              } catch (_) {}
+            }
+          }
           if (key === 'raw_materials_store' || key === 'item_store') {
             const diskPath = getStoreFilePath(key + '.json');
             if (fs.existsSync(diskPath)) {
@@ -997,6 +1021,16 @@ const getGRNStorePath = () => {
 const loadLocalGRNs = () => {
   if (supabaseMemoryStore.grn_store && Array.isArray(supabaseMemoryStore.grn_store) && supabaseMemoryStore.grn_store.length > 0) {
     return supabaseMemoryStore.grn_store;
+  }
+  const diskPath = getStoreFilePath('grn_store.json');
+  if (fs.existsSync(diskPath)) {
+    try {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskData) && diskData.length > 0) {
+        supabaseMemoryStore.grn_store = diskData;
+        return diskData;
+      }
+    } catch (_) {}
   }
   return [];
 };
