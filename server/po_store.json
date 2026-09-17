@@ -59,7 +59,7 @@
     "notes": "",
     "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
     "amount": "₹ 2,36,000.00",
-    "status": "Draft / Pending Approval",
+    "status": "MD Approved",
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -82,7 +82,7 @@
     "totalRemainingQty": 2000,
     "receivingProgressPct": "0.0",
     "grnHistory": [],
-    "statusType": "pending",
+    "statusType": "md_approved",
     "branch": "Chennai",
     "contactPerson": "Annamalaiyar",
     "deliveryType": "Organization",
@@ -96,7 +96,11 @@
     "otherCharges": 0,
     "discountPct": 0,
     "grnCount": 0,
-    "totalReceived": 0
+    "totalReceived": 0,
+    "approvedBy": "Velmurugan Rathinam (MD)",
+    "approvalDate": "17 Sept 2026",
+    "approvalTime": "05:55 pm",
+    "approvalRemarks": "Test MD Approval"
   },
   {
     "id": "4080449000000518001",
@@ -3616,6 +3620,7 @@
     "amount": "₹2,83,200.00",
     "status": "Draft / Pending Approval",
     "statusType": "approved",
-    "pdfName": "purchase_order.pdf"
+    "pdfName": "purchase_order.pdf",
+    "zohoId": "4080449000000521001"
   }
 ]

@@ -90,7 +90,7 @@ const TERMS_PRESETS = [
 ];
 
 export default function PurchaseOrdersView({ userRole = 'Procurement Head', targetPoNo, clearTargetPo, targetPoTab, clearTargetPoTab, onNavigateTab }) {
-  const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD';
+  const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD' || userRole === 'Admin' || userRole === 'Technical Administrator';
   
   const getLoggedInUserName = () => {
     const storedName = localStorage.getItem('controlroom_logged_user_name');
@@ -215,11 +215,27 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const pZohoId = normalize(p.zohoId);
           const existing = prevMap.get(pNo) || prevMap.get(pId) || prevMap.get(pZohoId);
           if (existing) {
+            const isAdvancedStatus = (
+              existing.status === 'MD Approved' || 
+              existing.statusType === 'md_approved' ||
+              existing.status === 'Payment Processed' || 
+              existing.statusType === 'payment_processed' ||
+              existing.status === 'Proceed PO' || 
+              existing.statusType === 'proceed_po' ||
+              existing.status === 'REJECTED'
+            );
+            const effStatus = isAdvancedStatus ? existing.status : (p.status || existing.status);
+            const effStatusType = isAdvancedStatus ? existing.statusType : (p.statusType || existing.statusType);
+
             const existingItems = Array.isArray(existing.items) && existing.items.length > 0 ? existing.items : [];
             const incomingItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [];
             return {
               ...existing,
               ...p,
+              status: effStatus,
+              statusType: effStatusType,
+              approvedBy: existing.approvedBy || p.approvedBy,
+              approvalRemarks: existing.approvalRemarks || p.approvalRemarks,
               items: incomingItems.length > 0 ? incomingItems : existingItems,
               vendor: (existing.vendor && existing.vendor !== 'Vendor' && existing.vendor !== 'Annamalaiyar') ? existing.vendor : (p.vendor || existing.vendor || 'Vendor'),
               deliveryAddress: (p.deliveryAddress && p.deliveryAddress !== '—' && p.deliveryAddress !== '') ? p.deliveryAddress : (existing.deliveryAddress || '—'),
@@ -763,12 +779,20 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     // Immediately reflect MD Approved state in the currently active view
     setViewingPoStatus('MD Approved');
+    const updatedApprovedPo = { 
+      ...poTarget, 
+      status: 'MD Approved', 
+      statusType: 'md_approved',
+      approvedBy: 'Velmurugan Rathinam (MD)',
+      approvalRemarks: approvalRemarksInput || 'Approved by MD'
+    };
     setPoList(prev => prev.map(p => {
       if (p.poNo === poId || p.id === poId) {
-        return { ...p, status: 'MD Approved', statusType: 'md_approved' };
+        return { ...p, ...updatedApprovedPo };
       }
       return p;
     }));
+    saveSafeZohoPO(updatedApprovedPo);
 
     fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/approve`, {
       method: 'POST',
@@ -1176,48 +1200,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     setAttachedFiles(po.pdfName ? [{ name: po.pdfName, size: 'Original Attachment' }] : []);
   };
 
-  // Restore current PO view/edit state across browser refresh
+  // Always land on the main PO table view on mount, and purge any stale detail view session
   useEffect(() => {
     try {
-      const savedMode = sessionStorage.getItem('controlroom_po_view_mode');
-      const savedPoJson = sessionStorage.getItem('controlroom_viewing_po');
-      if ((savedMode === 'view' || savedMode === 'edit') && savedPoJson) {
-        const savedPo = JSON.parse(savedPoJson);
-        if (savedPo && (savedPo.poNo || savedPo.id)) {
-          setViewMode(savedMode);
-          populateFormStates(savedPo);
-          const targetId = (/^\d{15,}$/.test(String(savedPo.id || ''))) 
-            ? savedPo.id 
-            : ((/^\d{15,}$/.test(String(savedPo.zohoId || ''))) 
-              ? savedPo.zohoId 
-              : (savedPo.id || savedPo.poNo || savedPo.zohoId));
-          if (targetId) {
-            fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`)
-              .then(res => res.ok ? res.json() : null)
-              .then(detail => {
-                if (detail && detail.poNo) {
-                  const merged = {
-                    ...savedPo,
-                    ...detail,
-                    vendor: (savedPo.vendor && savedPo.vendor !== 'Vendor' && savedPo.vendor !== 'Annamalaiyar' && savedPo.vendor !== 'Fresh Vendor') ? savedPo.vendor : (detail.vendor || savedPo.vendor),
-                    branch: savedPo.branch || detail.branch || '',
-                    contactPerson: savedPo.contactPerson || detail.contactPerson || '',
-                    gstNo: (savedPo.gstNo && savedPo.gstNo !== '—') ? savedPo.gstNo : (detail.gstNo || '—'),
-                    deliveryAddress: (savedPo.deliveryAddress && savedPo.deliveryAddress !== '—' && savedPo.deliveryAddress !== 'Tamil Nadu, India') ? savedPo.deliveryAddress : (detail.deliveryAddress || '—'),
-                    billingAddress: (savedPo.billingAddress && savedPo.billingAddress !== '—') ? savedPo.billingAddress : (detail.billingAddress || '—'),
-                    items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (savedPo.items || []),
-                    terms: (detail.terms && detail.terms.length > 50) ? detail.terms : (savedPo.terms || detail.terms || '')
-                  };
-                  populateFormStates(merged);
-                  sessionStorage.setItem('controlroom_viewing_po', JSON.stringify(merged));
-                  saveSafeZohoPO(merged);
-                }
-              })
-              .catch(() => {});
-          }
-        }
-      }
+      sessionStorage.removeItem('controlroom_po_view_mode');
+      sessionStorage.removeItem('controlroom_viewing_po');
     } catch (_) {}
+    setViewMode('list');
   }, []);
 
   const handleStartEdit = async (po, idx) => {
@@ -2352,8 +2341,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       if (isDraftOrPending) {
                         return (
                           <button
-                            onClick={() => handleStartView(target)}
-                            title="Open full PO details to review line items, totals, and terms before CEO approval"
+                            onClick={() => setApprovingPo(target)}
+                            title="Approve Purchase Order directly as MD / CEO"
                             style={{
                               backgroundColor: '#F0FDF4',
                               border: '1.5px solid #86EFAC',
@@ -2372,7 +2361,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#DCFCE7'; e.currentTarget.style.borderColor = '#4ADE80'; }}
                             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F0FDF4'; e.currentTarget.style.borderColor = '#86EFAC'; }}
                           >
-                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Review & Approve (CEO)
+                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Approve as MD
                           </button>
                         );
                       }
