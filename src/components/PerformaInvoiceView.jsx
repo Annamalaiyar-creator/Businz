@@ -484,8 +484,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       createdById: pi.createdById || currentEmpId,
       items: (pi.items && pi.items.length > 0) ? pi.items.map(it => {
         const isPreset = Boolean(it.isPresetItem);
+        const resolvedC = it.code || it.sku || it.itemId || resolveProductCode(it) || '';
         return {
           ...it,
+          code: resolvedC,
           name: it.name || 'Structural Steel Beams',
           category: it.category || (isPreset ? 'Preset Component' : 'Custom Material'),
           uom: it.uom || 'NOS',
@@ -499,6 +501,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         };
       }) : [
         {
+          code: pi.productCode || resolveProductCode({ name: pi.productName }) || '',
           name: pi.productName || 'Structural Steel Beams',
           category: 'PI Converted Materials',
           uom: 'NOS',

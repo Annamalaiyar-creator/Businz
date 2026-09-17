@@ -631,11 +631,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         // rather than double-recalculating from un-synchronized local storage.
         let rem;
         let finalReserved = allocated;
-        if (m.stock !== undefined && m.reserved !== undefined && Number(m.stock) + Number(m.reserved) === base + grnQty) {
+        if (allocated > 0) {
+          finalReserved = allocated;
+          rem = Math.max(0, base + grnQty - allocated);
+        } else if (m.stock !== undefined && m.reserved !== undefined && Number(m.reserved) > 0 && Number(m.stock) + Number(m.reserved) === base + grnQty) {
           rem = Number(m.stock);
           finalReserved = Number(m.reserved);
         } else {
-          rem = Math.max(0, base + grnQty - allocated);
+          rem = Math.max(0, base + grnQty - (Number(m.reserved) || 0));
         }
 
         m.openingStock = base;

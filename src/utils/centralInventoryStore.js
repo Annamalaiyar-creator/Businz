@@ -55,19 +55,53 @@ class CentralInventoryStore {
     } catch (_) {}
 
     const sanitizeInventoryItems = (list) => {
+      let bomAllocMap = new Map();
+      try {
+        const bomsRaw = localStorage.getItem('controlroom_bom_store');
+        if (bomsRaw) {
+          const boms = JSON.parse(bomsRaw);
+          if (Array.isArray(boms)) {
+            boms.forEach(b => {
+              const st = String(b?.status || '').toLowerCase();
+              const isSent = Boolean(b?.salesConfirmed) || [
+                'sales confirmed - sent to dispatch',
+                'sent to production',
+                'confirmed',
+                'packed & ready for dispatch',
+                'partially packed',
+                'closed',
+                'dispatch packing verified - sent to accounts',
+                'awaiting vehicle loading & dispatch'
+              ].some(s => st.includes(s));
+              if (isSent && !st.includes('cancel') && !st.includes('restored')) {
+                (b.items || []).forEach(it => {
+                  const c = String(it.code || '').toUpperCase().trim();
+                  const n = String(it.name || '').toLowerCase().trim();
+                  const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+                    const isMr300Only = (c === 'MR-300MM') || ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
+                    if (c && !isMr300Only) bomAllocMap.set(c, (bomAllocMap.get(c) || 0) + q);
+                    if (isMr300Only) {
+                      bomAllocMap.set('MR-300MM', (bomAllocMap.get('MR-300MM') || 0) + q);
+                    }
+                });
+              }
+            });
+          }
+        }
+      } catch (_) {}
+
       let foundMr300 = false;
       const sanitized = list.map(item => {
         const code = String(item.code || '').toUpperCase();
         const name = String(item.name || '').toLowerCase();
-        const isMr300 = code === 'MR-300MM' || (name.includes('mini rail') && name.includes('300'));
+        const isMr300 = code === 'MR-300MM' || (name.includes('mini rail') && (name.includes('300 mm') || name.includes('300mm') || name.includes('- 300')));
         const isAlu2414 = code === 'ALU-LEN-2414MM' || code === 'RM-ALU-2414';
         if (isMr300) {
           foundMr300 = true;
-          // Preserve deducted stock: openingStock baseline is 2000
           const baseOpening = 2000;
-          const curRes = Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0));
-          const existingStock = item.stock !== undefined && item.stock !== null && Number(item.stock) < 5000 ? Number(item.stock) : (baseOpening - curRes);
-          const effectiveStock = Math.max(0, Math.min(baseOpening, existingStock));
+          const alloc = bomAllocMap.get('MR-300MM') || 0;
+          const curRes = Math.max(Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0)), alloc);
+          const effectiveStock = Math.max(0, baseOpening - curRes);
           return {
             ...item,
             code: 'MR-300MM',
@@ -83,7 +117,7 @@ class CentralInventoryStore {
             available: effectiveStock,
             availableStock: effectiveStock,
             onHand: baseOpening,
-            reserved: curRes || (baseOpening - effectiveStock)
+            reserved: curRes
           };
         }
         if (isAlu2414) {
@@ -125,6 +159,9 @@ class CentralInventoryStore {
       });
 
       if (!foundMr300) {
+        const baseOpening = 2000;
+        const alloc = bomAllocMap.get('MR-300MM') || 0;
+        const effectiveStock = Math.max(0, baseOpening - alloc);
         sanitized.unshift({
           code: 'MR-300MM',
           name: 'Mini Rail - 300 mm',
@@ -136,12 +173,12 @@ class CentralInventoryStore {
           maxLevel: 10000,
           location: 'Finished Goods Bay - Aluminium',
           unitRate: 140,
-          openingStock: 2000,
-          stock: 2000,
-          available: 2000,
-          onHand: 2000,
-          physicalStock: 2000,
-          reserved: 0
+          openingStock: baseOpening,
+          stock: effectiveStock,
+          available: effectiveStock,
+          onHand: baseOpening,
+          physicalStock: baseOpening,
+          reserved: alloc
         });
       }
       return sanitized;
@@ -382,10 +419,48 @@ class CentralInventoryStore {
       const stockOut = txs.filter(t => t.direction === 'OUT' && t.type !== 'PRODUCTION_ISSUE' && t.type !== 'BOM_RESERVATION').reduce((acc, t) => acc + (parseFloat(t.qty) || 0), 0);
       const onHand = Math.max(0, totalIn - stockOut);
 
-      // Active Stock Reservations (BOMs & PIs)
-      const activeRes = this.reservations
-        .filter(r => r.itemCode === item.code && r.status === 'Active')
-        .reduce((acc, r) => acc + (parseFloat(r.reservedQty) || 0), 0);
+      // Active Stock Reservations from internal reservations, live BOM store, and item metadata
+      let bomAlloc = 0;
+      try {
+        const bRaw = localStorage.getItem('controlroom_bom_store');
+        if (bRaw) {
+          const bList = JSON.parse(bRaw);
+          if (Array.isArray(bList)) {
+            bList.forEach(b => {
+              const st = String(b?.status || '').toLowerCase();
+              const isSent = Boolean(b?.salesConfirmed) || [
+                'sales confirmed - sent to dispatch',
+                'sent to production',
+                'confirmed',
+                'packed & ready for dispatch',
+                'partially packed',
+                'closed',
+                'dispatch packing verified - sent to accounts',
+                'awaiting vehicle loading & dispatch'
+              ].some(s => st.includes(s));
+              if (isSent && !st.includes('cancel') && !st.includes('restored')) {
+                (b.items || []).forEach(it => {
+                  const c = String(it.code || '').toUpperCase().trim();
+                  const n = String(it.name || '').toLowerCase().trim();
+                  const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+                  const itemCode = String(item.code || '').toUpperCase().trim();
+                  const isMr300Only = (c === 'MR-300MM') || ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
+                  if (c && c === itemCode) bomAlloc += q;
+                  else if (!c && itemCode === 'MR-300MM' && isMr300Only) bomAlloc += q;
+                });
+              }
+            });
+          }
+        }
+      } catch (_) {}
+
+      const activeRes = Math.max(
+        this.reservations
+          .filter(r => r.itemCode === item.code && r.status === 'Active')
+          .reduce((acc, r) => acc + (parseFloat(r.reservedQty) || 0), 0),
+        bomAlloc,
+        Number(item.reserved) || 0
+      );
 
       const available = Math.max(0, onHand - activeRes);
 
@@ -404,6 +479,8 @@ class CentralInventoryStore {
         stockOut,
         reserved: activeRes,
         available,
+        availableStock: available,
+        stock: available,
         status
       };
     });

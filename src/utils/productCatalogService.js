@@ -173,10 +173,23 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       const lookupCode = (rawCode || resCode || '').toLowerCase();
 
       let realStock = 0;
-      if (lookupCode === 'mr-300mm' || nameKey === 'mini rail - 300 mm' || (nameKey.includes('mini rail') && nameKey.includes('300'))) {
-        realStock = 2000;
+      const isMr300Only = (lookupCode === 'mr-300mm') || ((nameKey.includes('mini rail') || nameKey.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(nameKey) && (nameKey.includes('300') || nameKey === 'mini rail'));
+      if (isMr300Only) {
+        if (rawStoreMap.has('mr-300mm')) {
+          realStock = Math.max(0, Number(rawStoreMap.get('mr-300mm')));
+        } else if (stockMap.has('mr-300mm')) {
+          realStock = Math.max(0, Number(stockMap.get('mr-300mm')));
+        } else {
+          realStock = 2000;
+        }
       } else if (lookupCode === 'alu-len-2414mm' || lookupCode === 'rm-alu-2414') {
-        realStock = 250;
+        if (rawStoreMap.has('alu-len-2414mm')) {
+          realStock = Math.max(0, Number(rawStoreMap.get('alu-len-2414mm')));
+        } else if (stockMap.has('alu-len-2414mm')) {
+          realStock = Math.max(0, Number(stockMap.get('alu-len-2414mm')));
+        } else {
+          realStock = 250;
+        }
       } else if (lookupCode && rawStoreMap.has(lookupCode)) {
         const val = Number(rawStoreMap.get(lookupCode));
         realStock = val >= 5000 ? 0 : Math.max(0, val);
