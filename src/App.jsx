@@ -32,6 +32,7 @@ import { heartbeatActiveSession, registerActiveSession, revokeSession } from './
 import { getSafeZohoPOs, getSafeZohoItems } from './services/zohoSafeSync';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
+import { fetchCloudStore } from './utils/supabaseDataSync';
 
 class AppErrorBoundary extends Component {
   constructor(props) {
@@ -287,7 +288,9 @@ function App() {
           getSafeZohoPOs(),
           getSafeZohoItems(),
           fetchMasterBranding(),
-          fetch('/api/raw-materials').then(r => r.json()).catch(() => [])
+          fetch('/api/raw-materials')
+            .then(r => r.json())
+            .catch(() => fetchCloudStore('RAW_MATERIALS_STORE', []))
         ]);
         
         if (Array.isArray(rawData) && rawData.length > 0) {

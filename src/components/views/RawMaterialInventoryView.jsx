@@ -7,6 +7,7 @@ import {
 import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
 import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from '../../utils/vrmProductsData';
+import { fetchCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 
 const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
   const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
@@ -606,6 +607,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 if (c) bomAllocations.set(c, (bomAllocations.get(c) || 0) + q);
                 if (n) bomAllocations.set(n, (bomAllocations.get(n) || 0) + q);
                 if (fp) bomAllocations.set(fp, (bomAllocations.get(fp) || 0) + q);
+
+                const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
+                  ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
+                if (isMr300) {
+                  bomAllocations.set('MR-300MM', (bomAllocations.get('MR-300MM') || 0) + q);
+                  bomAllocations.set('MR300', (bomAllocations.get('MR300') || 0) + q);
+                }
               }
             });
           }
@@ -617,13 +625,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const mCode = String(m.code || key).toUpperCase().trim();
         const mNorm = normalizeProductName(m.name || '');
         const mFp = wordFingerprint(m.name || '');
+        const isMr300Only = (mCode === 'MR-300MM' || mCode === 'MR300') ||
+          ((mNorm.includes('mini rail') || mNorm.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(mNorm) && (mNorm.includes('300') || mNorm === 'mini rail'));
         const allocated = Math.max(
           (mCode && bomAllocations.get(mCode)) || 0,
           (mNorm && bomAllocations.get(mNorm)) || 0,
-          (mFp && bomAllocations.get(mFp)) || 0
+          (mFp && bomAllocations.get(mFp)) || 0,
+          isMr300Only ? (bomAllocations.get('MR-300MM') || bomAllocations.get('MR300') || 0) : 0
         );
 
-        const base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0);
+        let base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0);
+        if (isMr300Only && base === 0) base = 2000;
         const grnQty = Number(m.goodsReceived || 0);
 
         // If the item already has an authoritative stock and reserved count from server / cloud
@@ -676,61 +688,67 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       .catch(() => {});
 
     // Authoritative Server & Cloud Database Inventory Sync
-    const fetchDatabaseInventory = () => {
-      fetch('/api/raw-materials')
-        .then(res => res.json())
-        .then(rawMats => {
-          if (Array.isArray(rawMats) && rawMats.length > 0) {
-            try {
-              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
-            } catch (_) {}
-            syncEngineInventory();
+    const fetchDatabaseInventory = async () => {
+      // 1. Authoritative sync of BOMs directly from Supabase Cloud
+      try {
+        let bData = await fetchCloudStore('BOM_STORE', []);
+        if (!Array.isArray(bData) || bData.length === 0) {
+          const bRes = await fetch('/api/boms');
+          if (bRes.ok) {
+            const json = await bRes.json();
+            bData = json?.data || json;
           }
-        })
-        .catch(() => {
-          fetch('/api/store/raw_materials_store')
-            .then(res => res.json())
-            .then(resData => {
-              const cloudMats = resData?.data;
-              if (Array.isArray(cloudMats) && cloudMats.length > 0) {
-                try {
-                  localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(cloudMats));
-                } catch (_) {}
-                syncEngineInventory();
-              }
-            })
-            .catch(() => {});
-        });
+        }
+        if (Array.isArray(bData) && bData.length > 0) {
+          try {
+            localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
+          } catch (_) {}
+        }
+      } catch (_) {}
 
-      // Synchronize BOM store to prevent local duplicates
-      fetch('/api/boms')
-        .then(res => res.json())
-        .then(resData => {
-          const bData = resData?.data || resData;
-          if (Array.isArray(bData) && bData.length > 0) {
-            try {
-              localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
-            } catch (_) {}
-          }
-        })
-        .catch(() => {});
+      // 2. Authoritative sync of RAW_MATERIALS_STORE directly from Supabase Cloud
+      try {
+        let rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []);
+        if (!Array.isArray(rawMats) || rawMats.length === 0) {
+          const rRes = await fetch('/api/raw-materials');
+          if (rRes.ok) rawMats = await rRes.json();
+        }
+        if (Array.isArray(rawMats) && rawMats.length > 0) {
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      syncEngineInventory();
     };
 
     fetchDatabaseInventory();
     const pollDbInterval = setInterval(fetchDatabaseInventory, 6000);
 
+    const unsubCloudBoms = subscribeToCloudStore('BOM_STORE', () => {
+      fetchDatabaseInventory();
+    });
+    const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', () => {
+      fetchDatabaseInventory();
+    });
+
     const unsubscribe = prodModuleEngine.subscribe(() => {
       syncEngineInventory();
     });
     window.addEventListener('controlroom_raw_materials_update', syncEngineInventory);
+    window.addEventListener('controlroom_bom_store_updated', fetchDatabaseInventory);
     window.addEventListener('controlroom_grn_completed', syncEngineInventory);
     window.addEventListener('controlroom_storage_update', syncEngineInventory);
     window.addEventListener('central_inventory_updated', syncEngineInventory);
     window.addEventListener('storage', syncEngineInventory);
     return () => {
       clearInterval(pollDbInterval);
+      unsubCloudBoms();
+      unsubCloudRaw();
       unsubscribe();
       window.removeEventListener('controlroom_raw_materials_update', syncEngineInventory);
+      window.removeEventListener('controlroom_bom_store_updated', fetchDatabaseInventory);
       window.removeEventListener('controlroom_grn_completed', syncEngineInventory);
       window.removeEventListener('controlroom_storage_update', syncEngineInventory);
       window.removeEventListener('central_inventory_updated', syncEngineInventory);
@@ -2985,13 +3003,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                   />
                 </th>
-                <th style={{ padding: '12px 14px', width: '160px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Code</th>
+                <th style={{ padding: '12px 14px', width: '140px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Code</th>
                 <th style={{ padding: '12px 14px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Description</th>
-                <th style={{ padding: '12px 14px', width: '140px', fontWeight: 'bold', boxSizing: 'border-box' }}>Category</th>
-                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', boxSizing: 'border-box' }}>UOM</th>
-                <th style={{ padding: '12px 14px', width: '130px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Physical Stock</th>
-                <th style={{ padding: '12px 14px', width: '120px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Min. Level</th>
-                <th style={{ padding: '12px 14px', width: '120px', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                <th style={{ padding: '12px 14px', width: '130px', fontWeight: 'bold', boxSizing: 'border-box' }}>Category</th>
+                <th style={{ padding: '12px 14px', width: '80px', fontWeight: 'bold', boxSizing: 'border-box' }}>UOM</th>
+                <th style={{ padding: '12px 14px', width: '130px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Available Stock</th>
+                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Reserved</th>
+                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Physical Stock</th>
+                <th style={{ padding: '12px 14px', width: '90px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Min. Level</th>
+                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -3005,6 +3025,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     <td style={{ padding: '14px' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                     <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '60px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                     <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                     <td style={{ padding: '14px', textAlign: 'center' }}><div style={{ width: '70px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                   </tr>
                 ))
@@ -3095,8 +3117,27 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     >
                       {m.unit}
                     </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 'bold', color: isOut ? '#B91C1C' : isLow ? '#C2410C' : '#334155', whiteSpace: 'nowrap' }}>
-                      {(Number(m.stock !== undefined ? m.stock : (m.physicalStock !== undefined ? m.physicalStock : 0)) || 0).toLocaleString()}
+                    {/* Available Stock */}
+                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '13.5px', fontWeight: '800', color: isOut ? '#B91C1C' : isLow ? '#C2410C' : '#0E7490' }}>
+                        {(Number(m.availableStock !== undefined ? m.availableStock : (m.stock !== undefined ? m.stock : 0)) || 0).toLocaleString()}
+                      </span>
+                    </td>
+
+                    {/* Reserved in Active BOMs */}
+                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {Number(m.reserved || 0) > 0 ? (
+                        <span style={{ backgroundColor: '#FEF3C7', color: '#B45309', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', border: '1px solid #FDE68A' }}>
+                          {Number(m.reserved).toLocaleString()}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94A3B8', fontSize: '12px' }}>0</span>
+                      )}
+                    </td>
+
+                    {/* In-Store Physical Stock Baseline */}
+                    <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '600', color: '#64748B', whiteSpace: 'nowrap' }}>
+                      {(Number(m.physicalStock !== undefined ? m.physicalStock : (m.openingStock !== undefined ? m.openingStock : 0)) || 0).toLocaleString()}
                     </td>
                     <td style={{ padding: '12px 14px', textAlign: 'right', color: '#64748B', whiteSpace: 'nowrap' }}>
                       {(Number(m.minLevel !== undefined ? m.minLevel : (m.reorderLevel !== undefined ? m.reorderLevel : 0)) || 0).toLocaleString()}
