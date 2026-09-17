@@ -2735,6 +2735,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     );
                     const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
                     const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
+                    const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
                     const isMdApproved = (st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy)) && !isClosed && !isGrnProcess && !isPaymentProcessed;
                     const isDraftOrPending = !isClosed && !isGrnProcess && !isPaymentProcessed && !isMdApproved;
 
