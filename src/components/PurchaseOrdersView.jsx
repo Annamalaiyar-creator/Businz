@@ -90,28 +90,13 @@ const TERMS_PRESETS = [
 ];
 
 export default function PurchaseOrdersView({ userRole = 'Procurement Head', targetPoNo, clearTargetPo, targetPoTab, clearTargetPoTab, onNavigateTab }) {
-  const storedRole = localStorage.getItem('controlroom_user_role') || userRole || '';
-  const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').toLowerCase();
-  const isAdminOrTech = 
-    userRole === 'Admin' || 
-    userRole === 'Technical Administrator' || 
-    storedRole === 'Admin' || 
-    storedRole === 'Technical Administrator' || 
-    storedEmail.includes('annamalai');
-
-  const isMDOnly = 
-    (userRole === 'CEO' || 
-     userRole === 'Managing Director' || 
-     userRole === 'MD' || 
-     storedRole === 'CEO' || 
-     storedRole === 'Managing Director' || 
-     storedRole === 'MD' || 
-     storedEmail.includes('maniskremo') || 
-     storedEmail.includes('ceo') || 
-     storedEmail.includes('velmurugan')) && !isAdminOrTech;
-
-  const isExecutiveOrMD = isMDOnly;
-  const canApproveAsMD = isMDOnly || isAdminOrTech;
+  const activeRole = userRole || localStorage.getItem('controlroom_user_role') || 'Procurement Head';
+  const isProcurementRole = activeRole === 'Procurement Head' || activeRole === 'Procurement Admin' || activeRole.includes('Procurement');
+  const isAccounts = activeRole.includes('Accounts');
+  const isAdminOrTech = activeRole === 'Admin' || activeRole === 'Technical Administrator';
+  const isExecutiveOrMD = (activeRole === 'CEO' || activeRole === 'Managing Director' || activeRole === 'MD') && !isProcurementRole && !isAdminOrTech;
+  const canApproveAsMD = isExecutiveOrMD || isAdminOrTech;
+  const isProcurementHead = isProcurementRole || isAdminOrTech;
   
   const getLoggedInUserName = () => {
     const storedName = localStorage.getItem('controlroom_logged_user_name');
@@ -189,9 +174,19 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
   };
 
-  const isAccounts = userRole.includes('Accounts');
-  const isProcurementRole = userRole.includes('Procurement') || storedRole.includes('Procurement');
-  const isProcurementHead = !isAccounts && (isProcurementRole || isAdminOrTech);
+  const getPoStage = (po) => {
+    if (!po) return 'Draft';
+    const s = String(po.status || '').trim();
+    const st = String(po.statusType || '').toLowerCase();
+    if (s === 'REJECTED' || st === 'rejected') return 'REJECTED';
+    if (s.includes('CLOSED') || st === 'closed') return 'CLOSED';
+    if (s.includes('PARTIALLY') || st === 'partially_received') return 'PARTIALLY_RECEIVED';
+    if (s === 'Proceed PO' || s === 'PROCEED PO' || st === 'proceed_po') return 'PROCEED_PO';
+    if (s === 'Payment Processed' || st === 'payment_processed') return 'PAYMENT_PROCESSED';
+    if (s === 'MD Approved' || st === 'md_approved' || Boolean(po.approvedBy)) return 'MD_APPROVED';
+    return 'Draft';
+  };
+
   const [statusFilter, setStatusFilter] = useState('All');
   const [filterDate, setFilterDate] = useState('');
   const [poTab, setPoTab] = useState(isExecutiveOrMD ? 'Draft' : isAccounts ? 'MD_APPROVED' : 'All');
@@ -237,17 +232,21 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const pZohoId = normalize(p.zohoId);
           const existing = prevMap.get(pNo) || prevMap.get(pId) || prevMap.get(pZohoId);
           if (existing) {
-            const isAdvancedStatus = (
-              existing.status === 'MD Approved' || 
-              existing.statusType === 'md_approved' ||
-              existing.status === 'Payment Processed' || 
-              existing.statusType === 'payment_processed' ||
-              existing.status === 'Proceed PO' || 
-              existing.statusType === 'proceed_po' ||
-              existing.status === 'REJECTED'
-            );
-            const effStatus = isAdvancedStatus ? existing.status : (p.status || existing.status);
-            const effStatusType = isAdvancedStatus ? existing.statusType : (p.statusType || existing.statusType);
+            const stageRank = {
+              'Draft': 1,
+              'MD_APPROVED': 2,
+              'PAYMENT_PROCESSED': 3,
+              'PROCEED_PO': 4,
+              'PARTIALLY_RECEIVED': 5,
+              'CLOSED': 6,
+              'REJECTED': 7
+            };
+            const existingRank = stageRank[getPoStage(existing)] || 1;
+            const incomingRank = stageRank[getPoStage(p)] || 1;
+            const keepIncoming = incomingRank >= existingRank;
+
+            const effStatus = keepIncoming ? (p.status || existing.status) : existing.status;
+            const effStatusType = keepIncoming ? (p.statusType || existing.statusType) : existing.statusType;
 
             const existingItems = Array.isArray(existing.items) && existing.items.length > 0 ? existing.items : [];
             const incomingItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [];
@@ -1603,36 +1602,25 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             pVend.toLowerCase().includes(searchQuery.toLowerCase());
 
           const statusStr = String(po.status || '');
-          const statusTypeStr = String(po.statusType || '');
-          const isActuallyApproved = statusStr === 'MD Approved' || statusTypeStr === 'md_approved' || Boolean(po.approvedBy);
-          const isActuallyPaymentProcessed = statusStr === 'Payment Processed' || statusTypeStr === 'payment_processed';
-          const isActuallyProceed = statusStr === 'Proceed PO' || statusTypeStr === 'proceed_po';
+          const currentStage = getPoStage(po);
 
           const matchesStatus = statusFilter === 'All' ||
-            (statusFilter === 'Awaiting Accounts Verification' && isActuallyApproved && !isActuallyPaymentProcessed && !isActuallyProceed) ||
-            (statusFilter === 'Payment Processed / Credit Verified' && isActuallyPaymentProcessed) ||
-            (statusFilter === 'Proceed PO (GRN Ready)' && isActuallyProceed) ||
-            (statusFilter === 'Draft / Pending MD Approval' && !isActuallyApproved && !isActuallyPaymentProcessed && !isActuallyProceed && (statusStr === 'Draft' || statusStr === 'WAITING FOR APPROVAL' || statusStr === 'Pending Approval' || statusTypeStr === 'pending' || statusTypeStr === 'draft')) ||
-            (statusFilter === 'Draft' && !isActuallyApproved && (statusStr === 'Draft' || statusTypeStr === 'draft')) ||
-            (statusFilter === 'Draft / Pending Approval' && !isActuallyApproved && (statusStr === 'Draft / Pending Approval' || statusStr === 'WAITING FOR APPROVAL' || statusStr === 'Pending Approval' || statusTypeStr === 'pending')) ||
-            (statusFilter === 'MD Approved' && isActuallyApproved && !isActuallyPaymentProcessed && !isActuallyProceed) ||
-            (statusFilter === 'Payment Processed' && isActuallyPaymentProcessed) ||
-            (statusFilter === 'Proceed PO' && isActuallyProceed) ||
-            (statusFilter === 'OPEN' && (statusStr === 'OPEN' || statusTypeStr === 'approved')) ||
-            (statusFilter === 'OPEN / PARTIALLY RECEIVED' && (statusStr.includes('PARTIALLY') || statusTypeStr === 'partially_received')) ||
-            (statusFilter === 'CLOSED / FULLY RECEIVED' && (statusStr.includes('CLOSED') || statusStr.includes('FULLY RECEIVED') || statusTypeStr === 'closed')) ||
-            (statusFilter === 'REJECTED' && (statusStr === 'REJECTED' || statusTypeStr === 'rejected')) ||
+            (statusFilter === 'Awaiting Accounts Verification' && currentStage === 'MD_APPROVED') ||
+            (statusFilter === 'Payment Processed / Credit Verified' && currentStage === 'PAYMENT_PROCESSED') ||
+            (statusFilter === 'Proceed PO (GRN Ready)' && currentStage === 'PROCEED_PO') ||
+            (statusFilter === 'Draft / Pending MD Approval' && currentStage === 'Draft') ||
+            (statusFilter === 'Draft' && currentStage === 'Draft') ||
+            (statusFilter === 'Draft / Pending Approval' && currentStage === 'Draft') ||
+            (statusFilter === 'MD Approved' && currentStage === 'MD_APPROVED') ||
+            (statusFilter === 'Payment Processed' && currentStage === 'PAYMENT_PROCESSED') ||
+            (statusFilter === 'Proceed PO' && currentStage === 'PROCEED_PO') ||
+            (statusFilter === 'OPEN' && (statusStr === 'OPEN' || currentStage === 'MD_APPROVED' || currentStage === 'Draft')) ||
+            (statusFilter === 'OPEN / PARTIALLY RECEIVED' && currentStage === 'PARTIALLY_RECEIVED') ||
+            (statusFilter === 'CLOSED / FULLY RECEIVED' && currentStage === 'CLOSED') ||
+            (statusFilter === 'REJECTED' && currentStage === 'REJECTED') ||
             statusStr === statusFilter;
 
-          const matchesTab = poTab === 'All' ||
-            (poTab === 'Draft' && !isActuallyApproved && !isActuallyPaymentProcessed && !isActuallyProceed && (statusStr === 'Draft' || statusStr === 'WAITING FOR APPROVAL' || statusStr === 'Pending Approval' || statusTypeStr === 'draft' || statusTypeStr === 'pending')) ||
-            (poTab === 'MD_APPROVED' && isActuallyApproved && !isActuallyPaymentProcessed && !isActuallyProceed) ||
-            (poTab === 'PAYMENT_PROCESSED' && isActuallyPaymentProcessed) ||
-            (poTab === 'PROCEED_PO' && isActuallyProceed) ||
-            (poTab === 'PARTIALLY_RECEIVED' && (statusStr === 'OPEN / PARTIALLY RECEIVED' || statusStr.includes('PARTIALLY') || statusTypeStr === 'partially_received')) ||
-            (poTab === 'CLOSED' && (statusStr === 'CLOSED / FULLY RECEIVED' || statusStr === 'CLOSED' || statusTypeStr === 'closed')) ||
-            (poTab === 'REJECTED' && (statusStr === 'REJECTED' || statusTypeStr === 'rejected')) ||
-            statusStr === poTab;
+          const matchesTab = poTab === 'All' || currentStage === poTab;
 
           let matchesDate = true;
           if (filterDate) {
@@ -1826,23 +1814,23 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             {/* 2. STATUS TABS ROW */}
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
               {(isExecutiveOrMD ? [
-                { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => (po.status === 'Draft' || po.status === 'WAITING FOR APPROVAL' || po.status === 'Pending Approval' || po.statusType === 'draft' || po.statusType === 'pending') && !po.approvedBy && po.status !== 'MD Approved' && po.statusType !== 'md_approved').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'Approved by MD', count: poList.filter(po => (po.status === 'MD Approved' || po.statusType === 'md_approved' || Boolean(po.approvedBy)) && po.status !== 'Payment Processed' && po.statusType !== 'payment_processed' && po.status !== 'Proceed PO' && po.statusType !== 'proceed_po').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'Approved by MD', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
                 { id: 'All', label: 'All Purchase Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' }
               ] : isAccounts ? [
-                { id: 'MD_APPROVED', label: 'Awaiting Accounts Verification', count: poList.filter(po => (po.status === 'MD Approved' || po.statusType === 'md_approved' || Boolean(po.approvedBy)) && po.status !== 'Payment Processed' && po.statusType !== 'payment_processed' && po.status !== 'Proceed PO' && po.statusType !== 'proceed_po').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => po.status === 'Payment Processed' || po.statusType === 'payment_processed').length, bg: '#fef3c7', fg: '#92400e' },
-                { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => (po.status === 'Draft' || po.status === 'WAITING FOR APPROVAL' || po.status === 'Pending Approval' || po.statusType === 'draft' || po.statusType === 'pending') && !po.approvedBy && po.status !== 'MD Approved' && po.statusType !== 'md_approved').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'Awaiting Accounts Verification', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
+                { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
                 { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' }
               ] : [
                 { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Draft', label: 'Draft / Pending Approval', count: poList.filter(po => (po.status === 'Draft' || po.status === 'WAITING FOR APPROVAL' || po.status === 'Pending Approval' || po.statusType === 'draft' || po.statusType === 'pending') && !po.approvedBy && po.status !== 'MD Approved' && po.statusType !== 'md_approved').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => (po.status === 'MD Approved' || po.statusType === 'md_approved' || Boolean(po.approvedBy)) && po.status !== 'Payment Processed' && po.statusType !== 'payment_processed' && po.status !== 'Proceed PO' && po.statusType !== 'proceed_po').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed', count: poList.filter(po => po.status === 'Payment Processed' || po.statusType === 'payment_processed').length, bg: '#fef3c7', fg: '#92400e' },
-                { id: 'PROCEED_PO', label: 'Proceed PO (GRN Ready)', count: poList.filter(po => po.status === 'Proceed PO' || po.statusType === 'proceed_po').length, bg: '#ecfeff', fg: '#0e7490' },
-                { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: poList.filter(po => po.status === 'OPEN / PARTIALLY RECEIVED' || String(po.status).includes('PARTIALLY') || po.statusType === 'partially_received').length, bg: '#fef3c7', fg: '#b45309' },
-                { id: 'CLOSED', label: 'Closed / Fully Received', count: poList.filter(po => po.status === 'CLOSED / FULLY RECEIVED' || po.status === 'CLOSED' || po.statusType === 'closed').length, bg: '#dcfce7', fg: '#15803d' },
-                { id: 'REJECTED', label: 'Rejected', count: poList.filter(po => po.status === 'REJECTED' || po.statusType === 'rejected').length, bg: '#fee2e2', fg: '#dc2626' }
+                { id: 'Draft', label: 'Draft / Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'MD_APPROVED', label: 'MD Approved', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
+                { id: 'PROCEED_PO', label: 'Proceed PO (GRN Ready)', count: poList.filter(po => getPoStage(po) === 'PROCEED_PO').length, bg: '#ecfeff', fg: '#0e7490' },
+                { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: poList.filter(po => getPoStage(po) === 'PARTIALLY_RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'CLOSED', label: 'Closed / Fully Received', count: poList.filter(po => getPoStage(po) === 'CLOSED').length, bg: '#dcfce7', fg: '#15803d' },
+                { id: 'REJECTED', label: 'Rejected', count: poList.filter(po => getPoStage(po) === 'REJECTED').length, bg: '#fee2e2', fg: '#dc2626' }
               ]).map(tab => (
                 <button
                   key={tab.id}
