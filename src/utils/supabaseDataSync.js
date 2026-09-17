@@ -79,14 +79,17 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     } catch (err) {}
   }
 
-  // 1. Fetch directly from Supabase leaves table store
+  // 1. Fetch directly from Supabase leaves table store (with 5s safety timeout)
   try {
-    const { data: records, error } = await supabase
+    const fetchPromise = supabase
       .from('leaves')
       .select('reason')
       .eq('employee', storeKey.toUpperCase())
       .order('id', { ascending: false })
       .limit(1);
+
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
+    const { data: records, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     const record = (records && records.length > 0) ? records[0] : null;
 

@@ -20,10 +20,13 @@ export async function getSafeZohoPOs() {
     cloudList = await fetchCloudStore('po_store', []);
   } catch (_) {}
 
-  // 2. Fetch from live Zoho backend
+  // 2. Fetch from live Zoho backend with timeout
   try {
-    const res = await fetch('/api/zoho/purchaseorders');
-    if (res.ok) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('/api/zoho/purchaseorders', { signal: controller.signal }).catch(() => null);
+    clearTimeout(timeoutId);
+    if (res && res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
         const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
