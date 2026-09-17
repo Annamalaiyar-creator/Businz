@@ -35,6 +35,8 @@ export default function BomOrdersView(props) {
   const [selectedRows, setSelectedRows] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [tableLoading, setTableLoading] = useState(true);
+  const [isConfirmingForward, setIsConfirmingForward] = useState(false);
   const [printingBomRecord, setPrintingBomRecord] = useState(null);
   const [exportFormatRecord, setExportFormatRecord] = useState(null);
   const [isExportingFormat, setIsExportingFormat] = useState(null); // 'pdf' | 'jpg' | 'csv' | null
@@ -72,7 +74,8 @@ export default function BomOrdersView(props) {
 
   // Initial cloud fetch, polling and cross-tab storage listener
   useEffect(() => {
-    const syncFromCloud = async () => {
+    const syncFromCloud = async (isInitial = false) => {
+      if (isInitial) setTableLoading(true);
       try {
         let data = null;
         try {
@@ -127,21 +130,24 @@ export default function BomOrdersView(props) {
         } catch (_) {}
       } catch (err) {
         console.error('Error in syncFromCloud:', err);
+      } finally {
+        if (isInitial) setTableLoading(false);
       }
     };
 
     // Initial fetch
-    syncFromCloud();
+    syncFromCloud(true);
 
     // Real-time live subscription directly from Supabase Database
     const realtimeSub = subscribeToCloudStore('bom_store', (updatedBoms) => {
       if (Array.isArray(updatedBoms)) {
         const { list: resolvedList } = resolveBomCollisions(updatedBoms, 658);
         setBomStore(resolvedList.map(stripDataUrlsFromRecord));
+        setTableLoading(false);
       }
     });
 
-    const pollInterval = setInterval(syncFromCloud, 8000);
+    const pollInterval = setInterval(() => syncFromCloud(false), 8000);
 
     const syncFromStorage = () => {
       syncFromCloud();
@@ -4718,11 +4724,13 @@ export default function BomOrdersView(props) {
                     return;
                   }
 
-                  const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
-                  const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
-                  const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
+                  setIsConfirmingForward(true);
+                  try {
+                    const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
+                    const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
+                    const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
 
-                  const finalizedItems = currentItemsList.map(i => ({ ...i, confirmed: true }));
+                    const finalizedItems = currentItemsList.map(i => ({ ...i, confirmed: true }));
                   const packingItems = (confirmingBomModal.dispatchPacking && confirmingBomModal.dispatchPacking.length > 0)
                     ? confirmingBomModal.dispatchPacking
                     : finalizedItems.map(it => ({
@@ -4793,26 +4801,40 @@ export default function BomOrdersView(props) {
 
                   setConfirmingBomModal(null);
                   alert(`✅ BOM (${confirmingBomModal.bomCode}) successfully verified by Sales and forwarded to Dispatch!`);
-                }}
-                style={{
-                  border: 'none',
-                  backgroundColor: '#0E7490',
-                  color: 'white',
-                  height: '40px',
-                  padding: '0 24px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 2px 4px rgba(14,116,144,0.3)'
-                }}
-              >
-                <CheckCircle style={{ width: '16px', height: '16px' }} />
-                Confirm BOM & Send to Dispatch
-              </button>
+                } finally {
+                  setIsConfirmingForward(false);
+                }
+              }}
+              disabled={isConfirmingForward}
+              style={{
+                border: 'none',
+                backgroundColor: '#0E7490',
+                color: 'white',
+                height: '40px',
+                padding: '0 24px',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '800',
+                cursor: isConfirmingForward ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 4px rgba(14,116,144,0.3)',
+                opacity: isConfirmingForward ? 0.7 : 1
+              }}
+            >
+              {isConfirmingForward ? (
+                <>
+                  <RotateCcw style={{ width: '16px', height: '16px', animation: 'spin 0.75s linear infinite' }} />
+                  Forwarding to Dispatch...
+                </>
+              ) : (
+                <>
+                  <CheckCircle style={{ width: '16px', height: '16px' }} />
+                  Confirm BOM & Send to Dispatch
+                </>
+              )}
+            </button>
             )}
           </div>
         </div>
@@ -6062,105 +6084,191 @@ export default function BomOrdersView(props) {
               </tr>
             </thead>
             <tbody>
-              {currentRows.map((row, idx) => {
-                const isChecked = selectedRows.includes(row.code);
-                return (
-                  <tr key={idx} style={{
-                    borderBottom: '1px solid #F1F5F9',
-                    transition: 'all 0.15s ease',
-                    backgroundColor: isChecked ? '#ECFEFF' : 'transparent'
-                  }} className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}>
-                    <td style={{
-                      width: '48px',
-                      minWidth: '48px',
-                      padding: '12px 0',
-                      textAlign: 'center',
-                      verticalAlign: 'middle',
-                      boxSizing: 'border-box',
-                      borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
-                    }}>
-                      <input
-                        type="checkbox"
-                        style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                        checked={isChecked}
-                        onChange={() => handleSelectRowGeneric(row.code)}
-                      />
-                    </td>
+              {tableLoading ? (
+                <>
+                  <tr style={{ backgroundColor: '#F0FDFA' }}>
                     <td
-                      onClick={() => {
-                        const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-                        const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
-                        setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
-                      }}
-                      style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
+                      colSpan={pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions').length + 1}
+                      style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        <span>{row.code}</span>
-                        {row.sourcePiNo && (
-                          <span
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
-                                detail: { tab: 'Proforma Invoice', targetPi: row.sourcePiNo } 
-                              }));
-                              if (typeof props.onChangeTab === 'function') {
-                                props.onChangeTab('Proforma Invoice');
-                              }
-                            }}
-                            title={`Converted from Proforma Invoice ${row.sourcePiNo} - Click to view PI`}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11px',
-                              color: '#0E7490',
-                              backgroundColor: '#ECFEFF',
-                              border: '1px solid #A5F3FC',
-                              borderRadius: '4px',
-                              padding: '1px 6px',
-                              width: 'fit-content',
-                              cursor: 'pointer',
-                              fontWeight: '700'
-                            }}
-                          >
-                            🔗 PI: {row.sourcePiNo} ↗
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div className="businz-spin-ring" />
+                          <div style={{ textAlign: 'left' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490' }}>
+                                Loading BOM Orders...
+                              </span>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
+                                <span className="businz-pulse-dot" /> Live Central Database Sync
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
+                              Retrieving Bill of Materials & verifying live inventory from BUSINZ Cloud...
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </td>
-                    <td
-                      onClick={() => {
-                        const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-                        const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
-                        setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
-                      }}
-                      style={{ padding: '12px 14px', color: '#64748B', cursor: 'pointer' }}
-                    >
-                      {row.c2}
-                    </td>
-                    <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
-                    <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
-                      <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        👤 {(row.salesPerson || row.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
-                    <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{row.c5}</td>
-                    <td style={{ padding: '12px 14px', textAlign: 'left' }}>
-                      <span style={{ backgroundColor: row.stBg, color: row.stFg, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px', border: row.stBorder }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.stFg }}></span>
-                        {row.status}
-                      </span>
-                    </td>
                   </tr>
-                );
-              })}
+                  {Array.from({ length: 6 }).map((_, sIdx) => {
+                    const totalHeaders = pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions');
+                    return (
+                      <tr key={`bom-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
+                          <input type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }} />
+                        </td>
+                        {totalHeaders.map((_, hIdx) => (
+                          <td key={`bom-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
+                            <div
+                              className="skeleton-shimmer skeleton-text"
+                              style={{
+                                width: hIdx === 0 ? '90px' : (hIdx === 1 ? '65%' : (hIdx === totalHeaders.length - 1 ? '85px' : '95px')),
+                                height: '14px',
+                                marginLeft: hIdx >= totalHeaders.length - 2 ? 'auto' : '0'
+                              }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </>
+              ) : currentRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions').length + 1}
+                    style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <Boxes size={32} style={{ color: '#CBD5E1' }} />
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No BOM orders found</span>
+                      <span style={{ fontSize: '12px', color: '#94A3B8' }}>
+                        No records match your active search or filter criteria. Try adjusting your query or clear filters.
+                      </span>
+                      {(searchQueryText || filterDateVal || filterStatusSelect !== 'All' || activeSubTab !== 'All') && (
+                        <button
+                          type="button"
+                          onClick={() => { setSearchQueryText(''); setFilterDateVal(''); setFilterStatusSelect('All'); setActiveSubTab('All'); }}
+                          style={{
+                            marginTop: '6px',
+                            padding: '6px 14px',
+                            backgroundColor: '#F1F5F9',
+                            color: '#0E7490',
+                            border: '1px solid #CBD5E1',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Clear All Filters
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                currentRows.map((row, idx) => {
+                  const isChecked = selectedRows.includes(row.code);
+                  return (
+                    <tr key={idx} style={{
+                      borderBottom: '1px solid #F1F5F9',
+                      transition: 'all 0.15s ease',
+                      backgroundColor: isChecked ? '#ECFEFF' : 'transparent'
+                    }} className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}>
+                      <td style={{
+                        width: '48px',
+                        minWidth: '48px',
+                        padding: '12px 0',
+                        textAlign: 'center',
+                        verticalAlign: 'middle',
+                        boxSizing: 'border-box',
+                        borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
+                      }}>
+                        <input
+                          type="checkbox"
+                          style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
+                          checked={isChecked}
+                          onChange={() => handleSelectRowGeneric(row.code)}
+                        />
+                      </td>
+                      <td
+                        onClick={() => {
+                          const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
+                          const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+                          setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
+                        }}
+                        style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span>{row.code}</span>
+                          {row.sourcePiNo && (
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+                                  detail: { tab: 'Proforma Invoice', targetPi: row.sourcePiNo } 
+                                }));
+                                if (typeof props.onChangeTab === 'function') {
+                                  props.onChangeTab('Proforma Invoice');
+                                }
+                              }}
+                              title={`Converted from Proforma Invoice ${row.sourcePiNo} - Click to view PI`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                color: '#0E7490',
+                                backgroundColor: '#ECFEFF',
+                                border: '1px solid #A5F3FC',
+                                borderRadius: '4px',
+                                padding: '1px 6px',
+                                width: 'fit-content',
+                                cursor: 'pointer',
+                                fontWeight: '700'
+                              }}
+                            >
+                              🔗 PI: {row.sourcePiNo} ↗
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td
+                        onClick={() => {
+                          const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
+                          const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+                          setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
+                        }}
+                        style={{ padding: '12px 14px', color: '#64748B', cursor: 'pointer' }}
+                      >
+                        {row.c2}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
+                      <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
+                        <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          👤 {(row.salesPerson || row.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
+                      <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{row.c5}</td>
+                      <td style={{ padding: '12px 14px', textAlign: 'left' }}>
+                        <span style={{ backgroundColor: row.stBg, color: row.stFg, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px', border: row.stBorder }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.stFg }}></span>
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
         {/* PAGINATION FOOTER - STRICT RULES MATCH */}
-        {filteredRows.length > 0 && (
+        {!tableLoading && filteredRows.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
             {/* Left Side: Rows per page selector + Showing X to Y entries */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

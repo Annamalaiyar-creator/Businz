@@ -3468,15 +3468,16 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
 
   // Pattern-based resolution for common aliases (e.g. Mini Rails, Adhesive Rails, Double C Rails)
   const cleanStr = rawName.toLowerCase();
-  if (cleanStr.includes('mini rail') && cleanStr.includes('300')) {
-    return 'MR-300MM';
-  }
-  const mrMatch = cleanStr.match(/mini\s*rail\s*[-–—]?\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*mini\s*rail/i);
+  const mrMatch = cleanStr.match(/mini\s*rail\s*[-–—]?\s*(\d+)\s*mm/i) || cleanStr.match(/(\d+)\s*mm\s*mini\s*rail/i) || cleanStr.match(/mini\s*rail\s*[-–—]?\s*(\d+)/i);
   if (mrMatch) {
     const mm = mrMatch[1];
     if (mm === '300') return 'MR-300MM';
     if (cleanStr.includes('old')) return ('MR' + mm + 'O').toUpperCase();
+    if (cleanStr.includes('new')) return ('MR' + mm + 'N').toUpperCase();
     return ('MR' + mm).toUpperCase();
+  }
+  if (cleanStr.includes('mini rail') && (cleanStr.includes('300 mm') || cleanStr.includes('300mm') || cleanStr.includes('- 300'))) {
+    return 'MR-300MM';
   }
   const arMatch = cleanStr.match(/adhesive\s*rail\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*adhesive\s*rail/i);
   if (arMatch) {

@@ -375,7 +375,7 @@ export default function TypeableProductSelect({
               );
               const pCodeL = String(prod.code || '').toLowerCase().trim();
               const pNameL = String(prod.name || '').toLowerCase().trim();
-              if (pCodeL === 'mr-300mm' || pNameL === 'mini rail - 300 mm' || (pNameL.includes('mini rail') && pNameL.includes('300'))) {
+              if ((pCodeL === 'mr-300mm' || pNameL === 'mini rail - 300 mm' || (pNameL.includes('mini rail') && pNameL.includes('300'))) && (prod.stock === undefined && prod.availableStock === undefined)) {
                 stockNum = 2000;
               } else if (stockNum >= 5000) {
                 stockNum = 0;

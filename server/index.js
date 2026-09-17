@@ -2700,6 +2700,9 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
       items: req.body.items || []
     };
 
+    const initialTempId = localPOObj.id;
+    const initialTempPoNo = localPOObj.poNo;
+
     const localPOs = loadLocalPOs();
     const existingIdx = localPOs.findIndex(p => p.poNo === localPOObj.poNo || p.id === localPOObj.id);
     if (existingIdx !== -1) {
@@ -2781,9 +2784,15 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
         localPOObj.statusType = 'draft';
       }
 
-      // Save updated PO in local store
+      // Save updated PO in local store - strictly in-place update using initialTempId/initialTempPoNo
       const localPOs = loadLocalPOs();
-      const existingIdx = localPOs.findIndex(p => p.poNo === localPOObj.poNo || p.id === localPOObj.id);
+      const existingIdx = localPOs.findIndex(p => 
+        (localPOObj.zohoId && p.zohoId === localPOObj.zohoId) ||
+        (localPOObj.poNo && p.poNo === localPOObj.poNo) ||
+        (localPOObj.id && p.id === localPOObj.id) ||
+        (initialTempPoNo && (p.poNo === initialTempPoNo || p.id === initialTempPoNo)) ||
+        (initialTempId && (p.id === initialTempId || p.poNo === initialTempId))
+      );
       if (existingIdx !== -1) {
         localPOs[existingIdx] = { ...localPOs[existingIdx], ...localPOObj };
       } else {
@@ -3094,12 +3103,18 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
           const q = parseFloat(it?.qty || it?.bomQty || 0) || 0;
           if (q > 0) {
             const resCode = resolveProductCode(it).toLowerCase().trim();
-            const code = String(resCode || it?.code || '').toLowerCase().trim();
+            const code = String(it?.code || resCode || '').toLowerCase().trim();
             const name = String(it?.name || it?.description || '').toLowerCase().trim();
             const fp = wordFingerprint(name);
             if (code) allocations.set(code, (allocations.get(code) || 0) + q);
             if (name) allocations.set(name, (allocations.get(name) || 0) + q);
             if (fp) allocations.set(fp, (allocations.get(fp) || 0) + q);
+
+            const isMr300 = code === 'mr-300mm' || code === 'mr100n' || (name.includes('mini rail') && name.includes('300'));
+            if (isMr300) {
+              if (code !== 'mr-300mm') allocations.set('mr-300mm', (allocations.get('mr-300mm') || 0) + q);
+              if (code !== 'mr100n') allocations.set('mr100n', (allocations.get('mr100n') || 0) + q);
+            }
           }
         });
       }
@@ -3115,15 +3130,24 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
       let changed = false;
       rawMats.forEach(m => {
         const mRes = resolveProductCode(m).toLowerCase().trim();
-        const mCode = String(mRes || m?.code || m?.sku || m?.itemId || '').toLowerCase().trim();
+        const mCode = String(m?.code || mRes || m?.sku || m?.itemId || '').toLowerCase().trim();
         const mName = String(m?.name || '').toLowerCase().trim();
         const mFp = wordFingerprint(mName);
+        const isMr300 = mCode === 'mr-300mm' || mCode === 'mr100n' || (mName.includes('mini rail') && mName.includes('300'));
+        const isAlu2414 = mCode === 'alu-len-2414mm' || mCode === 'rm-alu-2414';
+
         const blocked = Math.max(
           (mCode && allocations.get(mCode)) || 0,
           (mName && allocations.get(mName)) || 0,
-          (mFp && allocations.get(mFp)) || 0
+          (mFp && allocations.get(mFp)) || 0,
+          isMr300 ? (allocations.get('mr-300mm') || allocations.get('mr100n') || 0) : 0
         );
-        const baseline = Math.max(0, parseFloat(m?.openingStock !== undefined ? m.openingStock : 5000) || 5000);
+
+        let baseline = isMr300 ? 2000 : (isAlu2414 ? 250 : 0);
+        if (m?.openingStock !== undefined && m?.openingStock !== null && Number(m.openingStock) > 0) {
+          baseline = Number(m.openingStock);
+        }
+
         const newStock = Math.max(0, baseline - blocked);
         const minL = parseFloat(m?.minLevel || 100) || 100;
         const newStatus = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
@@ -3158,15 +3182,24 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
       let changed = false;
       items.forEach(it => {
         const itRes = resolveProductCode(it).toLowerCase().trim();
-        const itCode = String(itRes || it?.code || it?.sku || it?.itemId || '').toLowerCase().trim();
+        const itCode = String(it?.code || itRes || it?.sku || it?.itemId || '').toLowerCase().trim();
         const itName = String(it?.name || '').toLowerCase().trim();
         const itFp = wordFingerprint(itName);
+        const isMr300 = itCode === 'mr-300mm' || itCode === 'mr100n' || (itName.includes('mini rail') && itName.includes('300'));
+        const isAlu2414 = itCode === 'alu-len-2414mm' || itCode === 'rm-alu-2414';
+
         const blocked = Math.max(
           (itCode && allocations.get(itCode)) || 0,
           (itName && allocations.get(itName)) || 0,
-          (itFp && allocations.get(itFp)) || 0
+          (itFp && allocations.get(itFp)) || 0,
+          isMr300 ? (allocations.get('mr-300mm') || allocations.get('mr100n') || 0) : 0
         );
-        const baseline = Math.max(0, parseFloat(it?.openingStock !== undefined ? it.openingStock : 5000) || 5000);
+
+        let baseline = isMr300 ? 2000 : (isAlu2414 ? 250 : 0);
+        if (it?.openingStock !== undefined && it?.openingStock !== null && Number(it.openingStock) > 0 && Number(it.openingStock) < 5000) {
+          baseline = Number(it.openingStock);
+        }
+
         const newStock = Math.max(0, baseline - blocked);
         const minL = parseFloat(it?.minLevel || 20) || 20;
         const newStatus = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
@@ -3421,7 +3454,67 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
     
     if (data.purchaseorders) {
       const localGRNs = loadLocalGRNs();
+      let localPOs = loadLocalPOs();
       
+      // Auto-enrich up to 5 recent Zoho POs that are missing line items in local store
+      try {
+        let hasNewEnrichedItems = false;
+        const recentToCheck = data.purchaseorders.slice(0, 5);
+        for (const rpo of recentToCheck) {
+          const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+          const rNoClean = normalize(rpo.purchaseorder_number);
+          const rIdClean = normalize(rpo.purchaseorder_id);
+          const matchedLp = localPOs.find(p => {
+            const lpNoClean = normalize(p.poNo);
+            const lpIdClean = normalize(p.id);
+            const lpZohoId = normalize(p.zohoId);
+            return (rNoClean && (lpNoClean === rNoClean || lpIdClean === rNoClean)) ||
+                   (rIdClean && (lpIdClean === rIdClean || lpZohoId === rIdClean || lpNoClean === rIdClean));
+          });
+
+          if (!matchedLp || !Array.isArray(matchedLp.items) || matchedLp.items.length === 0) {
+            try {
+              const poDetailRes = await fetchZohoPurchaseOrderDetail(accessToken, rpo.purchaseorder_id);
+              if (poDetailRes && poDetailRes.purchaseorder && Array.isArray(poDetailRes.purchaseorder.line_items) && poDetailRes.purchaseorder.line_items.length > 0) {
+                const fetchedItems = poDetailRes.purchaseorder.line_items.map(li => ({
+                  name: li.name || li.item_name || 'Material Item',
+                  sku: li.sku || '',
+                  description: li.description || '',
+                  account: li.account_name || 'Raw Material',
+                  qty: Number(li.quantity || 1),
+                  unit: li.unit || 'NOS',
+                  rate: Number(li.rate || 0),
+                  tax: Number(li.tax_percentage || 18),
+                  previouslyReceived: 0,
+                  remainingQty: Number(li.quantity || 1)
+                }));
+                if (matchedLp) {
+                  matchedLp.items = fetchedItems;
+                  matchedLp.zohoId = rpo.purchaseorder_id;
+                } else {
+                  localPOs.unshift({
+                    id: rpo.purchaseorder_id,
+                    poNo: rpo.purchaseorder_number,
+                    zohoId: rpo.purchaseorder_id,
+                    vendor: rpo.vendor_name || 'Vendor',
+                    poDate: rpo.date,
+                    amount: `₹ ${Number(rpo.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+                    status: 'Draft',
+                    items: fetchedItems
+                  });
+                }
+                hasNewEnrichedItems = true;
+              }
+            } catch (_) {}
+          }
+        }
+        if (hasNewEnrichedItems) {
+          saveLocalPOs(localPOs);
+        }
+      } catch (e) {
+        console.warn('PO enrichment notice:', e.message);
+      }
+
       const translated = data.purchaseorders.map(po => {
         // Calculate total received across all GRNs linked to this PO
         const poRefClean = String(po.purchaseorder_number || po.purchaseorder_id || '').toLowerCase();
@@ -3446,11 +3539,11 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           g.status === 'CLOSED'
         );
 
-        const localPOs = loadLocalPOs();
+        const currentLocalPOs = loadLocalPOs();
         const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
         const pNoClean = normalize(po.purchaseorder_number);
         const pIdClean = normalize(po.purchaseorder_id);
-        const lpMatch = localPOs.find(p => {
+        const lpMatch = currentLocalPOs.find(p => {
           const lpNoClean = normalize(p.poNo);
           const lpIdClean = normalize(p.id);
           const lpZohoId = normalize(p.zohoId);
@@ -3528,8 +3621,8 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
       });
 
       // Apply local status overrides and append newly created local POs that Zoho hasn't indexed yet
-      const localPOs = loadLocalPOs();
-      localPOs.forEach(lp => {
+      const finalLocalPOs = loadLocalPOs();
+      finalLocalPOs.forEach(lp => {
         const lpPoNo = String(lp.poNo || lp.id || '').toLowerCase();
         const lpZohoId = String(lp.zohoId || '').toLowerCase();
         
@@ -3540,6 +3633,10 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         });
 
         if (existsIdx !== -1) {
+          // Always preserve non-empty items if translated currently has empty items
+          if (Array.isArray(lp.items) && lp.items.length > 0 && (!Array.isArray(translated[existsIdx].items) || translated[existsIdx].items.length === 0)) {
+            translated[existsIdx].items = lp.items;
+          }
           if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po') {
             translated[existsIdx].status = 'Proceed PO';
             translated[existsIdx].statusType = 'proceed_po';
@@ -5761,6 +5858,99 @@ app.post('/api/raw-materials', async (req, res) => {
     }
     res.status(400).json({ success: false, message: 'Array of materials required' });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to atomically deduct stock for BOM orders across all roles
+app.post('/api/raw-materials/deduct', async (req, res) => {
+  try {
+    const { bomCode, items, user } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.json({ success: true, message: 'No items to deduct' });
+    }
+
+    const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+    let rawMats = loadLocalRawMaterials();
+    if (!Array.isArray(rawMats) || rawMats.length === 0) {
+      rawMats = [];
+    }
+
+    const itemsPath = getStoreFilePath('item_store.json');
+    let itemsList = loadLocalItems();
+    if (!Array.isArray(itemsList)) itemsList = [];
+
+    const deductedList = [];
+
+    items.forEach(it => {
+      const qty = parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0;
+      if (qty <= 0) return;
+      const cleanCode = String(it.code || it.sku || '').toUpperCase().trim();
+      const cleanName = String(it.name || it.description || '').toLowerCase().trim();
+
+      const mat = rawMats.find(m => {
+        const mCode = String(m.code || m.sku || '').toUpperCase().trim();
+        const mName = String(m.name || '').toLowerCase().trim();
+        if (cleanCode && mCode === cleanCode) return true;
+        if (cleanName && mName === cleanName) return true;
+        if (cleanName && cleanName.length > 5 && mName.includes(cleanName)) return true;
+        if ((cleanCode === 'MR-300MM' || cleanName.includes('mini rail')) && (mCode === 'MR-300MM' || mCode === 'MR100N' || (mName.includes('mini rail') && mName.includes('300')))) return true;
+        return false;
+      });
+
+      if (mat) {
+        const baseOpen = Math.max(0, parseFloat(mat.openingStock !== undefined ? mat.openingStock : (mat.physicalStock !== undefined ? mat.physicalStock : 2000)) || 2000);
+        const curStock = parseFloat(mat.stock !== undefined ? mat.stock : (mat.physicalStock || baseOpen)) || 0;
+        const newStock = Math.max(0, curStock - qty);
+        mat.openingStock = baseOpen;
+        mat.stock = newStock;
+        mat.physicalStock = newStock;
+        mat.availableStock = newStock;
+        mat.reserved = (parseFloat(mat.reserved) || 0) + qty;
+        mat.blockedForBom = mat.reserved;
+        mat.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user || 'System'}`;
+        deductedList.push({ code: mat.code, name: mat.name, deducted: qty, remaining: newStock });
+      }
+
+      const itMatch = itemsList.find(m => {
+        const mCode = String(m.code || m.sku || m.itemId || '').toUpperCase().trim();
+        const mName = String(m.name || '').toLowerCase().trim();
+        if (cleanCode && mCode === cleanCode) return true;
+        if (cleanName && mName === cleanName) return true;
+        if (cleanName && cleanName.length > 5 && mName.includes(cleanName)) return true;
+        if ((cleanCode === 'MR-300MM' || cleanName.includes('mini rail')) && (mCode === 'MR-300MM' || mCode === 'MR100N' || (mName.includes('mini rail') && mName.includes('300')))) return true;
+        return false;
+      });
+
+      if (itMatch) {
+        const baseOpen = Math.max(0, parseFloat(itMatch.openingStock !== undefined ? itMatch.openingStock : (itMatch.physicalStock !== undefined ? itMatch.physicalStock : 2000)) || 2000);
+        const curStock = parseFloat(itMatch.stock !== undefined ? itMatch.stock : (itMatch.physicalStock || baseOpen)) || 0;
+        const newStock = Math.max(0, curStock - qty);
+        itMatch.openingStock = baseOpen;
+        itMatch.stock = newStock;
+        itMatch.physicalStock = newStock;
+        itMatch.availableStock = newStock;
+        itMatch.reserved = (parseFloat(itMatch.reserved) || 0) + qty;
+      }
+    });
+
+    if (deductedList.length > 0) {
+      fs.writeFileSync(rawMatsPath, JSON.stringify(rawMats, null, 2), 'utf8');
+      supabaseMemoryStore.raw_materials_store = rawMats;
+      pushStoreToSupabase('raw_materials_store', rawMats).catch(() => {});
+      broadcastRealtimeEvent('inventory_updated', { rawMaterials: rawMats, deducted: deductedList });
+
+      fs.writeFileSync(itemsPath, JSON.stringify(itemsList, null, 2), 'utf8');
+      supabaseMemoryStore.item_store = itemsList;
+      pushStoreToSupabase('item_store', itemsList).catch(() => {});
+      broadcastRealtimeEvent('item_store_updated', { items: itemsList });
+
+      console.log(`[INVENTORY DEDUCTION] Deducted stock for BOM ${bomCode}:`, deductedList);
+    }
+
+    res.json({ success: true, deducted: deductedList, rawMaterials: rawMats });
+  } catch (err) {
+    console.error('[INVENTORY DEDUCTION ERROR]', err);
     res.status(500).json({ error: err.message });
   }
 });

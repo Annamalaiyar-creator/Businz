@@ -63,18 +63,64 @@ class CentralInventoryStore {
         const isAlu2414 = code === 'ALU-LEN-2414MM' || code === 'RM-ALU-2414';
         if (isMr300) {
           foundMr300 = true;
-          return { ...item, code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', stock: 2000, physicalStock: 2000, available: 2000, onHand: 2000 };
+          // Preserve deducted stock: openingStock baseline is 2000
+          const baseOpening = 2000;
+          const curRes = Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0));
+          const existingStock = item.stock !== undefined && item.stock !== null && Number(item.stock) < 5000 ? Number(item.stock) : (baseOpening - curRes);
+          const effectiveStock = Math.max(0, Math.min(baseOpening, existingStock));
+          return {
+            ...item,
+            code: 'MR-300MM',
+            name: 'Mini Rail - 300 mm',
+            cat: 'Aluminium Profiles',
+            type: 'Finished Product',
+            uom: 'NOS',
+            minLevel: 50,
+            reorderLevel: 100,
+            openingStock: baseOpening,
+            physicalStock: baseOpening,
+            stock: effectiveStock,
+            available: effectiveStock,
+            availableStock: effectiveStock,
+            onHand: baseOpening,
+            reserved: curRes || (baseOpening - effectiveStock)
+          };
         }
         if (isAlu2414) {
-          return { ...item, code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', stock: 250, physicalStock: 250, available: 250, onHand: 250 };
+          const baseOpening = 250;
+          const curRes = Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0));
+          const existingStock = item.stock !== undefined && item.stock !== null && Number(item.stock) < 5000 ? Number(item.stock) : (baseOpening - curRes);
+          const effectiveStock = Math.max(0, Math.min(baseOpening, existingStock));
+          return {
+            ...item,
+            code: 'ALU-LEN-2414MM',
+            name: 'Aluminium Length (2414 mm)',
+            cat: 'Raw Material',
+            type: 'Raw Material',
+            uom: 'Length',
+            minLevel: 20,
+            reorderLevel: 50,
+            openingStock: baseOpening,
+            physicalStock: baseOpening,
+            stock: effectiveStock,
+            available: effectiveStock,
+            availableStock: effectiveStock,
+            onHand: baseOpening,
+            reserved: curRes || (baseOpening - effectiveStock)
+          };
         }
         const st = Number(item.stock || 0);
+        const curRes = Number(item.reserved || item.blockedForBom || 0);
+        const baseOpening = Math.max(0, Number(item.openingStock !== undefined ? item.openingStock : (st >= 5000 ? 0 : st)));
+        const finalSt = st >= 5000 ? 0 : st;
         return {
           ...item,
-          stock: st >= 5000 ? 0 : st,
+          openingStock: baseOpening,
+          stock: finalSt,
           available: (Number(item.available || 0) >= 5000 ? 0 : Number(item.available || 0)),
           onHand: (Number(item.onHand || 0) >= 5000 ? 0 : Number(item.onHand || 0)),
-          physicalStock: (Number(item.physicalStock || 0) >= 5000 ? 0 : Number(item.physicalStock || 0))
+          physicalStock: (Number(item.physicalStock || 0) >= 5000 ? 0 : Number(item.physicalStock || 0)),
+          reserved: curRes
         };
       });
 
@@ -94,7 +140,8 @@ class CentralInventoryStore {
           stock: 2000,
           available: 2000,
           onHand: 2000,
-          physicalStock: 2000
+          physicalStock: 2000,
+          reserved: 0
         });
       }
       return sanitized;
@@ -284,13 +331,34 @@ class CentralInventoryStore {
   }
 
   // Helper Persistence Methods
-  saveItems() { saveCloudStore('item_store', this.items); }
-  saveTransactions() { saveCloudStore('vrm_prod_ledger', this.transactions); }
-  saveGrns() { saveCloudStore('grn_store', this.grnList); }
-  saveJobWorks() { saveCloudStore('jobworks_store', this.jobWorks); }
-  saveProdOrders() { saveCloudStore('workorder_store', this.productionOrders); }
-  saveReservations() { saveCloudStore('reservations_store', this.reservations); }
-  saveNotifications() { saveCloudStore('notifications_store', this.notifications); }
+  saveItems() {
+    try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
+    saveCloudStore('item_store', this.items);
+  }
+  saveTransactions() {
+    try { localStorage.setItem(this.storageKeyTx, JSON.stringify(this.transactions)); } catch (_) {}
+    saveCloudStore('vrm_prod_ledger', this.transactions);
+  }
+  saveGrns() {
+    try { localStorage.setItem(this.storageKeyGrn, JSON.stringify(this.grnList)); } catch (_) {}
+    saveCloudStore('grn_store', this.grnList);
+  }
+  saveJobWorks() {
+    try { localStorage.setItem(this.storageKeyJobWork, JSON.stringify(this.jobWorks)); } catch (_) {}
+    saveCloudStore('jobworks_store', this.jobWorks);
+  }
+  saveProdOrders() {
+    try { localStorage.setItem(this.storageKeyProdOrders, JSON.stringify(this.productionOrders)); } catch (_) {}
+    saveCloudStore('workorder_store', this.productionOrders);
+  }
+  saveReservations() {
+    try { localStorage.setItem(this.storageKeyReservations, JSON.stringify(this.reservations)); } catch (_) {}
+    saveCloudStore('reservations_store', this.reservations);
+  }
+  saveNotifications() {
+    try { localStorage.setItem(this.storageKeyNotifications, JSON.stringify(this.notifications)); } catch (_) {}
+    saveCloudStore('notifications_store', this.notifications);
+  }
 
   notifyChange() {
     this.evaluateStockAlerts();
@@ -558,14 +626,13 @@ class CentralInventoryStore {
       const targetUnit = (item && item.uom) || pItem.uom || pItem.unit || 'Nos';
 
       if (item) {
-        const baseStock = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : 0) || 0);
-        item.openingStock = baseStock;
-        const curBlocked = (parseFloat(item.reserved) || 0) + qty;
-        const newStock = Math.max(0, baseStock - curBlocked);
-        item.stock = newStock;
-        item.physicalStock = baseStock;
-        item.available = newStock;
-        item.reserved = curBlocked;
+        const curPhysical = Math.max(0, parseFloat(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 0))) || 0);
+        const nextStock = Math.max(0, curPhysical - qty);
+        item.stock = nextStock;
+        item.physicalStock = nextStock;
+        item.available = nextStock;
+        item.availableStock = nextStock;
+        item.reserved = Math.max(0, (parseFloat(item.reserved) || 0) + qty);
       }
 
       // Add to reservations
@@ -598,23 +665,24 @@ class CentralInventoryStore {
       };
       this.transactions.push(tx);
 
-      // Sync to raw materials store
+      // Sync to raw materials store with physical stock deduction
       let mMatch = currentMats.find(m => {
         const mCode = String(m.code || m.sku || '').toUpperCase().trim();
         const mNorm = normalizeProductName(m.name);
         return (pCode && mCode === pCode) || (normPName && mNorm === normPName) || (targetCode && mCode === targetCode);
       });
       if (mMatch) {
-        const baseM = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : 0) || 0);
-        mMatch.openingStock = baseM;
-        const newReserved = (parseFloat(mMatch.reserved) || 0) + qty;
-        const nextM = Math.max(0, baseM - newReserved);
+        const baseOpen = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : (mMatch.physicalStock !== undefined ? mMatch.physicalStock : 2000)) || 2000);
+        const curPhysical = Math.max(0, parseFloat(mMatch.physicalStock !== undefined ? mMatch.physicalStock : (mMatch.stock !== undefined ? mMatch.stock : baseOpen)) || 0);
+        const nextM = Math.max(0, curPhysical - qty);
         mMatch.stock = nextM;
         mMatch.availableStock = nextM;
-        mMatch.physicalStock = baseM;
-        mMatch.reserved = newReserved;
-        mMatch.blockedForBom = newReserved;
+        mMatch.physicalStock = nextM;
+        mMatch.openingStock = baseOpen;
+        mMatch.reserved = Math.max(0, (parseFloat(mMatch.reserved) || 0) + qty);
+        mMatch.blockedForBom = mMatch.reserved;
         mMatch.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (mMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
+        mMatch.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user}`;
       } else {
         const nextM = 0;
         currentMats.push({
@@ -636,6 +704,12 @@ class CentralInventoryStore {
     try {
       localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
       saveCloudStore('raw_materials_store', currentMats);
+      // Synchronously post to backend atomic deduction endpoint so server disk and all tabs update immediately!
+      fetch('/api/raw-materials/deduct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bomCode, items: itemsList, user })
+      }).catch(e => console.warn('[BOM DEDUCT BACKEND NOTICE]', e));
     } catch (_) {}
 
     // Synchronize controlroom_items_list (used by Items Directory, Product Catalog, Stock Status)
@@ -658,10 +732,9 @@ class CentralInventoryStore {
             return (pCode && itCode === pCode) || (normPName && itNorm === normPName) || (pName && it.name && it.name.toLowerCase() === pName.toLowerCase());
           });
           if (itMatch) {
-            const basePhysical = Math.max(0, parseFloat(itMatch.physicalStock !== undefined ? itMatch.physicalStock : (itMatch.openingStock || 0)) || 0);
-            itMatch.physicalStock = basePhysical;
-            itMatch.reserved = (parseFloat(itMatch.reserved) || 0) + qty;
-            const newSt = Math.max(0, basePhysical - itMatch.reserved);
+            const curPhysical = Math.max(0, parseFloat(itMatch.physicalStock !== undefined ? itMatch.physicalStock : (itMatch.stock !== undefined ? itMatch.stock : (itMatch.openingStock || 0))) || 0);
+            const newSt = Math.max(0, curPhysical - qty);
+            itMatch.physicalStock = newSt;
             itMatch.stock = newSt;
             itMatch.availableStock = newSt;
             itMatch.status = newSt <= 0 ? 'Out of Stock' : (newSt <= (itMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
@@ -711,7 +784,9 @@ class CentralInventoryStore {
     this.saveTransactions();
     this.notifyChange();
     try {
+      window.dispatchEvent(new Event('central_inventory_updated'));
       window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
       window.dispatchEvent(new Event('storage'));
     } catch (_) {}

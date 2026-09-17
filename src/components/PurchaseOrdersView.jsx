@@ -196,23 +196,54 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
     try {
       const safePOs = await getSafeZohoPOs();
-      if (Array.isArray(safePOs) && safePOs.length > 0) {
-        setPoList(prev => {
-          // Merge to preserve any freshly added or local POs
-          const existingIds = new Set(safePOs.map(p => p.id || p.poNo));
-          const localOnly = prev.filter(p => !existingIds.has(p.id || p.poNo));
-          return [...safePOs, ...localOnly];
+      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+
+      const mergeWithPrev = (incomingList, currentPrev) => {
+        const prevMap = new Map();
+        currentPrev.forEach(p => {
+          const pNo = normalize(p.poNo);
+          const pId = normalize(p.id);
+          const pZohoId = normalize(p.zohoId);
+          if (pNo) prevMap.set(pNo, p);
+          if (pId) prevMap.set(pId, p);
+          if (pZohoId) prevMap.set(pZohoId, p);
         });
+
+        const mergedIncoming = incomingList.map(p => {
+          const pNo = normalize(p.poNo);
+          const pId = normalize(p.id);
+          const pZohoId = normalize(p.zohoId);
+          const existing = prevMap.get(pNo) || prevMap.get(pId) || prevMap.get(pZohoId);
+          if (existing) {
+            const existingItems = Array.isArray(existing.items) && existing.items.length > 0 ? existing.items : [];
+            const incomingItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [];
+            return {
+              ...existing,
+              ...p,
+              items: incomingItems.length > 0 ? incomingItems : existingItems
+            };
+          }
+          return p;
+        });
+
+        const existingKeys = new Set(mergedIncoming.map(p => normalize(p.poNo || p.id)));
+        const localOnly = currentPrev.filter(p => {
+          const k1 = normalize(p.poNo);
+          const k2 = normalize(p.id);
+          return (k1 && !existingKeys.has(k1)) && (k2 && !existingKeys.has(k2));
+        });
+
+        return [...mergedIncoming, ...localOnly];
+      };
+
+      if (Array.isArray(safePOs) && safePOs.length > 0) {
+        setPoList(prev => mergeWithPrev(safePOs, prev));
       } else {
         const response = await fetchWithTimeout('/api/zoho/purchaseorders', { timeout: 25000 }).catch(() => null);
         if (response && response.ok) {
           const zohoPOs = await response.json().catch(() => []);
           if (Array.isArray(zohoPOs)) {
-            setPoList(prev => {
-              const existingIds = new Set(zohoPOs.map(p => p.id || p.poNo));
-              const localOnly = prev.filter(p => !existingIds.has(p.id || p.poNo));
-              return [...zohoPOs, ...localOnly];
-            });
+            setPoList(prev => mergeWithPrev(zohoPOs, prev));
           }
         }
       }

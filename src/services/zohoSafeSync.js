@@ -63,7 +63,11 @@ export async function getSafeZohoPOs() {
           });
         }
 
-        saveCloudStore('po_store', merged);
+        // Only save to cloud if we are not erasing items
+        const hasValidItems = merged.some(p => Array.isArray(p.items) && p.items.length > 0);
+        if (hasValidItems || cloudList.length === 0) {
+          saveCloudStore('po_store', merged);
+        }
         return merged;
       }
     }
@@ -77,16 +81,35 @@ export async function getSafeZohoPOs() {
   return [];
 }
 
-export async function saveSafeZohoPO(newOrUpdatedPO) {
+export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
   if (!newOrUpdatedPO) return;
   try {
     // 1. Fetch current cloud list from Supabase
     const cloudList = await fetchCloudStore('po_store', []);
     const targetId = newOrUpdatedPO.poNo || newOrUpdatedPO.id;
-    const existingIdx = cloudList.findIndex(p => (p.poNo && p.poNo === targetId) || (p.id && p.id === targetId));
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const cleanTargetId = normalize(targetId);
+
+    const existingIdx = cloudList.findIndex(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      const pZohoId = normalize(p.zohoId);
+      return (cleanTargetId && (pNo === cleanTargetId || pId === cleanTargetId || pZohoId === cleanTargetId));
+    });
+
     let updatedList;
     if (existingIdx !== -1) {
-      cloudList[existingIdx] = { ...cloudList[existingIdx], ...newOrUpdatedPO };
+      const existingPo = cloudList[existingIdx];
+      // Preserve existing items if newOrUpdatedPO has empty items
+      const preservedItems = (Array.isArray(newOrUpdatedPO.items) && newOrUpdatedPO.items.length > 0)
+        ? newOrUpdatedPO.items
+        : (existingPo.items || []);
+
+      cloudList[existingIdx] = {
+        ...existingPo,
+        ...newOrUpdatedPO,
+        items: preservedItems
+      };
       updatedList = cloudList;
     } else {
       updatedList = [newOrUpdatedPO, ...cloudList];
@@ -95,14 +118,16 @@ export async function saveSafeZohoPO(newOrUpdatedPO) {
     // 2. Persist immediately to Supabase Cloud
     saveCloudStore('po_store', updatedList);
 
-    // 3. Post to Zoho Books API
-    try {
-      fetch('/api/zoho/purchaseorders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newOrUpdatedPO)
-      }).catch(e => console.warn('[saveSafeZohoPO] Zoho sync notice:', e));
-    } catch (_) {}
+    // 3. Post to Zoho Books API ONLY when explicitly asked (avoids 3x duplicate creations)
+    if (syncWithZoho) {
+      try {
+        fetch('/api/zoho/purchaseorders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newOrUpdatedPO)
+        }).catch(e => console.warn('[saveSafeZohoPO] Zoho sync notice:', e));
+      } catch (_) {}
+    }
 
     return updatedList;
   } catch (err) {

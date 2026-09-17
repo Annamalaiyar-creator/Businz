@@ -3,11 +3,13 @@ import { Search, GitBranch, Plus, ChevronRight, X, Clock, CheckCircle2, AlertCir
 
 export default function MobileBomOrdersView({ userRole, onNavigate, onOpenCreateBom }) {
   const [bomList, setBomList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All'); // 'All' | 'Confirmed' | 'Draft'
   const [activeBom, setActiveBom] = useState(null);
 
   const loadBoms = () => {
+    setLoading(true);
     fetch('/api/boms')
       .then(res => res.json())
       .then(data => {
@@ -23,6 +25,9 @@ export default function MobileBomOrdersView({ userRole, onNavigate, onOpenCreate
           const saved = localStorage.getItem('controlroom_bom_store');
           if (saved) setBomList(JSON.parse(saved));
         } catch (_) {}
+      })
+      .finally(() => {
+        setLoading(false);
       });
   };
 
@@ -109,7 +114,23 @@ export default function MobileBomOrdersView({ userRole, onNavigate, onOpenCreate
 
       {/* 3. BOM Cards Feed */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filteredBoms.length === 0 ? (
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ padding: '14px 16px', backgroundColor: '#F0FDFA', borderRadius: '12px', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="businz-spin-ring-sm" />
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>
+                Loading BOM Orders & Inventory...
+              </div>
+            </div>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
+                <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '16px' }} />
+                <div className="skeleton-shimmer skeleton-text" style={{ width: '45%', height: '12px' }} />
+              </div>
+            ))}
+          </div>
+        ) : filteredBoms.length === 0 ? (
           <div style={{ padding: '32px 16px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', color: '#64748B' }}>
             <GitBranch size={32} style={{ color: '#CBD5E1', margin: '0 auto 8px auto' }} />
             <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>No BOM orders found</div>

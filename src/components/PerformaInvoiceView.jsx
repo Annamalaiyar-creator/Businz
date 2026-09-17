@@ -61,6 +61,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const storageKey = isSalesRole ? 'controlroom_sales_pi_store' : 'controlroom_procurement_pi_store';
 
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'create' | 'edit'
+  const [tableLoading, setTableLoading] = useState(true);
+  const [isConvertingToBom, setIsConvertingToBom] = useState(false);
+  const [convertingPiTarget, setConvertingPiTarget] = useState(null);
+  const [syncingPiNo, setSyncingPiNo] = useState(null);
   const [selectedPi, setSelectedPi] = useState(null); // For viewing details popup overlay
   const [printModalPi, setPrintModalPi] = useState(null); // For official Print & PDF template
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
@@ -239,6 +243,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   useEffect(() => {
     const loadPiData = () => {
+      setTableLoading(true);
       Promise.all([
         fetchCloudStore('sales_pi_store').catch(() => []),
         fetchCloudStore('proforma_invoice_store').catch(() => []),
@@ -303,7 +308,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
         const result = Array.from(mergedMap.values()).map(normalizePiRecord);
         setPiList(result);
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('Error loading PI data:', err);
+      }).finally(() => {
+        setTableLoading(false);
+      });
     };
 
     loadPiData();
@@ -312,6 +321,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const sub = subscribeToCloudStore('sales_pi_store', (latest) => {
       if (Array.isArray(latest)) {
         setPiList(latest.map(normalizePiRecord));
+        setTableLoading(false);
       }
     });
 
@@ -337,8 +347,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Direct manual or automatic one-click sync of a PI to Zoho Books (Quotes)
   const syncPiToZoho = async (targetPi) => {
-    if (!targetPi) return;
+    if (!targetPi || syncingPiNo) return;
     const cleanNo = String(targetPi.piNo || targetPi.id || '').trim();
+    setSyncingPiNo(cleanNo);
     try {
       const res = await fetch('/api/zoho/estimates', {
         method: 'POST',
@@ -394,11 +405,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     } catch (err) {
       alert(`Error syncing with Zoho Books: ${err.message}`);
+    } finally {
+      setSyncingPiNo(null);
     }
   };
 
   const handleConvertToBom = (pi) => {
-    if (!pi) return;
+    if (!pi || isConvertingToBom) return;
+    setIsConvertingToBom(true);
+    setConvertingPiTarget(pi);
+
     const cleanAmount = parseFloat(String(pi.amount || '').replace(/[^0-9.]/g, '')) || 0;
     const qty = parseFloat(pi.quantity) || 1;
     const rate = pi.unitValue || (cleanAmount > 0 ? cleanAmount / qty : 1000);
@@ -499,11 +515,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       localStorage.setItem('controlroom_pending_pi_to_bom', JSON.stringify(conversionData));
     } catch (e) {}
 
-    if (typeof onConvertToBom === 'function') {
-      onConvertToBom(conversionData);
-    } else {
-      window.dispatchEvent(new CustomEvent('controlroom_convert_pi_bom', { detail: conversionData }));
-    }
+    setTimeout(() => {
+      if (typeof onConvertToBom === 'function') {
+        onConvertToBom(conversionData);
+      } else {
+        window.dispatchEvent(new CustomEvent('controlroom_convert_pi_bom', { detail: conversionData }));
+      }
+      setIsConvertingToBom(false);
+      setConvertingPiTarget(null);
+    }, 650);
   };
 
   // Confirmation and edit states
@@ -732,15 +752,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
     const normName = normalizeProductName(itemName);
 
-    // Authoritative check for physical inventory balances
-    if (cleanCode === 'mr-300mm' || cleanName === 'mini rail - 300 mm' || (cleanName.includes('mini rail') && cleanName.includes('300'))) {
-      return 2000;
-    }
-    if (cleanCode === 'alu-len-2414mm' || cleanCode === 'rm-alu-2414' || cleanName.includes('alu-len-2414mm')) {
-      return 250;
-    }
-
-    // 1. Search in itemsList
+    // 1. Search in itemsList (carries live stock from central inventory and raw materials)
     const found = (itemsList || []).find(p => {
       const pCode = (p.code || '').toLowerCase().trim();
       const pResCode = resolveProductCode(p).toLowerCase().trim();
@@ -1708,6 +1720,113 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
 
+      {/* ==================== CONVERTING PI TO BOM ANIMATED MODAL ==================== */}
+      {isConvertingToBom && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '20px',
+            padding: '32px',
+            width: '90%',
+            maxWidth: '450px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            border: '1px solid #E2E8F0'
+          }}>
+            <div style={{
+              width: '68px',
+              height: '68px',
+              borderRadius: '50%',
+              backgroundColor: '#ECFEFF',
+              border: '2px solid #A5F3FC',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative'
+            }}>
+              <div className="businz-spin-ring" style={{ width: '60px', height: '60px', position: 'absolute' }} />
+              <Layers size={30} style={{ color: '#0E7490' }} />
+            </div>
+
+            <div>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: '800',
+                color: '#0E7490',
+                backgroundColor: '#ECFEFF',
+                padding: '3px 10px',
+                borderRadius: '12px',
+                letterSpacing: '0.5px',
+                textTransform: 'uppercase'
+              }}>
+                Workflow Automation
+              </span>
+              <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: '8px 0 4px 0' }}>
+                Converting Proforma Invoice to BOM...
+              </h3>
+              <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                Transferring line items, presets & customer data for <strong>{convertingPiTarget?.piNo || 'Quote'}</strong>
+              </p>
+            </div>
+
+            {/* Visual Workflow Graphic */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px',
+              padding: '12px 16px',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={16} style={{ color: '#0E7490' }} />
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>PI: {convertingPiTarget?.piNo || 'Quote'}</span>
+              </div>
+              <ArrowRight size={14} style={{ color: '#94A3B8' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Boxes size={16} style={{ color: '#059669' }} />
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#059669' }}>Bill of Materials</span>
+              </div>
+            </div>
+
+            {/* Reassuring Animated Progress Bar */}
+            <div style={{ width: '100%', backgroundColor: '#E2E8F0', borderRadius: '10px', height: '6px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                backgroundColor: '#0E7490',
+                borderRadius: '10px',
+                animation: 'businzProgressFill 0.65s ease-in-out forwards'
+              }} />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#059669', fontWeight: '700' }}>
+              <span className="businz-pulse-dot" /> Preparing BOM workspace & calculating stock...
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== VIEW 1: LIST DASHBOARD SCREEN ==================== */}
       {viewMode === 'list' && (() => {
         const uniqueStatuses = ['All', ...new Set(visiblePIList.map(pi => pi.status))];
@@ -1941,8 +2060,87 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </tr>
                   </thead>
                   <tbody>
-                    {(() => {
-                      return currentRows.map((pi, idx) => {
+                    {tableLoading ? (
+                      <>
+                        <tr style={{ backgroundColor: '#F0FDFA' }}>
+                          <td colSpan={7} style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div className="businz-spin-ring" />
+                                <div style={{ textAlign: 'left' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490' }}>
+                                      Loading Proforma Invoices...
+                                    </span>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
+                                      <span className="businz-pulse-dot" /> Live Cloud & Zoho Sync
+                                    </span>
+                                  </div>
+                                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
+                                    Retrieving quotation records from BUSINZ Cloud Storage & Zoho Books...
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                          <tr key={`pi-skeleton-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
+                              <input type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '90px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '65%', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '110px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '80px', height: '14px' }} />
+                            </td>
+                            <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                              <div className="skeleton-shimmer skeleton-text" style={{ width: '85px', height: '14px', marginLeft: 'auto' }} />
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '12px 14px' }}>
+                              <div className="skeleton-shimmer" style={{ width: '80px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
+                            </td>
+                          </tr>
+                        ))}
+                      </>
+                    ) : filteredPIList.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <FileText size={32} style={{ color: '#CBD5E1' }} />
+                            <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No Proforma Invoices found</span>
+                            <span style={{ fontSize: '12px', color: '#94A3B8' }}>No records match your active filter or search query. Click "+ Create Proforma Invoice" above to author a new quotation.</span>
+                            {(searchQuery || statusFilter !== 'All' || piTab !== 'All') && (
+                              <button
+                                type="button"
+                                onClick={() => { setSearchQuery(''); setStatusFilter('All'); setPiTab('All'); }}
+                                style={{
+                                  marginTop: '6px',
+                                  padding: '6px 14px',
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#0E7490',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Clear All Filters
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      currentRows.map((pi, idx) => {
                         const isChecked = selectedPIs.includes(pi.piNo);
 
                         const matchedBoms = getConvertedBomsForPi(pi);
@@ -2014,6 +2212,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               ) : (
                                 <button
                                   type="button"
+                                  disabled={Boolean(syncingPiNo)}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     syncPiToZoho(pi);
@@ -2026,20 +2225,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     border: '1px solid #A5F3FC',
                                     borderRadius: '4px',
                                     padding: '1px 5px',
-                                    cursor: 'pointer',
+                                    cursor: syncingPiNo ? 'not-allowed' : 'pointer',
                                     marginTop: '2px',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '2px'
+                                    gap: '3px',
+                                    opacity: (syncingPiNo && syncingPiNo !== String(pi.piNo || pi.id).trim()) ? 0.5 : 1
                                   }}
                                   title="Click to sync this PI directly with Zoho Books Quotes"
                                 >
-                                  ↻ Sync Zoho
+                                  {syncingPiNo === String(pi.piNo || pi.id).trim() ? (
+                                    <>
+                                      <RotateCcw size={10} style={{ animation: 'spin 0.75s linear infinite' }} />
+                                      Syncing...
+                                    </>
+                                  ) : (
+                                    <>↻ Sync Zoho</>
+                                  )}
                                 </button>
                               )}
                             </td>
                             <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>
-                              <div>{pi.vendor || pi.customerName || 'N/A'}</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontWeight: '700', color: '#0F172A' }}>{pi.vendor || pi.customerName || 'Direct Customer'}</span>
+                                {pi.contactPerson && <span style={{ fontSize: '11px', color: '#64748B' }}>Attn: {pi.contactPerson}</span>}
+                              </div>
                               <div style={{ marginTop: '3px' }}>
                                 <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
                                   {normalizePaymentTerm(pi.paymentTerms || pi.paymentType)}
@@ -2130,12 +2340,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             {/* Actions column removed per user request */}
                           </tr>
                         );
-                      });
-                    })()}
+                      })
+                    )}
                   </tbody>
                 </table>
                 {/* 4. PAGINATION FOOTER EXACT MATCHING STANDARD RULES */}
-                {filteredPIList.length > 0 && (
+                {!tableLoading && filteredPIList.length > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748b', borderTop: '1px solid #f1f5f9', backgroundColor: '#FFFFFF' }}>
                     {/* Left Side: Rows per page selector + Showing X to Y of Z entries */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -2486,8 +2696,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     );
                   }
 
+                  const isTargetSyncing = syncingPiNo && syncingPiNo === String(targetPi.piNo || targetPi.id || '').trim();
                   return (
                     <button
+                      disabled={Boolean(syncingPiNo)}
                       onClick={() => syncPiToZoho(targetPi)}
                       style={{
                         backgroundColor: '#F0FDFA',
@@ -2497,18 +2709,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         padding: '6px 14px',
                         fontSize: '12px',
                         fontWeight: '700',
-                        cursor: 'pointer',
+                        cursor: syncingPiNo ? 'not-allowed' : 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
                         whiteSpace: 'nowrap',
                         flexShrink: 0,
                         boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
+                        transition: 'all 0.15s ease',
+                        opacity: syncingPiNo ? 0.7 : 1
                       }}
                       title="Sync this PI directly to Zoho Books Quotes"
                     >
-                      <RotateCcw size={14} style={{ color: '#0E7490' }} /> Sync to Zoho
+                      <RotateCcw size={14} style={{ color: '#0E7490', animation: isTargetSyncing ? 'spin 0.75s linear infinite' : 'none' }} />
+                      {isTargetSyncing ? 'Syncing to Zoho...' : 'Sync to Zoho'}
                     </button>
                   );
                 })()}
@@ -4095,28 +4309,34 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     >
                       ✓ Zoho Quotes ↗
                     </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => syncPiToZoho(selectedPi)}
-                      title="Push this Proforma Invoice to Zoho Books Quotes"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 14px',
-                        backgroundColor: '#F0FDFA',
-                        color: '#0E7490',
-                        border: '1.5px solid #0E7490',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ↻ Sync to Zoho
-                    </button>
-                  )}
+                  ) : (() => {
+                    const isSelectedSyncing = syncingPiNo && syncingPiNo === String(selectedPi.piNo || selectedPi.id || '').trim();
+                    return (
+                      <button
+                        type="button"
+                        disabled={Boolean(syncingPiNo)}
+                        onClick={() => syncPiToZoho(selectedPi)}
+                        title="Push this Proforma Invoice to Zoho Books Quotes"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          backgroundColor: '#F0FDFA',
+                          color: '#0E7490',
+                          border: '1.5px solid #0E7490',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          cursor: syncingPiNo ? 'not-allowed' : 'pointer',
+                          opacity: syncingPiNo ? 0.7 : 1
+                        }}
+                      >
+                        <RotateCcw size={14} style={{ color: '#0E7490', animation: isSelectedSyncing ? 'spin 0.75s linear infinite' : 'none' }} />
+                        {isSelectedSyncing ? 'Syncing to Zoho...' : 'Sync to Zoho'}
+                      </button>
+                    );
+                  })()}
                   {(() => {
                     const matchedBoms = getConvertedBomsForPi(selectedPi);
                     const isConverted = (matchedBoms && matchedBoms.length > 0) || Boolean(selectedPi?.status === 'Converted to BOM' || selectedPi?.convertedToBom || selectedPi?.convertedBomCode);

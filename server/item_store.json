@@ -1,5 +1,25 @@
 [
   {
+    "code": "MR-300MM",
+    "sku": "MR-300MM",
+    "itemId": "MR-300MM",
+    "name": "Mini Rail - 300 mm",
+    "category": "Aluminium Profiles",
+    "cat": "Aluminium Profiles",
+    "unit": "NOS",
+    "uom": "NOS",
+    "price": 3200,
+    "rate": 3200,
+    "openingStock": 2000,
+    "stock": 1650,
+    "availableStock": 1650,
+    "reserved": 350,
+    "physicalStock": 2000,
+    "status": "In Stock",
+    "minLevel": 50,
+    "reorderLevel": 100
+  },
+  {
     "code": "AC(1-5)",
     "sku": "AC(1-5)",
     "itemId": "AC(1-5)",
@@ -23,7 +43,7 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "reserved": 0,
+    "reserved": 5,
     "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -57,7 +77,7 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "reserved": 0,
+    "reserved": 5,
     "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1601,42 +1621,6 @@
     "onHand": 0
   },
   {
-    "id": "4080449000000366386",
-    "itemId": "4080449000000366386",
-    "code": "MR-300MM",
-    "name": "Mini Rail - 300 mm",
-    "rate": 0,
-    "price": 0,
-    "sku": "MR75",
-    "status": "Out of Stock",
-    "description": "—",
-    "purchaseRate": 0,
-    "purchaseDescription": "",
-    "productType": "goods",
-    "unit": "Nos",
-    "uom": "NOS",
-    "material": "General Component",
-    "category": "General",
-    "stock": 2000,
-    "openingStock": 0,
-    "reorderLevel": 100,
-    "cat": "Aluminium Profiles",
-    "physicalStock": 2000,
-    "available": 2000,
-    "onHand": 2000,
-    "reserved": 200,
-    "blockedForBom": 0,
-    "minLevel": 10,
-    "store": "Main Store",
-    "lastUpdated": "Stock Set to 0",
-    "availableStock": 0,
-    "stockOnHand": 0,
-    "goodsReceived": 0,
-    "issuedProd": 0,
-    "matReturn": 0,
-    "stockAdj": 0
-  },
-  {
     "code": "FG-4047",
     "name": "Purlin 'HAT' Type - 3035 mm (GAL)",
     "cat": "GAL",
@@ -1920,9 +1904,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 100,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366930",
@@ -1944,9 +1928,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 100,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366962",
@@ -1968,9 +1952,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366970",
@@ -1992,9 +1976,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366410",
@@ -2016,9 +2000,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 700,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366402",
@@ -2040,9 +2024,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366722",
@@ -2064,9 +2048,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366730",
@@ -2088,9 +2072,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000033196",
@@ -2112,9 +2096,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366642",
@@ -2136,9 +2120,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366650",
@@ -2160,9 +2144,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366602",
@@ -2184,9 +2168,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 20,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366850",
@@ -2208,9 +2192,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368122",
@@ -2232,9 +2216,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 5,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368146",
@@ -2256,9 +2240,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 5,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366906",
@@ -2280,9 +2264,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 15,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366250",
@@ -2304,9 +2288,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366258",
@@ -2328,9 +2312,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 12,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366938",
@@ -2352,9 +2336,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 2100,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366946",
@@ -2376,9 +2360,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 100,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366978",
@@ -2400,9 +2384,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366986",
@@ -2424,9 +2408,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367418",
@@ -2448,9 +2432,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367338",
@@ -2472,9 +2456,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367426",
@@ -2496,9 +2480,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367346",
@@ -2520,9 +2504,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367354",
@@ -2544,9 +2528,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367362",
@@ -2568,9 +2552,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367298",
@@ -2592,9 +2576,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367370",
@@ -2616,9 +2600,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367282",
@@ -2640,9 +2624,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367290",
@@ -2664,9 +2648,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367378",
@@ -2688,9 +2672,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 1,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367386",
@@ -2712,9 +2696,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367306",
@@ -2736,9 +2720,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367394",
@@ -2760,9 +2744,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367314",
@@ -2784,9 +2768,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367402",
@@ -2808,9 +2792,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367410",
@@ -2832,9 +2816,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367322",
@@ -2856,9 +2840,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367330",
@@ -2880,9 +2864,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367082",
@@ -2904,9 +2888,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367098",
@@ -2928,9 +2912,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367090",
@@ -2952,9 +2936,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367074",
@@ -2976,9 +2960,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367250",
@@ -3000,9 +2984,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367154",
@@ -3024,9 +3008,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367258",
@@ -3048,9 +3032,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367266",
@@ -3072,9 +3056,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367162",
@@ -3096,9 +3080,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367274",
@@ -3120,9 +3104,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367170",
@@ -3144,9 +3128,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367178",
@@ -3168,9 +3152,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367186",
@@ -3192,9 +3176,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367194",
@@ -3216,9 +3200,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367106",
@@ -3240,9 +3224,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367202",
@@ -3264,9 +3248,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367210",
@@ -3288,9 +3272,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367114",
@@ -3312,9 +3296,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367218",
@@ -3336,9 +3320,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367122",
@@ -3360,9 +3344,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367130",
@@ -3384,9 +3368,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367226",
@@ -3408,9 +3392,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367138",
@@ -3432,9 +3416,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367234",
@@ -3456,9 +3440,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367146",
@@ -3480,9 +3464,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367242",
@@ -3504,9 +3488,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367874",
@@ -3528,9 +3512,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366450",
@@ -3552,9 +3536,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366442",
@@ -3576,9 +3560,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366434",
@@ -3600,9 +3584,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366418",
@@ -3624,9 +3608,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366426",
@@ -3648,9 +3632,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366898",
@@ -3672,9 +3656,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 15,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366914",
@@ -3696,9 +3680,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367002",
@@ -3720,9 +3704,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 500,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366954",
@@ -3744,9 +3728,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 400,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366994",
@@ -3768,9 +3752,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366530",
@@ -3792,9 +3776,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 208,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366506",
@@ -3816,9 +3800,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 188,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366570",
@@ -3840,9 +3824,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366586",
@@ -3864,9 +3848,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366562",
@@ -3888,9 +3872,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366578",
@@ -3912,9 +3896,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 616,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366890",
@@ -3936,9 +3920,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366810",
@@ -3960,9 +3944,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 536,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366818",
@@ -3984,9 +3968,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367826",
@@ -4008,9 +3992,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367746",
@@ -4032,9 +4016,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367834",
@@ -4056,9 +4040,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367754",
@@ -4080,9 +4064,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367762",
@@ -4104,9 +4088,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367770",
@@ -4128,9 +4112,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367842",
@@ -4152,9 +4136,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367778",
@@ -4176,9 +4160,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367674",
@@ -4200,9 +4184,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367690",
@@ -4224,9 +4208,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367850",
@@ -4248,9 +4232,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367682",
@@ -4272,9 +4256,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367698",
@@ -4296,9 +4280,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367786",
@@ -4320,9 +4304,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367794",
@@ -4344,9 +4328,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367706",
@@ -4368,9 +4352,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367722",
@@ -4392,9 +4376,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367802",
@@ -4416,9 +4400,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367714",
@@ -4440,9 +4424,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367730",
@@ -4464,9 +4448,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367810",
@@ -4488,9 +4472,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367818",
@@ -4512,9 +4496,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367738",
@@ -4536,9 +4520,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368162",
@@ -4560,9 +4544,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366826",
@@ -4584,9 +4568,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366834",
@@ -4608,9 +4592,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367466",
@@ -4632,9 +4616,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367458",
@@ -4656,9 +4640,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366594",
@@ -4680,9 +4664,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 20,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366554",
@@ -4704,9 +4688,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366122",
@@ -4728,9 +4712,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 48,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366130",
@@ -4752,9 +4736,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 7,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366138",
@@ -4776,9 +4760,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366146",
@@ -4800,9 +4784,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366154",
@@ -4824,9 +4808,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 5,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366162",
@@ -4848,9 +4832,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 8,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366170",
@@ -4872,9 +4856,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 8,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366178",
@@ -4896,9 +4880,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 8,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366098",
@@ -4920,9 +4904,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 48,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366106",
@@ -4944,9 +4928,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 602,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366114",
@@ -4968,9 +4952,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 2,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366882",
@@ -4992,9 +4976,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 5,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366490",
@@ -5016,9 +5000,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 581,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366498",
@@ -5040,9 +5024,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367866",
@@ -5064,9 +5048,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366842",
@@ -5088,9 +5072,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368154",
@@ -5112,9 +5096,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 22,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366522",
@@ -5136,9 +5120,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366514",
@@ -5160,9 +5144,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 362,
+    "availableStock": 0
   },
   {
     "id": "4080449000000033187",
@@ -5184,9 +5168,57 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
+  },
+  {
+    "id": "4080449000000366354",
+    "itemId": "4080449000000366354",
+    "code": "MR100N",
+    "name": "MINI RAIL 100mm (300mm) NEW",
+    "rate": 3200,
+    "price": 3200,
+    "sku": "MR100N",
+    "status": "Out of Stock",
+    "description": "—",
+    "purchaseRate": 320,
+    "purchaseDescription": "—",
+    "productType": "goods",
+    "unit": "NOS",
+    "uom": "NOS",
+    "material": "General Component",
+    "category": "General",
+    "stock": 0,
+    "openingStock": 0,
+    "reorderLevel": 100,
+    "physicalStock": 0,
+    "reserved": 1000,
+    "availableStock": 0
+  },
+  {
+    "id": "4080449000000366378",
+    "itemId": "4080449000000366378",
+    "code": "MR100O",
+    "name": "MINI RAIL 100mm (300mm) OLD",
+    "rate": 0,
+    "price": 0,
+    "sku": "MR100O",
+    "status": "Out of Stock",
+    "description": "—",
+    "purchaseRate": 0,
+    "purchaseDescription": "",
+    "productType": "goods",
+    "unit": "NOS",
+    "uom": "NOS",
+    "material": "General Component",
+    "category": "6063T6",
+    "stock": 0,
+    "openingStock": 0,
+    "reorderLevel": 100,
+    "physicalStock": 0,
+    "reserved": 200,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367058",
@@ -5208,9 +5240,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367066",
@@ -5232,9 +5264,105 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
+  },
+  {
+    "id": "4080449000000366394",
+    "itemId": "4080449000000366394",
+    "code": "MR125",
+    "name": "MINI RAIL 125mm (300mm)",
+    "rate": 0,
+    "price": 0,
+    "sku": "MR125",
+    "status": "Out of Stock",
+    "description": "—",
+    "purchaseRate": 0,
+    "purchaseDescription": "",
+    "productType": "goods",
+    "unit": "NOS",
+    "uom": "NOS",
+    "material": "General Component",
+    "category": "General",
+    "stock": 0,
+    "openingStock": 0,
+    "reorderLevel": 100,
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
+  },
+  {
+    "id": "4080449000000366362",
+    "itemId": "4080449000000366362",
+    "code": "MR40",
+    "name": "MINI RAIL 40mm (300mm) NEW",
+    "rate": 0,
+    "price": 0,
+    "sku": "MR40",
+    "status": "Out of Stock",
+    "description": "—",
+    "purchaseRate": 0,
+    "purchaseDescription": "",
+    "productType": "goods",
+    "unit": "NOS",
+    "uom": "NOS",
+    "material": "General Component",
+    "category": "6063T6",
+    "stock": 0,
+    "openingStock": 0,
+    "reorderLevel": 100,
+    "physicalStock": 0,
+    "reserved": 100,
+    "availableStock": 0
+  },
+  {
+    "id": "4080449000000366370",
+    "itemId": "4080449000000366370",
+    "code": "MR60",
+    "name": "MINI RAIL 60mm (300mm) NEW",
+    "rate": 0,
+    "price": 0,
+    "sku": "MR60",
+    "status": "Out of Stock",
+    "description": "—",
+    "purchaseRate": 0,
+    "purchaseDescription": "",
+    "productType": "goods",
+    "unit": "NOS",
+    "uom": "NOS",
+    "material": "General Component",
+    "category": "6063T6",
+    "stock": 0,
+    "openingStock": 0,
+    "reorderLevel": 100,
+    "physicalStock": 0,
+    "reserved": 100,
+    "availableStock": 0
+  },
+  {
+    "id": "4080449000000366386",
+    "itemId": "4080449000000366386",
+    "code": "MR75",
+    "name": "MINI RAIL 75mm (300mm)",
+    "rate": 0,
+    "price": 0,
+    "sku": "MR75",
+    "status": "Out of Stock",
+    "description": "—",
+    "purchaseRate": 0,
+    "purchaseDescription": "",
+    "productType": "goods",
+    "unit": "Nos",
+    "uom": "NOS",
+    "material": "General Component",
+    "category": "General",
+    "stock": 0,
+    "openingStock": 0,
+    "reorderLevel": 100,
+    "physicalStock": 0,
+    "reserved": 1100,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367882",
@@ -5256,9 +5384,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 2208,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367890",
@@ -5280,9 +5408,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 240,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367898",
@@ -5304,9 +5432,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367906",
@@ -5328,9 +5456,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367914",
@@ -5352,9 +5480,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367922",
@@ -5376,9 +5504,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367930",
@@ -5400,9 +5528,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367938",
@@ -5424,9 +5552,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367946",
@@ -5448,9 +5576,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367954",
@@ -5472,9 +5600,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367962",
@@ -5496,9 +5624,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368018",
@@ -5520,9 +5648,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367970",
@@ -5544,9 +5672,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 200,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367978",
@@ -5568,9 +5696,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367986",
@@ -5592,9 +5720,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 32,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367994",
@@ -5616,9 +5744,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368002",
@@ -5640,9 +5768,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 36,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368010",
@@ -5664,9 +5792,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368138",
@@ -5688,9 +5816,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367490",
@@ -5712,9 +5840,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367650",
@@ -5736,9 +5864,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367570",
@@ -5760,9 +5888,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367658",
@@ -5784,9 +5912,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367666",
@@ -5808,9 +5936,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367578",
@@ -5832,9 +5960,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367586",
@@ -5856,9 +5984,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367594",
@@ -5880,9 +6008,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367602",
@@ -5904,9 +6032,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367506",
@@ -5928,9 +6056,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 4,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367498",
@@ -5952,9 +6080,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367522",
@@ -5976,9 +6104,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367618",
@@ -6000,9 +6128,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367514",
@@ -6024,9 +6152,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 1,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367626",
@@ -6048,9 +6176,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367530",
@@ -6072,9 +6200,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367538",
@@ -6096,9 +6224,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367634",
@@ -6120,9 +6248,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367546",
@@ -6144,9 +6272,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367554",
@@ -6168,9 +6296,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367642",
@@ -6192,9 +6320,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367562",
@@ -6216,9 +6344,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367610",
@@ -6240,9 +6368,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366322",
@@ -6264,9 +6392,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366330",
@@ -6288,9 +6416,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 68,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366338",
@@ -6312,9 +6440,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366346",
@@ -6336,9 +6464,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366266",
@@ -6360,9 +6488,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 70,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366274",
@@ -6384,9 +6512,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366282",
@@ -6408,9 +6536,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366290",
@@ -6432,9 +6560,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 8,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366298",
@@ -6456,9 +6584,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 8,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366306",
@@ -6480,9 +6608,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366314",
@@ -6504,9 +6632,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 12,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366618",
@@ -6528,9 +6656,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366610",
@@ -6552,9 +6680,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366218",
@@ -6576,9 +6704,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366186",
@@ -6600,9 +6728,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366226",
@@ -6624,9 +6752,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 7,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366194",
@@ -6648,9 +6776,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 3,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366234",
@@ -6672,9 +6800,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 7,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366202",
@@ -6696,9 +6824,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 3,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366242",
@@ -6720,9 +6848,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 48,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366210",
@@ -6744,9 +6872,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 5,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366626",
@@ -6768,9 +6896,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 20,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366634",
@@ -6792,9 +6920,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 10,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368026",
@@ -6816,9 +6944,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368034",
@@ -6840,9 +6968,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368042",
@@ -6864,9 +6992,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368130",
@@ -6888,9 +7016,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 45,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368170",
@@ -6912,9 +7040,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366874",
@@ -6936,9 +7064,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366858",
@@ -6960,9 +7088,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366866",
@@ -6984,9 +7112,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367858",
@@ -7008,9 +7136,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367434",
@@ -7032,9 +7160,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367442",
@@ -7056,9 +7184,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367450",
@@ -7080,9 +7208,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367482",
@@ -7104,9 +7232,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367474",
@@ -7128,9 +7256,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366738",
@@ -7152,9 +7280,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366746",
@@ -7176,9 +7304,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366658",
@@ -7200,9 +7328,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 650,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366802",
@@ -7224,9 +7352,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 570,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366674",
@@ -7248,9 +7376,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 8,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366682",
@@ -7272,9 +7400,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 290,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366706",
@@ -7296,9 +7424,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366778",
@@ -7320,9 +7448,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 892,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366786",
@@ -7344,9 +7472,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 134,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366714",
@@ -7368,9 +7496,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366770",
@@ -7392,9 +7520,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366754",
@@ -7416,9 +7544,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366762",
@@ -7440,9 +7568,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366794",
@@ -7464,9 +7592,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366690",
@@ -7488,9 +7616,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 5,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366698",
@@ -7512,9 +7640,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366666",
@@ -7536,9 +7664,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366466",
@@ -7560,9 +7688,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366458",
@@ -7584,9 +7712,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368050",
@@ -7608,9 +7736,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368058",
@@ -7632,9 +7760,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368066",
@@ -7656,9 +7784,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366538",
@@ -7680,9 +7808,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366546",
@@ -7704,9 +7832,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 80,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367042",
@@ -7728,9 +7856,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367026",
@@ -7752,9 +7880,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367034",
@@ -7776,9 +7904,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367018",
@@ -7800,9 +7928,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367010",
@@ -7824,9 +7952,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000367050",
@@ -7848,9 +7976,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366482",
@@ -7872,9 +8000,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 581,
+    "availableStock": 0
   },
   {
     "id": "4080449000000366474",
@@ -7896,9 +8024,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 817,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368074",
@@ -7920,9 +8048,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368082",
@@ -7944,9 +8072,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368090",
@@ -7968,9 +8096,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368098",
@@ -7992,9 +8120,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368114",
@@ -8016,9 +8144,9 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   },
   {
     "id": "4080449000000368106",
@@ -8040,8 +8168,8 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "available": 0,
-    "onHand": 0,
-    "physicalStock": 0
+    "physicalStock": 0,
+    "reserved": 0,
+    "availableStock": 0
   }
 ]

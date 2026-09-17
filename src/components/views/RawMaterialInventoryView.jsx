@@ -466,8 +466,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           if (matMap.has(upperKey)) {
             const existing = matMap.get(upperKey);
-            const existingStock = existing.stock !== undefined ? existing.stock : null;
-            const isExistingReduced = existingStock !== null && existingStock < (existing.openingStock || 0);
+            const existingStock = existing.stock !== undefined ? Number(existing.stock) : null;
+            const baseOpen = Math.max(0, Number(existing.openingStock || (upperKey === 'MR-300MM' ? 2000 : (upperKey === 'ALU-LEN-2414MM' ? 250 : 0))));
+            const isExistingReduced = existingStock !== null && (existingStock < baseOpen || (existing.reserved && Number(existing.reserved) > 0));
             const incomingStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : null;
             const finalStock = isExistingReduced
               ? existingStock

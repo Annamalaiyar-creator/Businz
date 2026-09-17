@@ -101,13 +101,25 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       baseStock = 0;
     }
 
-    // Authoritative real stock assignments
+    // Authoritative real stock assignments with live deduction priority
     if (codeKey === 'mr-300mm' || nameKey === 'mini rail - 300 mm' || (nameKey.includes('mini rail') && nameKey.includes('300'))) {
-      realStock = 2000;
-      baseStock = 2000;
+      if (rawBal !== null && !isNaN(rawBal)) {
+        realStock = Math.max(0, rawBal);
+      } else if (centralBal !== null && !isNaN(centralBal)) {
+        realStock = Math.max(0, centralBal);
+      } else {
+        realStock = 2000;
+      }
+      baseStock = realStock;
     } else if (codeKey === 'alu-len-2414mm' || String(p.code || '').toLowerCase() === 'alu-len-2414mm') {
-      realStock = 250;
-      baseStock = 250;
+      if (rawBal !== null && !isNaN(rawBal)) {
+        realStock = Math.max(0, rawBal);
+      } else if (centralBal !== null && !isNaN(centralBal)) {
+        realStock = Math.max(0, centralBal);
+      } else {
+        realStock = 250;
+      }
+      baseStock = realStock;
     }
 
     const itemRecord = {

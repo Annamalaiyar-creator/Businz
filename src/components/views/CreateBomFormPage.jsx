@@ -1810,6 +1810,7 @@ export default function CreateBomFormPage(props) {
                       createdBy: effectiveSalesPersonName,
                       createdById: effectiveSalesPersonCode,
                       items: (bomMaterialsList || []).map(item => ({
+                        code: item.code || item.sku || item.itemId || resolveProductCode(item) || '',
                         name: item.name || 'Custom Item',
                         category: item.category || '',
                         uom: item.uom || 'NOS',

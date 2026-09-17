@@ -2117,3 +2117,49 @@ table td {
   accent-color: #0E7490;
   cursor: pointer;
 }
+
+/* ==========================================================================
+   BUSINZ PREMIUM LOADING & TRANSITION ANIMATIONS
+   ========================================================================== */
+@keyframes businzPulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.35; }
+}
+
+@keyframes businzProgressFill {
+  0% { width: 10%; }
+  50% { width: 75%; }
+  100% { width: 100%; }
+}
+
+@keyframes businzShimmerFlow {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.businz-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10B981;
+  display: inline-block;
+  animation: businzPulseDot 1.4s ease-in-out infinite;
+}
+
+.businz-spin-ring {
+  width: 34px;
+  height: 34px;
+  border: 3.5px solid rgba(14, 116, 144, 0.15);
+  border-top-color: #0E7490;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.businz-spin-ring-sm {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(14, 116, 144, 0.2);
+  border-top-color: #0E7490;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
