@@ -1,5 +1,37 @@
 [
   {
+    "id": "4080449000000520001",
+    "poNo": "PO-00134",
+    "zohoId": "4080449000000520001",
+    "vendor": "Annamalaiyar",
+    "poDate": "2026-09-17",
+    "deliveryDate": "2026-09-18",
+    "paymentTerms": "Due on Receipt",
+    "deliveryAddress": "Tamil Nadu, India",
+    "billingAddress": "Annamalaiyar, Main Road, Industrial Estate, Tamil Nadu - 600028, India",
+    "notes": "",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "amount": "₹ 64,00,000.00",
+    "status": "Draft",
+    "items": [
+      {
+        "name": "MINI RAIL 100mm (300mm) NEW",
+        "sku": "",
+        "description": "",
+        "account": "Cost of Goods Sold",
+        "qty": 2000,
+        "unit": "NOS",
+        "rate": 3200,
+        "tax": 18,
+        "previouslyReceived": 0,
+        "remainingQty": 2000
+      }
+    ],
+    "branch": "",
+    "contactPerson": "",
+    "gstNo": ""
+  },
+  {
     "id": "4080449000000519001",
     "poNo": "PO-00133",
     "zohoId": "4080449000000519001",
