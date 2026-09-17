@@ -153,6 +153,7 @@ export default function LoginScreen({ onLoginSuccess }) {
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [signUpFullName, setSignUpFullName] = useState('');
@@ -415,15 +416,21 @@ export default function LoginScreen({ onLoginSuccess }) {
       return;
     }
 
-    // Sync latest accounts from cloud database before authenticating to get latest approved status
+    setIsLoggingIn(true);
+
+    // Sync latest accounts with fast timeout to avoid blocking login
     try {
-      await syncEmployeesFromCloud();
+      await Promise.race([
+        syncEmployeesFromCloud(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
+      ]);
     } catch(e) {}
 
     const result = authenticateUser(empIdInput, usernameInput, passwordInput, selectedRoleObj);
 
     if (!result.success) {
       setErrorMsg(result.error);
+      setIsLoggingIn(false);
       return;
     }
 
@@ -434,6 +441,7 @@ export default function LoginScreen({ onLoginSuccess }) {
       result.username,
       result.displayName
     );
+    setIsLoggingIn(false);
   };
 
   return (
@@ -775,20 +783,25 @@ export default function LoginScreen({ onLoginSuccess }) {
               {/* Submit Button */}
               <button
                 type="submit"
+                disabled={isLoggingIn}
                 style={{
                   height: '42px',
                   borderRadius: '10px',
                   border: 'none',
-                  backgroundColor: '#4F46E5',
+                  backgroundColor: isLoggingIn ? '#818CF8' : '#4F46E5',
                   color: '#FFFFFF',
                   fontSize: '14px',
                   fontWeight: '600',
-                  cursor: 'pointer',
+                  cursor: isLoggingIn ? 'not-allowed' : 'pointer',
                   boxShadow: '0 4px 14px rgba(79, 70, 229, 0.3)',
-                  marginTop: '4px'
+                  marginTop: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
                 }}
               >
-                {isSignUpMode ? 'Register Account' : 'Get Started'}
+                {isLoggingIn ? 'Signing in...' : (isSignUpMode ? 'Register Account' : 'Get Started')}
               </button>
 
             </form>

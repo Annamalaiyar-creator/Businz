@@ -47,12 +47,30 @@ function mergeDatasets(localArray, remoteArray) {
  * @returns {Promise<Array|Object>}
  */
 export async function fetchCloudStore(storeKey, fallbackData = []) {
-  // For employees_store, fetch directly from Supabase users table
+  // 1. Fetch instantly from local server endpoint /api/store/:key first
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const res = await fetch(`/api/store/${storeKey}`, { signal: controller.signal }).catch(() => null);
+    clearTimeout(timeoutId);
+    if (res && res.ok) {
+      const json = await res.json();
+      if (json && json.data !== undefined && json.data !== null) {
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          return json.data;
+        } else if (json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
+          return json.data;
+        }
+      }
+    }
+  } catch (err) {}
+
+  // For employees_store, fetch directly from Supabase users table (with 1.5s timeout)
   if (storeKey === 'employees_store') {
     try {
-      const { data: dbUsers, error: userErr } = await supabase
-        .from('users')
-        .select('*');
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 1500));
+      const fetchPromise = supabase.from('users').select('*');
+      const { data: dbUsers, error: userErr } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (!userErr && Array.isArray(dbUsers) && dbUsers.length > 0) {
         // Only map genuine ControlRoom registered employees (those with CODE:::ROLE:::STATUS metadata)

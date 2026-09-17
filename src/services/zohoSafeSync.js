@@ -46,14 +46,19 @@ export async function getSafeZohoPOs() {
             return {
               ...zohoPo,
               ...cloudMatch,
-              vendor: (cloudMatch.vendor && cloudMatch.vendor !== 'Vendor' && cloudMatch.vendor !== 'Annamalaiyar') ? cloudMatch.vendor : (zohoPo.vendor || 'Vendor'),
+              vendor: (cloudMatch.vendor && cloudMatch.vendor !== 'Vendor' && cloudMatch.vendor !== 'Annamalaiyar' && cloudMatch.vendor !== 'Fresh Vendor') 
+                ? cloudMatch.vendor 
+                : ((zohoPo.vendor && zohoPo.vendor !== 'Vendor' && zohoPo.vendor !== 'Annamalaiyar') ? zohoPo.vendor : (cloudMatch.vendor || zohoPo.vendor || 'Vendor')),
+              branch: cloudMatch.branch || zohoPo.branch || '',
+              contactPerson: cloudMatch.contactPerson || zohoPo.contactPerson || '',
+              gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (zohoPo.gstNo || '—'),
               status: zohoPo.status || cloudMatch.status,
               statusType: zohoPo.statusType || cloudMatch.statusType,
               items: preservedItems,
               notes: cloudMatch.notes || zohoPo.notes || '',
-              terms: cloudMatch.terms || zohoPo.terms || '',
-              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—' && cloudMatch.deliveryAddress !== '') ? cloudMatch.deliveryAddress : (zohoPo.deliveryAddress || '—'),
-              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—' && cloudMatch.billingAddress !== '') ? cloudMatch.billingAddress : (zohoPo.billingAddress || '—'),
+              terms: (cloudMatch.terms && cloudMatch.terms.length > 50) ? cloudMatch.terms : (zohoPo.terms || cloudMatch.terms || ''),
+              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—' && cloudMatch.deliveryAddress !== 'Tamil Nadu, India') ? cloudMatch.deliveryAddress : (zohoPo.deliveryAddress || '—'),
+              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—') ? cloudMatch.billingAddress : (zohoPo.billingAddress || '—'),
               paymentTerms: (cloudMatch.paymentTerms && cloudMatch.paymentTerms !== 'Net 30 Days' && cloudMatch.paymentTerms !== 'Due on Receipt') ? cloudMatch.paymentTerms : (zohoPo.paymentTerms || 'Net 30 Days'),
               priority: cloudMatch.priority || zohoPo.priority || 'High',
               scope: cloudMatch.scope || zohoPo.scope || 'Vendor Scope',

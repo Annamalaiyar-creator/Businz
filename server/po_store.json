@@ -1,5 +1,55 @@
 [
   {
+    "id": "4080449000000519001",
+    "poNo": "PO-00133",
+    "zohoId": "4080449000000519001",
+    "vendor": "Paramount Industrial Supplies",
+    "poDate": "2026-09-17",
+    "deliveryDate": "2026-09-18",
+    "paymentTerms": "Due on Receipt",
+    "deliveryAddress": "Paramount Industrial Supplies, Main Road, Industrial Estate, Tamil Nadu - 600028",
+    "billingAddress": "Paramount Industrial Supplies, Main Road, Industrial Estate, Tamil Nadu - 600028",
+    "notes": "",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "amount": "₹ 2,36,000.00",
+    "status": "Draft / Pending Approval",
+    "items": [
+      {
+        "name": "MINI RAIL 100mm (300mm) NEW",
+        "description": "",
+        "account": "Finished Goods",
+        "qty": 2000,
+        "unit": "NOS",
+        "rate": 100,
+        "tax": 18,
+        "previouslyReceived": 0,
+        "remainingQty": 2000
+      }
+    ],
+    "contactNo": "—",
+    "email": "—",
+    "gstNo": "33ABCDE1234F1Z5",
+    "currency": "INR",
+    "totalOrderedQty": 2000,
+    "totalReceivedQty": 0,
+    "totalRemainingQty": 2000,
+    "receivingProgressPct": "0.0",
+    "grnHistory": [],
+    "statusType": "pending",
+    "branch": "Chennai",
+    "contactPerson": "Annamalaiyar",
+    "deliveryType": "Organization",
+    "purchaser": "Ar Annamalaiyar",
+    "shipmentPref": "Transport",
+    "project": "",
+    "priority": "High",
+    "scope": "Vendor Scope",
+    "transportName": "Transport",
+    "shippingCharges": 0,
+    "otherCharges": 0,
+    "discountPct": 0
+  },
+  {
     "id": "4080449000000518001",
     "poNo": "PO-00132",
     "zohoId": "4080449000000518001",
@@ -35,7 +85,9 @@
     "grnHistory": [],
     "notes": "Good",
     "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
-    "statusType": "draft"
+    "statusType": "draft",
+    "branch": "",
+    "contactPerson": ""
   },
   {
     "id": "4080449000000512005",
@@ -119,7 +171,8 @@
     ],
     "total": 31500000,
     "zohoId": "4080449000000502001",
-    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost."
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "notes": ""
   },
   {
     "id": "4080449000000501001",
@@ -157,7 +210,8 @@
     ],
     "total": 31500000,
     "zohoId": "4080449000000501001",
-    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost."
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "notes": ""
   },
   {
     "id": "4080449000000500001",
@@ -245,7 +299,9 @@
       }
     ],
     "total": 500000,
-    "zohoId": "4080449000000493001"
+    "zohoId": "4080449000000493001",
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000492001",
@@ -282,7 +338,9 @@
       }
     ],
     "total": 500000,
-    "zohoId": "4080449000000492001"
+    "zohoId": "4080449000000492001",
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000491001",
@@ -305,7 +363,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 500000
+    "total": 500000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000488001",
@@ -340,7 +400,9 @@
         "remainingQty": 250
       }
     ],
-    "total": 170000
+    "total": 170000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000487001",
@@ -375,7 +437,9 @@
         "remainingQty": 5000
       }
     ],
-    "total": 950000
+    "total": 950000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000486001",
@@ -410,7 +474,9 @@
         "remainingQty": 5000
       }
     ],
-    "total": 950000
+    "total": 950000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000485001",
@@ -433,7 +499,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 950000
+    "total": 950000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000480015",
@@ -468,7 +536,9 @@
         "remainingQty": 5000
       }
     ],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000484005",
@@ -491,7 +561,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000480008",
@@ -514,7 +586,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000481001",
@@ -537,7 +611,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000478007",
@@ -560,7 +636,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000480001",
@@ -583,7 +661,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000469002",
@@ -606,7 +686,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000472007",
@@ -629,7 +711,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000477001",
@@ -652,7 +736,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1225000
+    "total": 1225000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000449001",
@@ -675,7 +761,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 640000
+    "total": 640000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000426007",
@@ -698,7 +786,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 640000
+    "total": 640000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000440012",
@@ -721,7 +811,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 640000
+    "total": 640000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000448001",
@@ -744,7 +836,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 76800
+    "total": 76800,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000441005",
@@ -767,7 +861,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 76800
+    "total": 76800,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000436003",
@@ -790,7 +886,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 76800
+    "total": 76800,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000341005",
@@ -813,7 +911,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 614500
+    "total": 614500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000324006",
@@ -836,7 +936,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 420000
+    "total": 420000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000335005",
@@ -859,7 +961,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 554400
+    "total": 554400,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000334008",
@@ -882,7 +986,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 110000
+    "total": 110000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000326002",
@@ -905,7 +1011,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 554400
+    "total": 554400,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000338001",
@@ -928,7 +1036,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 525000
+    "total": 525000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000304065",
@@ -951,7 +1061,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1440000
+    "total": 1440000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000311002",
@@ -974,7 +1086,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 420000
+    "total": 420000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000276001",
@@ -997,7 +1111,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 7500
+    "total": 7500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000274001",
@@ -1020,7 +1136,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 17500
+    "total": 17500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000248008",
@@ -1043,7 +1161,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 30000
+    "total": 30000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000260001",
@@ -1066,7 +1186,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 172500
+    "total": 172500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000258001",
@@ -1089,7 +1211,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 300000
+    "total": 300000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000257001",
@@ -1112,7 +1236,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 30000
+    "total": 30000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000256001",
@@ -1135,7 +1261,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 12500
+    "total": 12500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000254001",
@@ -1158,7 +1286,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 12500
+    "total": 12500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000252001",
@@ -1181,7 +1311,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5000
+    "total": 5000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000248001",
@@ -1204,7 +1336,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 7500
+    "total": 7500,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000244001",
@@ -1227,7 +1361,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5000
+    "total": 5000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000080008",
@@ -1250,7 +1386,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 2301
+    "total": 2301,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000079005",
@@ -1273,7 +1411,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5900000
+    "total": 5900000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000083002",
@@ -1296,7 +1436,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 472000
+    "total": 472000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000085001",
@@ -1319,7 +1461,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 472000
+    "total": 472000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000080001",
@@ -1342,7 +1486,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 472000
+    "total": 472000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000078001",
@@ -1365,7 +1511,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5900000
+    "total": 5900000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000076001",
@@ -1388,7 +1536,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5900000
+    "total": 5900000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000055035",
@@ -1411,7 +1561,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 47200
+    "total": 47200,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000068012",
@@ -1434,7 +1586,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5900000
+    "total": 5900000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000037031",
@@ -1457,7 +1611,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5900000
+    "total": 5900000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000038060",
@@ -1480,7 +1636,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 500000
+    "total": 500000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000044038",
@@ -1503,7 +1661,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5000000
+    "total": 5000000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000066034",
@@ -1526,7 +1686,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 500000
+    "total": 500000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000064023",
@@ -1549,7 +1711,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 40000
+    "total": 40000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000039044",
@@ -1572,7 +1736,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 500000
+    "total": 500000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000058012",
@@ -1595,7 +1761,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 1100000
+    "total": 1100000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000055024",
@@ -1618,7 +1786,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5000000
+    "total": 5000000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000057039",
@@ -1641,7 +1811,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000057032",
@@ -1664,7 +1836,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5000000
+    "total": 5000000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000041042",
@@ -1687,7 +1861,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 500000
+    "total": 500000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000042028",
@@ -1710,7 +1886,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000042021",
@@ -1733,7 +1911,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 240000
+    "total": 240000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000057023",
@@ -1756,7 +1936,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000071022",
@@ -1779,7 +1961,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000066023",
@@ -1802,7 +1986,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000071015",
@@ -1825,7 +2011,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000054020",
@@ -1848,7 +2036,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000055017",
@@ -1871,7 +2061,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000037024",
@@ -1894,7 +2086,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000049035",
@@ -1917,7 +2111,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 20000
+    "total": 20000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000062032",
@@ -1940,7 +2136,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000071008",
@@ -1963,7 +2161,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000042008",
@@ -1986,7 +2186,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000056017",
@@ -2009,7 +2211,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000045008",
@@ -2032,7 +2236,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000057016",
@@ -2055,7 +2261,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 40000
+    "total": 40000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000038041",
@@ -2078,7 +2286,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000049024",
@@ -2101,7 +2311,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000051035",
@@ -2124,7 +2336,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000038034",
@@ -2147,7 +2361,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000066015",
@@ -2170,7 +2386,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000071001",
@@ -2193,7 +2411,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000033294",
@@ -2216,7 +2436,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000041035",
@@ -2239,7 +2461,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 5000000
+    "total": 5000000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000041028",
@@ -2262,7 +2486,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000058005",
@@ -2285,7 +2511,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000068005",
@@ -2308,7 +2536,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 60000
+    "total": 60000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000039029",
@@ -2331,7 +2561,9 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   },
   {
     "id": "4080449000000062025",
@@ -2354,6 +2586,8 @@
     "grnCount": 0,
     "totalReceived": 0,
     "items": [],
-    "total": 10000
+    "total": 10000,
+    "terms": "",
+    "notes": ""
   }
 ]

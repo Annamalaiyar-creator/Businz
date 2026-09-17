@@ -48,6 +48,54 @@ const getDatabaseStore = async (key) => {
         try {
           const parsed = JSON.parse(primaryRecord.reason);
           // If disk file has more items than cloud record for inventory stores (e.g. 309 vs 37), merge with disk master
+          if (key === 'po_store') {
+            const diskPath = getStoreFilePath('po_store.json');
+            if (fs.existsSync(diskPath)) {
+              try {
+                const diskPOs = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+                if (Array.isArray(diskPOs) && diskPOs.length > 0) {
+                  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+                  const poMap = new Map();
+                  if (Array.isArray(parsed)) {
+                    parsed.forEach(p => {
+                      const k1 = normalize(p.poNo);
+                      const k2 = normalize(p.id);
+                      const k3 = normalize(p.zohoId);
+                      if (k1) poMap.set(k1, p);
+                      if (k2) poMap.set(k2, p);
+                      if (k3) poMap.set(k3, p);
+                    });
+                  }
+                  diskPOs.forEach(d => {
+                    const k1 = normalize(d.poNo);
+                    const k2 = normalize(d.id);
+                    const k3 = normalize(d.zohoId);
+                    const cloudItem = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || (k3 && poMap.get(k3)) || {};
+                    const mergedPO = {
+                      ...cloudItem,
+                      ...d,
+                      vendor: (d.vendor && d.vendor !== 'Vendor' && d.vendor !== 'Annamalaiyar' && d.vendor !== 'Fresh Vendor') ? d.vendor : (cloudItem.vendor || d.vendor),
+                      branch: d.branch || cloudItem.branch || '',
+                      contactPerson: d.contactPerson || cloudItem.contactPerson || '',
+                      gstNo: (d.gstNo && d.gstNo !== '—') ? d.gstNo : (cloudItem.gstNo || d.gstNo || ''),
+                      deliveryAddress: (d.deliveryAddress && d.deliveryAddress !== '—' && d.deliveryAddress !== 'Tamil Nadu, India') ? d.deliveryAddress : (cloudItem.deliveryAddress || d.deliveryAddress || '—'),
+                      billingAddress: (d.billingAddress && d.billingAddress !== '—') ? d.billingAddress : (cloudItem.billingAddress || d.billingAddress || '—'),
+                      items: (Array.isArray(d.items) && d.items.length > 0) ? d.items : (cloudItem.items || []),
+                      terms: (d.terms && d.terms.length > 50) ? d.terms : (cloudItem.terms || d.terms || ''),
+                      notes: d.notes || cloudItem.notes || '',
+                      amount: (d.amount && d.amount !== '₹0.00' && d.amount !== '₹ 0.00') ? d.amount : (cloudItem.amount || d.amount)
+                    };
+                    if (k1) poMap.set(k1, mergedPO);
+                    if (k2) poMap.set(k2, mergedPO);
+                    if (k3) poMap.set(k3, mergedPO);
+                  });
+                  const merged = Array.from(new Set(poMap.values()));
+                  supabaseMemoryStore[key] = merged;
+                  return merged;
+                }
+              } catch (_) {}
+            }
+          }
           if (key === 'raw_materials_store' || key === 'item_store') {
             const diskPath = getStoreFilePath(key + '.json');
             if (fs.existsSync(diskPath)) {
@@ -710,7 +758,8 @@ const loadLocalPOs = () => {
       if (Array.isArray(diskPOs) && diskPOs.length > 0) {
         const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
         const map = new Map();
-        diskPOs.forEach(p => {
+        // Index in-memory POs first
+        memPOs.forEach(p => {
           const k1 = normalize(p.poNo);
           const k2 = normalize(p.id);
           const k3 = normalize(p.zohoId);
@@ -718,13 +767,27 @@ const loadLocalPOs = () => {
           if (k2) map.set(k2, p);
           if (k3) map.set(k3, p);
         });
-        memPOs.forEach(p => {
-          const k1 = normalize(p.poNo);
-          const k2 = normalize(p.id);
-          const k3 = normalize(p.zohoId);
+        // Merge with diskPOs (disk has the authoritative local edits)
+        diskPOs.forEach(d => {
+          const k1 = normalize(d.poNo);
+          const k2 = normalize(d.id);
+          const k3 = normalize(d.zohoId);
           const existing = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3)) || {};
-          const items = (Array.isArray(p.items) && p.items.length > 0) ? p.items : (existing.items || []);
-          const mergedItem = { ...existing, ...p, items };
+          const items = (Array.isArray(d.items) && d.items.length > 0) ? d.items : (existing.items || []);
+          const mergedItem = {
+            ...existing,
+            ...d,
+            vendor: (d.vendor && d.vendor !== 'Vendor' && d.vendor !== 'Annamalaiyar' && d.vendor !== 'Fresh Vendor') ? d.vendor : (existing.vendor || d.vendor),
+            deliveryAddress: (d.deliveryAddress && d.deliveryAddress !== '—' && d.deliveryAddress !== 'Tamil Nadu, India') ? d.deliveryAddress : (existing.deliveryAddress || d.deliveryAddress || '—'),
+            billingAddress: (d.billingAddress && d.billingAddress !== '—') ? d.billingAddress : (existing.billingAddress || d.billingAddress || '—'),
+            branch: d.branch || existing.branch || '',
+            contactPerson: d.contactPerson || existing.contactPerson || '',
+            gstNo: (d.gstNo && d.gstNo !== '—') ? d.gstNo : (existing.gstNo || d.gstNo || ''),
+            terms: (d.terms && d.terms.length > 50) ? d.terms : (existing.terms || d.terms || ''),
+            notes: d.notes || existing.notes || '',
+            amount: (d.amount && d.amount !== '₹0.00' && d.amount !== '₹ 0.00') ? d.amount : (existing.amount || d.amount),
+            items
+          };
           if (k1) map.set(k1, mergedItem);
           if (k2) map.set(k2, mergedItem);
           if (k3) map.set(k3, mergedItem);
@@ -2809,6 +2872,15 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
         if (req.body.vendor && req.body.vendor.trim() !== '' && req.body.vendor !== 'Fresh Vendor') {
           localPOObj.vendor = req.body.vendor.trim();
         }
+        if (req.body.branch) localPOObj.branch = req.body.branch;
+        if (req.body.contactPerson) localPOObj.contactPerson = req.body.contactPerson;
+        if (req.body.gstNo) localPOObj.gstNo = req.body.gstNo;
+        if (delAddressStr) localPOObj.deliveryAddress = delAddressStr;
+        if (billAddressStr) localPOObj.billingAddress = billAddressStr;
+        if (termsStr) localPOObj.terms = termsStr;
+        if (notesStr) localPOObj.notes = notesStr;
+        if (req.body.amount && req.body.amount !== '₹0.00' && req.body.amount !== '₹ 0.00') localPOObj.amount = req.body.amount;
+        if (Array.isArray(req.body.items) && req.body.items.length > 0) localPOObj.items = req.body.items;
       }
 
       if (isNoApproval) {
@@ -3718,18 +3790,24 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           ? lpMatch.amount
           : `₹ ${Number(rawTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+        const effectiveVendor = (lpMatch && lpMatch.vendor && lpMatch.vendor !== 'Fresh Vendor' && lpMatch.vendor !== 'Vendor' && (po.vendor_name === 'Annamalaiyar' ? lpMatch.vendor : (lpMatch.vendor || po.vendor_name))) || (lpMatch ? lpMatch.vendor : null) || po.vendor_name || 'Vendor';
+        const effectiveDelAddr = (lpMatch && lpMatch.deliveryAddress && lpMatch.deliveryAddress !== '—' && lpMatch.deliveryAddress !== 'Tamil Nadu, India') ? lpMatch.deliveryAddress : (lpMatch?.deliveryAddress || '—');
+        const effectiveBillAddr = (lpMatch && lpMatch.billingAddress && lpMatch.billingAddress !== '—') ? lpMatch.billingAddress : (lpMatch?.billingAddress || '—');
+        const effectiveTerms = (lpMatch && lpMatch.terms && lpMatch.terms.length > 50) ? lpMatch.terms : (lpMatch?.terms || po.terms || '');
+        const effectiveItems = (lpMatch && lpMatch.items && Array.isArray(lpMatch.items) && lpMatch.items.length > 0) ? lpMatch.items : [];
+
         return {
           id: po.purchaseorder_id,
           poNo: po.purchaseorder_number,
           zohoId: po.purchaseorder_id,
-          vendor: (lpMatch && lpMatch.vendor && lpMatch.vendor !== 'Fresh Vendor') ? lpMatch.vendor : (po.vendor_name || 'Vendor'),
+          vendor: effectiveVendor,
           branch: (lpMatch && lpMatch.branch) ? lpMatch.branch : (po.branch_name || ''),
           contactPerson: (lpMatch && lpMatch.contactPerson) ? lpMatch.contactPerson : (po.contact_person_name || ''),
           contactNo: (lpMatch && lpMatch.contactNo) ? lpMatch.contactNo : (po.phone || ''),
           email: (lpMatch && lpMatch.email) ? lpMatch.email : (po.email || ''),
           gstNo: effectiveGst,
-          deliveryAddress: (lpMatch && lpMatch.deliveryAddress && lpMatch.deliveryAddress !== '—' && lpMatch.deliveryAddress !== '') ? lpMatch.deliveryAddress : '—',
-          billingAddress: (lpMatch && lpMatch.billingAddress && lpMatch.billingAddress !== '—' && lpMatch.billingAddress !== '') ? lpMatch.billingAddress : '—',
+          deliveryAddress: effectiveDelAddr,
+          billingAddress: effectiveBillAddr,
           poDate: po.date,
           deliveryDate: po.delivery_date || (lpMatch ? lpMatch.deliveryDate : '—'),
           paymentTerms: (lpMatch && lpMatch.paymentTerms && lpMatch.paymentTerms !== 'Net 30 Days') ? lpMatch.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
@@ -3744,7 +3822,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           otherCharges: (lpMatch && lpMatch.otherCharges !== undefined) ? lpMatch.otherCharges : (po.adjustment || 0),
           discountPct: (lpMatch && lpMatch.discountPct !== undefined) ? lpMatch.discountPct : (po.discount_percent || 0),
           notes: (lpMatch && lpMatch.notes) ? lpMatch.notes : (po.notes || ''),
-          terms: (lpMatch && lpMatch.terms) ? lpMatch.terms : (po.terms || ''),
+          terms: effectiveTerms,
           approvalRequired: lpMatch ? lpMatch.approvalRequired : 'YES',
           approver: lpMatch ? lpMatch.approver : '',
           approvalPriority: lpMatch ? lpMatch.approvalPriority : '',
@@ -3753,7 +3831,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           statusType: statusType,
           grnCount: matchingGRNs.length,
           totalReceived,
-          items: (lpMatch && lpMatch.items && Array.isArray(lpMatch.items) && lpMatch.items.length > 0) ? lpMatch.items : []
+          items: effectiveItems
         };
       });
 
@@ -3771,16 +3849,25 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
 
         if (existsIdx !== -1) {
           // Always preserve non-empty items if translated currently has empty items
-          if (Array.isArray(lp.items) && lp.items.length > 0 && (!Array.isArray(translated[existsIdx].items) || translated[existsIdx].items.length === 0)) {
+          if (Array.isArray(lp.items) && lp.items.length > 0) {
             translated[existsIdx].items = lp.items;
           }
-          if (lp.notes && !translated[existsIdx].notes) translated[existsIdx].notes = lp.notes;
-          if (lp.terms && !translated[existsIdx].terms) translated[existsIdx].terms = lp.terms;
-          if (lp.deliveryAddress && lp.deliveryAddress !== '—' && (!translated[existsIdx].deliveryAddress || translated[existsIdx].deliveryAddress === '—')) {
+          if (lp.vendor && lp.vendor !== 'Vendor' && lp.vendor !== 'Fresh Vendor' && lp.vendor !== 'Annamalaiyar') {
+            translated[existsIdx].vendor = lp.vendor;
+          }
+          if (lp.branch) translated[existsIdx].branch = lp.branch;
+          if (lp.contactPerson) translated[existsIdx].contactPerson = lp.contactPerson;
+          if (lp.gstNo && lp.gstNo !== '—') translated[existsIdx].gstNo = lp.gstNo;
+          if (lp.notes) translated[existsIdx].notes = lp.notes;
+          if (lp.terms && lp.terms.length > 50) translated[existsIdx].terms = lp.terms;
+          if (lp.deliveryAddress && lp.deliveryAddress !== '—' && lp.deliveryAddress !== 'Tamil Nadu, India') {
             translated[existsIdx].deliveryAddress = lp.deliveryAddress;
           }
-          if (lp.billingAddress && lp.billingAddress !== '—' && (!translated[existsIdx].billingAddress || translated[existsIdx].billingAddress === '—')) {
+          if (lp.billingAddress && lp.billingAddress !== '—') {
             translated[existsIdx].billingAddress = lp.billingAddress;
+          }
+          if (lp.amount && lp.amount !== '₹0.00' && lp.amount !== '₹ 0.00') {
+            translated[existsIdx].amount = lp.amount;
           }
           if (lp.priority && !translated[existsIdx].priority) translated[existsIdx].priority = lp.priority;
           if (lp.scope && !translated[existsIdx].scope) translated[existsIdx].scope = lp.scope;
@@ -4929,7 +5016,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         return {
           name: (localItem && localItem.name) ? localItem.name : (item.name || item.itemName || 'Material Item'),
           description: (localItem && localItem.description) ? localItem.description : (item.description || item.desc || ''),
-          account: item.account || item.account_name || (localItem ? localItem.account : 'Cost of Goods Sold'),
+          account: (localItem && localItem.account) ? localItem.account : (item.account || item.account_name || 'Cost of Goods Sold'),
           qty: ordered,
           unit: item.unit || (localItem ? localItem.unit : 'NOS'),
           rate: Number(item.rate !== undefined ? item.rate : (item.unitPrice || (localItem ? localItem.rate : 0))),
@@ -5016,37 +5103,44 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         ? matchedLocalPO.billingAddress
         : (rawBillAddr || '—');
 
+      const effectiveVendor = (matchedLocalPO && matchedLocalPO.vendor && matchedLocalPO.vendor !== 'Fresh Vendor' && matchedLocalPO.vendor !== 'Vendor' && (po.vendor_name === 'Annamalaiyar' ? matchedLocalPO.vendor : (matchedLocalPO.vendor || po.vendor_name))) || (matchedLocalPO ? matchedLocalPO.vendor : null) || po.vendor_name || 'Vendor';
+      const effectiveDelAddr = (matchedLocalPO && matchedLocalPO.deliveryAddress && matchedLocalPO.deliveryAddress !== '—' && matchedLocalPO.deliveryAddress !== 'Tamil Nadu, India') ? matchedLocalPO.deliveryAddress : (delAddrFormatted || '—');
+      const effectiveBillAddr = (matchedLocalPO && matchedLocalPO.billingAddress && matchedLocalPO.billingAddress !== '—') ? matchedLocalPO.billingAddress : (billAddrFormatted || '—');
+      const effectiveTerms = (matchedLocalPO && matchedLocalPO.terms && matchedLocalPO.terms.length > 50) ? matchedLocalPO.terms : (po.terms || matchedLocalPO?.terms || '');
+      const effectiveItems = (items && items.length > 0) ? items : (matchedLocalPO?.items || []);
+      const effectiveAmount = (matchedLocalPO && matchedLocalPO.amount && matchedLocalPO.amount !== '₹0.00' && matchedLocalPO.amount !== '₹ 0.00') ? matchedLocalPO.amount : `₹${Number(po.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
       const translated = {
         id: po.purchaseorder_id,
         poNo: po.purchaseorder_number,
-        vendor: (matchedLocalPO && matchedLocalPO.vendor && matchedLocalPO.vendor !== 'Fresh Vendor') ? matchedLocalPO.vendor : (po.vendor_name || 'Vendor'),
-        branch: po.branch_name || (matchedLocalPO ? matchedLocalPO.branch : ''),
-        contactPerson: po.contact_person_name || (matchedLocalPO ? matchedLocalPO.contactPerson : ''),
+        vendor: effectiveVendor,
+        branch: (matchedLocalPO && matchedLocalPO.branch) ? matchedLocalPO.branch : (po.branch_name || ''),
+        contactPerson: (matchedLocalPO && matchedLocalPO.contactPerson) ? matchedLocalPO.contactPerson : (po.contact_person_name || ''),
         contactNo: (matchedLocalPO && matchedLocalPO.contactNo) ? matchedLocalPO.contactNo : (po.phone || po.mobile || ''),
         email: (matchedLocalPO && matchedLocalPO.email) ? matchedLocalPO.email : (po.email || ''),
-        gstNo: (matchedLocalPO && matchedLocalPO.gstNo) ? matchedLocalPO.gstNo : (po.gst_no || po.gstin || po.tax_registration_number || ''),
-        deliveryAddress: delAddrFormatted || '—',
-        billingAddress: billAddrFormatted || '—',
+        gstNo: (matchedLocalPO && matchedLocalPO.gstNo && matchedLocalPO.gstNo !== '—') ? matchedLocalPO.gstNo : (po.gst_no || po.gstin || po.tax_registration_number || ''),
+        deliveryAddress: effectiveDelAddr,
+        billingAddress: effectiveBillAddr,
         poDate: po.date,
         deliveryDate: po.delivery_date || (matchedLocalPO ? matchedLocalPO.deliveryDate : '—'),
-        paymentTerms: (matchedLocalPO && matchedLocalPO.paymentTerms && matchedLocalPO.paymentTerms !== 'Net 30 Days') ? matchedLocalPO.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
-        purchaser: po.purchaser_name || (matchedLocalPO ? matchedLocalPO.purchaser : '—'),
-        shipmentPref: po.shipment_preference || (matchedLocalPO ? matchedLocalPO.shipmentPref : 'Road Transport'),
-        currency: po.currency_code || 'INR',
-        project: po.project_name || (matchedLocalPO ? matchedLocalPO.project : ''),
-        priority: po.priority || (matchedLocalPO ? matchedLocalPO.priority : 'High'),
-        items: items,
-        totalOrderedQty,
-        totalReceivedQty,
-        totalRemainingQty: Math.max(0, totalOrderedQty - totalReceivedQty),
-        receivingProgressPct: totalOrderedQty > 0 ? ((totalReceivedQty / totalOrderedQty) * 100).toFixed(1) : 0,
+        paymentTerms: (matchedLocalPO && matchedLocalPO.paymentTerms && matchedLocalPO.paymentTerms !== 'Net 30 Days' && matchedLocalPO.paymentTerms !== 'Due on Receipt') ? matchedLocalPO.paymentTerms : (po.payment_terms_label || matchedLocalPO?.paymentTerms || 'Net 30 Days'),
+        purchaser: (matchedLocalPO && matchedLocalPO.purchaser && matchedLocalPO.purchaser !== '—') ? matchedLocalPO.purchaser : (po.purchaser_name || '—'),
+        shipmentPref: (matchedLocalPO && matchedLocalPO.shipmentPref) ? matchedLocalPO.shipmentPref : (po.shipment_preference || 'Road Transport'),
+        currency: po.currency_code || (matchedLocalPO ? matchedLocalPO.currency : 'INR'),
+        project: (matchedLocalPO && matchedLocalPO.project) ? matchedLocalPO.project : (po.project_name || ''),
+        priority: (matchedLocalPO && matchedLocalPO.priority) ? matchedLocalPO.priority : (po.priority || 'High'),
+        items: effectiveItems,
+        totalOrderedQty: (matchedLocalPO && matchedLocalPO.totalOrderedQty) ? matchedLocalPO.totalOrderedQty : totalOrderedQty,
+        totalReceivedQty: (matchedLocalPO && matchedLocalPO.totalReceivedQty) ? matchedLocalPO.totalReceivedQty : totalReceivedQty,
+        totalRemainingQty: (matchedLocalPO && matchedLocalPO.totalRemainingQty) ? matchedLocalPO.totalRemainingQty : Math.max(0, totalOrderedQty - totalReceivedQty),
+        receivingProgressPct: (matchedLocalPO && matchedLocalPO.receivingProgressPct) ? matchedLocalPO.receivingProgressPct : (totalOrderedQty > 0 ? ((totalReceivedQty / totalOrderedQty) * 100).toFixed(1) : 0),
         grnHistory: matchingGRNs,
-        shippingCharges: po.shipping_charge || (matchedLocalPO ? matchedLocalPO.shippingCharges : 0),
-        otherCharges: po.adjustment || (matchedLocalPO ? matchedLocalPO.otherCharges : 0),
-        discountPct: po.discount_percent || (matchedLocalPO ? matchedLocalPO.discountPct : 0),
-        notes: po.notes || (matchedLocalPO ? matchedLocalPO.notes : ''),
-        terms: po.terms || (matchedLocalPO ? matchedLocalPO.terms : ''),
-        amount: `₹${Number(po.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        shippingCharges: (matchedLocalPO && matchedLocalPO.shippingCharges !== undefined) ? matchedLocalPO.shippingCharges : (po.shipping_charge || 0),
+        otherCharges: (matchedLocalPO && matchedLocalPO.otherCharges !== undefined) ? matchedLocalPO.otherCharges : (po.adjustment || 0),
+        discountPct: (matchedLocalPO && matchedLocalPO.discountPct !== undefined) ? matchedLocalPO.discountPct : (po.discount_percent || 0),
+        notes: (matchedLocalPO && matchedLocalPO.notes) ? matchedLocalPO.notes : (po.notes || ''),
+        terms: effectiveTerms,
+        amount: effectiveAmount,
         status: statusText,
         statusType: statusType,
         approvedBy: matchedLocalPO ? matchedLocalPO.approvedBy : undefined,
