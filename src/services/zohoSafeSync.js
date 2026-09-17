@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate } from '../utils/supabaseDataSync';
 
 /**
  * Universal Safe Synchronizer for Zoho Books + Supabase in Control Room.
@@ -52,9 +52,39 @@ export async function getSafeZohoPOs() {
               branch: cloudMatch.branch || zohoPo.branch || '',
               contactPerson: cloudMatch.contactPerson || zohoPo.contactPerson || '',
               gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (zohoPo.gstNo || '—'),
-              status: (cloudMatch.status === 'MD Approved' || cloudMatch.statusType === 'md_approved' || cloudMatch.status === 'Payment Processed' || cloudMatch.statusType === 'payment_processed' || cloudMatch.status === 'Proceed PO' || cloudMatch.statusType === 'proceed_po' || cloudMatch.status === 'REJECTED') ? cloudMatch.status : (zohoPo.status || cloudMatch.status),
-              statusType: (cloudMatch.status === 'MD Approved' || cloudMatch.statusType === 'md_approved' || cloudMatch.status === 'Payment Processed' || cloudMatch.statusType === 'payment_processed' || cloudMatch.status === 'Proceed PO' || cloudMatch.statusType === 'proceed_po' || cloudMatch.status === 'REJECTED') ? cloudMatch.statusType : (zohoPo.statusType || cloudMatch.statusType),
+              status: (() => {
+                const isAdv = (st, stType, approver) => {
+                  const s = String(st || '').toLowerCase();
+                  const stt = String(stType || '').toLowerCase();
+                  return s.includes('md approved') || stt.includes('md_approved') ||
+                         s.includes('payment') || stt.includes('payment') ||
+                         s.includes('proceed') || stt.includes('proceed') ||
+                         s.includes('closed') || stt.includes('closed') ||
+                         s.includes('rejected') || stt.includes('rejected') ||
+                         Boolean(approver);
+                };
+                if (isAdv(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy)) return cloudMatch.status;
+                if (isAdv(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy)) return zohoPo.status;
+                return zohoPo.status || cloudMatch.status || 'Draft';
+              })(),
+              statusType: (() => {
+                const isAdv = (st, stType, approver) => {
+                  const s = String(st || '').toLowerCase();
+                  const stt = String(stType || '').toLowerCase();
+                  return s.includes('md approved') || stt.includes('md_approved') ||
+                         s.includes('payment') || stt.includes('payment') ||
+                         s.includes('proceed') || stt.includes('proceed') ||
+                         s.includes('closed') || stt.includes('closed') ||
+                         s.includes('rejected') || stt.includes('rejected') ||
+                         Boolean(approver);
+                };
+                if (isAdv(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy)) return cloudMatch.statusType || 'md_approved';
+                if (isAdv(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy)) return zohoPo.statusType || 'md_approved';
+                return zohoPo.statusType || cloudMatch.statusType || 'draft';
+              })(),
               approvedBy: cloudMatch.approvedBy || zohoPo.approvedBy,
+              approvalDate: cloudMatch.approvalDate || zohoPo.approvalDate,
+              approvalTime: cloudMatch.approvalTime || zohoPo.approvalTime,
               approvalRemarks: cloudMatch.approvalRemarks || zohoPo.approvalRemarks,
               items: preservedItems,
               notes: cloudMatch.notes || zohoPo.notes || '',
@@ -142,8 +172,8 @@ export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
       updatedList = [newOrUpdatedPO, ...cloudList];
     }
 
-    // 2. Persist immediately to Supabase Cloud
-    saveCloudStore('po_store', updatedList);
+    // 2. Persist immediately to Supabase Cloud & Local Server with zero debounce delay
+    await saveCloudStoreImmediate('po_store', updatedList);
 
     // 3. Post to Zoho Books API ONLY when explicitly asked (avoids 3x duplicate creations)
     if (syncWithZoho) {

@@ -1327,10 +1327,32 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
-          if (detail && detail.poNo) {
+            const isAdv = (p) => {
+              const s = String(p?.status || '').toLowerCase();
+              const st = String(p?.statusType || '').toLowerCase();
+              return s.includes('md approved') || st.includes('md_approved') ||
+                     s.includes('payment') || st.includes('payment') ||
+                     s.includes('proceed') || st.includes('proceed') ||
+                     s.includes('closed') || st.includes('closed') ||
+                     s.includes('rejected') || st.includes('rejected') ||
+                     Boolean(p?.approvedBy);
+            };
+            const effStatus = isAdv(enrichedPo) ? enrichedPo.status : (isAdv(detail) ? detail.status : (detail.status || enrichedPo.status));
+            const effStatusType = isAdv(enrichedPo) ? enrichedPo.statusType : (isAdv(detail) ? detail.statusType : (detail.statusType || enrichedPo.statusType));
+            const effApprovedBy = enrichedPo.approvedBy || detail.approvedBy;
+            const effApprovalDate = enrichedPo.approvalDate || detail.approvalDate;
+            const effApprovalTime = enrichedPo.approvalTime || detail.approvalTime;
+            const effApprovalRemarks = enrichedPo.approvalRemarks || detail.approvalRemarks;
+
             const merged = {
               ...enrichedPo,
               ...detail,
+              status: effStatus,
+              statusType: effStatusType,
+              approvedBy: effApprovedBy,
+              approvalDate: effApprovalDate,
+              approvalTime: effApprovalTime,
+              approvalRemarks: effApprovalRemarks,
               vendor: (enrichedPo.vendor && enrichedPo.vendor !== 'Vendor' && enrichedPo.vendor !== 'Annamalaiyar' && enrichedPo.vendor !== 'Fresh Vendor') 
                 ? enrichedPo.vendor 
                 : ((detail.vendor && detail.vendor !== 'Vendor' && detail.vendor !== 'Annamalaiyar') ? detail.vendor : (enrichedPo.vendor || detail.vendor || 'Vendor')),
@@ -1359,7 +1381,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               sessionStorage.setItem('controlroom_viewing_po', JSON.stringify(merged));
             } catch (_) {}
           }
-        }
       } catch (err) {
         console.error("Failed to load PO details from Zoho", err);
       } finally {
@@ -1858,8 +1879,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO Date</th>
                       <th style={{ width: '16%', minWidth: '140px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Expected Delivery</th>
                       <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                      <th style={{ width: '12%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
-                      <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Action</th>
+                      <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1886,9 +1906,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           </td>
                           <td style={{ textAlign: 'center', padding: '12px 14px' }}>
                             <div className="skeleton-shimmer" style={{ width: '80px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
-                          </td>
-                          <td style={{ textAlign: 'center', padding: '12px 14px' }}>
-                            <div className="skeleton-shimmer" style={{ width: '70px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
                           </td>
                         </tr>
                       ))
@@ -1932,60 +1949,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             <td style={{ fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>{po.amount}</td>
                             <td style={{ textAlign: 'center' }}>
                               {renderStatusBadge(po.statusType, po.status)}
-                            </td>
-                            <td style={{ textAlign: 'center', padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                              {(() => {
-                                const isApproved = po.status === 'MD Approved' || po.statusType === 'md_approved' || Boolean(po.approvedBy);
-                                const isPaymentDone = po.status === 'Payment Processed' || po.statusType === 'payment_processed';
-                                const isProceed = po.status === 'Proceed PO' || po.statusType === 'proceed_po';
-                                const isClosed = String(po.status || '').includes('CLOSED');
-
-                                if (isClosed) {
-                                  return <span style={{ fontSize: '11px', fontWeight: '700', color: '#15803D' }}>Closed</span>;
-                                }
-                                if (isProceed) {
-                                  return <span style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490' }}>Proceed PO</span>;
-                                }
-                                if (isPaymentDone) {
-                                  return <span style={{ fontSize: '11px', fontWeight: '700', color: '#92400E' }}>Payment Done</span>;
-                                }
-                                if (isApproved) {
-                                  return (
-                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                      <CheckCircle size={13} /> Approved
-                                    </span>
-                                  );
-                                }
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setApprovingPo(po);
-                                    }}
-                                    title="Approve Purchase Order as MD"
-                                    style={{
-                                      backgroundColor: '#16A34A',
-                                      color: '#FFFFFF',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      padding: '5px 12px',
-                                      fontSize: '11.5px',
-                                      fontWeight: '700',
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      boxShadow: '0 1px 2px rgba(22, 163, 74, 0.25)',
-                                      transition: 'all 0.15s ease'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                                  >
-                                    <CheckCircle size={13} /> Approve as MD
-                                  </button>
-                                );
-                              })()}
                             </td>
                           </tr>
                         );

@@ -71,9 +71,38 @@ const getDatabaseStore = async (key) => {
                     const k2 = normalize(d.id);
                     const k3 = normalize(d.zohoId);
                     const cloudItem = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || (k3 && poMap.get(k3)) || {};
+                    const isAdv = (p) => {
+                      const s = String(p?.status || '').toLowerCase();
+                      const st = String(p?.statusType || '').toLowerCase();
+                      return s.includes('md approved') || st.includes('md_approved') ||
+                             s.includes('payment') || st.includes('payment') ||
+                             s.includes('proceed') || st.includes('proceed') ||
+                             s.includes('closed') || st.includes('closed') ||
+                             s.includes('rejected') || st.includes('rejected') ||
+                             Boolean(p?.approvedBy);
+                    };
+                    const dAdv = isAdv(d);
+                    const cloudAdv = isAdv(cloudItem);
+                    const effStatus = dAdv ? d.status : (cloudAdv ? cloudItem.status : (d.status || cloudItem.status || 'Draft'));
+                    const effStatusType = dAdv ? (d.statusType || 'md_approved') : (cloudAdv ? (cloudItem.statusType || 'md_approved') : (d.statusType || cloudItem.statusType || 'draft'));
+                    const effApprovedBy = d.approvedBy || cloudItem.approvedBy;
+                    const effApprovalDate = d.approvalDate || cloudItem.approvalDate;
+                    const effApprovalTime = d.approvalTime || cloudItem.approvalTime;
+                    const effApprovalRemarks = d.approvalRemarks || cloudItem.approvalRemarks;
+                    const effPaymentDetails = d.paymentDetails || cloudItem.paymentDetails;
+                    const effProceedDetails = d.proceedDetails || cloudItem.proceedDetails;
+
                     const mergedPO = {
                       ...cloudItem,
                       ...d,
+                      status: effStatus,
+                      statusType: effStatusType,
+                      approvedBy: effApprovedBy,
+                      approvalDate: effApprovalDate,
+                      approvalTime: effApprovalTime,
+                      approvalRemarks: effApprovalRemarks,
+                      paymentDetails: effPaymentDetails,
+                      proceedDetails: effProceedDetails,
                       vendor: (d.vendor && d.vendor !== 'Vendor' && d.vendor !== 'Annamalaiyar' && d.vendor !== 'Fresh Vendor') ? d.vendor : (cloudItem.vendor || d.vendor),
                       branch: d.branch || cloudItem.branch || '',
                       contactPerson: d.contactPerson || cloudItem.contactPerson || '',
@@ -3829,6 +3858,12 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           amount: calcTotalWithGst,
           status: statusText,
           statusType: statusType,
+          approvedBy: (lpMatch && lpMatch.approvedBy) ? lpMatch.approvedBy : (po.approvedBy || undefined),
+          approvalDate: (lpMatch && lpMatch.approvalDate) ? lpMatch.approvalDate : undefined,
+          approvalTime: (lpMatch && lpMatch.approvalTime) ? lpMatch.approvalTime : undefined,
+          approvalRemarks: (lpMatch && lpMatch.approvalRemarks) ? lpMatch.approvalRemarks : undefined,
+          paymentDetails: (lpMatch && lpMatch.paymentDetails) ? lpMatch.paymentDetails : undefined,
+          proceedDetails: (lpMatch && lpMatch.proceedDetails) ? lpMatch.proceedDetails : undefined,
           grnCount: matchingGRNs.length,
           totalReceived,
           items: effectiveItems
@@ -3838,13 +3873,17 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
       // Apply local status overrides and append newly created local POs that Zoho hasn't indexed yet
       const finalLocalPOs = loadLocalPOs();
       finalLocalPOs.forEach(lp => {
-        const lpPoNo = String(lp.poNo || lp.id || '').toLowerCase();
-        const lpZohoId = String(lp.zohoId || '').toLowerCase();
+        const lpPoNo = normalize(lp.poNo);
+        const lpId = normalize(lp.id);
+        const lpZohoId = normalize(lp.zohoId);
         
         const existsIdx = translated.findIndex(p => {
-          const pNo = String(p.poNo || '').toLowerCase();
-          const pId = String(p.id || '').toLowerCase();
-          return (lpPoNo && (pNo === lpPoNo || pId === lpPoNo)) || (lpZohoId && pId === lpZohoId);
+          const pNo = normalize(p.poNo);
+          const pId = normalize(p.id);
+          const pZohoId = normalize(p.zohoId);
+          return (lpPoNo && (pNo === lpPoNo || pId === lpPoNo)) || 
+                 (lpId && (pId === lpId || pNo === lpId)) ||
+                 (lpZohoId && (pZohoId === lpZohoId || pId === lpZohoId));
         });
 
         if (existsIdx !== -1) {
@@ -3878,13 +3917,19 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           if (lp.purchaser && lp.purchaser !== '—' && (!translated[existsIdx].purchaser || translated[existsIdx].purchaser === '—')) {
             translated[existsIdx].purchaser = lp.purchaser;
           }
+          if (lp.approvedBy) translated[existsIdx].approvedBy = lp.approvedBy;
+          if (lp.approvalDate) translated[existsIdx].approvalDate = lp.approvalDate;
+          if (lp.approvalTime) translated[existsIdx].approvalTime = lp.approvalTime;
+          if (lp.approvalRemarks) translated[existsIdx].approvalRemarks = lp.approvalRemarks;
+          if (lp.paymentDetails) translated[existsIdx].paymentDetails = lp.paymentDetails;
+          if (lp.proceedDetails) translated[existsIdx].proceedDetails = lp.proceedDetails;
           if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po') {
             translated[existsIdx].status = 'Proceed PO';
             translated[existsIdx].statusType = 'proceed_po';
           } else if (lp.status === 'Payment Processed' || lp.statusType === 'payment_processed') {
             translated[existsIdx].status = 'Payment Processed';
             translated[existsIdx].statusType = 'payment_processed';
-          } else if (lp.status === 'MD Approved' || lp.statusType === 'md_approved') {
+          } else if (lp.status === 'MD Approved' || lp.statusType === 'md_approved' || Boolean(lp.approvedBy)) {
             translated[existsIdx].status = 'MD Approved';
             translated[existsIdx].statusType = 'md_approved';
           } else if (lp.status === 'Draft / Pending Approval' || lp.statusType === 'pending') {
@@ -4975,14 +5020,15 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
       let totalReceivedQty = 0;
 
       const localPOs = loadLocalPOs();
-      const cleanZohoId = String(po.purchaseorder_id || '').trim().toLowerCase();
-      const cleanPoNo = String(po.purchaseorder_number || poNo || '').trim().toLowerCase();
+      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+      const cleanZohoId = normalize(po.purchaseorder_id);
+      const cleanPoNo = normalize(po.purchaseorder_number || poNo);
       const matchedLocalPO = localPOs.find(p => {
-        const lpId = String(p.id || '').trim().toLowerCase();
-        const lpNo = String(p.poNo || '').trim().toLowerCase();
-        const lpZohoId = String(p.zohoId || '').trim().toLowerCase();
-        return (cleanZohoId && (lpId === cleanZohoId || lpZohoId === cleanZohoId)) ||
-               (cleanPoNo && (lpNo === cleanPoNo || lpId === cleanPoNo));
+        const lpId = normalize(p.id);
+        const lpNo = normalize(p.poNo);
+        const lpZohoId = normalize(p.zohoId);
+        return (cleanZohoId && (lpId === cleanZohoId || lpZohoId === cleanZohoId || lpNo === cleanZohoId)) ||
+               (cleanPoNo && (lpNo === cleanPoNo || lpId === cleanPoNo || lpZohoId === cleanPoNo));
       });
 
       const rawLineItems = (po.line_items && Array.isArray(po.line_items) && po.line_items.length > 0)
@@ -5056,7 +5102,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
       } else if (matchedLocalPO && (matchedLocalPO.status === 'Payment Processed' || matchedLocalPO.statusType === 'payment_processed')) {
         statusType = 'payment_processed';
         statusText = 'Payment Processed';
-      } else if (matchedLocalPO && (matchedLocalPO.status === 'MD Approved' || matchedLocalPO.statusType === 'md_approved')) {
+      } else if (matchedLocalPO && (matchedLocalPO.status === 'MD Approved' || matchedLocalPO.statusType === 'md_approved' || Boolean(matchedLocalPO.approvedBy))) {
         statusType = 'md_approved';
         statusText = 'MD Approved';
       } else if (matchedLocalPO && matchedLocalPO.status === 'REJECTED') {
@@ -5662,12 +5708,14 @@ app.post('/api/zoho/purchaseorders/:id/approve', async (req, res) => {
 
   // Update local PO store
   const localPOs = loadLocalPOs();
-  const cleanTarget = String(targetId).trim().toLowerCase();
-  const matchedIdx = localPOs.findIndex(p => 
-    String(p.id || '').trim().toLowerCase() === cleanTarget || 
-    String(p.poNo || '').trim().toLowerCase() === cleanTarget ||
-    String(p.zohoId || '').trim().toLowerCase() === cleanTarget
-  );
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+  const matchedIdx = localPOs.findIndex(p => {
+    const pId = normalize(p.id);
+    const pNo = normalize(p.poNo);
+    const pZohoId = normalize(p.zohoId);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget || pZohoId === cleanTarget);
+  });
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'MD Approved';
     localPOs[matchedIdx].statusType = 'md_approved';
@@ -5712,7 +5760,14 @@ app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
   const paymentImageMeta = req.body.paymentImageMeta || null;
 
   const localPOs = loadLocalPOs();
-  const matchedIdx = localPOs.findIndex(p => p.id === targetId || p.poNo === targetId);
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+  const matchedIdx = localPOs.findIndex(p => {
+    const pId = normalize(p.id);
+    const pNo = normalize(p.poNo);
+    const pZohoId = normalize(p.zohoId);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget || pZohoId === cleanTarget);
+  });
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'Payment Processed';
     localPOs[matchedIdx].statusType = 'payment_processed';
@@ -5773,7 +5828,14 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
   const proceedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
   const localPOs = loadLocalPOs();
-  const matchedIdx = localPOs.findIndex(p => p.id === targetId || p.poNo === targetId);
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+  const matchedIdx = localPOs.findIndex(p => {
+    const pId = normalize(p.id);
+    const pNo = normalize(p.poNo);
+    const pZohoId = normalize(p.zohoId);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget || pZohoId === cleanTarget);
+  });
   const matchedPO = matchedIdx !== -1 ? localPOs[matchedIdx] : null;
   const vendorEmail = (incomingEmail && incomingEmail !== '—' && incomingEmail.includes('@'))
     ? incomingEmail.trim()
