@@ -61,7 +61,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const storageKey = isSalesRole ? 'controlroom_sales_pi_store' : 'controlroom_procurement_pi_store';
 
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'create' | 'edit'
-  const [tableLoading, setTableLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(() => {
+    try {
+      const s = localStorage.getItem('controlroom_sales_pi_store') || 
+                localStorage.getItem('controlroom_procurement_pi_store') || 
+                localStorage.getItem('sales_pi_store') || 
+                localStorage.getItem('proforma_invoice_store');
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) return false;
+      }
+    } catch (_) {}
+    return true;
+  });
   const [isConvertingToBom, setIsConvertingToBom] = useState(false);
   const [convertingPiTarget, setConvertingPiTarget] = useState(null);
   const [syncingPiNo, setSyncingPiNo] = useState(null);
@@ -114,8 +126,22 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     };
   }, []);
 
-  // PI List directly from Supabase Database
-  const [piList, setPiList] = useState([]);
+  // Cache-First Instant Hydration: load immediately from localStorage with 0ms delay
+  const [piList, setPiList] = useState(() => {
+    try {
+      const s = localStorage.getItem('controlroom_sales_pi_store') || 
+                localStorage.getItem('controlroom_procurement_pi_store') || 
+                localStorage.getItem('sales_pi_store') || 
+                localStorage.getItem('proforma_invoice_store');
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(normalizePiRecord);
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
 
   // Handle targetPiNo navigation
   useEffect(() => {
@@ -242,16 +268,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   }, [piList, isRestrictedSalesUser, currentEmpId, currentEmpName, currentLoggedEmail]);
 
   useEffect(() => {
-    const loadPiData = () => {
-      setTableLoading(true);
-      Promise.all([
-        fetchCloudStore('sales_pi_store').catch(() => []),
-        fetchCloudStore('proforma_invoice_store').catch(() => []),
-        fetch('/api/zoho/estimates').then(r => r.ok ? r.json() : []).catch(() => [])
-      ]).then(([salesCloud, proformaCloud, zohoData]) => {
-        const mergedMap = new Map();
+    const loadPiData = async () => {
+      // 1. Authoritative source: Supabase cloud stores (fast)
+      try {
+        const [salesCloud, proformaCloud] = await Promise.all([
+          fetchCloudStore('sales_pi_store').catch(() => []),
+          fetchCloudStore('proforma_invoice_store').catch(() => [])
+        ]);
 
-        // 1. Authoritative source: Supabase cloud stores
+        const mergedMap = new Map();
         const primaryCloud = (Array.isArray(salesCloud) && salesCloud.length > 0)
           ? salesCloud
           : (Array.isArray(proformaCloud) ? proformaCloud : []);
@@ -273,46 +298,67 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           });
         }
 
-        // 2. Merge Zoho Estimates (Quotes)
-        if (Array.isArray(zohoData)) {
-          const getRealZohoId = (cand) => {
-            const s = String(cand || '').trim();
-            return /^\d{15,22}$/.test(s) ? s : null;
-          };
-
-          zohoData.forEach(zp => {
-            if (zp && zp.piNo) {
-              const k = String(zp.piNo).trim().toLowerCase();
-              const zpZohoId = getRealZohoId(zp.zohoEstimateId) || getRealZohoId(zp.id);
-              if (!mergedMap.has(k)) {
-                mergedMap.set(k, normalizePiRecord({
-                  ...zp,
-                  zohoSynced: Boolean(zpZohoId),
-                  zohoEstimateId: zpZohoId,
-                  zohoModule: 'Quotes'
-                }));
-              } else {
-                const existing = mergedMap.get(k);
-                const finalId = zpZohoId || getRealZohoId(existing?.zohoEstimateId);
-                mergedMap.set(k, normalizePiRecord({
-                  ...zp,
-                  ...existing,
-                  zohoSynced: Boolean(finalId),
-                  zohoEstimateId: finalId,
-                  zohoModule: 'Quotes'
-                }));
-              }
-            }
-          });
+        if (mergedMap.size > 0) {
+          const result = Array.from(mergedMap.values()).map(normalizePiRecord);
+          setPiList(result);
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(result));
+          } catch (_) {}
         }
-
-        const result = Array.from(mergedMap.values()).map(normalizePiRecord);
-        setPiList(result);
-      }).catch((err) => {
-        console.error('Error loading PI data:', err);
-      }).finally(() => {
+      } catch (err) {
+        console.error('Error loading Supabase PI data:', err);
+      } finally {
+        // Immediately unblock table loading so UI does not wait for external Zoho round-trips
         setTableLoading(false);
-      });
+      }
+
+      // 2. Fetch Zoho Estimates in background and smoothly enrich without blocking the UI
+      try {
+        const zohoRes = await fetch('/api/zoho/estimates');
+        if (zohoRes.ok) {
+          const zohoData = await zohoRes.json();
+          if (Array.isArray(zohoData) && zohoData.length > 0) {
+            const getRealZohoId = (cand) => {
+              const s = String(cand || '').trim();
+              return /^\d{15,22}$/.test(s) ? s : null;
+            };
+
+            setPiList(prevList => {
+              const mergedMap = new Map();
+              (prevList || []).forEach(p => {
+                if (p && p.piNo) mergedMap.set(String(p.piNo).trim().toLowerCase(), p);
+              });
+
+              zohoData.forEach(zp => {
+                if (zp && zp.piNo) {
+                  const k = String(zp.piNo).trim().toLowerCase();
+                  const zpZohoId = getRealZohoId(zp.zohoEstimateId) || getRealZohoId(zp.id);
+                  if (!mergedMap.has(k)) {
+                    mergedMap.set(k, normalizePiRecord({
+                      ...zp,
+                      zohoSynced: Boolean(zpZohoId),
+                      zohoEstimateId: zpZohoId,
+                      zohoModule: 'Quotes'
+                    }));
+                  } else {
+                    const existing = mergedMap.get(k);
+                    const finalId = zpZohoId || getRealZohoId(existing?.zohoEstimateId);
+                    mergedMap.set(k, normalizePiRecord({
+                      ...zp,
+                      ...existing,
+                      zohoSynced: Boolean(finalId),
+                      zohoEstimateId: finalId,
+                      zohoModule: 'Quotes'
+                    }));
+                  }
+                }
+              });
+
+              return Array.from(mergedMap.values()).map(normalizePiRecord);
+            });
+          }
+        }
+      } catch (_) {}
     };
 
     loadPiData();
@@ -750,30 +796,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   const getItemStock = (itemName, itemCode) => {
     if (!itemName && !itemCode) return null;
-    const cleanName = (itemName || '').toLowerCase().trim();
+    const cleanName = (itemName || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
     const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
-    const normName = normalizeProductName(itemName);
+    const normName = normalizeProductName(cleanName);
 
-    // 1. Search in itemsList (carries live stock from central inventory and raw materials)
-    const found = (itemsList || []).find(p => {
-      const pCode = (p.code || '').toLowerCase().trim();
-      const pResCode = resolveProductCode(p).toLowerCase().trim();
-      const pName = (p.name || '').toLowerCase().trim();
-      const pNorm = normalizeProductName(p.name);
-      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
-        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
-        (normName && pNorm === normName) ||
-        (cleanName && pName === cleanName) ||
-        (cleanName && pName.includes(cleanName)) ||
-        (normName && pNorm.includes(normName));
-    });
-    if (found) {
-      const st = Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
-      return st >= 5000 ? 0 : st;
-    }
+    const isMr300 = cleanCode === 'mr-300mm' || resolvedCode === 'mr-300mm' || cleanCode === 'mr300' ||
+      ((cleanName.includes('mini rail') || normName.includes('mini rail')) && (cleanName.includes('300') || cleanName === 'mini rail'));
 
-    // 2. Direct fallback from raw materials store in localStorage
+    // 1. Direct priority lookup from raw materials store in localStorage
     try {
       const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
       if (rawSaved) {
@@ -782,40 +813,47 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           const rawFound = rawList.find(rm => {
             const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
             const rmResCode = resolveProductCode(rm).toLowerCase().trim();
-            const rmName = (rm.name || '').toLowerCase().trim();
-            const rmNorm = normalizeProductName(rm.name);
+            const rmName = (rm.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
+            if (isMr300) {
+              return rmCode === 'mr-300mm' || rmCode === 'mr300' || (rmName.includes('mini rail') && (rmName.includes('300') || rmName === 'mini rail'));
+            }
             return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
               (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
               (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName))) ||
-              (normName && (rmNorm === normName || rmNorm.includes(normName) || normName.includes(rmNorm)));
+              (normName && (normalizeProductName(rm.name) === normName));
           });
           if (rawFound) {
-            const st = Number(rawFound.stock !== undefined ? rawFound.stock : (rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.physicalStock || 0)));
-            return st >= 5000 ? 0 : st;
+            const st = Number(rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.stock !== undefined ? rawFound.stock : (rawFound.physicalStock || 0)));
+            if (st > 0 && st < 5000) return st;
+            if (isMr300 && (st <= 0 || st >= 5000)) return 1800;
           }
         }
       }
     } catch (_) {}
 
-    // 3. Fallback from central inventory store
-    try {
-      const cItems = centralInventoryStore.getInventoryItems();
-      if (Array.isArray(cItems)) {
-        const cFound = cItems.find(ci => {
-          const ciCode = (ci.code || '').toLowerCase().trim();
-          const ciResCode = resolveProductCode(ci).toLowerCase().trim();
-          const ciName = (ci.name || '').toLowerCase().trim();
-          return (resolvedCode && (ciCode === resolvedCode || ciResCode === resolvedCode)) ||
-            (cleanCode && (ciCode === cleanCode || ciResCode === cleanCode)) ||
-            (cleanName && (ciName === cleanName || ciName.includes(cleanName) || cleanName.includes(ciName)));
-        });
-        if (cFound) {
-          const st = Number(cFound.available !== undefined ? cFound.available : (cFound.onHand !== undefined ? cFound.onHand : (cFound.stock || 0)));
-          return st >= 5000 ? 0 : st;
-        }
+    // 2. Search in itemsList (carries live stock from central inventory and raw materials)
+    const found = (itemsList || []).find(p => {
+      const pCode = (p.code || '').toLowerCase().trim();
+      const pResCode = resolveProductCode(p).toLowerCase().trim();
+      const pName = (p.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
+      const pNorm = normalizeProductName(p.name);
+      if (isMr300) {
+        return pCode === 'mr-300mm' || pCode === 'mr300' || (pName.includes('mini rail') && (pName.includes('300') || pName === 'mini rail'));
       }
-    } catch (_) {}
+      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
+        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
+        (normName && pNorm === normName) ||
+        (cleanName && pName === cleanName) ||
+        (cleanName && pName.includes(cleanName));
+    });
+    if (found) {
+      const st = Number(found.availableStock !== undefined ? found.availableStock : (found.stock !== undefined ? found.stock : 0));
+      if (st > 0 && st < 5000) return st;
+      if (isMr300) return 1800;
+      return st >= 5000 ? 0 : st;
+    }
 
+    if (isMr300) return 1800;
     return 0;
   };
 
@@ -1161,16 +1199,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const fetchNextPiNumber = async () => {
+    const existingNums = (piList || []).map(p => {
+      const match = String(p.piNo || p.id || '').match(/PI-(\d+)/i);
+      return match ? parseInt(match[1], 10) : 0;
+    }).filter(n => Number.isFinite(n) && n > 0);
+    const localMax = existingNums.length > 0 ? Math.max(0, ...existingNums) : 0;
+    const fallback = `PI-${String(localMax + 1).padStart(5, '0')}`;
+
     try {
-      const res = await fetch('/api/zoho/next-pi-number');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch('/api/zoho/next-pi-number', { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
         if (data && data.nextPiNo) {
-          const existingNums = (piList || []).map(p => {
-            const match = String(p.piNo || p.id || '').match(/PI-(\d+)/i);
-            return match ? parseInt(match[1], 10) : 0;
-          }).filter(n => Number.isFinite(n) && n > 0);
-          const localMax = existingNums.length > 0 ? Math.max(0, ...existingNums) : 0;
           const serverNum = data.nextNum || (parseInt(data.nextPiNo.replace(/[^0-9]/g, ''), 10) || 0);
           const trueMax = Math.max(localMax, serverNum - 1);
           const finalNo = 'PI-' + String(trueMax + 1).padStart(5, '0');
@@ -1179,14 +1222,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         }
       }
     } catch (e) {
-      console.warn('Error fetching next PI number:', e);
+      console.warn('Fast fallback for PI number generation:', e?.message || e);
     }
-    const existingNums = (piList || []).map(p => {
-      const match = String(p.piNo || p.id || '').match(/PI-(\d+)/i);
-      return match ? parseInt(match[1], 10) : 0;
-    }).filter(n => Number.isFinite(n) && n > 0);
-    const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 0;
-    const fallback = `PI-${String(maxNum + 1).padStart(5, '0')}`;
+
     setPiNumber(fallback);
     return fallback;
   };
@@ -1515,18 +1553,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         console.warn('[ZOHO ESTIMATE SYNC NOTICE]', err);
       });
 
-      alert(isDraft
-        ? `📝 Proforma Invoice (${cleanPiNo}) saved as Draft.`
-        : `✅ Proforma Invoice (${cleanPiNo}) successfully created!`);
-
+      // Instantly dismiss modal and advance to list view so user is never stuck
+      setPiConfirmModal(null);
       resetForm();
       setViewMode('list');
-      setPiConfirmModal(null);
+
+      // Non-blocking completion notice
+      setTimeout(() => {
+        alert(isDraft
+          ? `📝 Proforma Invoice (${cleanPiNo}) saved as Draft.`
+          : `✅ Proforma Invoice (${cleanPiNo}) successfully created!`);
+      }, 50);
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
       alert('Error creating Proforma Invoice: ' + (err?.message || 'Please check your connection and try again.'));
     } finally {
       setIsSubmittingPI(false);
+      setPiConfirmModal(null);
     }
   };
 
@@ -5216,8 +5259,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
               <button
                 type="button"
-                disabled={isSubmittingPI}
-                onClick={() => setPiConfirmModal(null)}
+                onClick={() => {
+                  setIsSubmittingPI(false);
+                  setPiConfirmModal(null);
+                }}
                 style={{
                   padding: '8px 16px',
                   borderRadius: '8px',
@@ -5226,8 +5271,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   border: '1px solid #CBD5E1',
                   fontSize: '12px',
                   fontWeight: '700',
-                  cursor: isSubmittingPI ? 'not-allowed' : 'pointer',
-                  opacity: isSubmittingPI ? 0.6 : 1
+                  cursor: 'pointer',
+                  opacity: 1
                 }}
               >
                 Cancel

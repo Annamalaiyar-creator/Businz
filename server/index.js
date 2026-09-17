@@ -982,6 +982,10 @@ const getZohoAccessToken = () => {
     });
 
     req.on('error', (e) => reject(e));
+    req.setTimeout(4000, () => {
+      try { req.destroy(); } catch (_) {}
+      reject(new Error('Zoho token request timed out'));
+    });
     req.write(postData);
     req.end();
   }).finally(() => {
@@ -2979,9 +2983,18 @@ app.post('/api/reset-bom-workflow-data', async (req, res) => {
   }
 });
 
-// Centralized GET all BOMs endpoint - reads authoritative list from disk & Supabase
+// Centralized GET all BOMs endpoint - reads authoritative list from disk & memory with fast caching
+let cachedBomsResult = null;
+let lastBomFetchTimestamp = 0;
+
 app.get('/api/boms', async (req, res) => {
   try {
+    const now = Date.now();
+    // 1. Serve immediately from high-speed memory cache if fresh (< 30s)
+    if (cachedBomsResult && (now - lastBomFetchTimestamp < 30000)) {
+      return res.json({ success: true, data: cachedBomsResult, total: cachedBomsResult.length });
+    }
+
     const filePath = getStoreFilePath('bom_store.json');
     let diskList = [];
     if (fs.existsSync(filePath)) {
@@ -2993,21 +3006,62 @@ app.get('/api/boms', async (req, res) => {
     }
     if (!Array.isArray(diskList)) diskList = [];
 
-    let cloudList = [];
-    try {
-      const { data: records } = await supabase
-        .from('leaves')
-        .select('reason')
-        .eq('employee', 'BOM_STORE')
-        .order('id', { ascending: false })
-        .limit(1);
-      const record = (records && records.length > 0) ? records[0] : null;
-      if (record && record.reason) {
-        const parsed = JSON.parse(record.reason);
-        if (Array.isArray(parsed)) cloudList = parsed;
-      }
-    } catch (e) {}
-    // Merge cloud and disk records (cloud takes priority, but any disk records not yet in cloud are preserved)
+    // Helper to sort BOMs by code sequence descending
+    const sortBoms = (list) => {
+      const parseBomSeq = (code) => {
+        const m = String(code || '').match(/BOM-(\d+)/i);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+      return list.sort((a, b) => {
+        const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
+        const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
+        if (seqA !== seqB) return seqB - seqA;
+        const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
+        const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
+        return dateB - dateA;
+      });
+    };
+
+    // If we have records on disk or in memory store, prepare fast response
+    let cloudList = (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store)) 
+      ? supabaseMemoryStore.bom_store 
+      : [];
+
+    // Only block on Supabase if memory and disk are both completely empty
+    if (cloudList.length === 0 && diskList.length === 0) {
+      try {
+        const { data: records } = await supabase
+          .from('leaves')
+          .select('reason')
+          .eq('employee', 'BOM_STORE')
+          .order('id', { ascending: false })
+          .limit(1);
+        const record = (records && records.length > 0) ? records[0] : null;
+        if (record && record.reason) {
+          const parsed = JSON.parse(record.reason);
+          if (Array.isArray(parsed)) {
+            cloudList = parsed;
+            supabaseMemoryStore.bom_store = parsed;
+          }
+        }
+      } catch (e) {}
+    } else if (now - lastBomFetchTimestamp > 60000) {
+      // Background revalidation without blocking client response
+      supabase.from('leaves').select('reason').eq('employee', 'BOM_STORE').order('id', { ascending: false }).limit(1)
+        .then(({ data: records }) => {
+          const rec = records?.[0];
+          if (rec && rec.reason) {
+            try {
+              const parsed = JSON.parse(rec.reason);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                supabaseMemoryStore.bom_store = parsed;
+              }
+            } catch (_) {}
+          }
+        }).catch(() => {});
+    }
+
+    // Merge cloud and disk records
     const map = new Map();
     cloudList.forEach(item => {
       const c = item?.bomCode || item?.code || item?.id;
@@ -3023,19 +3077,10 @@ app.get('/api/boms', async (req, res) => {
         }
       }
     });
-    const finalBoms = Array.from(map.values());
-    const parseBomSeq = (code) => {
-      const m = String(code || '').match(/BOM-(\d+)/i);
-      return m ? parseInt(m[1], 10) : 0;
-    };
-    finalBoms.sort((a, b) => {
-      const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
-      const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
-      if (seqA !== seqB) return seqB - seqA;
-      const dateA = new Date(a?.salesConfirmedAt || a?.date || a?.createdAt || 0).getTime() || 0;
-      const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
-      return dateB - dateA;
-    });
+
+    const finalBoms = sortBoms(Array.from(map.values()));
+    cachedBomsResult = finalBoms;
+    lastBomFetchTimestamp = Date.now();
     return res.json({ success: true, data: finalBoms, total: finalBoms.length });
   } catch (err) {
     console.error('Error fetching BOMs:', err);
@@ -3945,6 +3990,10 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
           resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
         });
         req.on('error', () => resolve(null));
+        req.setTimeout(2500, () => {
+          try { req.destroy(); } catch (_) {}
+          resolve(null);
+        });
         req.end();
       });
 
@@ -4004,7 +4053,14 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
   res.json({ nextPiNo, nextNum });
 });
 
+let zohoEstimatesCache = { data: null, timestamp: 0 };
+
 app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res) => {
+  const now = Date.now();
+  if (zohoEstimatesCache.data && (now - zohoEstimatesCache.timestamp < 30000)) {
+    return res.json(zohoEstimatesCache.data);
+  }
+
   let localEstimates = [];
   try {
     const p1 = getStoreFilePath('proforma_invoice_store.json');
@@ -4097,7 +4153,9 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
       }
     });
 
-    res.json(Array.from(piMap.values()));
+    const finalEstimates = Array.from(piMap.values());
+    zohoEstimatesCache = { data: finalEstimates, timestamp: Date.now() };
+    res.json(finalEstimates);
   } catch (err) {
     res.json(localEstimates);
   }
@@ -4112,6 +4170,7 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
     if (fs.existsSync(pProforma)) localEstimates = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
   } catch (_) {}
 
+  zohoEstimatesCache.timestamp = 0;
   const cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
 
   // Check if this PI already has a verified 15-22 digit Zoho Estimate ID
@@ -5822,6 +5881,14 @@ app.get('/api/zoho/items', async (req, res) => {
 // Endpoint to retrieve live reconciled Raw Materials inventory
 app.get('/api/raw-materials', async (req, res) => {
   try {
+    // 1. Instant response from high-speed memory cache or disk
+    if (supabaseMemoryStore.raw_materials_store && Array.isArray(supabaseMemoryStore.raw_materials_store) && supabaseMemoryStore.raw_materials_store.length > 0) {
+      return res.json(supabaseMemoryStore.raw_materials_store);
+    }
+    const rawMats = loadLocalRawMaterials();
+    if (Array.isArray(rawMats) && rawMats.length > 0) {
+      return res.json(rawMats);
+    }
     const cloudMats = await getDatabaseStore('raw_materials_store');
     if (Array.isArray(cloudMats) && cloudMats.length > 0) {
       cloudMats.forEach(item => {
@@ -5837,8 +5904,7 @@ app.get('/api/raw-materials', async (req, res) => {
       } catch (_) {}
       return res.json(cloudMats);
     }
-    const rawMats = loadLocalRawMaterials();
-    res.json(rawMats);
+    res.json([]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

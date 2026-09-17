@@ -35,7 +35,6 @@ export default function BomOrdersView(props) {
   const [selectedRows, setSelectedRows] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [tableLoading, setTableLoading] = useState(true);
   const [isConfirmingForward, setIsConfirmingForward] = useState(false);
   const [printingBomRecord, setPrintingBomRecord] = useState(null);
   const [exportFormatRecord, setExportFormatRecord] = useState(null);
@@ -43,8 +42,31 @@ export default function BomOrdersView(props) {
   const [bomCancelPromptModal, setBomCancelPromptModal] = useState(null);
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
 
-  // BOM Store directly from Supabase Database
-  const [bomStore, setBomStore] = useState([]);
+  // Cache-First Instant Hydration: load immediately from localStorage with 0ms delay
+  const [bomStore, setBomStore] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_bom_store');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const { list: resolvedList } = resolveBomCollisions(parsed, 658);
+          return resolvedList.map(stripDataUrlsFromRecord);
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  const [tableLoading, setTableLoading] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_bom_store');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return false;
+      }
+    } catch (_) {}
+    return true;
+  });
 
   // Customer List from Supabase & Zoho
   const [customerList, setCustomerList] = useState([]);
@@ -75,7 +97,10 @@ export default function BomOrdersView(props) {
   // Initial cloud fetch, polling and cross-tab storage listener
   useEffect(() => {
     const syncFromCloud = async (isInitial = false) => {
-      if (isInitial) setTableLoading(true);
+      // Only show table spinner if we don't already have records in memory
+      if (isInitial && (!Array.isArray(bomStore) || bomStore.length === 0)) {
+        setTableLoading(true);
+      }
       try {
         let data = null;
         try {
@@ -111,23 +136,31 @@ export default function BomOrdersView(props) {
             });
             const cleaned = sorted.map(stripDataUrlsFromRecord);
             setBomStore(cleaned);
+            try {
+              localStorage.setItem('controlroom_bom_store', JSON.stringify(cleaned));
+            } catch (_) {}
           }
         }
 
-        // Sync Customers directly from Supabase & Zoho Books
-        try {
-          let custs = await fetchCloudStore('customer_store', []);
-          if (!Array.isArray(custs) || custs.length === 0) {
-            const zohoCustRes = await fetch('/api/zoho/customers');
-            if (zohoCustRes.ok) {
-              const zCusts = await zohoCustRes.json();
-              if (Array.isArray(zCusts) && zCusts.length > 0) custs = zCusts;
+        // Immediately unblock table loading as soon as BOM records are available
+        if (isInitial) setTableLoading(false);
+
+        // Sync Customers in background without delaying BOM table rendering
+        (async () => {
+          try {
+            let custs = await fetchCloudStore('customer_store', []);
+            if (!Array.isArray(custs) || custs.length === 0) {
+              const zohoCustRes = await fetch('/api/zoho/customers');
+              if (zohoCustRes.ok) {
+                const zCusts = await zohoCustRes.json();
+                if (Array.isArray(zCusts) && zCusts.length > 0) custs = zCusts;
+              }
             }
-          }
-          if (Array.isArray(custs) && custs.length > 0) {
-            setCustomerList(custs);
-          }
-        } catch (_) {}
+            if (Array.isArray(custs) && custs.length > 0) {
+              setCustomerList(custs);
+            }
+          } catch (_) {}
+        })();
       } catch (err) {
         console.error('Error in syncFromCloud:', err);
       } finally {

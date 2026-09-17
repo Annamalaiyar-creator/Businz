@@ -2,13 +2,43 @@
 // Connects to /api/realtime-events using Native Server-Sent Events (SSE)
 let activeEventSource = null;
 let reconnectTimer = null;
+let consecutiveErrors = 0;
+let sseSupported = null;
 
 export const initRealtimeSync = () => {
   if (typeof window === 'undefined') return;
   if (activeEventSource) return;
 
-  const connect = () => {
+  const connect = async () => {
+    // If SSE is detected as unavailable on this host/port, do not throw continuous console errors
+    if (sseSupported === false && consecutiveErrors >= 3) {
+      return;
+    }
+
     try {
+      // 1. Probe the endpoint first to verify text/event-stream is actually returned
+      const probe = await fetch('/api/realtime-events', { method: 'GET', cache: 'no-store' }).catch(() => null);
+      if (!probe || !probe.ok) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) {
+          sseSupported = false;
+          return;
+        }
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 15000);
+        return;
+      }
+
+      const contentType = probe.headers.get('content-type') || '';
+      if (!contentType.includes('text/event-stream')) {
+        // Endpoint returns JSON or HTML (e.g. static hosting or offline proxy)
+        sseSupported = false;
+        return;
+      }
+
+      // 2. Safe to connect native EventSource
+      sseSupported = true;
+      consecutiveErrors = 0;
       activeEventSource = new EventSource('/api/realtime-events');
 
       activeEventSource.onopen = () => {
@@ -112,12 +142,18 @@ export const initRealtimeSync = () => {
           activeEventSource.close();
           activeEventSource = null;
         }
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 3000);
+        consecutiveErrors++;
+        if (consecutiveErrors < 3) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connect, 15000);
+        }
       };
     } catch (err) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, 4000);
+      consecutiveErrors++;
+      if (consecutiveErrors < 3) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 15000);
+      }
     }
   };
 

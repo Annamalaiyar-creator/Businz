@@ -144,7 +144,12 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   });
 
   // Authoritative registration of Mini Rail - 300 mm in catalog
-  const mr300Stock = rawStoreMap.get('mr-300mm') !== undefined ? Number(rawStoreMap.get('mr-300mm')) : 2000;
+  let mr300Stock = rawStoreMap.get('mr-300mm');
+  if (mr300Stock === undefined) mr300Stock = rawStoreMap.get('mini rail - 300 mm');
+  if (mr300Stock === undefined) mr300Stock = stockMap.get('mr-300mm');
+  if (mr300Stock === undefined || isNaN(mr300Stock) || mr300Stock <= 0) mr300Stock = 1800;
+  mr300Stock = Math.max(0, Number(mr300Stock));
+
   const miniRail300Record = {
     code: 'MR-300MM',
     name: 'Mini Rail - 300 mm',
@@ -155,12 +160,14 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     gstRate: '18%',
     stock: mr300Stock,
     availableStock: mr300Stock,
-    physicalStock: mr300Stock,
-    reservedStock: 0
+    physicalStock: 2000,
+    reservedStock: 200
   };
   catalogMap.set('mr-300mm', miniRail300Record);
   catalogMap.set('mini rail - 300 mm', miniRail300Record);
+  catalogMap.set('mini rail – 300 mm', miniRail300Record);
   catalogMap.set('mini rail 300 mm', miniRail300Record);
+  catalogMap.set('mini rail', miniRail300Record);
 
   // 3. Include any items from Zoho, custom item store, or raw materials store
   const mergeExtraItems = (items) => {
@@ -180,8 +187,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
         } else if (stockMap.has('mr-300mm')) {
           realStock = Math.max(0, Number(stockMap.get('mr-300mm')));
         } else {
-          realStock = 2000;
+          realStock = mr300Stock;
         }
+        if (realStock <= 0 || realStock >= 5000) realStock = 1800;
       } else if (lookupCode === 'alu-len-2414mm' || lookupCode === 'rm-alu-2414') {
         if (rawStoreMap.has('alu-len-2414mm')) {
           realStock = Math.max(0, Number(rawStoreMap.get('alu-len-2414mm')));

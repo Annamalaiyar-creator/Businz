@@ -374,9 +374,25 @@ export default function TypeableProductSelect({
                 (prod.availableStock !== undefined ? prod.availableStock : 0)
               );
               const pCodeL = String(prod.code || '').toLowerCase().trim();
-              const pNameL = String(prod.name || '').toLowerCase().trim();
-              if ((pCodeL === 'mr-300mm' || pNameL === 'mini rail - 300 mm' || (pNameL.includes('mini rail') && pNameL.includes('300'))) && (prod.stock === undefined && prod.availableStock === undefined)) {
-                stockNum = 2000;
+              const pNameL = String(prod.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
+              const isMr300 = (pCodeL === 'mr-300mm' || pCodeL === 'mr300') ||
+                ((pNameL.includes('mini rail') || pNameL.includes('minirail')) && (pNameL.includes('300') || pNameL === 'mini rail'));
+
+              if (isMr300) {
+                if (stockNum <= 0 || stockNum >= 5000) {
+                  try {
+                    const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
+                    if (rawSaved) {
+                      const rawList = JSON.parse(rawSaved);
+                      const rf = (rawList || []).find(r => r.code === 'MR-300MM' || r.code === 'MR300');
+                      if (rf) {
+                        const s = Number(rf.availableStock !== undefined ? rf.availableStock : (rf.stock !== undefined ? rf.stock : (rf.physicalStock || 0)));
+                        if (s > 0 && s < 5000) stockNum = s;
+                      }
+                    }
+                  } catch (_) {}
+                  if (stockNum <= 0 || stockNum >= 5000) stockNum = 1800;
+                }
               } else if (stockNum >= 5000) {
                 stockNum = 0;
               }

@@ -167,7 +167,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
     matMap.set('MR-300MM', defaultMiniRail);
-    matMap.set('MINI RAIL - 300 MM', defaultMiniRail);
 
     // 1. Seed all official VRM standardized catalog products (285 items)
     (VRM_PRODUCTS || []).forEach(p => {
@@ -357,7 +356,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 2000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 2000, physicalStock: 2000, availableStock: 2000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       matMap.set('MR-300MM', defaultMiniRail);
-      matMap.set('MINI RAIL - 300 MM', defaultMiniRail);
       // 1. Seed all official VRM standardized catalog products (285 items)
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
@@ -669,6 +667,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         return true;
       });
       setMaterials(filteredMaterials);
+      try {
+        localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(filteredMaterials));
+        window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+        window.dispatchEvent(new Event('central_inventory_updated'));
+      } catch (_) {}
     };
 
     syncEngineInventory();
@@ -744,8 +747,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     window.addEventListener('storage', syncEngineInventory);
     return () => {
       clearInterval(pollDbInterval);
-      unsubCloudBoms();
-      unsubCloudRaw();
+      if (unsubCloudBoms && typeof unsubCloudBoms.unsubscribe === 'function') unsubCloudBoms.unsubscribe();
+      if (unsubCloudRaw && typeof unsubCloudRaw.unsubscribe === 'function') unsubCloudRaw.unsubscribe();
       unsubscribe();
       window.removeEventListener('controlroom_raw_materials_update', syncEngineInventory);
       window.removeEventListener('controlroom_bom_store_updated', fetchDatabaseInventory);
@@ -800,6 +803,23 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const bRaw = localStorage.getItem('controlroom_bom_store');
       let boms = [];
       if (bRaw) boms = JSON.parse(bRaw);
+
+      // Pre-map linked PI to Sales Person as fallback
+      const piMap = {};
+      try {
+        const pRaw = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_procurement_pi_store');
+        if (pRaw) {
+          const pis = JSON.parse(pRaw);
+          if (Array.isArray(pis)) {
+            pis.forEach(p => {
+              const no = String(p.piNo || p.id || '').toUpperCase().trim();
+              const sp = p.salesPerson || p.salesperson || p.createdBy || '';
+              if (no && sp) piMap[no] = sp;
+            });
+          }
+        }
+      } catch (_) {}
+
       if (Array.isArray(boms)) {
         boms.forEach(b => {
           const st = String(b?.status || '').toLowerCase();
@@ -814,6 +834,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             'dispatch packing verified - sent to accounts',
             'awaiting vehicle loading & dispatch'
           ].some(s => st.includes(s));
+
+          const rawSales = b.salesPerson || b.salesperson || b.salesRep || b.createdBy || b.createdByName || b.salesPersonName || (b.sourcePiNo ? piMap[String(b.sourcePiNo).toUpperCase().trim()] : '') || '';
+          const cleanSalesPerson = rawSales ? rawSales.replace(/\s*\([^)]*\)/g, '').trim() : '';
+          const salesCode = b.salesPersonCode || b.createdById || '';
+          const displaySalesPerson = cleanSalesPerson ? `${cleanSalesPerson}${salesCode ? ` (${salesCode})` : ''}` : 'Sales Executive';
 
           (b?.items || []).forEach(it => {
             const itRes = resolveProductCode(it).toLowerCase().trim();
@@ -855,11 +880,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   unit: it.uom || selectedMat.unit || 'NOS',
                   previousStock: baseStock,
                   newStock: isSentToDispatch ? afterStock : baseStock,
-                  user: b.salesPerson || b.createdBy || 'Sales Executive',
+                  user: displaySalesPerson,
+                  salesPerson: cleanSalesPerson || 'Sales Executive',
+                  salesPersonCode: salesCode,
+                  salesPersonFull: displaySalesPerson,
+                  sourcePiNo: b.sourcePiNo || '',
                   role: 'Sales Department',
                   reason: isSentToDispatch
-                    ? `Deducted ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Sales Confirmed - Forwarded to Dispatch).`
-                    : `Allocated ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code}.`,
+                    ? `Deducted ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Sales Confirmed - Forwarded to Dispatch). Sales Owner: ${displaySalesPerson}.`
+                    : `Allocated ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code}. Sales Owner: ${displaySalesPerson}.`,
                   source: b.companyName || b.customerName || 'Sales Order',
                   location: selectedMat.store || 'Finished Goods Bay'
                 });
@@ -991,8 +1020,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const mCodeLower = mCode.toLowerCase();
       const mNameLower = mName.toLowerCase();
 
-      // Filter out invalid items or blank rows upfront
-      if (!mCode || !mName || mCode === '—' || mCodeLower === 'rm-vrm') return false;
+      // Filter out invalid items or blank rows upfront, and unify legacy MR300 into canonical MR-300MM
+      if (!mCode || !mName || mCode === '—' || mCodeLower === 'rm-vrm' || mCodeLower === 'mr300') return false;
 
       // Identify whether an item is raw material strictly based on Category
       const itemCat = String(m.category || m.cat || '').trim().toLowerCase();
@@ -2165,7 +2194,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
       if (auditSearchQuery.trim()) {
         const q = auditSearchQuery.toLowerCase().trim();
-        const str = `${log.referenceDoc} ${log.reason} ${log.typeName} ${log.user} ${log.role} ${log.source}`.toLowerCase();
+        const str = `${log.referenceDoc} ${log.reason} ${log.typeName} ${log.user} ${log.role} ${log.source} ${log.salesPerson || ''} ${log.salesPersonFull || ''} ${log.salesPersonCode || ''}`.toLowerCase();
         if (!str.includes(q)) return false;
       }
       return true;
@@ -2457,7 +2486,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     <th style={{ padding: '12px 16px', fontWeight: '800' }}>Activity Description / Narrative</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'right', width: '120px' }}>Impact Qty</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'center', width: '140px' }}>Stock Balance</th>
-                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '160px' }}>Authorized By</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', width: '180px' }}>Sales Owner / Authorized By</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800', width: '140px' }}>Warehouse Bay</th>
                   </tr>
                 </thead>
@@ -2533,13 +2562,45 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                           </td>
 
                           {/* Activity Description */}
-                          <td style={{ padding: '14px 16px', color: '#1E293B', lineHeight: '1.5', minWidth: '260px' }}>
+                          <td style={{ padding: '14px 16px', color: '#1E293B', lineHeight: '1.5', minWidth: '270px' }}>
                             <div style={{ fontWeight: '500' }}>{log.reason}</div>
-                            {log.source && (
-                              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                                Source Entity: <strong>{log.source}</strong>
-                              </div>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                              {log.source && (
+                                <span style={{ fontSize: '11px', color: '#64748B' }}>
+                                  Customer: <strong style={{ color: '#0F172A' }}>{log.source}</strong>
+                                </span>
+                              )}
+                              {log.salesPerson && (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#ECFEFF',
+                                  color: '#0E7490',
+                                  border: '1px solid #CFFAFE'
+                                }}>
+                                  <span>👤 Sales Person:</span>
+                                  <strong style={{ color: '#155E75' }}>{log.salesPersonFull || log.salesPerson}</strong>
+                                </span>
+                              )}
+                              {log.sourcePiNo && (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: '600',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#475569',
+                                  border: '1px solid #E2E8F0'
+                                }}>
+                                  Ref PI: {log.sourcePiNo}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Impact Quantity */}
@@ -2573,14 +2634,30 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                             </span>
                           </td>
 
-                          {/* Authorized By */}
+                          {/* Sales Owner / Authorized By */}
                           <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '12.5px' }}>
-                              {log.user || 'Production Head'}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#64748B' }}>
-                              {log.role || 'Production & Logistics'}
-                            </div>
+                            {log.salesPerson ? (
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <span style={{ fontSize: '12px' }}>👤</span>
+                                  <span style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px' }}>
+                                    {log.salesPerson}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', marginTop: '2px' }}>
+                                  {log.salesPersonCode ? `Sales Rep (${log.salesPersonCode})` : (log.role || 'Sales Department')}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '12.5px' }}>
+                                  {log.user || 'Production Head'}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>
+                                  {log.role || 'Production & Logistics'}
+                                </div>
+                              </div>
+                            )}
                           </td>
 
                           {/* Warehouse Location */}
@@ -2718,9 +2795,27 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                           }}>
                             {log.referenceDoc}
                           </span>
-                          <span style={{ fontSize: '12px', color: '#64748B' }}>
-                            Authorized by: <strong style={{ color: '#0F172A' }}>{log.user}</strong> ({log.role})
-                          </span>
+                          {log.salesPerson ? (
+                            <span style={{
+                              fontSize: '11.5px',
+                              backgroundColor: '#ECFEFF',
+                              border: '1px solid #A5F3FC',
+                              color: '#0E7490',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              <span>👤 Sales Person:</span>
+                              <strong style={{ color: '#155E75' }}>{log.salesPersonFull || log.salesPerson}</strong>
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: '#64748B' }}>
+                              Authorized by: <strong style={{ color: '#0F172A' }}>{log.user}</strong> ({log.role})
+                            </span>
+                          )}
                         </div>
 
                         {/* Timestamp */}
@@ -2774,8 +2869,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       </div>
 
                       {/* Footer entity info */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B', paddingTop: '4px' }}>
-                        <span>Source / Order: <strong style={{ color: '#0F172A' }}>{log.source || 'Warehouse Inventory Store'}</strong></span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B', paddingTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
+                        <span>Customer / Order: <strong style={{ color: '#0F172A' }}>{log.source || 'Warehouse Inventory Store'}</strong></span>
+                        {log.salesPerson && (
+                          <span style={{ backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #CFFAFE', color: '#0E7490', fontWeight: '700' }}>
+                            👤 Sales Person: <strong>{log.salesPersonFull || log.salesPerson}</strong>
+                          </span>
+                        )}
                         <span>Bay: <strong style={{ color: '#0E7490' }}>{log.location || selectedMat.store || 'Finished Goods Bay'}</strong></span>
                       </div>
                     </div>
