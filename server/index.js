@@ -697,10 +697,46 @@ const getStoreFilePath = (filename) => {
 };
 
 const loadLocalPOs = () => {
-  if (supabaseMemoryStore.po_store && supabaseMemoryStore.po_store.length > 0) {
-    return supabaseMemoryStore.po_store;
+  let memPOs = [];
+  if (supabaseMemoryStore.po_store && Array.isArray(supabaseMemoryStore.po_store) && supabaseMemoryStore.po_store.length > 0) {
+    memPOs = supabaseMemoryStore.po_store;
   }
-  return supabaseMemoryStore.po_store || [];
+  
+  // Also check disk po_store.json and merge seamlessly
+  try {
+    const diskPath = getStoreFilePath('po_store.json');
+    if (fs.existsSync(diskPath)) {
+      const diskPOs = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskPOs) && diskPOs.length > 0) {
+        const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+        const map = new Map();
+        diskPOs.forEach(p => {
+          const k1 = normalize(p.poNo);
+          const k2 = normalize(p.id);
+          const k3 = normalize(p.zohoId);
+          if (k1) map.set(k1, p);
+          if (k2) map.set(k2, p);
+          if (k3) map.set(k3, p);
+        });
+        memPOs.forEach(p => {
+          const k1 = normalize(p.poNo);
+          const k2 = normalize(p.id);
+          const k3 = normalize(p.zohoId);
+          const existing = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3)) || {};
+          const items = (Array.isArray(p.items) && p.items.length > 0) ? p.items : (existing.items || []);
+          const mergedItem = { ...existing, ...p, items };
+          if (k1) map.set(k1, mergedItem);
+          if (k2) map.set(k2, mergedItem);
+          if (k3) map.set(k3, mergedItem);
+        });
+        const merged = Array.from(new Set(map.values()));
+        supabaseMemoryStore.po_store = merged;
+        return merged;
+      }
+    }
+  } catch (_) {}
+
+  return memPOs;
 };
 
 const saveLocalPOs = (pos) => {
@@ -3647,6 +3683,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         return {
           id: po.purchaseorder_id,
           poNo: po.purchaseorder_number,
+          zohoId: po.purchaseorder_id,
           vendor: (lpMatch && lpMatch.vendor && lpMatch.vendor !== 'Fresh Vendor') ? lpMatch.vendor : (po.vendor_name || 'Vendor'),
           branch: (lpMatch && lpMatch.branch) ? lpMatch.branch : (po.branch_name || ''),
           contactPerson: (lpMatch && lpMatch.contactPerson) ? lpMatch.contactPerson : (po.contact_person_name || ''),
@@ -3658,7 +3695,21 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           poDate: po.date,
           deliveryDate: po.delivery_date || (lpMatch ? lpMatch.deliveryDate : '—'),
           paymentTerms: (lpMatch && lpMatch.paymentTerms && lpMatch.paymentTerms !== 'Net 30 Days') ? lpMatch.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
-          purchaser: (lpMatch && lpMatch.purchaser) ? lpMatch.purchaser : (po.purchaser_name || '—'),
+          purchaser: (lpMatch && lpMatch.purchaser && lpMatch.purchaser !== '—') ? lpMatch.purchaser : (po.purchaser_name || '—'),
+          shipmentPref: (lpMatch && lpMatch.shipmentPref) ? lpMatch.shipmentPref : (po.shipment_preference || 'Road Transport'),
+          currency: (lpMatch && lpMatch.currency) ? lpMatch.currency : (po.currency_code || 'INR'),
+          project: (lpMatch && lpMatch.project) ? lpMatch.project : (po.project_name || ''),
+          priority: (lpMatch && lpMatch.priority) ? lpMatch.priority : (po.priority || 'High'),
+          scope: (lpMatch && lpMatch.scope) ? lpMatch.scope : 'Vendor Scope',
+          transportName: (lpMatch && lpMatch.transportName) ? lpMatch.transportName : '',
+          shippingCharges: (lpMatch && lpMatch.shippingCharges !== undefined) ? lpMatch.shippingCharges : (po.shipping_charge || 0),
+          otherCharges: (lpMatch && lpMatch.otherCharges !== undefined) ? lpMatch.otherCharges : (po.adjustment || 0),
+          discountPct: (lpMatch && lpMatch.discountPct !== undefined) ? lpMatch.discountPct : (po.discount_percent || 0),
+          notes: (lpMatch && lpMatch.notes) ? lpMatch.notes : (po.notes || ''),
+          terms: (lpMatch && lpMatch.terms) ? lpMatch.terms : (po.terms || ''),
+          approvalRequired: lpMatch ? lpMatch.approvalRequired : 'YES',
+          approver: lpMatch ? lpMatch.approver : '',
+          approvalPriority: lpMatch ? lpMatch.approvalPriority : '',
           amount: calcTotalWithGst,
           status: statusText,
           statusType: statusType,
@@ -3684,6 +3735,23 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           // Always preserve non-empty items if translated currently has empty items
           if (Array.isArray(lp.items) && lp.items.length > 0 && (!Array.isArray(translated[existsIdx].items) || translated[existsIdx].items.length === 0)) {
             translated[existsIdx].items = lp.items;
+          }
+          if (lp.notes && !translated[existsIdx].notes) translated[existsIdx].notes = lp.notes;
+          if (lp.terms && !translated[existsIdx].terms) translated[existsIdx].terms = lp.terms;
+          if (lp.deliveryAddress && lp.deliveryAddress !== '—' && (!translated[existsIdx].deliveryAddress || translated[existsIdx].deliveryAddress === '—')) {
+            translated[existsIdx].deliveryAddress = lp.deliveryAddress;
+          }
+          if (lp.billingAddress && lp.billingAddress !== '—' && (!translated[existsIdx].billingAddress || translated[existsIdx].billingAddress === '—')) {
+            translated[existsIdx].billingAddress = lp.billingAddress;
+          }
+          if (lp.priority && !translated[existsIdx].priority) translated[existsIdx].priority = lp.priority;
+          if (lp.scope && !translated[existsIdx].scope) translated[existsIdx].scope = lp.scope;
+          if (lp.transportName && !translated[existsIdx].transportName) translated[existsIdx].transportName = lp.transportName;
+          if (lp.shippingCharges !== undefined && !translated[existsIdx].shippingCharges) translated[existsIdx].shippingCharges = lp.shippingCharges;
+          if (lp.otherCharges !== undefined && !translated[existsIdx].otherCharges) translated[existsIdx].otherCharges = lp.otherCharges;
+          if (lp.discountPct !== undefined && !translated[existsIdx].discountPct) translated[existsIdx].discountPct = lp.discountPct;
+          if (lp.purchaser && lp.purchaser !== '—' && (!translated[existsIdx].purchaser || translated[existsIdx].purchaser === '—')) {
+            translated[existsIdx].purchaser = lp.purchaser;
           }
           if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po') {
             translated[existsIdx].status = 'Proceed PO';
@@ -3713,6 +3781,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           translated.unshift({
             id: lp.zohoId || lp.id || lp.poNo,
             poNo: lp.poNo || lp.id,
+            zohoId: lp.zohoId || lp.id,
             vendor: lp.vendor || 'Vendor',
             branch: lp.branch || '',
             contactPerson: lp.contactPerson || '',
@@ -3725,6 +3794,20 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
             deliveryDate: lp.deliveryDate || '—',
             paymentTerms: lp.paymentTerms || 'Net 30 Days',
             purchaser: lp.purchaser || '—',
+            shipmentPref: lp.shipmentPref || 'Road Transport',
+            currency: lp.currency || 'INR',
+            project: lp.project || '',
+            priority: lp.priority || 'High',
+            scope: lp.scope || 'Vendor Scope',
+            transportName: lp.transportName || '',
+            shippingCharges: lp.shippingCharges || 0,
+            otherCharges: lp.otherCharges || 0,
+            discountPct: lp.discountPct || 0,
+            notes: lp.notes || '',
+            terms: lp.terms || '',
+            approvalRequired: lp.approvalRequired || 'YES',
+            approver: lp.approver || '',
+            approvalPriority: lp.approvalPriority || '',
             amount: lp.amount || '₹0.00',
             status: lp.status || 'OPEN',
             statusType: lp.statusType || 'approved',
@@ -5038,8 +5121,9 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
     });
 
     return res.json({
-      id: poNo,
-      poNo: poNo,
+      id: matchedLocalPO ? (matchedLocalPO.zohoId || matchedLocalPO.id || poNo) : poNo,
+      poNo: matchedLocalPO ? (matchedLocalPO.poNo || matchedLocalPO.purchaseorder_number || poNo) : poNo,
+      zohoId: matchedLocalPO ? (matchedLocalPO.zohoId || matchedLocalPO.id) : undefined,
       vendor: matchedLocalPO ? matchedLocalPO.vendor : 'Misar Trading Co',
       branch: matchedLocalPO ? matchedLocalPO.branch : '',
       contactPerson: matchedLocalPO ? matchedLocalPO.contactPerson : '',
@@ -5056,11 +5140,16 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
       currency: matchedLocalPO ? matchedLocalPO.currency : 'INR',
       project: matchedLocalPO ? matchedLocalPO.project : '',
       priority: matchedLocalPO ? matchedLocalPO.priority : 'High',
+      scope: matchedLocalPO ? matchedLocalPO.scope : 'Vendor Scope',
+      transportName: matchedLocalPO ? matchedLocalPO.transportName : '',
       shippingCharges: matchedLocalPO ? (matchedLocalPO.shippingCharges || 0) : 0,
       otherCharges: matchedLocalPO ? (matchedLocalPO.otherCharges || 0) : 0,
       discountPct: matchedLocalPO ? (matchedLocalPO.discountPct || 0) : 0,
       notes: matchedLocalPO ? (matchedLocalPO.notes || '') : '',
       terms: matchedLocalPO ? (matchedLocalPO.terms || '') : '',
+      approvalRequired: matchedLocalPO ? matchedLocalPO.approvalRequired : 'YES',
+      approver: matchedLocalPO ? matchedLocalPO.approver : '',
+      approvalPriority: matchedLocalPO ? matchedLocalPO.approvalPriority : '',
       items: items,
       totalOrderedQty,
       totalReceivedQty,

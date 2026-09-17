@@ -220,7 +220,21 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             return {
               ...existing,
               ...p,
-              items: incomingItems.length > 0 ? incomingItems : existingItems
+              items: incomingItems.length > 0 ? incomingItems : existingItems,
+              vendor: (existing.vendor && existing.vendor !== 'Vendor' && existing.vendor !== 'Annamalaiyar') ? existing.vendor : (p.vendor || existing.vendor || 'Vendor'),
+              deliveryAddress: (p.deliveryAddress && p.deliveryAddress !== '—' && p.deliveryAddress !== '') ? p.deliveryAddress : (existing.deliveryAddress || '—'),
+              billingAddress: (p.billingAddress && p.billingAddress !== '—' && p.billingAddress !== '') ? p.billingAddress : (existing.billingAddress || '—'),
+              paymentTerms: (p.paymentTerms && p.paymentTerms !== 'Net 30 Days') ? p.paymentTerms : (existing.paymentTerms || p.paymentTerms || 'Due on Receipt'),
+              notes: (p.notes && p.notes !== '') ? p.notes : (existing.notes || ''),
+              terms: (p.terms && p.terms !== '') ? p.terms : (existing.terms || ''),
+              scope: p.scope || existing.scope || 'Vendor Scope',
+              priority: p.priority || existing.priority || 'High',
+              transportName: p.transportName || existing.transportName || '',
+              shippingCharges: p.shippingCharges !== undefined ? p.shippingCharges : (existing.shippingCharges || 0),
+              otherCharges: p.otherCharges !== undefined ? p.otherCharges : (existing.otherCharges || 0),
+              discountPct: p.discountPct !== undefined ? p.discountPct : (existing.discountPct || 0),
+              purchaser: (p.purchaser && p.purchaser !== '—') ? p.purchaser : (existing.purchaser || '—'),
+              amount: (p.amount && p.amount !== '₹0.00' && p.amount !== '₹ 0.00') ? p.amount : (existing.amount || p.amount)
             };
           }
           return p;
@@ -628,7 +642,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const safePoNo = poNumber ? String(poNumber).toUpperCase() : '';
     const safeGstNo = gstNo ? String(gstNo).toUpperCase() : 'N/A';
 
+    const existingSelectedPo = (editIdx !== null && poList[editIdx]) ? poList[editIdx] : null;
+    const assignedId = existingSelectedPo ? (existingSelectedPo.id || existingSelectedPo.zohoId || safePoNo) : (safePoNo || ('PO-' + String(poList.length + 1).padStart(5, '0')));
+    const assignedZohoId = existingSelectedPo ? (existingSelectedPo.zohoId || existingSelectedPo.id) : undefined;
+
     const newPO = {
+      id: assignedId,
+      zohoId: assignedZohoId,
       poNo: safePoNo || ('PO-' + String(poList.length + 1).padStart(5, '0')),
       vendor: vendorName || 'Fresh Vendor',
       branch: branch || '',
@@ -682,10 +702,21 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             const mergedSavedPO = {
               ...newPO,
               ...data.po,
+              id: newPO.id || data.po.id,
+              zohoId: data.po.zohoId || data.po.id || newPO.zohoId,
               vendor: newPO.vendor,
               deliveryAddress: newPO.deliveryAddress,
               billingAddress: newPO.billingAddress,
               paymentTerms: newPO.paymentTerms,
+              notes: newPO.notes,
+              terms: newPO.terms,
+              priority: newPO.priority,
+              scope: newPO.scope,
+              transportName: newPO.transportName,
+              shippingCharges: newPO.shippingCharges,
+              otherCharges: newPO.otherCharges,
+              discountPct: newPO.discountPct,
+              purchaser: newPO.purchaser,
               items: (newPO.items && newPO.items.length > 0) ? newPO.items : (data.po.items || [])
             };
             setPoList(prev => prev.map(p => (p.poNo === newPO.poNo || p.id === newPO.id) ? { ...p, ...mergedSavedPO } : p));
@@ -997,9 +1028,29 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     setEmail(po.email || '');
     setGstNo(po.gstNo || po.gstin || po.tax_registration_number || '');
     setDeliveryType(po.deliveryType || 'Organization');
-    setDeliveryAddress(po.deliveryAddress || po.delivery_address || '');
-    setBillingAddress(po.billingAddress || po.billing_address || '');
-    setSameAsDelivery(po.deliveryAddress === po.billingAddress);
+    const formatAddress = (addr) => {
+      if (!addr) return '';
+      if (typeof addr === 'string') return addr;
+      if (typeof addr === 'object') {
+        const parts = [
+          addr.address,
+          addr.address1,
+          addr.street2,
+          addr.city,
+          addr.state,
+          addr.zip,
+          addr.country
+        ].filter(p => p && String(p).trim().length > 0);
+        return parts.join(', ');
+      }
+      return String(addr);
+    };
+
+    const delAddr = formatAddress(po.deliveryAddress || po.delivery_address || '');
+    const billAddr = formatAddress(po.billingAddress || po.billing_address || '');
+    setDeliveryAddress(delAddr);
+    setBillingAddress(billAddr);
+    setSameAsDelivery(delAddr === billAddr && delAddr !== '');
 
     const parseDateToInputFormat = (dateStr) => {
       if (!dateStr || dateStr === 'Draft' || dateStr === 'Immediate') return '';
@@ -1057,15 +1108,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       setItems([]);
     }
 
-    setShippingCharges(po.shippingCharges || po.shipping_charge || 0);
-    setOtherCharges(po.otherCharges || po.adjustment || 0);
+    setShippingCharges(po.shippingCharges !== undefined ? po.shippingCharges : (po.shipping_charge || 0));
+    setOtherCharges(po.otherCharges !== undefined ? po.otherCharges : (po.adjustment || 0));
     setDiscountPct(po.discountPct !== undefined ? po.discountPct : (po.discount_percent || 0));
-    setNotes(po.notes || '');
-    setTerms(po.terms || `1. Material should be as per the agreed specification and quality.
+    setNotes(po.notes || po.remarks || '');
+    const defaultTerms = `1. Material should be as per the agreed specification and quality.
 2. Delivery should be made on or before the delivery date.
 3. Payment will be released as per the agreed payment terms.
 4. Any delay in delivery may attract penalty as per company policy.
-5. All disputes are subject to the jurisdiction of Nellore courts.`);
+5. All disputes are subject to the jurisdiction of Nellore courts.`;
+    setTerms(po.terms || po.terms_and_conditions || defaultTerms);
     setAttachedFiles(po.pdfName ? [{ name: po.pdfName, size: 'Original Attachment' }] : []);
   };
 
@@ -1103,6 +1155,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               deliveryAddress: (enrichedPo.deliveryAddress && enrichedPo.deliveryAddress !== '—' && enrichedPo.deliveryAddress !== '') ? enrichedPo.deliveryAddress : (detail.deliveryAddress || '—'),
               billingAddress: (enrichedPo.billingAddress && enrichedPo.billingAddress !== '—' && enrichedPo.billingAddress !== '') ? enrichedPo.billingAddress : (detail.billingAddress || '—'),
               paymentTerms: (enrichedPo.paymentTerms && enrichedPo.paymentTerms !== 'Net 30 Days') ? enrichedPo.paymentTerms : (detail.paymentTerms || 'Net 30 Days'),
+              notes: (detail.notes && detail.notes !== '') ? detail.notes : (enrichedPo.notes || ''),
+              terms: (detail.terms && detail.terms !== '') ? detail.terms : (enrichedPo.terms || ''),
+              scope: detail.scope || enrichedPo.scope || 'Vendor Scope',
+              priority: detail.priority || enrichedPo.priority || 'High',
+              transportName: detail.transportName || enrichedPo.transportName || '',
+              shippingCharges: detail.shippingCharges !== undefined ? detail.shippingCharges : (enrichedPo.shippingCharges || 0),
+              otherCharges: detail.otherCharges !== undefined ? detail.otherCharges : (enrichedPo.otherCharges || 0),
+              discountPct: detail.discountPct !== undefined ? detail.discountPct : (enrichedPo.discountPct || 0),
+              purchaser: (detail.purchaser && detail.purchaser !== '—') ? detail.purchaser : (enrichedPo.purchaser || '—'),
               items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (enrichedPo.items || [])
             };
             populateFormStates(merged);
@@ -1150,6 +1211,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               deliveryAddress: (enrichedPo.deliveryAddress && enrichedPo.deliveryAddress !== '—' && enrichedPo.deliveryAddress !== '') ? enrichedPo.deliveryAddress : (detail.deliveryAddress || '—'),
               billingAddress: (enrichedPo.billingAddress && enrichedPo.billingAddress !== '—' && enrichedPo.billingAddress !== '') ? enrichedPo.billingAddress : (detail.billingAddress || '—'),
               paymentTerms: (enrichedPo.paymentTerms && enrichedPo.paymentTerms !== 'Net 30 Days') ? enrichedPo.paymentTerms : (detail.paymentTerms || 'Net 30 Days'),
+              notes: (detail.notes && detail.notes !== '') ? detail.notes : (enrichedPo.notes || ''),
+              terms: (detail.terms && detail.terms !== '') ? detail.terms : (enrichedPo.terms || ''),
+              scope: detail.scope || enrichedPo.scope || 'Vendor Scope',
+              priority: detail.priority || enrichedPo.priority || 'High',
+              transportName: detail.transportName || enrichedPo.transportName || '',
+              shippingCharges: detail.shippingCharges !== undefined ? detail.shippingCharges : (enrichedPo.shippingCharges || 0),
+              otherCharges: detail.otherCharges !== undefined ? detail.otherCharges : (enrichedPo.otherCharges || 0),
+              discountPct: detail.discountPct !== undefined ? detail.discountPct : (enrichedPo.discountPct || 0),
+              purchaser: (detail.purchaser && detail.purchaser !== '—') ? detail.purchaser : (enrichedPo.purchaser || '—'),
               items: (detail.items && Array.isArray(detail.items) && detail.items.length > 0) ? detail.items : (enrichedPo.items || [])
             };
             populateFormStates(merged);

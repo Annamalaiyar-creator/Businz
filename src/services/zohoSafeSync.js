@@ -37,16 +37,29 @@ export async function getSafeZohoPOs() {
             return (zNo && (cNo === zNo || cId === zNo)) || (zId && (cId === zId || cZohoId === zId));
           });
           if (cloudMatch) {
+            const preservedItems = (Array.isArray(cloudMatch.items) && cloudMatch.items.length > 0)
+              ? cloudMatch.items
+              : (Array.isArray(zohoPo.items) && zohoPo.items.length > 0 ? zohoPo.items : []);
             return {
               ...zohoPo,
               ...cloudMatch,
               vendor: (cloudMatch.vendor && cloudMatch.vendor !== 'Vendor' && cloudMatch.vendor !== 'Annamalaiyar') ? cloudMatch.vendor : (zohoPo.vendor || 'Vendor'),
               status: zohoPo.status || cloudMatch.status,
               statusType: zohoPo.statusType || cloudMatch.statusType,
-              items: (cloudMatch.items && cloudMatch.items.length > 0) ? cloudMatch.items : (zohoPo.items || []),
-              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—') ? cloudMatch.deliveryAddress : (zohoPo.deliveryAddress || '—'),
-              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—') ? cloudMatch.billingAddress : (zohoPo.billingAddress || '—'),
-              paymentTerms: (cloudMatch.paymentTerms && cloudMatch.paymentTerms !== 'Net 30 Days') ? cloudMatch.paymentTerms : (zohoPo.paymentTerms || 'Net 30 Days'),
+              items: preservedItems,
+              notes: cloudMatch.notes || zohoPo.notes || '',
+              terms: cloudMatch.terms || zohoPo.terms || '',
+              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—' && cloudMatch.deliveryAddress !== '') ? cloudMatch.deliveryAddress : (zohoPo.deliveryAddress || '—'),
+              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—' && cloudMatch.billingAddress !== '') ? cloudMatch.billingAddress : (zohoPo.billingAddress || '—'),
+              paymentTerms: (cloudMatch.paymentTerms && cloudMatch.paymentTerms !== 'Net 30 Days' && cloudMatch.paymentTerms !== 'Due on Receipt') ? cloudMatch.paymentTerms : (zohoPo.paymentTerms || 'Net 30 Days'),
+              priority: cloudMatch.priority || zohoPo.priority || 'High',
+              scope: cloudMatch.scope || zohoPo.scope || 'Vendor Scope',
+              transportName: cloudMatch.transportName || zohoPo.transportName || '',
+              shippingCharges: cloudMatch.shippingCharges !== undefined ? cloudMatch.shippingCharges : (zohoPo.shippingCharges || 0),
+              otherCharges: cloudMatch.otherCharges !== undefined ? cloudMatch.otherCharges : (zohoPo.otherCharges || 0),
+              discountPct: cloudMatch.discountPct !== undefined ? cloudMatch.discountPct : (zohoPo.discountPct || 0),
+              purchaser: (cloudMatch.purchaser && cloudMatch.purchaser !== '—') ? cloudMatch.purchaser : (zohoPo.purchaser || '—'),
+              amount: (cloudMatch.amount && cloudMatch.amount !== '₹0.00' && cloudMatch.amount !== '₹ 0.00') ? cloudMatch.amount : zohoPo.amount
             };
           }
           return zohoPo;
@@ -63,9 +76,13 @@ export async function getSafeZohoPOs() {
           });
         }
 
-        // Only save to cloud if we are not erasing items
-        const hasValidItems = merged.some(p => Array.isArray(p.items) && p.items.length > 0);
-        if (hasValidItems || cloudList.length === 0) {
+        // Only save to cloud if we are not erasing items from records that already had items
+        const isSafeToSave = cloudList.every(c => {
+          if (!Array.isArray(c.items) || c.items.length === 0) return true;
+          const m = merged.find(p => normalize(p.poNo) === normalize(c.poNo) || normalize(p.id) === normalize(c.id));
+          return m && Array.isArray(m.items) && m.items.length > 0;
+        });
+        if (isSafeToSave || cloudList.length === 0) {
           saveCloudStore('po_store', merged);
         }
         return merged;
