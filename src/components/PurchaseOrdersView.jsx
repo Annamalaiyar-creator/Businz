@@ -120,15 +120,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   };
 
   const loggedInUserName = getLoggedInUserName();
-  const [viewMode, setViewMode] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem('controlroom_po_view_mode');
-      if (saved && (saved === 'view' || saved === 'edit' || saved === 'create')) {
-        return saved;
-      }
-    } catch (_) {}
-    return 'list';
-  }); // 'list' | 'create' | 'edit' | 'view'
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'create' | 'edit' | 'view'
   const [poDetailLoading, setPoDetailLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 

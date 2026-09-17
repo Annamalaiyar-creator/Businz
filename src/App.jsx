@@ -77,11 +77,16 @@ class AppErrorBoundary extends Component {
               The dashboard encountered a temporary loading issue. Click below to refresh your dashboard session.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => {
-                    this.setState({ hasError: false });
-                    localStorage.removeItem('controlroom_active_tab');
+                    try {
+                      sessionStorage.clear();
+                      localStorage.removeItem('controlroom_active_tab');
+                      localStorage.removeItem('controlroom_po_view_mode');
+                      localStorage.removeItem('controlroom_viewing_po');
+                    } catch (_) {}
+                    this.setState({ hasError: false, error: null });
                     window.location.reload();
                   }}
                   style={{
@@ -102,9 +107,11 @@ class AppErrorBoundary extends Component {
                 </button>
                 <button
                   onClick={() => {
-                    localStorage.removeItem('controlroom_is_authenticated');
-                    localStorage.removeItem('controlroom_user_role');
-                    localStorage.removeItem('controlroom_active_tab');
+                    try {
+                      sessionStorage.clear();
+                      localStorage.clear();
+                    } catch (_) {}
+                    this.setState({ hasError: false, error: null });
                     window.location.reload();
                   }}
                   style={{
@@ -123,10 +130,10 @@ class AppErrorBoundary extends Component {
               </div>
 
               {this.state.error && (
-                <details style={{ marginTop: '14px', textAlign: 'left', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px', color: '#64748B' }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: '700', color: '#DC2626' }}>View Error Diagnostic Info</summary>
-                  <pre style={{ marginTop: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#991B1B' }}>
-                    {this.state.error.toString()}
+                <details open style={{ marginTop: '14px', textAlign: 'left', backgroundColor: '#FEF2F2', padding: '12px 14px', borderRadius: '8px', border: '1px solid #FECACA', fontSize: '11px', color: '#991B1B' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: '700', color: '#DC2626', marginBottom: '6px' }}>Error Diagnostic Info</summary>
+                  <pre style={{ marginTop: '6px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#991B1B', maxHeight: '180px', overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace' }}>
+                    {this.state.error.stack || this.state.error.toString()}
                   </pre>
                 </details>
               )}
