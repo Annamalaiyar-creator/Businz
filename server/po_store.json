@@ -3618,9 +3618,13 @@
     "approver": "Velmurugan Rathinam (CEO)",
     "approvalPriority": "High",
     "amount": "₹2,83,200.00",
-    "status": "Draft / Pending Approval",
-    "statusType": "approved",
+    "status": "MD Approved",
+    "statusType": "md_approved",
     "pdfName": "purchase_order.pdf",
-    "zohoId": "4080449000000521001"
+    "zohoId": "4080449000000521001",
+    "approvedBy": "Velmurugan Rathinam (MD)",
+    "approvalRemarks": "Approved by MD",
+    "approvalDate": "17 Sept 2026",
+    "approvalTime": "06:46 pm"
   }
 ]

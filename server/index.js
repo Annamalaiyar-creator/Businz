@@ -803,9 +803,44 @@ const loadLocalPOs = () => {
           const k3 = normalize(d.zohoId);
           const existing = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3)) || {};
           const items = (Array.isArray(d.items) && d.items.length > 0) ? d.items : (existing.items || []);
+
+          const isAdv = (st, stType, approver) => {
+            const s = String(st || '').toLowerCase();
+            const stt = String(stType || '').toLowerCase();
+            return s.includes('md approved') || stt.includes('md_approved') ||
+                   s.includes('payment') || stt.includes('payment') ||
+                   s.includes('proceed') || stt.includes('proceed') ||
+                   s.includes('closed') || stt.includes('closed') ||
+                   s.includes('rejected') || stt.includes('rejected') ||
+                   Boolean(approver);
+          };
+
+          const effStatus = isAdv(existing.status, existing.statusType, existing.approvedBy)
+            ? existing.status
+            : (isAdv(d.status, d.statusType, d.approvedBy) ? d.status : (d.status || existing.status || 'Draft'));
+
+          const effStatusType = isAdv(existing.status, existing.statusType, existing.approvedBy)
+            ? (existing.statusType || (existing.status === 'MD Approved' ? 'md_approved' : (existing.status === 'Payment Processed' ? 'payment_processed' : 'approved')))
+            : (isAdv(d.status, d.statusType, d.approvedBy) ? (d.statusType || 'md_approved') : (d.statusType || existing.statusType || 'draft'));
+
+          const effApprovedBy = existing.approvedBy || d.approvedBy;
+          const effApprovalDate = existing.approvalDate || d.approvalDate;
+          const effApprovalTime = existing.approvalTime || d.approvalTime;
+          const effApprovalRemarks = existing.approvalRemarks || d.approvalRemarks;
+          const effPaymentDetails = existing.paymentDetails || d.paymentDetails;
+          const effProceedDetails = existing.proceedDetails || d.proceedDetails;
+
           const mergedItem = {
             ...existing,
             ...d,
+            status: effStatus,
+            statusType: effStatusType,
+            approvedBy: effApprovedBy,
+            approvalDate: effApprovalDate,
+            approvalTime: effApprovalTime,
+            approvalRemarks: effApprovalRemarks,
+            paymentDetails: effPaymentDetails,
+            proceedDetails: effProceedDetails,
             vendor: (d.vendor && d.vendor !== 'Vendor' && d.vendor !== 'Annamalaiyar' && d.vendor !== 'Fresh Vendor') ? d.vendor : (existing.vendor || d.vendor),
             deliveryAddress: (d.deliveryAddress && d.deliveryAddress !== '—' && d.deliveryAddress !== 'Tamil Nadu, India') ? d.deliveryAddress : (existing.deliveryAddress || d.deliveryAddress || '—'),
             billingAddress: (d.billingAddress && d.billingAddress !== '—') ? d.billingAddress : (existing.billingAddress || d.billingAddress || '—'),
@@ -820,6 +855,15 @@ const loadLocalPOs = () => {
           if (k1) map.set(k1, mergedItem);
           if (k2) map.set(k2, mergedItem);
           if (k3) map.set(k3, mergedItem);
+        });
+        // Also ensure any existing in-memory/cloud POs not on disk are in the map
+        memPOs.forEach(p => {
+          const k1 = normalize(p.poNo);
+          const k2 = normalize(p.id);
+          const k3 = normalize(p.zohoId);
+          if (k1 && !map.has(k1)) map.set(k1, p);
+          if (k2 && !map.has(k2)) map.set(k2, p);
+          if (k3 && !map.has(k3)) map.set(k3, p);
         });
         const merged = Array.from(new Set(map.values()));
         supabaseMemoryStore.po_store = merged;
@@ -3644,6 +3688,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
     const data = await fetchZohoPurchaseOrders(accessToken);
     
     if (data.purchaseorders) {
+      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
       const localGRNs = loadLocalGRNs();
       let localPOs = loadLocalPOs();
       
@@ -3652,7 +3697,6 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         let hasNewEnrichedItems = false;
         const recentToCheck = data.purchaseorders.slice(0, 5);
         for (const rpo of recentToCheck) {
-          const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
           const rNoClean = normalize(rpo.purchaseorder_number);
           const rIdClean = normalize(rpo.purchaseorder_id);
           const matchedLp = localPOs.find(p => {
