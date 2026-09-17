@@ -191,7 +191,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   const isAccounts = userRole.includes('Accounts');
   const isProcurementRole = userRole.includes('Procurement') || storedRole.includes('Procurement');
-  const isProcurementHead = isProcurementRole || isAdminOrTech || isAccounts;
+  const isProcurementHead = !isAccounts && (isProcurementRole || isAdminOrTech);
   const [statusFilter, setStatusFilter] = useState('All');
   const [filterDate, setFilterDate] = useState('');
   const [poTab, setPoTab] = useState(isExecutiveOrMD ? 'Draft' : isAccounts ? 'MD_APPROVED' : 'All');
@@ -2118,8 +2118,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   );
                 })()}
 
-                {/* Push to GRN Button: Appears in floating action bar for any PO with status "Proceed PO" */}
-                {selectedPOs.length === 1 && (() => {
+                {/* Push to GRN Button: Appears in floating action bar for any PO with status "Proceed PO" (Procurement only) */}
+                {selectedPOs.length === 1 && !isAccounts && (() => {
                   const target = poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]);
                   if (!target) return null;
                   const st = String(target.status || '').trim();
@@ -2219,13 +2219,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       }
 
                       if (st === 'Payment Processed' || target.statusType === 'payment_processed') {
-                        return (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        if (!isProcurementHead) {
+                          return (
                             <div style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '5px',
-                              padding: '5px 10px',
+                              gap: '6px',
+                              padding: '5px 12px',
                               borderRadius: '8px',
                               backgroundColor: '#ECFDF5',
                               color: '#065F46',
@@ -2233,40 +2233,41 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                               fontWeight: '700',
                               border: '1px solid #A7F3D0'
                             }}>
-                              <CheckCircle size={12} style={{ color: '#059669' }} /> Payment Processed
+                              <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
                             </div>
-                            {isProcurementHead && (
-                              <button
-                                onClick={() => {
-                                  setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
-                                  setProceedingPo(target);
-                                }}
-                                style={{
-                                  backgroundColor: '#0E7490',
-                                  border: 'none',
-                                  color: '#FFFFFF',
-                                  borderRadius: '10px',
-                                  padding: '6px 14px',
-                                  fontSize: '12px',
-                                  fontWeight: '700',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  boxShadow: '0 1px 2px rgba(14, 116, 144, 0.25)',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                              >
-                                <Send size={14} style={{ color: '#FFFFFF' }} /> Proceed PO (Ready for GRN)
-                              </button>
-                            )}
-                          </div>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => {
+                              setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                              setProceedingPo(target);
+                            }}
+                            style={{
+                              backgroundColor: '#0E7490',
+                              border: 'none',
+                              color: '#FFFFFF',
+                              borderRadius: '10px',
+                              padding: '6px 14px',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 1px 2px rgba(14, 116, 144, 0.25)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                          >
+                            <Send size={14} style={{ color: '#FFFFFF' }} /> Proceed PO (Ready for GRN)
+                          </button>
                         );
                       }
 
                       if (st === 'Proceed PO' || st === 'PROCEED PO' || target.statusType === 'proceed_po') {
+                        if (isAccounts) return null;
                         return (
                           <button
                             onClick={() => handlePushToGrn(target)}
@@ -2728,6 +2729,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     }
 
                     if (isProceedPoOnly) {
+                      if (isAccounts) {
+                        return (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', border: '1px solid #0E7490', borderRadius: '8px', padding: '6px 14px', fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>
+                            <CheckCircle size={14} style={{ color: '#0E7490' }} /> Proceed PO (GRN Ready)
+                          </div>
+                        );
+                      }
                       return (
                         <button
                           type="button"
@@ -2753,8 +2761,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     }
 
                     if (isPaymentProcessed) {
-                      return (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      if (!isProcurementHead) {
+                        return (
                           <div style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -2762,26 +2770,26 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             backgroundColor: '#ECFDF5',
                             border: '1px solid #A7F3D0',
                             borderRadius: '8px',
-                            padding: '6px 12px',
+                            padding: '6px 14px',
                             fontSize: '12px',
                             fontWeight: '700',
                             color: '#065F46'
                           }}>
-                            <CheckCircle size={14} style={{ color: '#059669' }} /> Payment Processed
+                            <CheckCircle size={15} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
                           </div>
-                          {isProcurementHead && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProceedEmailInput(currentPoObj?.email || email || (currentPoObj?.vendor ? `contact@${currentPoObj.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
-                                setProceedingPo(currentPoObj);
-                              }}
-                              style={{ backgroundColor: '#0E7490', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '12px', fontWeight: '700', color: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
-                            >
-                              <Send style={{ width: '14px', height: '14px' }} /> Proceed PO (Ready for GRN)
-                            </button>
-                          )}
-                        </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProceedEmailInput(currentPoObj?.email || email || (currentPoObj?.vendor ? `contact@${currentPoObj.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                            setProceedingPo(currentPoObj);
+                          }}
+                          style={{ backgroundColor: '#0E7490', border: 'none', borderRadius: '8px', padding: '8px 20px', fontSize: '13px', fontWeight: '700', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
+                        >
+                          <Send style={{ width: '15px', height: '15px' }} /> Proceed PO (Ready for GRN)
+                        </button>
                       );
                     }
 
@@ -3651,26 +3659,43 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                               <CheckCircle size={14} style={{ color: '#0E7490' }} /> In GRN Process
                             </div>
                           ) : isProceedPoOnly ? (
-                            <button
-                              type="button"
-                              onClick={() => handlePushToGrn(currentPoObj)}
-                              style={{
-                                backgroundColor: '#0E7490',
-                                border: 'none',
-                                borderRadius: '8px',
-                                padding: '7px 18px',
-                                fontSize: '13px',
-                                fontWeight: '700',
-                                color: 'white',
-                                cursor: 'pointer',
+                            isAccounts ? (
+                              <div style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                              }}
-                            >
-                              <Boxes size={15} /> Push to GRN
-                            </button>
+                                backgroundColor: '#ECFEFF',
+                                border: '1px solid #0E7490',
+                                borderRadius: '8px',
+                                padding: '6px 14px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                color: '#0E7490'
+                              }}>
+                                <CheckCircle size={14} style={{ color: '#0E7490' }} /> Proceed PO (GRN Ready)
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handlePushToGrn(currentPoObj)}
+                                style={{
+                                  backgroundColor: '#0E7490',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  padding: '7px 18px',
+                                  fontSize: '13px',
+                                  fontWeight: '700',
+                                  color: 'white',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+                                }}
+                              >
+                                <Boxes size={15} /> Push to GRN
+                              </button>
+                            )
                           ) : isPaymentProcessed ? (
                             <>
                               <div style={{
