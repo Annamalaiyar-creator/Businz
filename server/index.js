@@ -5132,6 +5132,20 @@ app.get('/api/grns', async (req, res) => {
   res.json(sorted);
 });
 
+// Endpoint to reset all GRNs
+app.all('/api/grns/reset-all', async (req, res) => {
+  try {
+    const grnPath = getStoreFilePath('grn_store.json');
+    try {
+      fs.writeFileSync(grnPath, '[]', 'utf8');
+    } catch (_) {}
+    await saveDatabaseStore('grn_store', []);
+    res.json({ success: true, message: 'All GRNs reset to empty.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Endpoint to delete a GRN by ID or grnNo
 app.delete('/api/grns/:id', async (req, res) => {
   const targetId = req.params.id;

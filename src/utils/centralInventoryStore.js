@@ -232,26 +232,7 @@ class CentralInventoryStore {
         this.grnList = [];
       }
     } else {
-      this.grnList = [
-        {
-          grnNo: 'GRN-00124',
-          supplier: 'Hindalco Extrusions Ltd',
-          poNo: 'PO-2026-088',
-          grnDate: '2026-08-20',
-          invNo: 'INV-HIND-991',
-          invDate: '2026-08-19',
-          warehouse: 'Main Raw Material Warehouse - Rack A1',
-          materialCode: 'RM-ALU-6000',
-          materialName: 'Aluminium Profile 6000mm Length',
-          orderedQty: 100,
-          receivedQty: 100,
-          unit: 'Lengths',
-          batchNo: 'BATCH-ALU-2026-08',
-          status: 'Posted to Inventory',
-          receivedBy: 'Rajesh Kumar (Store In-Charge)',
-          remarks: 'Inspected and verified 100 lengths in good condition'
-        }
-      ];
+      this.grnList = [];
       this.saveGrns();
     }
 
@@ -264,30 +245,7 @@ class CentralInventoryStore {
         this.jobWorks = [];
       }
     } else {
-      this.jobWorks = [
-        {
-          jobWorkNo: 'JW-00124',
-          prodOrderNo: 'PROD-2026-101',
-          bomRef: 'BOM-SOLAR-001',
-          inputMaterialCode: 'RM-ALU-6000',
-          inputMaterialName: 'Aluminium Profile 6000mm Length',
-          inputQty: 1,
-          inputUnit: 'Length',
-          outputMaterialCode: 'PM-ALU-300',
-          outputMaterialName: 'Aluminium 300mm Cut Piece',
-          expectedOutputQty: 8,
-          actualOutputQty: 8,
-          outputUnit: 'Pieces',
-          employee: 'Suresh Kumar (Operator)',
-          workstation: 'Cut-off Saw Station #2',
-          machine: 'CNC Precision Saw M-04',
-          assignedDate: '2026-08-21',
-          dueDate: '2026-08-22',
-          priority: 'High',
-          status: 'Completed',
-          instructions: 'Cut 6000mm length cleanly into 8 equal 300mm cut pieces'
-        }
-      ];
+      this.jobWorks = [];
       this.saveJobWorks();
     }
 
@@ -300,23 +258,7 @@ class CentralInventoryStore {
         this.productionOrders = [];
       }
     } else {
-      this.productionOrders = [
-        {
-          prodOrderNo: 'PROD-2026-101',
-          bomCode: 'BOM-SOLAR-001',
-          customerName: 'Tata Power Solar Systems',
-          productCode: 'FG-SOLAR-STR',
-          productName: 'Solar Structure Array Module',
-          requiredQty: 10,
-          producedQty: 0,
-          status: 'In Production',
-          createdAt: '2026-08-21',
-          requiredMaterials: [
-            { code: 'PM-ALU-300', name: 'Aluminium 300mm Cut Piece', reqQty: 80, issuedQty: 0, unit: 'Pieces' },
-            { code: 'CON-BLT-M8', name: 'M8×30 Hex Bolt (SS304)', reqQty: 160, issuedQty: 0, unit: 'Nos' }
-          ]
-        }
-      ];
+      this.productionOrders = [];
       this.saveProdOrders();
     }
 
@@ -329,16 +271,7 @@ class CentralInventoryStore {
         this.reservations = [];
       }
     } else {
-      this.reservations = [
-        {
-          id: 'RES-001',
-          refNo: 'BOM-SOLAR-001',
-          itemCode: 'RM-ALU-6000',
-          reservedQty: 20,
-          date: '2026-08-21',
-          status: 'Active'
-        }
-      ];
+      this.reservations = [];
       this.saveReservations();
     }
 

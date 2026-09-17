@@ -111,7 +111,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
 
   const ALUMINUM_PROFILES = [
-    { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 2000, minLevel: 50, store: 'Bay #4 - FG Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Bay #4 - FG Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Aluminium', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
@@ -163,7 +163,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const [materials, setMaterials] = useState(() => {
     // One-time client migration to ensure all stock counts are initialized to 0
     try {
-      const stockZeroKey = 'controlroom_stock_zero_reset_v3';
+      const stockZeroKey = 'controlroom_stock_zero_reset_v5';
       if (localStorage.getItem(stockZeroKey) !== 'true') {
         localStorage.setItem(stockZeroKey, 'true');
         ['controlroom_raw_materials_store', 'controlroom_central_items_v2'].forEach(key => {
@@ -188,6 +188,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             } catch (_) {}
           }
         });
+        localStorage.setItem('controlroom_central_grns_v2', '[]');
+        localStorage.setItem('goods_receipt_notes', '[]');
       }
     } catch (_) {}
 
@@ -502,7 +504,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           if (matMap.has(upperKey)) {
             const existing = matMap.get(upperKey);
             const existingStock = existing.stock !== undefined ? Number(existing.stock) : null;
-            const baseOpen = Math.max(0, Number(existing.openingStock || (upperKey === 'MR-300MM' ? 2000 : (upperKey === 'ALU-LEN-2414MM' ? 250 : 0))));
+            const baseOpen = Math.max(0, Number(existing.openingStock || 0));
             const isExistingReduced = existingStock !== null && (existingStock < baseOpen || (existing.reserved && Number(existing.reserved) > 0));
             const incomingStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : null;
             const finalStock = isExistingReduced
@@ -530,7 +532,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             unit: it.unit || it.uom || 'Nos',
             stock: (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 0,
             minLevel: 50,
-            status: ((it.stock !== undefined && Number(it.stock) === 0) ? 'Out of Stock' : 'In Stock'),
+            status: (it.stock !== undefined && Number(it.stock) > 0) ? 'In Stock' : 'Out of Stock',
             store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
             hsn: '7604',
             lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
@@ -670,6 +672,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
         let base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0);
         const grnQty = Number(m.goodsReceived || 0);
+
+        if (base === 0 && grnQty === 0) {
+          m.openingStock = 0;
+          m.physicalStock = 0;
+          m.stock = 0;
+          m.availableStock = 0;
+          m.reserved = 0;
+          m.blockedForBom = 0;
+          m.status = 'Out of Stock';
+          return;
+        }
 
         // If the item already has an authoritative stock and reserved count from server / cloud
         // (e.g. stock: 4800, reserved: 200, physical: 5000), prioritize that authoritative state directly
