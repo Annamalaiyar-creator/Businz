@@ -53,39 +53,48 @@ export async function getSafeZohoPOs() {
               contactPerson: cloudMatch.contactPerson || zohoPo.contactPerson || '',
               gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (zohoPo.gstNo || '—'),
               status: (() => {
-                const isAdv = (st, stType, approver) => {
-                  const s = String(st || '').toLowerCase();
-                  const stt = String(stType || '').toLowerCase();
-                  return s.includes('md approved') || stt.includes('md_approved') ||
-                         s.includes('payment') || stt.includes('payment') ||
-                         s.includes('proceed') || stt.includes('proceed') ||
-                         s.includes('closed') || stt.includes('closed') ||
-                         s.includes('rejected') || stt.includes('rejected') ||
-                         Boolean(approver);
+                const getStageRank = (st, stType, approver) => {
+                  const s = String(st || '').toLowerCase().trim();
+                  const stt = String(stType || '').toLowerCase().trim();
+                  if (s.includes('rejected') || stt.includes('rejected')) return 7;
+                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) return 6;
+                  if (s.includes('partially') || stt.includes('partially')) return 5;
+                  if (s.includes('proceed') || stt.includes('proceed')) return 4;
+                  if (s.includes('payment') || stt.includes('payment')) return 3;
+                  if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
+                  return 1;
                 };
-                if (isAdv(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy)) return cloudMatch.status;
-                if (isAdv(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy)) return zohoPo.status;
-                return zohoPo.status || cloudMatch.status || 'Draft';
+                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy);
+                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy);
+                if (zRank > cRank) return zohoPo.status;
+                if (cRank > zRank) return cloudMatch.status;
+                return cloudMatch.status || zohoPo.status || 'Draft';
               })(),
               statusType: (() => {
-                const isAdv = (st, stType, approver) => {
-                  const s = String(st || '').toLowerCase();
-                  const stt = String(stType || '').toLowerCase();
-                  return s.includes('md approved') || stt.includes('md_approved') ||
-                         s.includes('payment') || stt.includes('payment') ||
-                         s.includes('proceed') || stt.includes('proceed') ||
-                         s.includes('closed') || stt.includes('closed') ||
-                         s.includes('rejected') || stt.includes('rejected') ||
-                         Boolean(approver);
+                const getStageRank = (st, stType, approver) => {
+                  const s = String(st || '').toLowerCase().trim();
+                  const stt = String(stType || '').toLowerCase().trim();
+                  if (s.includes('rejected') || stt.includes('rejected')) return 7;
+                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) return 6;
+                  if (s.includes('partially') || stt.includes('partially')) return 5;
+                  if (s.includes('proceed') || stt.includes('proceed')) return 4;
+                  if (s.includes('payment') || stt.includes('payment')) return 3;
+                  if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
+                  return 1;
                 };
-                if (isAdv(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy)) return cloudMatch.statusType || 'md_approved';
-                if (isAdv(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy)) return zohoPo.statusType || 'md_approved';
-                return zohoPo.statusType || cloudMatch.statusType || 'draft';
+                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy);
+                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy);
+                if (zRank > cRank) return zohoPo.statusType || 'draft';
+                if (cRank > zRank) return cloudMatch.statusType || 'draft';
+                return cloudMatch.statusType || zohoPo.statusType || 'draft';
               })(),
               approvedBy: cloudMatch.approvedBy || zohoPo.approvedBy,
               approvalDate: cloudMatch.approvalDate || zohoPo.approvalDate,
               approvalTime: cloudMatch.approvalTime || zohoPo.approvalTime,
               approvalRemarks: cloudMatch.approvalRemarks || zohoPo.approvalRemarks,
+              proceedDetails: cloudMatch.proceedDetails || zohoPo.proceedDetails,
+              paymentDetails: cloudMatch.paymentDetails || zohoPo.paymentDetails,
+              grnDetails: cloudMatch.grnDetails || zohoPo.grnDetails,
               items: preservedItems,
               notes: cloudMatch.notes || zohoPo.notes || '',
               terms: (cloudMatch.terms && cloudMatch.terms.length > 50) ? cloudMatch.terms : (zohoPo.terms || cloudMatch.terms || ''),

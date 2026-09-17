@@ -1,6 +1,6 @@
 [
   {
-    "id": "PO-00135",
+    "id": "4080449000000521001",
     "poNo": "PO-00135",
     "zohoId": "4080449000000521001",
     "vendor": "Paramount Industrial Supplies",
@@ -37,13 +37,15 @@
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
+        "sku": "SKU-101",
         "description": "—",
         "account": "Finished Goods",
         "qty": 2000,
         "unit": "NOS",
         "rate": 120,
         "tax": 18,
-        "sku": ""
+        "previouslyReceived": 0,
+        "remainingQty": 2000
       }
     ],
     "deliveryType": "Organization",
@@ -54,7 +56,7 @@
     "approvalTime": "06:46 pm",
     "success": true,
     "message": "Control Room Zoho Gateway Active",
-    "time": "2026-09-17T16:06:19.218Z",
+    "time": "2026-09-17T16:32:21.330Z",
     "paymentDetails": {
       "mode": "Bank Transfer",
       "refNo": "21333434",
@@ -72,7 +74,12 @@
         "uploadedAt": "2026-09-17T16:04:44.270Z"
       },
       "verifiedBy": "Accounts Team"
-    }
+    },
+    "totalOrderedQty": 2000,
+    "totalReceivedQty": 0,
+    "totalRemainingQty": 2000,
+    "receivingProgressPct": "0.0",
+    "grnHistory": []
   },
   {
     "id": "4080449000000520001",

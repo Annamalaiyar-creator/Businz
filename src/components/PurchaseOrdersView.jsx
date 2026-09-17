@@ -971,28 +971,37 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const remarks = proceedRemarksInput || 'Authorized for dispatch and GRN creation';
     const targetVendorEmail = (proceedEmailInput || poTarget.email || email || '').trim();
 
+    const proceedDetails = {
+      date: proceedDate,
+      time: proceedTime,
+      remarks,
+      authorizedBy: 'Procurement Head',
+      vendorEmail: targetVendorEmail,
+      emailDispatched: Boolean(targetVendorEmail),
+      deliveryStatus: targetVendorEmail ? `Dispatched to ${targetVendorEmail}` : 'Authorized (Ready for GRN)'
+    };
+
+    const updatedProceedPo = {
+      ...poTarget,
+      status: 'Proceed PO',
+      statusType: 'proceed_po',
+      email: targetVendorEmail || poTarget.email,
+      proceedDetails
+    };
+
     // 1. Immediately reflect 'Proceed PO' in currently active view and poList
     setViewingPoStatus('Proceed PO');
-    setPoList(prev => prev.map(p => {
-      if (p.poNo === poId || p.id === poId) {
-        return {
-          ...p,
-          status: 'Proceed PO',
-          statusType: 'proceed_po',
-          email: targetVendorEmail || p.email,
-          proceedDetails: {
-            date: proceedDate,
-            time: proceedTime,
-            remarks,
-            authorizedBy: 'Procurement Head',
-            vendorEmail: targetVendorEmail,
-            emailDispatched: Boolean(targetVendorEmail),
-            deliveryStatus: targetVendorEmail ? `Dispatched to ${targetVendorEmail}` : 'Authorized (Ready for GRN)'
-          }
-        };
-      }
-      return p;
-    }));
+    setPoList(prev => prev.map(p => (p.poNo === poId || p.id === poId) ? { ...p, ...updatedProceedPo } : p));
+    saveSafeZohoPO(updatedProceedPo);
+
+    if (poTab === 'PAYMENT_PROCESSED') {
+      setPoTab('PROCEED_PO');
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: updatedProceedPo }));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
 
     setProceedingPo(null);
     setProceedRemarksInput('');
@@ -2106,41 +2115,162 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   );
                 })()}
 
-                {/* Push to GRN Button: Appears in floating action bar for any PO with status "Proceed PO" (Procurement only) */}
-                {selectedPOs.length === 1 && !isAccounts && (() => {
+                {/* 3. Role & Status-specific Primary Actions (1 PO Selected) */}
+                {selectedPOs.length === 1 && (() => {
                   const target = poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]);
                   if (!target) return null;
                   const st = String(target.status || '').trim();
-                  const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO' || target.statusType === 'proceed_po';
+                  const stt = String(target.statusType || '').toLowerCase();
 
-                  if (!isProceedPo) return null;
+                  // ACCOUNTS ROLE ACTIONS: Verify Payment or Payment Processed badge ONLY
+                  if (isAccounts) {
+                    const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved' || stt === 'md_approved';
+                    if (isMdApproved) {
+                      return (
+                        <button
+                          onClick={() => handleOpenPaymentProcessModal(target)}
+                          style={{
+                            backgroundColor: '#FFFBEB',
+                            border: '1px solid #FDE68A',
+                            color: '#92400E',
+                            borderRadius: '10px',
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFBEB'}
+                        >
+                          <CreditCard size={14} style={{ color: '#D97706' }} /> Verify Payment
+                        </button>
+                      );
+                    }
+                    const isPaidOrBeyond = st === 'Payment Processed' || stt === 'payment_processed' || st === 'Proceed PO' || stt === 'proceed_po' || st.includes('CLOSED') || st.includes('PARTIALLY');
+                    if (isPaidOrBeyond) {
+                      return (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#065F46',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          border: '1px solid #A7F3D0'
+                        }}>
+                          <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
+                        </div>
+                      );
+                    }
+                    return null;
+                  }
 
-                  return (
-                    <button
-                      onClick={() => handlePushToGrn(target)}
-                      style={{
-                        backgroundColor: '#0E7490',
-                        border: 'none',
-                        color: '#FFFFFF',
-                        borderRadius: '10px',
-                        padding: '6px 16px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 2px 4px rgba(14, 116, 144, 0.3)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                    >
-                      <Boxes size={14} style={{ color: '#FFFFFF' }} /> Push to GRN
-                    </button>
-                  );
+                  // PROCUREMENT / ADMIN / CEO ACTIONS (isAccounts is FALSE)
+                  const isPaymentProcessed = st === 'Payment Processed' || stt === 'payment_processed';
+                  const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO' || stt === 'proceed_po';
+                  const isAlreadyApproved = isPaymentProcessed || isProceedPo || st === 'MD Approved' || stt === 'md_approved' || st.includes('CLOSED') || st.includes('PARTIALLY');
+                  const isDraftOrPending = !isAlreadyApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
+
+                  // A) If CEO/MD and still Draft -> Show "Approve as MD"
+                  if (canApproveAsMD && isDraftOrPending) {
+                    return (
+                      <button
+                        onClick={() => setApprovingPo(target)}
+                        title="Approve Purchase Order directly as MD / CEO"
+                        style={{
+                          backgroundColor: '#F0FDF4',
+                          border: '1.5px solid #86EFAC',
+                          color: '#15803D',
+                          borderRadius: '10px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 4px rgba(22, 163, 74, 0.15)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#DCFCE7'; e.currentTarget.style.borderColor = '#4ADE80'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F0FDF4'; e.currentTarget.style.borderColor = '#86EFAC'; }}
+                      >
+                        <CheckCircle size={14} style={{ color: '#16A34A' }} /> Approve as MD
+                      </button>
+                    );
+                  }
+
+                  // B) If Payment Processed -> Show "Proceed PO (Ready for GRN)"
+                  if (isPaymentProcessed) {
+                    return (
+                      <button
+                        onClick={() => {
+                          setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                          setProceedingPo(target);
+                        }}
+                        style={{
+                          backgroundColor: '#0E7490',
+                          border: 'none',
+                          color: '#FFFFFF',
+                          borderRadius: '10px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 1px 2px rgba(14, 116, 144, 0.25)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                      >
+                        <Send size={14} style={{ color: '#FFFFFF' }} /> Proceed PO (Ready for GRN)
+                      </button>
+                    );
+                  }
+
+                  // C) If Proceed PO -> Show "Push to GRN" (Proceed PO disappears)
+                  if (isProceedPo) {
+                    return (
+                      <button
+                        onClick={() => handlePushToGrn(target)}
+                        style={{
+                          backgroundColor: '#0E7490',
+                          border: 'none',
+                          color: '#FFFFFF',
+                          borderRadius: '10px',
+                          padding: '6px 16px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 4px rgba(14, 116, 144, 0.3)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                      >
+                        <Boxes size={14} style={{ color: '#FFFFFF' }} /> Push to GRN
+                      </button>
+                    );
+                  }
+
+                  return null;
                 })()}
 
+                {/* 4. Delete: For Procurement/Admin (not MD, not Accounts) */}
                 {!isExecutiveOrMD && !isAccounts && (
                   <button
                     onClick={() => {
@@ -2170,407 +2300,90 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   </button>
                 )}
 
-                {/* Accounts View: Render direct buttons inside floating toolbar pill (no 3-dot menu, no clone, no edit) */}
-                {isAccounts ? (
-                  <>
-                    {selectedPOs.length === 1 && (() => {
-                      const target = poList.find(p => p.poNo === selectedPOs[0]);
-                      if (!target) return null;
-                      const st = String(target.status || '').trim();
-                      const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved';
+                {/* 5. View Details */}
+                <button
+                  onClick={() => {
+                    if (selectedPOs && selectedPOs.length > 1) {
+                      alert("You can't open details for multiple files at once. Please select a single item to view details.");
+                      return;
+                    }
+                    const target = (selectedPOs && selectedPOs.length > 0)
+                      ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
+                      : (poList[0] || null);
+                    if (target) {
+                      handleStartView(target);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    color: '#1E293B',
+                    borderRadius: '10px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                >
+                  <Eye size={14} style={{ color: '#0E7490' }} /> View Details
+                </button>
 
-                      if (isMdApproved) {
-                        return (
-                          <button
-                            onClick={() => handleOpenPaymentProcessModal(target)}
-                            style={{
-                              backgroundColor: '#FFFBEB',
-                              border: '1px solid #FDE68A',
-                              color: '#92400E',
-                              borderRadius: '10px',
-                              padding: '6px 14px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFBEB'}
-                          >
-                            <CreditCard size={14} style={{ color: '#D97706' }} /> Verify Payment
-                          </button>
-                        );
-                      }
+                {/* 6. Export / Print PDF */}
+                <button
+                  onClick={() => window.print()}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    color: '#1E293B',
+                    borderRadius: '10px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                >
+                  <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
+                </button>
 
-                      if (st === 'Payment Processed' || target.statusType === 'payment_processed') {
-                        if (!isProcurementHead) {
-                          return (
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '5px 12px',
-                              borderRadius: '8px',
-                              backgroundColor: '#ECFDF5',
-                              color: '#065F46',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              border: '1px solid #A7F3D0'
-                            }}>
-                              <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
-                            </div>
-                          );
-                        }
-                        return (
-                          <button
-                            onClick={() => {
-                              setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
-                              setProceedingPo(target);
-                            }}
-                            style={{
-                              backgroundColor: '#0E7490',
-                              border: 'none',
-                              color: '#FFFFFF',
-                              borderRadius: '10px',
-                              padding: '6px 14px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 1px 2px rgba(14, 116, 144, 0.25)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                          >
-                            <Send size={14} style={{ color: '#FFFFFF' }} /> Proceed PO (Ready for GRN)
-                          </button>
-                        );
-                      }
-
-                      if (st === 'Proceed PO' || st === 'PROCEED PO' || target.statusType === 'proceed_po') {
-                        if (isAccounts) return null;
-                        return (
-                          <button
-                            onClick={() => handlePushToGrn(target)}
-                            style={{
-                              backgroundColor: '#0E7490',
-                              border: 'none',
-                              color: '#FFFFFF',
-                              borderRadius: '10px',
-                              padding: '6px 16px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 4px rgba(14, 116, 144, 0.3)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0891B2'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                          >
-                            <Boxes size={14} style={{ color: '#FFFFFF' }} /> Push to GRN
-                          </button>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    <button
-                      onClick={() => {
-                        if (selectedPOs && selectedPOs.length > 1) {
-                          alert("You can't open details for multiple files at once. Please select a single item to view details.");
-                          return;
-                        }
-                        const target = (selectedPOs && selectedPOs.length > 0)
-                          ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
-                          : (poList[0] || null);
-                        if (target) {
-                          handleStartView(target);
-                        }
-                      }}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <Eye size={14} style={{ color: '#0E7490' }} /> View Details
-                    </button>
-
-                    <button
-                      onClick={() => window.print()}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
-                    </button>
-
-                    {/* Export to Tally */}
-                    <button
-                      onClick={() => setShowTallyModal(true)}
-                      style={{
-                        backgroundColor: '#FEF3C7',
-                        border: '1px solid #FDE68A',
-                        color: '#92400E',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(217,119,6,0.1)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                      title="Export selected Purchase Orders to TallyPrime / Tally.ERP 9"
-                    >
-                      <FileCode size={14} style={{ color: '#D97706' }} /> Export to Tally
-                    </button>
-                  </>
-                ) : canApproveAsMD ? (
-                  <>
-                    {selectedPOs.length === 1 && (() => {
-                      const target = poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]);
-                      if (!target) return null;
-                      const st = String(target.status || '').trim();
-                      const stType = String(target.statusType || '').toLowerCase();
-                      const isAlreadyApproved = st === 'MD Approved' || st === 'Payment Processed' || st === 'Proceed PO' || st.includes('CLOSED') || stType === 'md_approved' || stType === 'payment_processed' || stType === 'proceed_po' || stType === 'closed';
-                      const isDraftOrPending = !isAlreadyApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN' || stType === 'pending' || stType === 'draft');
-                      if (isDraftOrPending) {
-                        return (
-                          <button
-                            onClick={() => setApprovingPo(target)}
-                            title="Approve Purchase Order directly as MD / CEO"
-                            style={{
-                              backgroundColor: '#F0FDF4',
-                              border: '1.5px solid #86EFAC',
-                              color: '#15803D',
-                              borderRadius: '10px',
-                              padding: '6px 14px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 4px rgba(22, 163, 74, 0.15)',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#DCFCE7'; e.currentTarget.style.borderColor = '#4ADE80'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F0FDF4'; e.currentTarget.style.borderColor = '#86EFAC'; }}
-                          >
-                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Approve as MD
-                          </button>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    <button
-                      onClick={() => {
-                        if (selectedPOs && selectedPOs.length > 1) {
-                          alert("You can't open details for multiple files at once. Please select a single item to view details.");
-                          return;
-                        }
-                        const target = (selectedPOs && selectedPOs.length > 0)
-                          ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
-                          : (poList[0] || null);
-                        if (target) {
-                          handleStartView(target);
-                        }
-                      }}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <Eye size={14} style={{ color: '#0E7490' }} /> View Details
-                    </button>
-
-                    <button
-                      onClick={() => window.print()}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <FileText size={14} style={{ color: '#059669' }} /> Export PDF
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => {
-                        if (selectedPOs && selectedPOs.length > 1) {
-                          alert("You can't open details for multiple files at once. Please select a single item to view details.");
-                          return;
-                        }
-                        const target = (selectedPOs && selectedPOs.length > 0)
-                          ? (poList.find(p => p.poNo === selectedPOs[0]) || { poNo: selectedPOs[0], vendor: 'Vendor Reference' })
-                          : (poList[0] || null);
-                        if (target) {
-                          handleStartView(target);
-                        }
-                      }}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <Eye size={14} style={{ color: '#0E7490' }} /> View Details
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        alert(`Cloned ${selectedPOs.length} selected PO record(s).`);
-                      }}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <Copy size={14} style={{ color: '#2563EB' }} /> Duplicate / Clone
-                    </button>
-
-                    <button
-                      onClick={() => window.print()}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                    >
-                      <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
-                    </button>
-
-                    {/* Export to Tally */}
-                    <button
-                      onClick={() => setShowTallyModal(true)}
-                      style={{
-                        backgroundColor: '#FEF3C7',
-                        border: '1px solid #FDE68A',
-                        color: '#92400E',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(217,119,6,0.1)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                      title="Export selected Purchase Orders to TallyPrime / Tally.ERP 9"
-                    >
-                      <FileCode size={14} style={{ color: '#D97706' }} /> Export to Tally
-                    </button>
-                  </>
+                {/* 7. Export to Tally */}
+                {(isAccounts || isTechnicalAdmin) && (
+                  <button
+                    onClick={() => setShowTallyModal(true)}
+                    style={{
+                      backgroundColor: '#FEF3C7',
+                      border: '1px solid #FDE68A',
+                      color: '#92400E',
+                      borderRadius: '10px',
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 2px rgba(217,119,6,0.1)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                    title="Export selected Purchase Orders to TallyPrime / Tally.ERP 9"
+                  >
+                    <FileCode size={14} style={{ color: '#D97706' }} /> Export to Tally
+                  </button>
                 )}
 
                 <button

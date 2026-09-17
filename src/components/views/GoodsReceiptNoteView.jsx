@@ -12,7 +12,7 @@ import {
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
 import StatusBadge from '../StatusBadge';
-import { getSafeZohoVendors, getSafeZohoItems } from '../../services/zohoSafeSync';
+import { getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../../services/zohoSafeSync';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
@@ -802,6 +802,17 @@ export default function GoodsReceiptNoteView(props) {
             window.dispatchEvent(new Event('controlroom_raw_materials_update'));
             window.dispatchEvent(new Event('controlroom_storage_update'));
             window.dispatchEvent(new CustomEvent('storage'));
+
+            const poTargetId = data.grn.poRef || data.grn.poNo || selectedGRNPo;
+            if (poTargetId && poTargetId !== '—') {
+              saveSafeZohoPO({
+                poNo: poTargetId,
+                id: poTargetId,
+                status: data.grn.status || 'OPEN / PARTIALLY RECEIVED',
+                statusType: data.grn.status === 'CLOSED / FULLY RECEIVED' ? 'closed' : 'partially_received',
+                order_status: data.grn.status === 'CLOSED / FULLY RECEIVED' ? 'closed' : 'received'
+              }).catch(() => {});
+            }
           } catch (_) {}
 
           // Refresh raw materials cache from server
@@ -944,6 +955,17 @@ export default function GoodsReceiptNoteView(props) {
             localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
             window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
             window.dispatchEvent(new CustomEvent('storage'));
+
+            const poTargetId = data.grn.poRef || data.grn.poNo || selectedGRNPo;
+            if (poTargetId && poTargetId !== '—') {
+              saveSafeZohoPO({
+                poNo: poTargetId,
+                id: poTargetId,
+                status: 'CLOSED / FULLY RECEIVED',
+                statusType: 'closed',
+                order_status: 'closed'
+              }).catch(() => {});
+            }
           } catch (_) {}
         }
 
