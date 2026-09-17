@@ -4,9 +4,9 @@
     "sku": "L500",
     "itemId": "4080449000000366098",
     "name": "LEG 500 mm (HDG)",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -34,7 +34,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "L650",
@@ -43,14 +43,14 @@
     "name": "LEG 650 mm (HDG)",
     "cat": "HDG",
     "category": "HDG",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
     "status": "Out of Stock",
     "productType": "goods",
-    "store": "Bay #1 - Extrusion Yard",
+    "store": "Finished Goods Bay - HDG",
     "location": "Bay #1 - Extrusion Yard",
     "hsn": "7604",
     "minLevel": 50,
@@ -78,9 +78,9 @@
     "sku": "L900",
     "itemId": "4080449000000366114",
     "name": "LEG 900 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -108,16 +108,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-707"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "L1000",
     "sku": "L1000",
     "itemId": "4080449000000366122",
     "name": "LEG 1000 mm (HDG)",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -145,16 +145,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "L1200",
     "sku": "L1200",
     "itemId": "4080449000000366130",
     "name": "LEG 1200 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -219,7 +219,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Deducted 200 for BOM TEST-BOM-001 by Sales Executive"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "L1500",
@@ -263,9 +263,9 @@
     "sku": "L1800",
     "itemId": "4080449000000366154",
     "name": "LEG 1800 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -300,9 +300,9 @@
     "sku": "L2000",
     "itemId": "4080449000000366162",
     "name": "LEG 2000 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -337,9 +337,9 @@
     "sku": "L2500",
     "itemId": "4080449000000366170",
     "name": "LEG 2500 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -374,9 +374,9 @@
     "sku": "L3000",
     "itemId": "4080449000000366178",
     "name": "LEG 3000 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -448,7 +448,7 @@
     "sku": "R2950",
     "itemId": "4080449000000366194",
     "name": "RAFTER 2950 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -485,7 +485,7 @@
     "sku": "R3350",
     "itemId": "4080449000000366202",
     "name": "RAFTER 3350 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -522,7 +522,7 @@
     "sku": "R3900",
     "itemId": "4080449000000366210",
     "name": "RAFTER 3900 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -670,7 +670,7 @@
     "sku": "GR3900",
     "itemId": "4080449000000366242",
     "name": "RAFTER 3900 mm (GAL)",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -700,7 +700,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "CB2400",
@@ -744,9 +744,9 @@
     "sku": "CB3000",
     "itemId": "4080449000000366258",
     "name": "Cross Bracing -3000mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -781,9 +781,9 @@
     "sku": "HP2400",
     "itemId": "4080449000000366266",
     "name": "Purlin 'HAT' Type - 2400 mm (GAL)",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -811,7 +811,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-710"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "HP2485",
@@ -1003,9 +1003,9 @@
     "sku": "HP3600",
     "itemId": "4080449000000366314",
     "name": "Purlin 'HAT' Type - 3600 mm (GAL)",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -1077,9 +1077,9 @@
     "sku": "CP3000",
     "itemId": "4080449000000366330",
     "name": "Purlin 'C' Type - 3000 mm (HDG)",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -1200,18 +1200,18 @@
     "store": "Bay #4 - FG Store",
     "location": "Finished Goods Bay - Aluminium",
     "hsn": "7604",
-    "minLevel": 20,
+    "minLevel": 50,
     "reorderLevel": 100,
     "stock": 0,
-    "lastUpdated": "Live Store Balance (2000 Units)",
+    "lastUpdated": "Stock Set to 0",
     "parentCode": "MR100N",
     "parentName": "Finished Product",
     "reserved": 0,
     "blockedForBom": 0,
     "physicalStock": 0,
     "availableStock": 0,
-    "lengthMm": "2414",
-    "cutLength": "100 mm",
+    "lengthMm": "300",
+    "cutLength": "300 mm",
     "openingStock": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1225,16 +1225,16 @@
     "stockOnHand": 0
   },
   {
-    "code": "MR100O",
-    "sku": "MR100O",
-    "itemId": "4080449000000366378",
-    "name": "MINI RAIL 100mm (300mm) OLD",
+    "code": "MR100N",
+    "sku": "MR100N",
+    "itemId": "4080449000000366354",
+    "name": "MINI RAIL 100mm (300mm) NEW",
     "cat": "General",
     "category": "General",
-    "unit": "Nos",
+    "unit": "NOS",
     "uom": "NOS",
-    "price": 0,
-    "rate": 0,
+    "price": 3200,
+    "rate": 3200,
     "gstRate": "18%",
     "status": "Out of Stock",
     "productType": "goods",
@@ -1243,8 +1243,47 @@
     "hsn": "7604",
     "minLevel": 20,
     "reorderLevel": 100,
-    "lengthMm": "2414",
-    "cutLength": "100 mm",
+    "stock": 0,
+    "lastUpdated": "Stock Set to 0",
+    "reserved": 0,
+    "openingStock": 0,
+    "goodsReceived": 0,
+    "issuedProd": 0,
+    "matReturn": 0,
+    "stockAdj": 0,
+    "lengthMm": "300",
+    "cutLength": "300 mm",
+    "physicalStock": 0,
+    "availableStock": 0,
+    "blockedForBom": 0,
+    "id": "4080449000000366354",
+    "description": "—",
+    "purchaseRate": 320,
+    "purchaseDescription": "—",
+    "material": "General Component",
+    "stockOnHand": 0
+  },
+  {
+    "code": "MR100O",
+    "sku": "MR100O",
+    "itemId": "4080449000000366378",
+    "name": "MINI RAIL 100mm (300mm) OLD",
+    "cat": "6063T6",
+    "category": "6063T6",
+    "unit": "Nos",
+    "uom": "NOS",
+    "price": 0,
+    "rate": 0,
+    "gstRate": "18%",
+    "status": "Out of Stock",
+    "productType": "goods",
+    "store": "Main Store",
+    "location": "Finished Goods Bay - Aluminium",
+    "hsn": "7604",
+    "minLevel": 50,
+    "reorderLevel": 100,
+    "lengthMm": "300",
+    "cutLength": "300 mm",
     "stock": 0,
     "lastUpdated": "Stock Set to 0",
     "reserved": 0,
@@ -1268,8 +1307,8 @@
     "sku": "MR40",
     "itemId": "4080449000000366362",
     "name": "MINI RAIL 40mm (300mm) NEW",
-    "cat": "General",
-    "category": "General",
+    "cat": "6063T6",
+    "category": "6063T6",
     "unit": "Nos",
     "uom": "NOS",
     "price": 0,
@@ -1307,8 +1346,8 @@
     "sku": "MR60",
     "itemId": "4080449000000366370",
     "name": "MINI RAIL 60mm (300mm) NEW",
-    "cat": "General",
-    "category": "General",
+    "cat": "6063T6",
+    "category": "6063T6",
     "unit": "Nos",
     "uom": "NOS",
     "price": 0,
@@ -1346,9 +1385,9 @@
     "sku": "AR100",
     "itemId": "4080449000000366410",
     "name": "ADHESIVE RAIL 100mm (300mm)",
-    "cat": "6063T6",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -1689,7 +1728,7 @@
     "sku": "UM",
     "itemId": "4080449000000366474",
     "name": "Universal Mid Clamp",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -1706,7 +1745,7 @@
     "lengthMm": "2650",
     "cutLength": "2650 mm",
     "stock": 0,
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "reserved": 0,
     "openingStock": 0,
     "goodsReceived": 0,
@@ -1728,7 +1767,7 @@
     "sku": "UE",
     "itemId": "4080449000000366482",
     "name": "Universal End Clamp",
-    "cat": "6063T6",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -1745,7 +1784,7 @@
     "lengthMm": "2650",
     "cutLength": "35 mm",
     "stock": 0,
-    "lastUpdated": "Blocked for BOM BOM-721",
+    "lastUpdated": "Stock Set to 0",
     "reserved": 0,
     "openingStock": 0,
     "goodsReceived": 0,
@@ -1767,9 +1806,9 @@
     "sku": "LC",
     "itemId": "4080449000000366490",
     "name": "Locking Clamp",
-    "cat": "6063T6",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -1784,7 +1823,7 @@
     "lengthMm": "3000",
     "cutLength": "3000 mm",
     "stock": 0,
-    "lastUpdated": "Blocked for BOM BOM-721",
+    "lastUpdated": "Stock Set to 0",
     "reserved": 0,
     "openingStock": 0,
     "goodsReceived": 0,
@@ -1843,9 +1882,9 @@
     "sku": "EC35",
     "itemId": "4080449000000366506",
     "name": "End Clamp 35 mm",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -1860,7 +1899,7 @@
     "lengthMm": "2650",
     "cutLength": "35 mm",
     "stock": 0,
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "reserved": 0,
     "openingStock": 0,
     "goodsReceived": 0,
@@ -1882,22 +1921,22 @@
     "sku": "MC35",
     "itemId": "4080449000000366514",
     "name": "Mid Clamp 35mm",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
     "status": "Out of Stock",
     "productType": "goods",
-    "store": "Bay #4 - FG Store",
+    "store": "Main Store",
     "location": "Finished Goods Bay - Aluminium",
     "hsn": "7604",
-    "minLevel": 20,
+    "minLevel": 60,
     "reorderLevel": 100,
     "stock": 0,
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "parentCode": "MC35",
     "parentName": "Finished Product",
     "lengthMm": "2650",
@@ -1934,8 +1973,8 @@
     "productType": "goods",
     "store": "Main Store",
     "location": "Finished Goods Bay - Aluminium",
-    "hsn": "7616",
-    "minLevel": 200,
+    "hsn": "7604",
+    "minLevel": 60,
     "reorderLevel": 100,
     "stock": 0,
     "lastUpdated": "Stock Set to 0",
@@ -1953,16 +1992,18 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "lengthMm": "2650",
+    "cutLength": "30 mm"
   },
   {
     "code": "EC30",
     "sku": "EC30",
     "itemId": "4080449000000366530",
     "name": "End Clamp 30 mm",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -1990,7 +2031,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "T10",
@@ -2036,7 +2077,7 @@
     "sku": "T8",
     "itemId": "4080449000000366546",
     "name": "T nut 8mm",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -2188,9 +2229,9 @@
     "sku": "E80",
     "itemId": "4080449000000366578",
     "name": "EPDM 80*20",
-    "cat": "6063T6",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -2262,9 +2303,9 @@
     "sku": "LB",
     "itemId": "4080449000000366594",
     "name": "L BRACING",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -2299,9 +2340,9 @@
     "sku": "BP",
     "itemId": "4080449000000366602",
     "name": "BRACING PLATE 80*160",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -2410,7 +2451,7 @@
     "sku": "RC40",
     "itemId": "4080449000000366626",
     "name": "RAFTER CLEAT 500*40",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -2447,7 +2488,7 @@
     "sku": "RC70",
     "itemId": "4080449000000366634",
     "name": "RAFTER CLEAT 500*70",
-    "cat": "HDG",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -2558,7 +2599,7 @@
     "sku": "AM8*20",
     "itemId": "4080449000000366658",
     "name": "SS304 Allen Bolt M8*20",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -2588,7 +2629,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "SWM8",
@@ -2632,7 +2673,7 @@
     "sku": "AM8*30",
     "itemId": "4080449000000366674",
     "name": "SS304 Allen Bolt M8*30",
-    "cat": "6063T6",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -2662,14 +2703,14 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-719"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "AM8*50",
     "sku": "AM8*50",
     "itemId": "4080449000000366682",
     "name": "SS304 Allen Bolt M8*50",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -3113,7 +3154,7 @@
     "sku": "SHM10*30",
     "itemId": "4080449000000366778",
     "name": "SS304 Hexa Bolt M10*30",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -3143,14 +3184,14 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "SHM12*30",
     "sku": "SHM12*30",
     "itemId": "4080449000000366786",
     "name": "SS304 Hexa Bolt M12*30",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -3180,7 +3221,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-711"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "PWBM8",
@@ -3224,7 +3265,7 @@
     "sku": "AM8*25",
     "itemId": "4080449000000366802",
     "name": "SS304 Allen Bolt M8*25",
-    "cat": "SS304",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -3254,16 +3295,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-721"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ANM10*100",
     "sku": "ANM10*100",
     "itemId": "4080449000000366810",
     "name": "GI Anchor Bolt M10*100",
-    "cat": "GAL",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -3594,7 +3635,7 @@
     "sku": "AC(1-5)",
     "itemId": "AC(1-5)",
     "name": "ACDB (1-5 KW) With MCB AND SPD",
-    "cat": "BOS",
+    "cat": "Finished Goods",
     "category": "Finished Goods",
     "unit": "NOS",
     "uom": "NOS",
@@ -3619,14 +3660,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "DC(1-5)",
     "sku": "DC(1-5)",
     "itemId": "DC(1-5)",
     "name": "DCDB (1-5 KW) With MCB, FUSE AND SPD",
-    "cat": "BOS",
+    "cat": "Finished Goods",
     "category": "Finished Goods",
     "unit": "NOS",
     "uom": "NOS",
@@ -3651,7 +3694,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "AC(5-10)",
@@ -3683,7 +3728,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "DC(5-10)",
@@ -3715,7 +3762,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "ER1",
@@ -3747,7 +3796,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "ER2",
@@ -3779,7 +3830,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "ER3",
@@ -3811,16 +3864,18 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "LA1",
     "sku": "LA1",
     "itemId": "4080449000000366882",
     "name": "LIGHTNING ARRESTER 16mm",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -3848,7 +3903,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "CER1",
@@ -3880,7 +3935,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "CER2",
@@ -3912,7 +3969,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "CER3",
@@ -3944,7 +4003,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "ELA",
@@ -3988,9 +4049,9 @@
     "sku": "EPC6",
     "itemId": "4080449000000366898",
     "name": "EARTH PIT CHAMBER",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4018,16 +4079,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "CB10",
     "sku": "CB10",
     "itemId": "4080449000000366906",
     "name": "CHEMICAL BAG 10kg",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4055,7 +4116,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ES",
@@ -4099,7 +4160,7 @@
     "sku": "ACB4",
     "itemId": "4080449000000366922",
     "name": "AC CABLE 4Sqmm. (Black)",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
     "unit": "MT",
     "uom": "MT",
@@ -4129,16 +4190,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ACR4",
     "sku": "ACR4",
     "itemId": "4080449000000366930",
     "name": "AC CABLE 4Sqmm. (Red)",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4166,16 +4227,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "DCB4",
     "sku": "DCB4",
     "itemId": "4080449000000366938",
     "name": "DC CABLE 4Sqmm. (Black)",
-    "cat": "FRLS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4203,16 +4264,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-712"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "DCR4",
     "sku": "DCR4",
     "itemId": "4080449000000366946",
     "name": "DC CABLE 4Sqmm. (Red)",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4240,16 +4301,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ECG4",
     "sku": "ECG4",
     "itemId": "4080449000000366954",
     "name": "EARTHING CABLE 4Sqmm. (Green)",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4277,7 +4338,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ACB6",
@@ -4469,9 +4530,9 @@
     "sku": "ECG16",
     "itemId": "4080449000000367002",
     "name": "EARTHING CABLE 16Sqmm. (Green)",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -4499,7 +4560,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "TT1",
@@ -4531,7 +4592,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TB1",
@@ -4563,7 +4626,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TT1.5",
@@ -4595,7 +4660,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TB1.5",
@@ -4627,7 +4694,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TT2",
@@ -4659,7 +4728,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TB2",
@@ -4691,7 +4762,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TMS",
@@ -4723,7 +4796,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "MR75",
@@ -6839,9 +6914,9 @@
     "sku": "PS3.6",
     "itemId": "4080449000000367506",
     "name": "POLYCAB ONGRID 3.6KW Single Phase",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -6869,7 +6944,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "PS4",
@@ -8578,9 +8653,9 @@
     "sku": "ABD540",
     "itemId": "4080449000000367882",
     "name": "MODULE - ADANI BIFACIAL DCR 540wp",
-    "cat": "ADANI (DCR)",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -8608,7 +8683,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-714"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ABD545",
@@ -9059,9 +9134,9 @@
     "sku": "WTD580",
     "itemId": "4080449000000367986",
     "name": "MODULE - WAREE TOPCON DCR 580wp",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -9089,7 +9164,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "WTD585",
@@ -9688,9 +9763,9 @@
     "sku": "CT",
     "itemId": "4080449000000368122",
     "name": "CABLE TIE",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -9718,14 +9793,14 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "RL",
     "sku": "RL",
     "itemId": "4080449000000368130",
     "name": "RING LUGS (4-6 mm)",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
     "unit": "NOS",
     "uom": "NOS",
@@ -9799,9 +9874,9 @@
     "sku": "CTR",
     "itemId": "4080449000000368146",
     "name": "CABLE TRAY",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -9829,16 +9904,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "MC4",
     "sku": "MC4",
     "itemId": "4080449000000368154",
     "name": "MC4 CONNECTOR",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -9866,16 +9941,16 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-729"
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "HR",
     "sku": "HR",
     "itemId": "4080449000000368162",
     "name": "HAND RAIL",
-    "cat": "BOS",
+    "cat": "General",
     "category": "General",
-    "unit": "NOS",
+    "unit": "Nos",
     "uom": "NOS",
     "price": 0,
     "rate": 0,
@@ -9922,7 +9997,7 @@
     "store": "Bay #1 - Extrusion Yard",
     "location": "Bay #1 - Extrusion Yard",
     "hsn": "7604",
-    "minLevel": 50,
+    "minLevel": 15,
     "reorderLevel": 50,
     "id": "RM-ALU-LEN-2414MM",
     "description": "Aluminium Length 2414 mm for Solar Structure",
@@ -9940,7 +10015,12 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Live Store"
+    "lastUpdated": "Stock Set to 0",
+    "lengthMm": "2414",
+    "parentCode": "ALU-LEN-2414MM",
+    "parentName": "Finished Product",
+    "available": 250,
+    "onHand": 250
   },
   {
     "code": "MID-SEC",
@@ -9965,7 +10045,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TOP-2M",
@@ -9990,7 +10072,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "BOT-2M",
@@ -10015,7 +10099,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "TOP-1.5M",
@@ -10040,7 +10126,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "BOT-2.4M",
@@ -10065,7 +10153,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-001",
@@ -10088,7 +10178,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-002",
@@ -10111,7 +10203,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-003",
@@ -10134,7 +10228,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-004",
@@ -10157,7 +10253,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-005",
@@ -10180,7 +10278,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-006",
@@ -10203,7 +10303,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-007",
@@ -10226,7 +10328,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-008",
@@ -10249,7 +10353,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "RM-009",
@@ -10272,7 +10378,9 @@
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "ALU-COIL-1.5",
@@ -10296,7 +10404,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "MR150",
@@ -10320,7 +10430,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "LR3000",
@@ -10344,7 +10456,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4272",
@@ -10366,7 +10480,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-8886",
@@ -10388,7 +10504,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-8184",
@@ -10410,7 +10528,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4569",
@@ -10432,7 +10552,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-9681",
@@ -10454,7 +10576,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5068",
@@ -10476,7 +10600,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-3914",
@@ -10498,7 +10624,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-8311",
@@ -10520,7 +10648,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-9323",
@@ -10542,7 +10672,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4484",
@@ -10564,7 +10696,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5845",
@@ -10586,7 +10720,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5846",
@@ -10608,7 +10744,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 0,
+    "onHand": 0
   },
   {
     "id": "4080449000000033196",
@@ -10641,7 +10779,9 @@
     "matReturn": 0,
     "stockAdj": 0,
     "lastUpdated": "Stock Set to 0",
-    "minLevel": 100
+    "minLevel": 50,
+    "store": "Main Store",
+    "hsn": "7604"
   },
   {
     "id": "4080449000000033187",
@@ -10663,7 +10803,7 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "cat": "—",
+    "cat": "General",
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
@@ -10673,8 +10813,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-712",
-    "minLevel": 100
+    "lastUpdated": "Stock Set to 0",
+    "minLevel": 50,
+    "store": "Main Store",
+    "hsn": "7604"
   },
   {
     "id": "4080449000000366394",
@@ -10707,7 +10849,11 @@
     "matReturn": 0,
     "stockAdj": 0,
     "lastUpdated": "Stock Set to 0",
-    "minLevel": 100
+    "minLevel": 30,
+    "lengthMm": "300",
+    "cutLength": "300 mm",
+    "store": "Main Store",
+    "hsn": "7604"
   },
   {
     "id": "4080449000000368170",
@@ -10729,7 +10875,7 @@
     "stock": 0,
     "openingStock": 0,
     "reorderLevel": 100,
-    "cat": "6063T6",
+    "cat": "General",
     "physicalStock": 0,
     "availableStock": 0,
     "stockOnHand": 0,
@@ -10739,7 +10885,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Blocked for BOM BOM-721",
+    "lastUpdated": "Stock Set to 0",
     "minLevel": 100
   },
   {
@@ -10975,7 +11121,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 0"
+    "lastUpdated": "Stock Set to 0",
+    "grnNo": "GRN-00124",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5057",
@@ -10988,7 +11137,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "availableStock": 0,
     "physicalStock": 0,
     "category": "GAL",
@@ -10997,7 +11146,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-0472",
@@ -11010,7 +11162,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "availableStock": 0,
     "physicalStock": 0,
     "category": "GAL",
@@ -11019,7 +11171,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4621",
@@ -11032,7 +11187,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "availableStock": 0,
     "physicalStock": 0,
     "category": "GAL",
@@ -11041,7 +11196,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4622",
@@ -11054,7 +11212,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-622",
+    "lastUpdated": "Stock Set to 0",
     "category": "Finished Goods",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11063,7 +11221,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-7910",
@@ -11076,7 +11237,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-689",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11085,7 +11246,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5184",
@@ -11098,7 +11262,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-630",
+    "lastUpdated": "Stock Set to 0",
     "category": "GAL",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11107,7 +11271,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5185",
@@ -11120,7 +11287,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-NaN",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11129,7 +11296,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-7244",
@@ -11142,7 +11312,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-656",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11151,7 +11321,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-6731",
@@ -11164,7 +11337,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-682",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11173,7 +11346,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-6732",
@@ -11183,10 +11359,10 @@
     "stock": 0,
     "reserved": 0,
     "blockedForBom": 0,
-    "minLevel": 10,
+    "minLevel": 50,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-682",
+    "lastUpdated": "Stock Set to 0",
     "category": "—",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11195,7 +11371,8 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604"
   },
   {
     "code": "FG-4047",
@@ -11208,7 +11385,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-707",
+    "lastUpdated": "Stock Set to 0",
     "availableStock": 0,
     "physicalStock": 0,
     "category": "GAL",
@@ -11217,7 +11394,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4048",
@@ -11230,7 +11410,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-684",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11239,7 +11419,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-7997",
@@ -11252,7 +11435,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-692",
+    "lastUpdated": "Stock Set to 0",
     "category": "BOS",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11261,7 +11444,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-7998",
@@ -11274,7 +11460,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-692",
+    "lastUpdated": "Stock Set to 0",
     "category": "BOS",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11283,7 +11469,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-7999",
@@ -11296,7 +11485,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-692",
+    "lastUpdated": "Stock Set to 0",
     "category": "BOS",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11305,7 +11494,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-8000",
@@ -11318,7 +11510,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-692",
+    "lastUpdated": "Stock Set to 0",
     "category": "BOS",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11327,7 +11519,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-8001",
@@ -11340,7 +11535,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-688",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11349,7 +11544,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-1041",
@@ -11362,7 +11560,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-689",
+    "lastUpdated": "Stock Set to 0",
     "category": "BOS",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11371,7 +11569,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-1042",
@@ -11384,7 +11585,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-689",
+    "lastUpdated": "Stock Set to 0",
     "category": "BOS",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11393,7 +11594,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-4662",
@@ -11406,7 +11610,7 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-692",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "physicalStock": 0,
@@ -11415,7 +11619,10 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-8721",
@@ -11430,14 +11637,17 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-711",
+    "lastUpdated": "Stock Set to 0",
     "category": "6063T6",
     "openingStock": 0,
     "stockOnHand": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "hsn": "7604",
+    "available": 0,
+    "onHand": 0
   },
   {
     "code": "FG-5948",
@@ -11452,13 +11662,14 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-721",
+    "lastUpdated": "Stock Set to 0",
     "openingStock": 0,
     "stockOnHand": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "category": "6063T6"
   },
   {
     "code": "ITEM-8035",
@@ -11477,7 +11688,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "category": "BOS",
+    "lastUpdated": "Stock Set to 0"
   },
   {
     "code": "ITEM-9871",
@@ -11490,14 +11703,15 @@
     "reserved": 0,
     "blockedForBom": 0,
     "status": "Out of Stock",
-    "lastUpdated": "Blocked for BOM BOM-729",
+    "lastUpdated": "Stock Set to 0",
     "openingStock": 0,
     "stockOnHand": 0,
     "minLevel": 50,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "category": "BOS"
   },
   {
     "code": "ITEM-9877",
@@ -11510,14 +11724,15 @@
     "reserved": 0,
     "blockedForBom": 0,
     "status": "Out of Stock",
-    "lastUpdated": "Blocked for BOM BOM-729",
+    "lastUpdated": "Stock Set to 0",
     "openingStock": 0,
     "stockOnHand": 0,
     "minLevel": 50,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "category": "BOS"
   },
   {
     "code": "FG-0603",
@@ -11532,25 +11747,26 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-729",
+    "lastUpdated": "Stock Set to 0",
     "openingStock": 0,
     "stockOnHand": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "category": "BOS"
   },
   {
     "code": "MR300",
-    "name": "MR300",
+    "name": "Mini Rail - 300mm",
     "cat": "Finished Goods",
     "unit": "Pieces",
     "stock": 0,
     "minLevel": 20,
     "status": "Out of Stock",
-    "store": "Main Store",
+    "store": "Bay #4 - FG Store",
     "hsn": "7616",
-    "lastUpdated": "Production Approved",
+    "lastUpdated": "Stock Set to 0",
     "reserved": 0,
     "openingStock": 0,
     "goodsReceived": 0,
@@ -11560,7 +11776,8 @@
     "physicalStock": 0,
     "availableStock": 0,
     "blockedForBom": 0,
-    "stockOnHand": 0
+    "stockOnHand": 0,
+    "category": "Finished Goods"
   },
   {
     "code": "FG-0234",
@@ -11573,10 +11790,83 @@
     "minLevel": 10,
     "status": "Out of Stock",
     "store": "Main Store",
-    "lastUpdated": "Blocked for BOM BOM-699",
+    "lastUpdated": "Stock Set to 0",
     "physicalStock": 0,
     "availableStock": 0,
     "openingStock": 0,
+    "stockOnHand": 0,
+    "goodsReceived": 0,
+    "issuedProd": 0,
+    "matReturn": 0,
+    "stockAdj": 0,
+    "category": "GAL"
+  },
+  {
+    "code": "MR60N",
+    "name": "MINI RAIL 60mm (300mm) NEW",
+    "cat": "Aluminium",
+    "unit": "Pieces",
+    "lengthMm": "300",
+    "cutLength": "300 mm",
+    "stock": 0,
+    "minLevel": 40,
+    "store": "Main Store",
+    "hsn": "7604",
+    "status": "Out of Stock",
+    "lastUpdated": "Stock Set to 0",
+    "reserved": 0,
+    "openingStock": 0,
+    "goodsReceived": 0,
+    "issuedProd": 0,
+    "matReturn": 0,
+    "stockAdj": 0,
+    "physicalStock": 0,
+    "availableStock": 0,
+    "blockedForBom": 0,
+    "category": "Aluminium",
+    "stockOnHand": 0
+  },
+  {
+    "code": "MR40N",
+    "name": "MINI RAIL 40mm (300mm) NEW",
+    "cat": "Aluminium",
+    "unit": "Pieces",
+    "lengthMm": "300",
+    "cutLength": "300 mm",
+    "stock": 0,
+    "minLevel": 40,
+    "store": "Main Store",
+    "hsn": "7604",
+    "status": "Out of Stock",
+    "lastUpdated": "Stock Set to 0",
+    "reserved": 0,
+    "openingStock": 0,
+    "goodsReceived": 0,
+    "issuedProd": 0,
+    "matReturn": 0,
+    "stockAdj": 0,
+    "physicalStock": 0,
+    "availableStock": 0,
+    "blockedForBom": 0,
+    "category": "Aluminium",
+    "stockOnHand": 0
+  },
+  {
+    "code": "ALU-BAR-2650MM",
+    "name": "Aluminium Extrusion Bar (2650 mm)",
+    "cat": "Raw Material",
+    "category": "Raw Material",
+    "unit": "Length",
+    "stock": 0,
+    "minLevel": 20,
+    "status": "Out of Stock",
+    "store": "Bay #1 - Extrusion Yard",
+    "lastUpdated": "Stock Set to 0",
+    "openingStock": 0,
+    "physicalStock": 0,
+    "availableStock": 0,
+    "reserved": 0,
+    "blockedForBom": 0,
     "stockOnHand": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
