@@ -3759,7 +3759,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         } else if (lpMatch && (lpMatch.status === 'Payment Processed' || lpMatch.statusType === 'payment_processed')) {
           statusType = 'payment_processed';
           statusText = 'Payment Processed';
-        } else if (lpMatch && (lpMatch.status === 'MD Approved' || lpMatch.statusType === 'md_approved')) {
+        } else if (lpMatch && (lpMatch.status === 'MD Approved' || lpMatch.statusType === 'md_approved' || Boolean(lpMatch.approvedBy))) {
           statusType = 'md_approved';
           statusText = 'MD Approved';
         } else if (lpMatch && lpMatch.status === 'REJECTED') {

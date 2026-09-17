@@ -90,7 +90,25 @@ const TERMS_PRESETS = [
 ];
 
 export default function PurchaseOrdersView({ userRole = 'Procurement Head', targetPoNo, clearTargetPo, targetPoTab, clearTargetPoTab, onNavigateTab }) {
-  const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD' || userRole === 'Admin' || userRole === 'Technical Administrator';
+  const storedRole = localStorage.getItem('controlroom_user_role') || userRole || '';
+  const storedEmail = (localStorage.getItem('controlroom_logged_user') || '').toLowerCase();
+  const isExecutiveOrMD = 
+    userRole === 'CEO' || 
+    userRole === 'Managing Director' || 
+    userRole === 'MD' || 
+    userRole === 'Admin' || 
+    userRole === 'Technical Administrator' ||
+    userRole === 'Procurement Head' ||
+    storedRole === 'CEO' || 
+    storedRole === 'Managing Director' || 
+    storedRole === 'MD' || 
+    storedRole === 'Admin' || 
+    storedRole === 'Technical Administrator' ||
+    storedRole === 'Procurement Head' ||
+    storedEmail.includes('maniskremo') ||
+    storedEmail.includes('annamalai') ||
+    storedEmail.includes('ceo') ||
+    storedEmail.includes('velmurugan');
   
   const getLoggedInUserName = () => {
     const storedName = localStorage.getItem('controlroom_logged_user_name');
@@ -1840,7 +1858,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       <th style={{ width: '14%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO Date</th>
                       <th style={{ width: '16%', minWidth: '140px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Expected Delivery</th>
                       <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'right', boxSizing: 'border-box' }}>Total Value</th>
-                      <th style={{ width: '12%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                      <th style={{ width: '12%', minWidth: '120px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                      <th style={{ width: '14%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'center', boxSizing: 'border-box' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1867,6 +1886,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           </td>
                           <td style={{ textAlign: 'center', padding: '12px 14px' }}>
                             <div className="skeleton-shimmer" style={{ width: '80px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '12px 14px' }}>
+                            <div className="skeleton-shimmer" style={{ width: '70px', height: '22px', borderRadius: '12px', margin: '0 auto' }} />
                           </td>
                         </tr>
                       ))
@@ -1910,6 +1932,60 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             <td style={{ fontWeight: '600', color: '#1e293b', textAlign: 'right' }}>{po.amount}</td>
                             <td style={{ textAlign: 'center' }}>
                               {renderStatusBadge(po.statusType, po.status)}
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                              {(() => {
+                                const isApproved = po.status === 'MD Approved' || po.statusType === 'md_approved' || Boolean(po.approvedBy);
+                                const isPaymentDone = po.status === 'Payment Processed' || po.statusType === 'payment_processed';
+                                const isProceed = po.status === 'Proceed PO' || po.statusType === 'proceed_po';
+                                const isClosed = String(po.status || '').includes('CLOSED');
+
+                                if (isClosed) {
+                                  return <span style={{ fontSize: '11px', fontWeight: '700', color: '#15803D' }}>Closed</span>;
+                                }
+                                if (isProceed) {
+                                  return <span style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490' }}>Proceed PO</span>;
+                                }
+                                if (isPaymentDone) {
+                                  return <span style={{ fontSize: '11px', fontWeight: '700', color: '#92400E' }}>Payment Done</span>;
+                                }
+                                if (isApproved) {
+                                  return (
+                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      <CheckCircle size={13} /> Approved
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setApprovingPo(po);
+                                    }}
+                                    title="Approve Purchase Order as MD"
+                                    style={{
+                                      backgroundColor: '#16A34A',
+                                      color: '#FFFFFF',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      padding: '5px 12px',
+                                      fontSize: '11.5px',
+                                      fontWeight: '700',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      boxShadow: '0 1px 2px rgba(22, 163, 74, 0.25)',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                                  >
+                                    <CheckCircle size={13} /> Approve as MD
+                                  </button>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -2659,9 +2735,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     );
                     const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
                     const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
-                    const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
-                    const isDraftOrPending = (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || objStatusType === 'pending') && !isClosed && !isGrnProcess && !isPaymentProcessed;
-                    const isMdApproved = !isClosed && !isGrnProcess && !isPaymentProcessed && !isDraftOrPending;
+                    const isMdApproved = (st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy)) && !isClosed && !isGrnProcess && !isPaymentProcessed;
+                    const isDraftOrPending = !isClosed && !isGrnProcess && !isPaymentProcessed && !isMdApproved;
 
                     if (isClosed) {
                       return (
@@ -3459,11 +3534,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
                   const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
                   const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
-                  const isAlreadyApproved = isClosed || isGrnProcess || isPaymentProcessed || st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || st === 'OPEN' || objStatus === 'OPEN' || objStatusType === 'approved';
+                  const isAlreadyApproved = isClosed || isGrnProcess || isPaymentProcessed || st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy);
 
-                  const isDraftOrPending = isExecutiveOrMD 
-                    ? (!isAlreadyApproved && st !== 'REJECTED' && objStatus !== 'REJECTED')
-                    : (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval') && !isAlreadyApproved;
+                  const isDraftOrPending = !isAlreadyApproved && st !== 'REJECTED' && objStatus !== 'REJECTED';
 
                   return (
                     <div style={{
