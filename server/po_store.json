@@ -79,7 +79,17 @@
     "totalReceivedQty": 0,
     "totalRemainingQty": 2000,
     "receivingProgressPct": "0.0",
-    "grnHistory": []
+    "grnHistory": [],
+    "proceedDetails": {
+      "date": "17 Sept 2026",
+      "time": "10:19 pm",
+      "remarks": "Authorized for dispatch and GRN creation",
+      "authorizedBy": "Procurement Head",
+      "vendorEmail": "",
+      "emailDispatched": false,
+      "emailSentAt": "2026-09-17T16:49:39.446Z",
+      "deliveryStatus": "Authorized (Ready for GRN)"
+    }
   },
   {
     "id": "4080449000000520001",

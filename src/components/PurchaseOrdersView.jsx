@@ -2360,7 +2360,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 </button>
 
                 {/* 7. Export to Tally */}
-                {(isAccounts || isTechnicalAdmin) && (
+                {(isAccounts || isAdminOrTech) && (
                   <button
                     onClick={() => setShowTallyModal(true)}
                     style={{
