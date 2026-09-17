@@ -2624,7 +2624,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
                       poNo: poNumber,
                       vendor: vendorName,
-                      amount: `₹ ${Number(totalAmountWithGst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+                      amount: `₹ ${Number(getGrandTotal() || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
                       paymentTerms
                     };
 
@@ -3425,7 +3425,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   const currentPoObj = poList.find(p => p.poNo === poNumber || p.id === poNumber) || {
                     poNo: poNumber,
                     vendor: vendorName,
-                    amount: `₹ ${Number(totalAmountWithGst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+                    amount: `₹ ${Number(getGrandTotal() || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
                     paymentTerms
                   };
                   const objStatus = String(currentPoObj?.status || '').trim();
