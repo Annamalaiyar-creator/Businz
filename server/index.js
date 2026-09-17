@@ -4929,7 +4929,16 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
     });
     
     const localPOs = loadLocalPOs();
-    const matchedLocalPO = localPOs.find(p => p.id === poNo || p.poNo === poNo || (p.poNo && poNo.toLowerCase().includes(p.poNo.toLowerCase())));
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const targetClean = normalize(poNo);
+    const matchedLocalPO = localPOs.find(p => 
+      normalize(p.id) === targetClean || 
+      normalize(p.poNo) === targetClean || 
+      normalize(p.zohoId) === targetClean ||
+      normalize(p.purchaseorder_number) === targetClean ||
+      (p.poNo && normalize(p.poNo).includes(targetClean)) ||
+      (targetClean && normalize(p.poNo).length > 0 && targetClean.includes(normalize(p.poNo)))
+    );
 
     let sampleItems = [];
     if (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0) {
@@ -4944,10 +4953,7 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
       }));
     } else {
-      sampleItems = [
-        { id: 'PO-ITEM-0', name: 'MS Material without Galvanizing', description: 'Supply of MS Material without galvanizing (APL Make)\n1. SQUARE TUBES 60*60*2MM', quantity: 4850, unit: 'Kg', rate: 65, tax: 18, sku: 'SKU-101' },
-        { id: 'PO-ITEM-1', name: 'MS Material without Galvanizing', description: 'Supply of MS Material without galvanizing (APL Make)\n1. ISMC SECTIONS 75*40*5MM', quantity: 1450, unit: 'Kg', rate: 65, tax: 18, sku: 'SKU-102' }
-      ];
+      sampleItems = [];
     }
 
     const itemReceivedTotals = {};
@@ -5034,9 +5040,15 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
   }
 
   try {
-    const accessToken = await getZohoAccessToken();
-    const realPoId = await resolveZohoPOId(accessToken, poNo);
-    const data = await fetchZohoPurchaseOrderDetail(accessToken, realPoId || poNo);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Zoho PO detail fetch timed out (using local authoritative record)')), 4000)
+    );
+    const fetchZohoPromise = (async () => {
+      const accessToken = await getZohoAccessToken();
+      const realPoId = await resolveZohoPOId(accessToken, poNo);
+      return await fetchZohoPurchaseOrderDetail(accessToken, realPoId || poNo);
+    })();
+    const data = await Promise.race([fetchZohoPromise, timeoutPromise]);
     
     if (data.purchaseorder) {
       const po = data.purchaseorder;
@@ -5286,26 +5298,8 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         rate: Number(it.rate || it.unitPrice || 0),
         tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
       }));
-    } else if (poNo.includes('0201')) {
-      sampleItems = [
-        { name: 'Solar Mounting Structure', description: 'HDG Aluminium Profile Rail 40x40mm', quantity: 3000, unit: 'NOS', rate: 450, tax: 18, sku: 'SKU-101' },
-        { name: 'Fasteners M8*50 SS304', description: 'SS304 Allen Bolt with Washer', quantity: 1000, unit: 'Set', rate: 25, tax: 18, sku: 'SKU-102' }
-      ];
-    } else if (poNo.includes('0202')) {
-      sampleItems = [
-        { name: 'MS Material without Galvanizing', description: 'Supply of MS Material without galvanizing (APL Make)\n1. SQUARE TUBES 60*60*2MM', quantity: 4850, unit: 'Kg', rate: 65, tax: 18, sku: 'SKU-101' },
-        { name: 'MS Material without Galvanizing', description: 'Supply of MS Material without galvanizing (APL Make)\n1. ISMC SECTIONS 75*40*5MM', quantity: 1450, unit: 'Kg', rate: 65, tax: 18, sku: 'SKU-102' }
-      ];
-    } else if (poNo.includes('142')) {
-      sampleItems = [
-        { name: 'Monocrystalline Solar Panel 540W', description: 'Tier 1 Bifacial Dual Glass Module', quantity: 1500, unit: 'NOS', rate: 14500, tax: 18, sku: 'SKU-101' },
-        { name: 'Solar Inverter 100kW String', description: 'Three Phase Grid Tied Inverter', quantity: 8, unit: 'NOS', rate: 185000, tax: 18, sku: 'SKU-102' }
-      ];
     } else {
-      sampleItems = [
-        { name: 'MS Material without Galvanizing', description: 'Supply of MS Material without galvanizing (APL Make)\n1. SQUARE TUBES 60*60*2MM', quantity: 4850, unit: 'Kg', rate: 65, tax: 18, sku: 'SKU-101' },
-        { name: 'MS Material without Galvanizing', description: 'Supply of MS Material without galvanizing (APL Make)\n1. ISMC SECTIONS 75*40*5MM', quantity: 1450, unit: 'Kg', rate: 65, tax: 18, sku: 'SKU-102' }
-      ];
+      sampleItems = [];
     }
 
     const itemReceivedTotals = {};

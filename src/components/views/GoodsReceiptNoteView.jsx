@@ -12,7 +12,7 @@ import {
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
 import StatusBadge from '../StatusBadge';
-import { getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../../services/zohoSafeSync';
+import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../../services/zohoSafeSync';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
@@ -453,31 +453,33 @@ export default function GoodsReceiptNoteView(props) {
         // Instant pre-population from poTarget if available
         if (poTarget) {
           setSelectedGRNPo(poRef);
-          if (poTarget.vendor) setSelectedGRNVendor(poTarget.vendor);
+          if (poTarget.vendor && poTarget.vendor !== 'Vendor') setSelectedGRNVendor(poTarget.vendor);
           if (Array.isArray(poTarget.items) && poTarget.items.length > 0) {
             const initialItems = poTarget.items.map((it, idx) => {
-              const ordered = Number(it.qty || it.quantity || 0);
+              const ordered = Number(it.qty !== undefined ? it.qty : (it.quantity || 0));
+              const prev = Number(it.previouslyReceived || 0);
+              const remaining = (it.remainingQty !== undefined) ? Number(it.remainingQty) : Math.max(0, ordered - prev);
               return {
                 id: it.id || it.itemId || it.lineItemId || `PO-ITEM-${idx}`,
-                name: it.name || it.item_name || 'Item',
+                name: it.name || it.item_name || 'Material Item',
                 sku: it.sku || `SKU-${101 + idx}`,
-                desc: it.description || '',
+                desc: it.description || it.desc || '',
                 uom: it.unit || it.uom || 'NOS',
                 ordered: ordered,
-                prev: 0,
-                remaining: ordered,
-                now: ordered,
-                accepted: ordered,
+                prev: prev,
+                remaining: remaining,
+                now: remaining,
+                accepted: remaining,
                 rejected: 0,
                 reason: '—',
-                batch: `LOT-2026-${idx + 1}`
+                batch: it.batch || `LOT-2026-${idx + 1}`
               };
             });
             setGrnItems(initialItems);
           }
         }
 
-        loadPOItems(poRef, currentPOs, true);
+        loadPOItems(poRef, currentPOs, true, poTarget);
         setIsViewOnlyMode(false);
         setShowCreateGRN(true);
       }
@@ -492,29 +494,31 @@ export default function GoodsReceiptNoteView(props) {
       resetCreateGRNForm();
       const poRef = poTarget.poNo || poTarget.id;
       setSelectedGRNPo(poRef);
-      if (poTarget.vendor) setSelectedGRNVendor(poTarget.vendor);
+      if (poTarget.vendor && poTarget.vendor !== 'Vendor') setSelectedGRNVendor(poTarget.vendor);
       if (Array.isArray(poTarget.items) && poTarget.items.length > 0) {
         const initialItems = poTarget.items.map((it, idx) => {
-          const ordered = Number(it.qty || it.quantity || 0);
+          const ordered = Number(it.qty !== undefined ? it.qty : (it.quantity || 0));
+          const prev = Number(it.previouslyReceived || 0);
+          const remaining = (it.remainingQty !== undefined) ? Number(it.remainingQty) : Math.max(0, ordered - prev);
           return {
             id: it.id || it.itemId || it.lineItemId || `PO-ITEM-${idx}`,
-            name: it.name || it.item_name || 'Item',
+            name: it.name || it.item_name || 'Material Item',
             sku: it.sku || `SKU-${101 + idx}`,
-            desc: it.description || '',
+            desc: it.description || it.desc || '',
             uom: it.unit || it.uom || 'NOS',
             ordered: ordered,
-            prev: 0,
-            remaining: ordered,
-            now: ordered,
-            accepted: ordered,
+            prev: prev,
+            remaining: remaining,
+            now: remaining,
+            accepted: remaining,
             rejected: 0,
             reason: '—',
-            batch: `LOT-2026-${idx + 1}`
+            batch: it.batch || `LOT-2026-${idx + 1}`
           };
         });
         setGrnItems(initialItems);
       }
-      loadPOItems(poRef, livePOs, true);
+      loadPOItems(poRef, livePOs, true, poTarget);
       setIsViewOnlyMode(false);
       setShowCreateGRN(true);
     };
@@ -524,7 +528,16 @@ export default function GoodsReceiptNoteView(props) {
   }, [livePOs]);
 
   // Fetch live Zoho Purchase Orders & stored GRNs for GRN selection and list display
-  useEffect(() => {
+  const fetchLivePOs = useCallback(async () => {
+    try {
+      const safePOs = await getSafeZohoPOs();
+      if (Array.isArray(safePOs) && safePOs.length > 0) {
+        setLivePOs(safePOs);
+        handlePendingPushToGrn(safePOs);
+        return;
+      }
+    } catch (_) {}
+
     fetch('/api/zoho/purchaseorders')
       .then(res => res.json())
       .then(data => {
@@ -539,12 +552,16 @@ export default function GoodsReceiptNoteView(props) {
       });
   }, []);
 
+  useEffect(() => {
+    fetchLivePOs();
+  }, [fetchLivePOs]);
+
   // Also check whenever activeTab switches to Goods Receipt Note
   useEffect(() => {
     if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
-      handlePendingPushToGrn(livePOs);
+      fetchLivePOs();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchLivePOs]);
 
   useEffect(() => {
     fetch('/api/grns')
@@ -576,7 +593,7 @@ export default function GoodsReceiptNoteView(props) {
   }, [activeTab]);
 
   // Function to load PO details and line items when a PO is selected
-  const loadPOItems = (selectedId, currentLivePOs = livePOs, autoFillNow = false) => {
+  const loadPOItems = (selectedId, currentLivePOs = livePOs, autoFillNow = false, pushedPoTarget = null) => {
     if (!selectedId) {
       setSelectedGRNPo('');
       setGrnItems([]);
@@ -585,13 +602,68 @@ export default function GoodsReceiptNoteView(props) {
       return;
     }
 
-    const found = currentLivePOs.find(p => p.poNo === selectedId || p.id === selectedId);
-    const vendorName = found ? found.vendor : 'Vendor';
-    const targetId = found ? (found.id || selectedId) : selectedId;
-    const poRef = found ? (found.poNo || selectedId) : selectedId;
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const cleanSelected = normalize(selectedId);
+
+    // Read any pending pushed data from local/session storage as an additional source
+    let storedPushData = null;
+    try {
+      const rawStored = localStorage.getItem('controlroom_push_to_grn_po_data') || sessionStorage.getItem('controlroom_viewing_po');
+      if (rawStored) storedPushData = JSON.parse(rawStored);
+    } catch (_) {}
+
+    const pool = [
+      pushedPoTarget,
+      storedPushData,
+      ...(Array.isArray(currentLivePOs) ? currentLivePOs : []),
+      ...(Array.isArray(livePOs) ? livePOs : [])
+    ].filter(Boolean);
+
+    const targetPO = pool.find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      const pZohoId = normalize(p.zohoId);
+      return cleanSelected && (pNo === cleanSelected || pId === cleanSelected || pZohoId === cleanSelected || (pNo && cleanSelected.includes(pNo)) || (pNo && pNo.includes(cleanSelected)));
+    }) || pushedPoTarget || (storedPushData && (normalize(storedPushData.poNo) === cleanSelected || normalize(storedPushData.id) === cleanSelected) ? storedPushData : null);
+
+    const vendorName = (targetPO && targetPO.vendor && targetPO.vendor !== 'Vendor' && targetPO.vendor !== 'Fresh Vendor')
+      ? targetPO.vendor
+      : (selectedGRNVendor && selectedGRNVendor !== 'Vendor' ? selectedGRNVendor : 'Vendor');
+
+    const targetId = (targetPO && targetPO.id) ? targetPO.id : selectedId;
+    const poRef = (targetPO && targetPO.poNo) ? targetPO.poNo : selectedId;
 
     setSelectedGRNPo(poRef);
-    setSelectedGRNVendor(vendorName);
+    if (vendorName && vendorName !== 'Vendor') {
+      setSelectedGRNVendor(vendorName);
+    }
+
+    // Immediately pre-seed items from targetPO so UI reflects real items instantly without waiting for network
+    if (targetPO && Array.isArray(targetPO.items) && targetPO.items.length > 0) {
+      const seededItems = targetPO.items.map((it, idx) => {
+        const ordered = Number(it.qty !== undefined ? it.qty : (it.quantity || 0));
+        const prev = Number(it.previouslyReceived || 0);
+        const remaining = (it.remainingQty !== undefined) ? Number(it.remainingQty) : Math.max(0, ordered - prev);
+        const nowVal = autoFillNow ? remaining : (it.now !== undefined ? it.now : remaining);
+        const acceptedVal = autoFillNow ? remaining : (it.accepted !== undefined ? it.accepted : remaining);
+        return {
+          id: it.id || it.itemId || it.lineItemId || `PO-ITEM-${idx}`,
+          name: it.name || it.item_name || 'Material Item',
+          sku: it.sku || `SKU-${101 + idx}`,
+          desc: it.description || it.desc || '',
+          uom: it.unit || it.uom || 'NOS',
+          ordered: ordered,
+          prev: prev,
+          remaining: remaining,
+          now: nowVal,
+          accepted: acceptedVal,
+          rejected: 0,
+          reason: '—',
+          batch: it.batch || `LOT-2026-${idx + 1}`
+        };
+      });
+      setGrnItems(seededItems);
+    }
 
     Promise.all([
       fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`).then(res => res.ok ? res.json().catch(() => null) : null),
@@ -600,16 +672,23 @@ export default function GoodsReceiptNoteView(props) {
       .then(([detail, historyData]) => {
         let rawItems = (detail && Array.isArray(detail.items) && detail.items.length > 0)
           ? detail.items
-          : (found && Array.isArray(found.items) && found.items.length > 0)
-            ? found.items
-            : [
-              { name: 'Solar Mounting Structure', description: 'HDG Aluminium Profile Rail 40x40mm', qty: 3000, unit: 'NOS' },
-              { name: 'Fasteners M8*50 SS304', description: 'SS304 Allen Bolt with Washer', qty: 1000, unit: 'Set' }
-            ];
+          : (targetPO && Array.isArray(targetPO.items) && targetPO.items.length > 0)
+            ? targetPO.items
+            : null;
 
-        // Also if vendor was not resolved earlier, resolve from detail
-        if (detail && detail.vendor && (!vendorName || vendorName === 'Vendor')) {
+        if (!rawItems || rawItems.length === 0) {
+          if (grnItems && grnItems.length > 0) {
+            rawItems = grnItems;
+          } else {
+            rawItems = [];
+          }
+        }
+
+        // Also if vendor was not resolved earlier, resolve from detail or targetPO
+        if (detail && detail.vendor && detail.vendor !== 'Vendor' && detail.vendor !== 'Fresh Vendor') {
           setSelectedGRNVendor(detail.vendor);
+        } else if (targetPO && targetPO.vendor && targetPO.vendor !== 'Vendor') {
+          setSelectedGRNVendor(targetPO.vendor);
         }
 
         const historyTotals = (historyData && historyData.itemReceivedTotals) ? historyData.itemReceivedTotals : {};
@@ -630,19 +709,19 @@ export default function GoodsReceiptNoteView(props) {
             prev = Number(it.previouslyReceived);
           }
 
-          const ordered = it.qty || 0;
+          const ordered = Number(it.qty !== undefined ? it.qty : (it.quantity || it.ordered || 0));
           const remaining = (it.remainingQty !== undefined) ? Number(it.remainingQty) : Math.max(0, ordered - prev);
 
           // If autoFillNow is true (e.g. pushed from PO), pre-populate receiving now and accepted with remaining quantity!
-          const nowVal = autoFillNow ? remaining : '';
-          const acceptedVal = autoFillNow ? remaining : '';
+          const nowVal = autoFillNow ? remaining : (it.now !== undefined ? it.now : remaining);
+          const acceptedVal = autoFillNow ? remaining : (it.accepted !== undefined ? it.accepted : remaining);
 
           return {
             id: itemId,
-            name: it.name,
+            name: it.name || it.item_name || 'Material Item',
             sku: it.sku || `SKU-${101 + idx}`,
-            desc: it.description || '',
-            uom: it.unit || 'NOS',
+            desc: it.description || it.desc || '',
+            uom: it.unit || it.uom || 'NOS',
             ordered: ordered,
             prev: prev,
             remaining: remaining,
@@ -650,11 +729,13 @@ export default function GoodsReceiptNoteView(props) {
             accepted: acceptedVal,
             rejected: 0,
             reason: '—',
-            batch: `LOT-2026-${idx + 1}`
+            batch: it.batch || `LOT-2026-${idx + 1}`
           };
         });
 
-        setGrnItems(items);
+        if (items.length > 0) {
+          setGrnItems(items);
+        }
         setPoReceivingHistory(historyList);
       })
       .catch(err => console.error('Error fetching PO receiving history:', err));

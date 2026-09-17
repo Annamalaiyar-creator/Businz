@@ -30,8 +30,8 @@
     "approver": "Velmurugan Rathinam (CEO)",
     "approvalPriority": "High",
     "amount": "₹2,83,200.00",
-    "status": "Payment Processed",
-    "statusType": "payment_processed",
+    "status": "Proceed PO",
+    "statusType": "proceed_po",
     "grnCount": 0,
     "totalReceived": 0,
     "items": [
@@ -56,7 +56,7 @@
     "approvalTime": "06:46 pm",
     "success": true,
     "message": "Control Room Zoho Gateway Active",
-    "time": "2026-09-17T16:32:21.330Z",
+    "time": "2026-09-17T16:53:14.803Z",
     "paymentDetails": {
       "mode": "Bank Transfer",
       "refNo": "21333434",
@@ -82,13 +82,12 @@
     "grnHistory": [],
     "proceedDetails": {
       "date": "17 Sept 2026",
-      "time": "10:19 pm",
+      "time": "10:22 pm",
       "remarks": "Authorized for dispatch and GRN creation",
       "authorizedBy": "Procurement Head",
-      "vendorEmail": "",
-      "emailDispatched": false,
-      "emailSentAt": "2026-09-17T16:49:39.446Z",
-      "deliveryStatus": "Authorized (Ready for GRN)"
+      "vendorEmail": "—",
+      "emailDispatched": true,
+      "deliveryStatus": "Dispatched to —"
     }
   },
   {
