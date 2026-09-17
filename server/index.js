@@ -255,6 +255,9 @@ const saveDatabaseStore = async (key, storeData) => {
     } else if (key === 'po_store' && Array.isArray(storeData)) {
       const poPath = getStoreFilePath('po_store.json');
       fs.writeFileSync(poPath, JSON.stringify(storeData, null, 2), 'utf8');
+    } else if (key === 'grn_store' && Array.isArray(storeData)) {
+      const grnPath = getStoreFilePath('grn_store.json');
+      fs.writeFileSync(grnPath, JSON.stringify(storeData, null, 2), 'utf8');
     }
   } catch (diskErr) {
     console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
@@ -839,26 +842,49 @@ const loadLocalPOs = () => {
                    Boolean(approver);
           };
 
-          const effStatus = isAdv(existing.status, existing.statusType, existing.approvedBy)
-            ? existing.status
-            : (isAdv(d.status, d.statusType, d.approvedBy) ? d.status : (d.status || existing.status || 'Draft'));
+          const dOrd = Number(d.totalOrderedQty || 0);
+          const dRec = Number(d.totalReceivedQty || d.totalReceived || 0);
+          const exOrd = Number(existing.totalOrderedQty || 0);
+          const exRec = Number(existing.totalReceivedQty || existing.totalReceived || 0);
 
-          const effStatusType = isAdv(existing.status, existing.statusType, existing.approvedBy)
-            ? (existing.statusType || (existing.status === 'MD Approved' ? 'md_approved' : (existing.status === 'Payment Processed' ? 'payment_processed' : 'approved')))
-            : (isAdv(d.status, d.statusType, d.approvedBy) ? (d.statusType || 'md_approved') : (d.statusType || existing.statusType || 'draft'));
+          let effStatus = d.status || existing.status || 'Draft';
+          let effStatusType = d.statusType || existing.statusType || 'draft';
 
-          const effApprovedBy = existing.approvedBy || d.approvedBy;
-          const effApprovalDate = existing.approvalDate || d.approvalDate;
-          const effApprovalTime = existing.approvalTime || d.approvalTime;
-          const effApprovalRemarks = existing.approvalRemarks || d.approvalRemarks;
-          const effPaymentDetails = existing.paymentDetails || d.paymentDetails;
-          const effProceedDetails = existing.proceedDetails || d.proceedDetails;
+          if (d.status === 'OPEN / PARTIALLY RECEIVED' || (dOrd > 0 && dRec > 0 && dRec < dOrd)) {
+            effStatus = 'OPEN / PARTIALLY RECEIVED';
+            effStatusType = 'partially_received';
+          } else if (existing.status === 'OPEN / PARTIALLY RECEIVED' || (exOrd > 0 && exRec > 0 && exRec < exOrd)) {
+            effStatus = 'OPEN / PARTIALLY RECEIVED';
+            effStatusType = 'partially_received';
+          } else if (isAdv(d.status, d.statusType, d.approvedBy)) {
+            effStatus = d.status;
+            effStatusType = d.statusType || 'md_approved';
+          } else if (isAdv(existing.status, existing.statusType, existing.approvedBy)) {
+            effStatus = existing.status;
+            effStatusType = existing.statusType || 'md_approved';
+          }
+
+          const effApprovedBy = d.approvedBy || existing.approvedBy;
+          const effApprovalDate = d.approvalDate || existing.approvalDate;
+          const effApprovalTime = d.approvalTime || existing.approvalTime;
+          const effApprovalRemarks = d.approvalRemarks || existing.approvalRemarks;
+          const effPaymentDetails = d.paymentDetails || existing.paymentDetails;
+          const effProceedDetails = d.proceedDetails || existing.proceedDetails;
+          const effTotalOrdered = d.totalOrderedQty !== undefined ? d.totalOrderedQty : existing.totalOrderedQty;
+          const effTotalReceived = d.totalReceivedQty !== undefined ? d.totalReceivedQty : existing.totalReceivedQty;
+          const effTotalRemaining = d.totalRemainingQty !== undefined ? d.totalRemainingQty : existing.totalRemainingQty;
+          const effGrnCount = d.grnCount !== undefined ? d.grnCount : existing.grnCount;
 
           const mergedItem = {
             ...existing,
             ...d,
             status: effStatus,
             statusType: effStatusType,
+            totalOrderedQty: effTotalOrdered,
+            totalReceivedQty: effTotalReceived,
+            totalRemainingQty: effTotalRemaining,
+            grnCount: effGrnCount,
+            totalReceived: effTotalReceived,
             approvedBy: effApprovedBy,
             approvalDate: effApprovalDate,
             approvalTime: effApprovalTime,
@@ -3854,10 +3880,17 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
 
         const isNoApproval = lpMatch && String(lpMatch.approvalRequired).toUpperCase() === 'NO';
 
-        if (po.status === 'billed' || po.status === 'closed' || po.status === 'received' || po.is_received === true || matchingClosedGRN) {
+        const totalOrdered = lpMatch && Number(lpMatch.totalOrderedQty) ? Number(lpMatch.totalOrderedQty) : (Array.isArray(lpMatch?.items) ? lpMatch.items.reduce((s, it) => s + Number(it.qty || it.quantity || 0), 0) : 0);
+        const isFullyReceived = (totalOrdered > 0 && totalReceived >= totalOrdered) || (matchingClosedGRN && (totalOrdered === 0 || totalReceived >= totalOrdered));
+        const isPartial = (totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered) || matchingGRNs.length > 0 || po.status === 'partially_received' || (lpMatch && (lpMatch.status === 'OPEN / PARTIALLY RECEIVED' || lpMatch.statusType === 'partially_received'));
+
+        if (isPartial && totalOrdered > 0 && totalReceived < totalOrdered) {
+          statusType = 'partially_received';
+          statusText = 'OPEN / PARTIALLY RECEIVED';
+        } else if (isFullyReceived || (totalOrdered > 0 && totalReceived >= totalOrdered) || (po.status === 'closed' && (totalOrdered === 0 || totalReceived >= totalOrdered))) {
           statusType = 'closed';
           statusText = 'CLOSED / FULLY RECEIVED';
-        } else if (matchingGRNs.length > 0 || po.status === 'partially_received') {
+        } else if (isPartial || po.status === 'received' || po.is_received === true) {
           statusType = 'partially_received';
           statusText = 'OPEN / PARTIALLY RECEIVED';
         } else if (lpMatch && (lpMatch.status === 'Proceed PO' || lpMatch.statusType === 'proceed_po')) {
@@ -4001,7 +4034,21 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           if (lp.approvalRemarks) translated[existsIdx].approvalRemarks = lp.approvalRemarks;
           if (lp.paymentDetails) translated[existsIdx].paymentDetails = lp.paymentDetails;
           if (lp.proceedDetails) translated[existsIdx].proceedDetails = lp.proceedDetails;
-          if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po') {
+          if (lp.totalOrderedQty !== undefined) translated[existsIdx].totalOrderedQty = lp.totalOrderedQty;
+          if (lp.totalReceivedQty !== undefined) translated[existsIdx].totalReceivedQty = lp.totalReceivedQty;
+          if (lp.totalRemainingQty !== undefined) translated[existsIdx].totalRemainingQty = lp.totalRemainingQty;
+          if (lp.receivingProgressPct !== undefined) translated[existsIdx].receivingProgressPct = lp.receivingProgressPct;
+          if (lp.totalReceived !== undefined && !translated[existsIdx].totalReceived) translated[existsIdx].totalReceived = lp.totalReceived;
+          if (lp.grnCount !== undefined && !translated[existsIdx].grnCount) translated[existsIdx].grnCount = lp.grnCount;
+          if (Array.isArray(lp.grnHistory) && lp.grnHistory.length > 0) translated[existsIdx].grnHistory = lp.grnHistory;
+
+          if (lp.status === 'OPEN / PARTIALLY RECEIVED' || lp.statusType === 'partially_received') {
+            translated[existsIdx].status = 'OPEN / PARTIALLY RECEIVED';
+            translated[existsIdx].statusType = 'partially_received';
+          } else if (lp.status === 'CLOSED / FULLY RECEIVED' || lp.statusType === 'closed') {
+            translated[existsIdx].status = 'CLOSED / FULLY RECEIVED';
+            translated[existsIdx].statusType = 'closed';
+          } else if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po') {
             translated[existsIdx].status = 'Proceed PO';
             translated[existsIdx].statusType = 'proceed_po';
           } else if (lp.status === 'Payment Processed' || lp.statusType === 'payment_processed') {
@@ -5180,10 +5227,16 @@ app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
         g.status === 'CLOSED'
       );
 
-      if (po.status === 'billed' || po.status === 'closed' || po.status === 'received' || po.is_received === true || matchingClosedGRN || (totalOrderedQty > 0 && totalReceivedQty >= totalOrderedQty)) {
+      const isActuallyClosed = (totalOrderedQty > 0 && totalReceivedQty >= totalOrderedQty) || (matchingClosedGRN && (totalOrderedQty === 0 || totalReceivedQty >= totalOrderedQty)) || (po.status === 'closed' && (totalOrderedQty === 0 || totalReceivedQty >= totalOrderedQty));
+      const isPartiallyReceived = (totalOrderedQty > 0 && totalReceivedQty > 0 && totalReceivedQty < totalOrderedQty) || (matchingGRNs.length > 0 && totalReceivedQty < totalOrderedQty) || po.status === 'partially_received' || (matchedLocalPO && (matchedLocalPO.status === 'OPEN / PARTIALLY RECEIVED' || matchedLocalPO.statusType === 'partially_received'));
+
+      if (isPartiallyReceived && totalOrderedQty > 0 && totalReceivedQty < totalOrderedQty) {
+        statusType = 'partially_received';
+        statusText = 'OPEN / PARTIALLY RECEIVED';
+      } else if (isActuallyClosed) {
         statusType = 'closed';
         statusText = 'CLOSED / FULLY RECEIVED';
-      } else if (matchingGRNs.length > 0 || totalReceivedQty > 0 || po.status === 'partially_received') {
+      } else if (isPartiallyReceived || (totalReceivedQty > 0 && totalOrderedQty > 0 && totalReceivedQty < totalOrderedQty) || po.status === 'received' || po.is_received === true) {
         statusType = 'partially_received';
         statusText = 'OPEN / PARTIALLY RECEIVED';
       } else if (matchedLocalPO && (matchedLocalPO.status === 'Proceed PO' || matchedLocalPO.statusType === 'proceed_po')) {
@@ -5511,41 +5564,53 @@ app.delete('/api/grns/:id', async (req, res) => {
 // Endpoint to create a new GRN (Saves locally + Posts Draft Bill to Zoho)
 app.post('/api/grns', async (req, res) => {
   const grnData = req.body;
-  let grns = await getDatabaseStore('grn_store');
+  let grns = loadLocalGRNs();
+  if (!Array.isArray(grns) || grns.length === 0) {
+    grns = await getDatabaseStore('grn_store');
+  }
   if (!Array.isArray(grns)) grns = [];
   
-  const poRefTarget = (grnData.poRef || grnData.poNo || grnData.poId || '').toLowerCase();
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const poRefTarget = normalize(grnData.poRef || grnData.poNo || grnData.poId);
   
   // Calculate existing received quantity across all previous GRNs for this PO
   let pastReceivedQty = 0;
   grns.forEach(g => {
-    const ref = (g.poRef || g.poNo || g.poId || '').toLowerCase();
-    if (poRefTarget && (ref === poRefTarget || ref.includes(poRefTarget) || poRefTarget.includes(ref) || (ref.includes('0202') && poRefTarget.includes('0202')))) {
+    const isSameGrn = (grnData.id && (g.id === grnData.id || g.grnNo === grnData.id)) || 
+                      (grnData.grnNo && (g.grnNo === grnData.grnNo || g.id === grnData.grnNo));
+    if (isSameGrn) return;
+    const ref = normalize(g.poRef || g.poNo || g.poId);
+    if (poRefTarget && (ref === poRefTarget || ref.includes(poRefTarget) || poRefTarget.includes(ref))) {
       (g.items || []).forEach(it => {
-        pastReceivedQty += Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
+        pastReceivedQty += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
       });
     }
   });
 
-  const currentReceived = (grnData.items || []).reduce((sum, it) => sum + Number(it.accepted !== undefined ? it.accepted : (it.now || 0)), 0);
-  const totalOrdered = (grnData.items || []).reduce((sum, it) => sum + Number(it.ordered !== undefined ? it.ordered : (it.qty !== undefined ? it.qty : (it.quantity || 0))), 0);
-  const totalReceivedSoFar = pastReceivedQty + currentReceived;
-  const isFullyReceived = (totalOrdered > 0 && totalReceivedSoFar >= totalOrdered) || grnData.status === 'CLOSED / FULLY RECEIVED';
-  const calculatedStatus = isFullyReceived ? 'CLOSED / FULLY RECEIVED' : (totalReceivedSoFar > 0 ? 'OPEN / PARTIALLY RECEIVED' : 'OPEN');
+  const currentAccepted = Number(grnData.acceptedQty !== undefined && grnData.acceptedQty !== '' ? grnData.acceptedQty : (grnData.receivedQty || 0));
+  const totalReceivedSoFar = pastReceivedQty + currentAccepted;
+  
+  let totalOrdered = Number(grnData.totalOrderedQty || 0);
+  if (totalOrdered === 0 && Array.isArray(grnData.items)) {
+    totalOrdered = grnData.items.reduce((sum, it) => sum + (Number(it.ordered) || 0), 0);
+  }
 
-  console.log(`[GRN SAVE] PO: ${poRefTarget} | Past: ${pastReceivedQty} | Current: ${currentReceived} | Total: ${totalReceivedSoFar}/${totalOrdered} | Status: ${calculatedStatus}`);
+  const isFullyReceived = (totalOrdered > 0 && totalReceivedSoFar >= totalOrdered) || grnData.forceClosePO === true;
+  const calculatedStatus = isFullyReceived ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED';
+
+  console.log(`[GRN SAVE] PO: ${poRefTarget} | Past: ${pastReceivedQty} | Current: ${currentAccepted} | Total: ${totalReceivedSoFar}/${totalOrdered} | Status: ${calculatedStatus}`);
 
   const newGRN = {
     id: grnData.id || `GRN-${Date.now()}`,
-    grnNo: `GRN-2026-${String(grns.length + 101).padStart(5, '0')}`,
+    grnNo: grnData.grnNo || grnData.id || `GRN-${Date.now()}`,
     poRef: grnData.poRef || grnData.poNo || '—',
     poNo: grnData.poNo || grnData.poRef || '—',
-    poId: grnData.poId || grnData.poRef || grnData.poNo || '—',
-    vendor: grnData.vendor || '—',
+    poId: grnData.poId || grnData.poRef || '—',
+    vendor: grnData.vendor || 'Vendor',
     date: grnData.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
     challanNo: grnData.challanNo || '—',
     receivedQty: grnData.receivedQty || 0,
-    acceptedQty: grnData.acceptedQty || 0,
+    acceptedQty: grnData.acceptedQty !== undefined ? grnData.acceptedQty : (grnData.receivedQty || 0),
     rejectedQty: grnData.rejectedQty || 0,
     receivedBy: grnData.receivedBy || '—',
     inspectorName: grnData.inspectorName || '—',
@@ -5556,109 +5621,64 @@ app.post('/api/grns', async (req, res) => {
     zohoBillPosted: false
   };
 
-  // If connected to Zoho Books, attempt to post a Draft Bill to Zoho & close PO if fully received
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const postData = JSON.stringify({
-        vendor_id: grnData.vendorId || '',
-        bill_number: newGRN.grnNo,
-        reference_number: grnData.challanNo || grnData.poRef || '',
-        date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        line_items: (grnData.items || []).map(it => ({
-          name: it.name || 'Material Item',
-          description: it.desc || '',
-          rate: Number(it.rate || 0),
-          quantity: Number(it.accepted || it.now || 1)
-        }))
-      });
-
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/bills?organization_id=${zohoSession.orgId}`,
-        method: 'POST',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
-        }
-      };
-
-      const reqZoho = https.request(options, (resZoho) => {
-        let body = '';
-        resZoho.on('data', chunk => body += chunk);
-        resZoho.on('end', () => {
-          try {
-            const parsed = JSON.parse(body);
-            if (parsed.bill) {
-              newGRN.zohoBillPosted = true;
-              newGRN.zohoBillId = parsed.bill.bill_id;
-            }
-          } catch (e) {
-            console.error('Error parsing Zoho bill response:', e);
-          }
-        });
-      });
-      reqZoho.on('error', (e) => console.error('Zoho Bill post error:', e));
-      reqZoho.write(postData);
-      reqZoho.end();
-
-      // Create Purchase Receive in Zoho Books to update Receive Status to "Received"
-      const poTargetId = grnData.poId || grnData.poRef || grnData.poNo;
-      if (poTargetId) {
-        await createZohoPurchaseReceive(accessToken, poTargetId, newGRN);
-        if (isFullyReceived || calculatedStatus === 'CLOSED / FULLY RECEIVED' || grnData.status === 'CLOSED / FULLY RECEIVED') {
-          await markZohoPOClosed(accessToken, poTargetId);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to post bill/create receive in Zoho Books:', err);
-    }
+  // 1. SAVE GRN IMMEDIATELY TO LOCAL STORE AND SUPABASE!
+  const existingGrnIdx = grns.findIndex(g => (newGRN.id && (g.id === newGRN.id || g.grnNo === newGRN.id)) || 
+                                            (newGRN.grnNo && (g.grnNo === newGRN.grnNo || g.id === newGRN.grnNo)));
+  if (existingGrnIdx >= 0) {
+    grns[existingGrnIdx] = newGRN;
+  } else {
+    grns.unshift(newGRN);
   }
-
-  // Update status in local PO store & Supabase
-  if (calculatedStatus === 'CLOSED / FULLY RECEIVED') {
-    const localPOs = loadLocalPOs();
-    const targetClean = String(grnData.poRef || grnData.poNo || '').toLowerCase();
-    const updated = localPOs.map(p => {
-      const pNo = String(p.poNo || p.id || '').toLowerCase();
-      if (pNo && (pNo === targetClean || targetClean.includes(pNo) || pNo.includes(targetClean))) {
-        return { ...p, status: 'CLOSED / FULLY RECEIVED', statusType: 'closed' };
-      }
-      return p;
-    });
-    saveLocalPOs(updated);
-  }
-
-  grns.unshift(newGRN);
   saveLocalGRNs(grns);
 
-  // Update matching PO status in po_store.json
+  // 2. UPDATE MATCHING PO STATUS IN LOCAL STORE & SUPABASE IMMEDIATELY!
   try {
     const localPOs = loadLocalPOs();
-    const targetRef = String(newGRN.poRef || newGRN.poNo || newGRN.poId || '').toLowerCase().trim();
-    if (targetRef) {
+    if (poRefTarget) {
       const updatedPOs = localPOs.map(po => {
-        const poNum = String(po.poNo || po.id || '').toLowerCase().trim();
-        if (poNum && (poNum === targetRef || targetRef.includes(poNum) || poNum.includes(targetRef))) {
+        const poNum = normalize(po.poNo);
+        const poId = normalize(po.id);
+        const poZohoId = normalize(po.zohoId);
+        if (poRefTarget === poNum || poRefTarget === poId || poRefTarget === poZohoId || (poNum && poRefTarget.includes(poNum)) || (poNum && poNum.includes(poRefTarget))) {
+          const ord = totalOrdered > 0 ? totalOrdered : Number(po.totalOrderedQty || (po.items ? po.items.reduce((s, it) => s + (Number(it.qty) || 0), 0) : 0));
+          const rec = totalReceivedSoFar;
+          const rem = Math.max(0, ord - rec);
           return {
             ...po,
             status: calculatedStatus,
-            statusType: isFullyReceived ? 'closed' : (calculatedStatus.includes('PARTIALLY') ? 'partially_received' : 'approved'),
-            order_status: isFullyReceived ? 'closed' : 'received'
+            statusType: isFullyReceived ? 'closed' : 'partially_received',
+            order_status: isFullyReceived ? 'closed' : 'received',
+            totalOrderedQty: ord,
+            totalReceivedQty: rec,
+            totalRemainingQty: rem,
+            grnCount: (Number(po.grnCount) || 0) + 1,
+            totalReceived: rec,
+            items: (po.items || []).map((poIt, idx) => {
+              const grnIt = (newGRN.items || []).find(gi => 
+                (gi.name && poIt.name && gi.name.trim().toLowerCase() === poIt.name.trim().toLowerCase()) ||
+                (gi.id && poIt.id && gi.id === poIt.id)
+              ) || (newGRN.items || [])[idx];
+              const itAccepted = grnIt ? Number(grnIt.accepted !== undefined && grnIt.accepted !== '' ? grnIt.accepted : (grnIt.now || 0)) : 0;
+              const itOrdered = Number(poIt.qty || poIt.quantity || ord);
+              const prevItRec = Number(poIt.previouslyReceived || 0) + itAccepted;
+              return {
+                ...poIt,
+                previouslyReceived: prevItRec,
+                remainingQty: Math.max(0, itOrdered - prevItRec)
+              };
+            })
           };
         }
         return po;
       });
       saveLocalPOs(updatedPOs);
+      saveDatabaseStore('po_store', updatedPOs).catch(() => {});
     }
   } catch (err) {
     console.error('Failed to update PO status in po_store:', err);
   }
 
-  // Auto-update central item stock in item_store.json and raw_materials_store.json upon GRN receipt
+  // 3. INWARD STOCK INTO INVENTORY (item_store.json & raw_materials_store.json) IMMEDIATELY!
   try {
     const localItems = loadLocalItems();
     if (Array.isArray(localItems) && localItems.length > 0) {
@@ -5668,7 +5688,6 @@ app.post('/api/grns', async (req, res) => {
         const itemCodeClean = String(item.code || item.sku || item.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         
         let addedQty = 0;
-        let grnCategory = null;
         (newGRN.items || []).forEach(grnItem => {
           const grnItemNameClean = String(grnItem.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const grnItemCodeClean = String(grnItem.code || grnItem.sku || grnItem.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -5677,16 +5696,9 @@ app.post('/api/grns', async (req, res) => {
           const isCodeMatch = itemCodeClean && grnItemCodeClean && (itemCodeClean === grnItemCodeClean || itemCodeClean.includes(grnItemCodeClean) || grnItemCodeClean.includes(itemCodeClean));
 
           if (isNameMatch || isCodeMatch) {
-            const qty = Number(grnItem.accepted !== undefined ? grnItem.accepted : (grnItem.now || 0));
+            const qty = Number(grnItem.accepted !== undefined && grnItem.accepted !== '' ? grnItem.accepted : (grnItem.now || 0));
             if (qty > 0) {
               addedQty += qty;
-              // Classify item category based on GRN selection
-              const specifiedType = (grnItem.itemType || grnItem.category || grnItem.type || '').toString().toLowerCase();
-              if (specifiedType.includes('raw') || specifiedType.includes('rm')) {
-                grnCategory = 'Raw Material';
-              } else if (specifiedType.includes('finished') || specifiedType.includes('fg')) {
-                grnCategory = 'Finished Goods';
-              }
             }
           }
         });
@@ -5695,14 +5707,12 @@ app.post('/api/grns', async (req, res) => {
           itemsUpdated = true;
           const currentStock = Number(item.stock || 0);
           const newStock = currentStock + addedQty;
-          console.log(`[INVENTORY STOCK UPDATE] Item: ${item.name} | Old Stock: ${currentStock} | Received: +${addedQty} | New Stock: ${newStock} | Category: ${grnCategory || item.category}`);
+          console.log(`[INVENTORY STOCK UPDATE] Item: ${item.name} | Old Stock: ${currentStock} | Received: +${addedQty} | New Stock: ${newStock}`);
           return { 
             ...item, 
             stock: newStock,
             availableStock: newStock,
-            physicalStock: (Number(item.physicalStock) || currentStock) + addedQty,
-            category: grnCategory || item.category || 'Raw Material',
-            cat: grnCategory || item.cat || item.category || 'Raw Material'
+            physicalStock: (Number(item.physicalStock) || currentStock) + addedQty
           };
         }
         return item;
@@ -5713,7 +5723,6 @@ app.post('/api/grns', async (req, res) => {
       }
     }
 
-    // Synchronously update raw_materials_store.json so Sales, Procurement, and Production see live inwarded stock
     const localRawMats = loadLocalRawMaterials();
     if (Array.isArray(localRawMats) && localRawMats.length > 0) {
       let rawUpdated = false;
@@ -5730,7 +5739,7 @@ app.post('/api/grns', async (req, res) => {
           const isCodeMatch = rmCodeClean && grnItemCodeClean && (rmCodeClean === grnItemCodeClean || rmCodeClean.includes(grnItemCodeClean) || grnItemCodeClean.includes(rmCodeClean));
 
           if (isNameMatch || isCodeMatch) {
-            const qty = Number(grnItem.accepted !== undefined ? grnItem.accepted : (grnItem.now || 0));
+            const qty = Number(grnItem.accepted !== undefined && grnItem.accepted !== '' ? grnItem.accepted : (grnItem.now || 0));
             if (qty > 0) addedQty += qty;
           }
         });
@@ -5765,7 +5774,26 @@ app.post('/api/grns', async (req, res) => {
     console.error('Failed to update inventory stock on GRN save:', err);
   }
 
+  // 4. RETURN SUCCESS TO CLIENT IMMEDIATELY!
   res.json({ success: true, grn: newGRN });
+
+  // 5. ASYNCHRONOUS BACKGROUND ZOHO SYNC (NON-BLOCKING)
+  if (zohoSession.connected) {
+    setImmediate(async () => {
+      try {
+        const accessToken = await getZohoAccessToken();
+        const poTargetId = grnData.poId || grnData.poRef || grnData.poNo;
+        if (poTargetId) {
+          await createZohoPurchaseReceive(accessToken, poTargetId, newGRN);
+          if (isFullyReceived) {
+            await markZohoPOClosed(accessToken, poTargetId);
+          }
+        }
+      } catch (err) {
+        console.warn('[ZOHO BACKGROUND SYNC NOTICE]:', err?.message || err);
+      }
+    });
+  }
 });
 
 // Endpoint for MD Approval (Draft/Pending -> MD Approved)

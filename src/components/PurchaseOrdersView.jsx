@@ -179,6 +179,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const s = String(po.status || '').trim();
     const st = String(po.statusType || '').toLowerCase();
     if (s === 'REJECTED' || st === 'rejected') return 'REJECTED';
+
+    const totOrd = Number(po.totalOrderedQty || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.qty || it.quantity || 0), 0) : 0));
+    const totRec = Number(po.totalReceivedQty || po.totalReceived || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.previouslyReceived || 0), 0) : 0));
+    if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+      return 'PARTIALLY_RECEIVED';
+    }
+
     if (s.includes('CLOSED') || st === 'closed') return 'CLOSED';
     if (s.includes('PARTIALLY') || st === 'partially_received') return 'PARTIALLY_RECEIVED';
     if (s === 'Proceed PO' || s === 'PROCEED PO' || st === 'proceed_po') return 'PROCEED_PO';

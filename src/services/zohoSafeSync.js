@@ -53,11 +53,19 @@ export async function getSafeZohoPOs() {
               contactPerson: cloudMatch.contactPerson || zohoPo.contactPerson || '',
               gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (zohoPo.gstNo || '—'),
               status: (() => {
+                const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
+                const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
+                if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+                  return 'OPEN / PARTIALLY RECEIVED';
+                }
                 const getStageRank = (st, stType, approver) => {
                   const s = String(st || '').toLowerCase().trim();
                   const stt = String(stType || '').toLowerCase().trim();
                   if (s.includes('rejected') || stt.includes('rejected')) return 7;
-                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) return 6;
+                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) {
+                    if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 5;
+                    return 6;
+                  }
                   if (s.includes('partially') || stt.includes('partially')) return 5;
                   if (s.includes('proceed') || stt.includes('proceed')) return 4;
                   if (s.includes('payment') || stt.includes('payment')) return 3;
@@ -71,11 +79,19 @@ export async function getSafeZohoPOs() {
                 return cloudMatch.status || zohoPo.status || 'Draft';
               })(),
               statusType: (() => {
+                const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
+                const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
+                if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+                  return 'partially_received';
+                }
                 const getStageRank = (st, stType, approver) => {
                   const s = String(st || '').toLowerCase().trim();
                   const stt = String(stType || '').toLowerCase().trim();
                   if (s.includes('rejected') || stt.includes('rejected')) return 7;
-                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) return 6;
+                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) {
+                    if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 5;
+                    return 6;
+                  }
                   if (s.includes('partially') || stt.includes('partially')) return 5;
                   if (s.includes('proceed') || stt.includes('proceed')) return 4;
                   if (s.includes('payment') || stt.includes('payment')) return 3;
@@ -95,6 +111,13 @@ export async function getSafeZohoPOs() {
               proceedDetails: cloudMatch.proceedDetails || zohoPo.proceedDetails,
               paymentDetails: cloudMatch.paymentDetails || zohoPo.paymentDetails,
               grnDetails: cloudMatch.grnDetails || zohoPo.grnDetails,
+              totalOrderedQty: cloudMatch.totalOrderedQty !== undefined ? cloudMatch.totalOrderedQty : zohoPo.totalOrderedQty,
+              totalReceivedQty: cloudMatch.totalReceivedQty !== undefined ? cloudMatch.totalReceivedQty : zohoPo.totalReceivedQty,
+              totalRemainingQty: cloudMatch.totalRemainingQty !== undefined ? cloudMatch.totalRemainingQty : zohoPo.totalRemainingQty,
+              receivingProgressPct: cloudMatch.receivingProgressPct !== undefined ? cloudMatch.receivingProgressPct : zohoPo.receivingProgressPct,
+              grnCount: cloudMatch.grnCount !== undefined ? cloudMatch.grnCount : zohoPo.grnCount,
+              totalReceived: cloudMatch.totalReceived !== undefined ? cloudMatch.totalReceived : zohoPo.totalReceived,
+              grnHistory: (Array.isArray(cloudMatch.grnHistory) && cloudMatch.grnHistory.length > 0) ? cloudMatch.grnHistory : (zohoPo.grnHistory || []),
               items: preservedItems,
               notes: cloudMatch.notes || zohoPo.notes || '',
               terms: (cloudMatch.terms && cloudMatch.terms.length > 50) ? cloudMatch.terms : (zohoPo.terms || cloudMatch.terms || ''),
