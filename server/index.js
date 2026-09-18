@@ -3767,8 +3767,65 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
     
     if (data.purchaseorders) {
       const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-      const localGRNs = loadLocalGRNs();
+
+      // Permanently ensure local server store is merged with Supabase cloud store
       let localPOs = loadLocalPOs();
+      try {
+        const cloudPOs = await getDatabaseStore('po_store');
+        if (Array.isArray(cloudPOs) && cloudPOs.length > 0) {
+          const map = new Map();
+          cloudPOs.forEach(p => {
+            const k1 = normalize(p.poNo);
+            const k2 = normalize(p.id);
+            const k3 = normalize(p.zohoId);
+            if (k1) map.set(k1, p);
+            if (k2) map.set(k2, p);
+            if (k3) map.set(k3, p);
+          });
+          localPOs.forEach(p => {
+            const k1 = normalize(p.poNo);
+            const k2 = normalize(p.id);
+            const k3 = normalize(p.zohoId);
+            const match = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3));
+            if (match) {
+              const pRank = getPoStageRank(p);
+              const mRank = getPoStageRank(match);
+              const winner = mRank >= pRank ? { ...p, ...match } : { ...match, ...p };
+              if (k1) map.set(k1, winner);
+              if (k2) map.set(k2, winner);
+              if (k3) map.set(k3, winner);
+            } else {
+              if (k1) map.set(k1, p);
+              if (k2) map.set(k2, p);
+              if (k3) map.set(k3, p);
+            }
+          });
+          localPOs = Array.from(new Set(map.values()));
+          saveLocalPOs(localPOs);
+        }
+      } catch (err) {
+        console.warn('Notice: Error merging cloud PO store in GET /api/zoho/purchaseorders:', err?.message);
+      }
+
+      let localGRNs = loadLocalGRNs();
+      try {
+        const cloudGRNs = await getDatabaseStore('grn_store');
+        if (Array.isArray(cloudGRNs) && cloudGRNs.length > 0) {
+          const gMap = new Map();
+          cloudGRNs.forEach(g => {
+            const id = g.id || g.grnNo;
+            if (id) gMap.set(id, g);
+          });
+          localGRNs.forEach(g => {
+            const id = g.id || g.grnNo;
+            if (id && !gMap.has(id)) gMap.set(id, g);
+          });
+          localGRNs = Array.from(gMap.values());
+          saveLocalGRNs(localGRNs);
+        }
+      } catch (err) {
+        console.warn('Notice: Error merging cloud GRN store in GET /api/zoho/purchaseorders:', err?.message);
+      }
       
       // Auto-enrich up to 5 recent Zoho POs that are missing line items in local store
       try {

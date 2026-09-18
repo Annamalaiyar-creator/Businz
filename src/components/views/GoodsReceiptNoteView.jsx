@@ -829,169 +829,156 @@ export default function GoodsReceiptNoteView(props) {
       return;
     }
 
+    // 1. Compute totals and statuses immediately
     const totalNow = processedItems.reduce((acc, it) => acc + Number(it.now || 0), 0);
     const totalAccepted = processedItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
     const totalRejected = processedItems.reduce((acc, it) => acc + Number(it.rejected || 0), 0);
     const totalOrdered = processedItems.reduce((acc, it) => acc + Number(it.ordered || 0), 0);
 
+    const prevPO = livePOs.find(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo || p.zohoId === selectedGRNPo) || {};
+    const curOrd = totalOrdered > 0 ? totalOrdered : Number(prevPO.totalOrderedQty || 0);
+    const pastRec = Number(prevPO.totalReceivedQty || prevPO.totalReceived || 0);
+    const curRec = pastRec + totalAccepted;
+    const curRem = Math.max(0, curOrd - curRec);
+    const isFull = (curOrd > 0 && curRec >= curOrd);
+
+    const grnGeneratedId = `GRN-2026-${String(Date.now()).slice(-5)}`;
     const docsToAttach = grnDocs || [];
 
-    const payload = {
+    const newGRNRecord = {
+      id: grnGeneratedId,
+      grnNo: grnGeneratedId,
       poRef: selectedGRNPo,
       poNo: selectedGRNPo,
-      vendor: selectedGRNVendor || 'Vendor',
+      vendor: selectedGRNVendor || prevPO.vendor || 'Vendor',
       challanNo: grnChallanNo || 'DC-NEW',
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      totalOrderedQty: totalOrdered,
+      totalOrderedQty: curOrd,
       receivedQty: totalNow,
       acceptedQty: totalAccepted,
       rejectedQty: totalRejected,
-      receivedBy: grnReceivedBy || '',
-      inspectorName: grnInspectorName || '',
+      receivedBy: grnReceivedBy || 'Store Manager',
+      inspectorName: grnInspectorName || 'Quality Inspector',
       inspectionRemarks: grnInspectionRemarks || '',
       items: processedItems,
-      documents: docsToAttach
+      documents: docsToAttach,
+      status: isFull ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED'
     };
 
+    const formattedGRN = {
+      id: newGRNRecord.id,
+      poRef: newGRNRecord.poRef,
+      vendor: newGRNRecord.vendor,
+      date: newGRNRecord.date,
+      received: `${totalNow} Units`,
+      status: newGRNRecord.status,
+      val: `₹ ${totalNow * 1250}`,
+      challanNo: newGRNRecord.challanNo,
+      receivedBy: newGRNRecord.receivedBy,
+      documents: newGRNRecord.documents
+    };
+
+    // 2. IMMEDIATE PERSISTENCE: GRN Store (React State + LocalStorage + Supabase Cloud)
+    setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
+    try {
+      const rawStored = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]';
+      const parsed = JSON.parse(rawStored);
+      const updatedGrns = [newGRNRecord, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== newGRNRecord.id) : [])];
+      localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedGrns));
+      localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedGrns));
+      saveCloudStoreImmediate('grn_store', updatedGrns).catch(() => {});
+    } catch (_) {}
+
+    // 3. IMMEDIATE PERSISTENCE: PO Store (Supabase Cloud + LocalStorage)
+    const poTargetId = selectedGRNPo;
+    if (poTargetId && poTargetId !== '—') {
+      saveSafeZohoPO({
+        poNo: poTargetId,
+        id: poTargetId,
+        status: isFull ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED',
+        statusType: isFull ? 'closed' : 'partially_received',
+        order_status: isFull ? 'closed' : 'received',
+        totalOrderedQty: curOrd,
+        totalReceivedQty: curRec,
+        totalRemainingQty: curRem,
+        totalReceived: curRec,
+        receivingProgressPct: curOrd > 0 ? ((curRec / curOrd) * 100).toFixed(1) : '0.0',
+        grnCount: (Number(prevPO.grnCount) || 0) + 1,
+        items: processedItems.map(it => {
+          const ord = Number(it.ordered || 0);
+          const acc = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
+          const prevIt = Number(it.prev || 0);
+          const totIt = prevIt + acc;
+          return {
+            ...it,
+            qty: ord,
+            previouslyReceived: totIt,
+            remainingQty: Math.max(0, ord - totIt)
+          };
+        })
+      }).catch(() => {});
+    }
+
+    // 4. IMMEDIATE PERSISTENCE: Inward Inventory Stock
+    try {
+      const rawStored = localStorage.getItem('controlroom_raw_materials_store') || '[]';
+      const rawMats = JSON.parse(rawStored);
+      if (Array.isArray(rawMats) && rawMats.length > 0) {
+        let anyUpdated = false;
+        const updatedRaw = rawMats.map(rm => {
+          const rmNameClean = String(rm.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rmCodeClean = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          let added = 0;
+          processedItems.forEach(pi => {
+            const piNameClean = String(pi.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const piCodeClean = String(pi.code || pi.sku || pi.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if ((rmNameClean && piNameClean && (rmNameClean === piNameClean || rmNameClean.includes(piNameClean) || piNameClean.includes(rmNameClean))) ||
+                (rmCodeClean && piCodeClean && (rmCodeClean === piCodeClean || rmCodeClean.includes(piCodeClean) || piCodeClean.includes(rmCodeClean)))) {
+              const q = Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0));
+              if (q > 0) added += q;
+            }
+          });
+          if (added > 0) {
+            anyUpdated = true;
+            const newStock = Number(rm.stock || 0) + added;
+            return {
+              ...rm,
+              stock: newStock,
+              availableStock: newStock,
+              physicalStock: (Number(rm.physicalStock) || Number(rm.stock || 0)) + added,
+              goodsReceived: (Number(rm.goodsReceived) || 0) + added,
+              status: newStock > (rm.minLevel || 50) ? 'In Stock' : 'Low Stock',
+              lastUpdated: `Inwarded from GRN ${grnGeneratedId}`
+            };
+          }
+          return rm;
+        });
+        if (anyUpdated) {
+          localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+          saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
+          window.dispatchEvent(new Event('central_inventory_updated'));
+          window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+        }
+      }
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: newGRNRecord }));
+    window.dispatchEvent(new Event('central_inventory_updated'));
+    window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+    window.dispatchEvent(new Event('controlroom_storage_update'));
+    window.dispatchEvent(new CustomEvent('storage'));
+
+    // 5. Notify server & Zoho backend asynchronously
     fetch('/api/grns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(newGRNRecord)
     })
       .then(res => res.json())
-      .then(data => {
-        if (data.grn) {
-          const formattedGRN = {
-            id: data.grn.grnNo || data.grn.id,
-            poRef: data.grn.poRef || data.grn.poNo || '—',
-            vendor: data.grn.vendor || '—',
-            date: data.grn.date || '—',
-            received: `${totalNow} Units`,
-            status: data.grn.status || 'OPEN / PARTIALLY RECEIVED',
-            val: `₹ ${totalNow * 1250}`,
-            challanNo: data.grn.challanNo || grnChallanNo,
-            receivedBy: data.grn.receivedBy || grnReceivedBy,
-            documents: data.grn.documents || docsToAttach
-          };
+      .catch(() => {});
 
-          setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
-
-          try {
-            const rawStored = localStorage.getItem('controlroom_central_grns_v2') || '[]';
-            const parsed = JSON.parse(rawStored);
-            const updated = [data.grn, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== (data.grn.grnNo || data.grn.id)) : [])];
-            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
-            localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
-            saveCloudStoreImmediate('grn_store', updated).catch(() => {});
-            window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
-            window.dispatchEvent(new Event('central_inventory_updated'));
-            window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
-            window.dispatchEvent(new CustomEvent('storage'));
-
-            const poTargetId = data.grn.poRef || data.grn.poNo || selectedGRNPo;
-            if (poTargetId && poTargetId !== '—') {
-              const prevPO = livePOs.find(p => p.poNo === poTargetId || p.id === poTargetId || p.zohoId === poTargetId) || {};
-              const curOrd = totalOrdered > 0 ? totalOrdered : Number(prevPO.totalOrderedQty || 0);
-              const pastRec = Number(prevPO.totalReceivedQty || prevPO.totalReceived || 0);
-              const curRec = pastRec + totalAccepted;
-              const curRem = Math.max(0, curOrd - curRec);
-              const isFull = (curOrd > 0 && curRec >= curOrd);
-
-              saveSafeZohoPO({
-                poNo: poTargetId,
-                id: poTargetId,
-                status: isFull ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED',
-                statusType: isFull ? 'closed' : 'partially_received',
-                order_status: isFull ? 'closed' : 'received',
-                totalOrderedQty: curOrd,
-                totalReceivedQty: curRec,
-                totalRemainingQty: curRem,
-                totalReceived: curRec,
-                receivingProgressPct: curOrd > 0 ? ((curRec / curOrd) * 100).toFixed(1) : '0.0',
-                grnCount: (Number(prevPO.grnCount) || 0) + 1,
-                items: processedItems.map(it => {
-                  const ord = Number(it.ordered || 0);
-                  const acc = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
-                  const prevIt = Number(it.prev || 0);
-                  const totIt = prevIt + acc;
-                  return {
-                    ...it,
-                    qty: ord,
-                    previouslyReceived: totIt,
-                    remainingQty: Math.max(0, ord - totIt)
-                  };
-                })
-              }).catch(() => {});
-            }
-          } catch (_) {}
-
-          // Refresh raw materials cache from server
-          fetch('/api/raw-materials')
-            .then(res => res.json())
-            .then(rawList => {
-              if (Array.isArray(rawList) && rawList.length > 0) {
-                try { localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawList)); } catch (_) {}
-                window.dispatchEvent(new Event('central_inventory_updated'));
-                window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-              }
-            })
-            .catch(() => {});
-
-          fetch('/api/grns')
-            .then(res => res.json())
-            .then(grns => {
-              if (Array.isArray(grns)) {
-                setGrnList(grns.map(g => ({
-                  id: g.grnNo || g.id,
-                  poRef: g.poRef || g.poNo || '—',
-                  vendor: g.vendor || '—',
-                  date: g.date || '—',
-                  received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-                  status: g.status || 'OPEN / PARTIALLY RECEIVED',
-                  val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
-                  challanNo: g.challanNo || '',
-                  receivedBy: g.receivedBy || '',
-                  inspectorName: g.inspectorName || '',
-                  inspectionRemarks: g.inspectionRemarks || '',
-                  documents: g.documents || []
-                })));
-                try {
-                  localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
-                  localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
-                } catch (_) {}
-              }
-            });
-
-          fetch('/api/zoho/purchaseorders')
-            .then(res => res.json())
-            .then(d => { if (Array.isArray(d)) setLivePOs(d); });
-
-          fetch('/api/zoho/items')
-            .then(res => res.json())
-            .then(items => { if (Array.isArray(items)) setItemsList(items); });
-        }
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      })
-      .catch(err => {
-        console.error('Failed to post GRN to API, saving to local state fallback:', err);
-        const fallbackGRN = {
-          id: `GRN-2026-${String(grnList.length + 101).padStart(5, '0')}`,
-          poRef: selectedGRNPo || 'PO-00001',
-          vendor: selectedGRNVendor || 'Vendor',
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-          received: `${totalNow} Units`,
-          status: 'OPEN / PARTIALLY RECEIVED',
-          val: `₹ ${totalNow * 1250}`,
-          challanNo: grnChallanNo,
-          receivedBy: grnReceivedBy,
-          documents: docsToAttach
-        };
-        setGrnList(prev => [fallbackGRN, ...prev]);
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      });
+    setShowCreateGRN(false);
+    resetCreateGRNForm();
   };
 
   const handleFullyReceived = () => {
@@ -1035,114 +1022,130 @@ export default function GoodsReceiptNoteView(props) {
       forceClosePO: true
     };
 
+    const grnGeneratedId = `GRN-2026-${String(Date.now()).slice(-5)}`;
+    const newGRNRecord = {
+      id: grnGeneratedId,
+      grnNo: grnGeneratedId,
+      poRef: selectedGRNPo,
+      poNo: selectedGRNPo,
+      vendor: selectedGRNVendor || 'Vendor',
+      challanNo: grnChallanNo || 'DC-FINAL',
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      totalOrderedQty: totalAccepted,
+      receivedQty: totalAccepted,
+      acceptedQty: totalAccepted,
+      rejectedQty: 0,
+      receivedBy: grnReceivedBy || 'Store Manager',
+      inspectorName: grnInspectorName || 'Quality Inspector',
+      inspectionRemarks: grnInspectionRemarks || 'PO Marked as Fully Received & Closed',
+      items: completedItems,
+      documents: docsToAttach,
+      status: 'CLOSED / FULLY RECEIVED'
+    };
+
+    const formattedGRN = {
+      id: newGRNRecord.id,
+      poRef: newGRNRecord.poRef,
+      vendor: newGRNRecord.vendor,
+      date: newGRNRecord.date,
+      received: `${totalAccepted} Units`,
+      status: 'CLOSED / FULLY RECEIVED',
+      val: `₹ ${totalAccepted * 1250}`,
+      challanNo: newGRNRecord.challanNo,
+      receivedBy: newGRNRecord.receivedBy,
+      documents: newGRNRecord.documents
+    };
+
+    // 1. IMMEDIATE PERSISTENCE: GRN Store
+    setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
+    try {
+      const rawStored = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]';
+      const parsed = JSON.parse(rawStored);
+      const updatedGrns = [newGRNRecord, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== newGRNRecord.id) : [])];
+      localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedGrns));
+      localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedGrns));
+      saveCloudStoreImmediate('grn_store', updatedGrns).catch(() => {});
+    } catch (_) {}
+
+    // 2. IMMEDIATE PERSISTENCE: PO Store
+    const poTargetId = selectedGRNPo;
+    if (poTargetId && poTargetId !== '—') {
+      const prevPO = livePOs.find(p => p.poNo === poTargetId || p.id === poTargetId || p.zohoId === poTargetId) || {};
+      const curOrd = totalAccepted > 0 ? totalAccepted : Number(prevPO.totalOrderedQty || 0);
+      saveSafeZohoPO({
+        poNo: poTargetId,
+        id: poTargetId,
+        status: 'CLOSED / FULLY RECEIVED',
+        statusType: 'closed',
+        order_status: 'closed',
+        totalOrderedQty: curOrd,
+        totalReceivedQty: curOrd,
+        totalRemainingQty: 0,
+        totalReceived: curOrd,
+        receivingProgressPct: '100.0',
+        grnCount: (Number(prevPO.grnCount) || 0) + 1
+      }).catch(() => {});
+    }
+
+    // 3. IMMEDIATE PERSISTENCE: Inward Inventory Stock
+    try {
+      const rawStored = localStorage.getItem('controlroom_raw_materials_store') || '[]';
+      const rawMats = JSON.parse(rawStored);
+      if (Array.isArray(rawMats) && rawMats.length > 0) {
+        let anyUpdated = false;
+        const updatedRaw = rawMats.map(rm => {
+          const rmNameClean = String(rm.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rmCodeClean = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          let added = 0;
+          completedItems.forEach(pi => {
+            const piNameClean = String(pi.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const piCodeClean = String(pi.code || pi.sku || pi.id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if ((rmNameClean && piNameClean && (rmNameClean === piNameClean || rmNameClean.includes(piNameClean) || piNameClean.includes(rmNameClean))) ||
+                (rmCodeClean && piCodeClean && (rmCodeClean === piCodeClean || rmCodeClean.includes(piCodeClean) || piCodeClean.includes(rmCodeClean)))) {
+              const q = Number(pi.accepted !== undefined && pi.accepted !== '' ? pi.accepted : (pi.now || 0));
+              if (q > 0) added += q;
+            }
+          });
+          if (added > 0) {
+            anyUpdated = true;
+            const newStock = Number(rm.stock || 0) + added;
+            return {
+              ...rm,
+              stock: newStock,
+              availableStock: newStock,
+              physicalStock: (Number(rm.physicalStock) || Number(rm.stock || 0)) + added,
+              goodsReceived: (Number(rm.goodsReceived) || 0) + added,
+              status: newStock > (rm.minLevel || 50) ? 'In Stock' : 'Low Stock',
+              lastUpdated: `Inwarded from GRN ${grnGeneratedId}`
+            };
+          }
+          return rm;
+        });
+        if (anyUpdated) {
+          localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+          saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
+          window.dispatchEvent(new Event('central_inventory_updated'));
+          window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+        }
+      }
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: newGRNRecord }));
+    window.dispatchEvent(new Event('central_inventory_updated'));
+    window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+    window.dispatchEvent(new Event('controlroom_storage_update'));
+    window.dispatchEvent(new CustomEvent('storage'));
+
+    // 4. Notify server & Zoho backend asynchronously
     fetch('/api/grns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, id: grnGeneratedId, grnNo: grnGeneratedId })
     })
       .then(res => res.json())
-      .then(data => {
-        if (data.grn) {
-          const formattedGRN = {
-            id: data.grn.grnNo || data.grn.id,
-            poRef: data.grn.poRef || data.grn.poNo || '—',
-            vendor: data.grn.vendor || '—',
-            date: data.grn.date || '—',
-            received: `${totalAccepted} Units`,
-            status: 'CLOSED / FULLY RECEIVED',
-            val: `₹ ${totalAccepted * 1250}`,
-            challanNo: data.grn.challanNo || grnChallanNo,
-            receivedBy: data.grn.receivedBy || grnReceivedBy,
-            documents: data.grn.documents || docsToAttach
-          };
-
-          setGrnList(prev => [formattedGRN, ...prev.filter(g => g.id !== formattedGRN.id)]);
-
-          try {
-            const rawStored = localStorage.getItem('controlroom_central_grns_v2') || '[]';
-            const parsed = JSON.parse(rawStored);
-            const updated = [data.grn, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== (data.grn.grnNo || data.grn.id)) : [])];
-            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
-            localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
-            saveCloudStoreImmediate('grn_store', updated).catch(() => {});
-            window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
-            window.dispatchEvent(new CustomEvent('storage'));
-
-            const poTargetId = data.grn.poRef || data.grn.poNo || selectedGRNPo;
-            if (poTargetId && poTargetId !== '—') {
-              const prevPO = livePOs.find(p => p.poNo === poTargetId || p.id === poTargetId || p.zohoId === poTargetId) || {};
-              const curOrd = totalAccepted > 0 ? totalAccepted : Number(prevPO.totalOrderedQty || 0);
-              saveSafeZohoPO({
-                poNo: poTargetId,
-                id: poTargetId,
-                status: 'CLOSED / FULLY RECEIVED',
-                statusType: 'closed',
-                order_status: 'closed',
-                totalOrderedQty: curOrd,
-                totalReceivedQty: curOrd,
-                totalRemainingQty: 0,
-                totalReceived: curOrd,
-                receivingProgressPct: '100.0',
-                grnCount: (Number(prevPO.grnCount) || 0) + 1
-              }).catch(() => {});
-            }
-          } catch (_) {}
-        }
-
-        fetch('/api/grns')
-          .then(res => res.json())
-          .then(grns => {
-            if (Array.isArray(grns)) {
-              setGrnList(grns.map(g => ({
-                id: g.grnNo || g.id,
-                poRef: g.poRef || g.poNo || '—',
-                vendor: g.vendor || '—',
-                date: g.date || '—',
-                received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-                status: g.status || 'CLOSED / FULLY RECEIVED',
-                val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
-                challanNo: g.challanNo || '',
-                receivedBy: g.receivedBy || '',
-                inspectorName: g.inspectorName || '',
-                inspectionRemarks: g.inspectionRemarks || '',
-                documents: g.documents || []
-              })));
-              try {
-                localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
-                localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
-              } catch (_) {}
-            }
-          });
-
-        fetch('/api/zoho/purchaseorders')
-          .then(res => res.json())
-          .then(d => { if (Array.isArray(d)) setLivePOs(d); });
-
-        fetch('/api/zoho/items')
-          .then(res => res.json())
-          .then(items => { if (Array.isArray(items)) setItemsList(items); });
-
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      })
-      .catch(err => {
-        console.error('Failed to mark as Fully Received on API, saving to local state fallback:', err);
-        const fallbackGRN = {
-          id: `GRN-2026-${String(grnList.length + 101).padStart(5, '0')}`,
-          poRef: selectedGRNPo || 'PO-00001',
-          vendor: selectedGRNVendor || 'Vendor',
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-          received: `${totalAccepted} Units`,
-          status: 'CLOSED / FULLY RECEIVED',
-          val: `₹ ${totalAccepted * 1250}`,
-          challanNo: grnChallanNo || 'DC-FULL',
-          receivedBy: grnReceivedBy || 'Store Manager',
-          documents: docsToAttach
-        };
-        setGrnList(prev => [fallbackGRN, ...prev]);
-        setShowCreateGRN(false);
-        resetCreateGRNForm();
-      });
+      .catch(() => {});
+    setShowCreateGRN(false);
+    resetCreateGRNForm();
   };
 
   const handleDeleteGRN = (targetId) => {

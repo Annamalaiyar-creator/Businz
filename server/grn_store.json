@@ -1,5 +1,40 @@
 [
   {
+    "id": "GRN-2026-00115",
+    "grnNo": "GRN-2026-00115",
+    "poRef": "PO-00138",
+    "poNo": "PO-00138",
+    "poId": "PO-00138",
+    "vendor": "Royal Steel Suppliers",
+    "date": "18 Sept 2026",
+    "challanNo": "DC-138-01",
+    "receivedQty": 100,
+    "acceptedQty": 100,
+    "rejectedQty": 0,
+    "receivedBy": "Store Manager",
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "Partial receipt: 100 units received in good condition",
+    "items": [
+      {
+        "id": "PO-ITEM-0",
+        "code": "ADANI-545",
+        "name": "MODULE - ADANI BIFACIAL DCR 545wp",
+        "category": "Finished Goods",
+        "itemType": "Finished Goods",
+        "uom": "NOS",
+        "ordered": 200,
+        "prev": 0,
+        "remaining": 100,
+        "now": 100,
+        "accepted": 100,
+        "rejected": 0
+      }
+    ],
+    "documents": [],
+    "status": "OPEN / PARTIALLY RECEIVED",
+    "zohoBillPosted": false
+  },
+  {
     "id": "GRN-2026-00114",
     "grnNo": "GRN-2026-00114",
     "poRef": "PO-00133",
