@@ -210,10 +210,11 @@
     "approver": "",
     "approvalPriority": "",
     "amount": "₹ 2,36,000.00",
-    "status": "Proceed PO",
-    "statusType": "proceed_po",
-    "grnCount": 0,
-    "totalReceived": 0,
+    "status": "OPEN / PARTIALLY RECEIVED",
+    "statusType": "partially_received",
+    "order_status": "received",
+    "grnCount": 1,
+    "totalReceived": 100,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -223,15 +224,22 @@
         "unit": "NOS",
         "rate": 100,
         "tax": 18,
-        "previouslyReceived": 0,
-        "remainingQty": 2000
+        "previouslyReceived": 100,
+        "remainingQty": 1900
       }
     ],
     "totalOrderedQty": 2000,
-    "totalReceivedQty": 0,
-    "totalRemainingQty": 2000,
-    "receivingProgressPct": "0.0",
-    "grnHistory": [],
+    "totalReceivedQty": 100,
+    "totalRemainingQty": 1900,
+    "receivingProgressPct": "5.0",
+    "grnHistory": [
+      {
+        "grnNo": "GRN-2026-00114",
+        "date": "18 Sept 2026",
+        "receivedQty": 100,
+        "status": "OPEN / PARTIALLY RECEIVED"
+      }
+    ],
     "deliveryType": "Organization",
     "approvedBy": "Velmurugan Rathinam (MD)",
     "approvalDate": "17 Sept 2026",

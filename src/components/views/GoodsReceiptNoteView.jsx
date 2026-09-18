@@ -13,7 +13,7 @@ import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
 import StatusBadge from '../StatusBadge';
 import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../../services/zohoSafeSync';
-import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
 
@@ -46,7 +46,7 @@ export default function GoodsReceiptNoteView(props) {
             vendor: g.vendor || '—',
             date: g.date || '—',
             received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-            status: g.status || 'Approved',
+            status: g.status || 'OPEN / PARTIALLY RECEIVED',
             val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
             challanNo: g.challanNo || '',
             receivedBy: g.receivedBy || '',
@@ -96,7 +96,7 @@ export default function GoodsReceiptNoteView(props) {
             vendor: g.vendor || '—',
             date: g.date || '—',
             received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-            status: g.status || 'Approved',
+            status: g.status || 'OPEN / PARTIALLY RECEIVED',
             val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
             challanNo: g.challanNo || '',
             receivedBy: g.receivedBy || '',
@@ -576,7 +576,7 @@ export default function GoodsReceiptNoteView(props) {
             vendor: g.vendor || '—',
             date: g.date || '—',
             received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-            status: g.status || 'Approved',
+            status: g.status || 'OPEN / PARTIALLY RECEIVED',
             val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
             challanNo: g.challanNo || '',
             receivedBy: g.receivedBy || '',
@@ -832,6 +832,7 @@ export default function GoodsReceiptNoteView(props) {
     const totalNow = processedItems.reduce((acc, it) => acc + Number(it.now || 0), 0);
     const totalAccepted = processedItems.reduce((acc, it) => acc + Number(it.accepted || 0), 0);
     const totalRejected = processedItems.reduce((acc, it) => acc + Number(it.rejected || 0), 0);
+    const totalOrdered = processedItems.reduce((acc, it) => acc + Number(it.ordered || 0), 0);
 
     const docsToAttach = grnDocs || [];
 
@@ -841,6 +842,7 @@ export default function GoodsReceiptNoteView(props) {
       vendor: selectedGRNVendor || 'Vendor',
       challanNo: grnChallanNo || 'DC-NEW',
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      totalOrderedQty: totalOrdered,
       receivedQty: totalNow,
       acceptedQty: totalAccepted,
       rejectedQty: totalRejected,
@@ -880,6 +882,7 @@ export default function GoodsReceiptNoteView(props) {
             const updated = [data.grn, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== (data.grn.grnNo || data.grn.id)) : [])];
             localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
             localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
+            saveCloudStoreImmediate('grn_store', updated).catch(() => {});
             window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
             window.dispatchEvent(new Event('central_inventory_updated'));
             window.dispatchEvent(new Event('controlroom_raw_materials_update'));
@@ -888,12 +891,37 @@ export default function GoodsReceiptNoteView(props) {
 
             const poTargetId = data.grn.poRef || data.grn.poNo || selectedGRNPo;
             if (poTargetId && poTargetId !== '—') {
+              const prevPO = livePOs.find(p => p.poNo === poTargetId || p.id === poTargetId || p.zohoId === poTargetId) || {};
+              const curOrd = totalOrdered > 0 ? totalOrdered : Number(prevPO.totalOrderedQty || 0);
+              const pastRec = Number(prevPO.totalReceivedQty || prevPO.totalReceived || 0);
+              const curRec = pastRec + totalAccepted;
+              const curRem = Math.max(0, curOrd - curRec);
+              const isFull = (curOrd > 0 && curRec >= curOrd);
+
               saveSafeZohoPO({
                 poNo: poTargetId,
                 id: poTargetId,
-                status: data.grn.status || 'OPEN / PARTIALLY RECEIVED',
-                statusType: data.grn.status === 'CLOSED / FULLY RECEIVED' ? 'closed' : 'partially_received',
-                order_status: data.grn.status === 'CLOSED / FULLY RECEIVED' ? 'closed' : 'received'
+                status: isFull ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED',
+                statusType: isFull ? 'closed' : 'partially_received',
+                order_status: isFull ? 'closed' : 'received',
+                totalOrderedQty: curOrd,
+                totalReceivedQty: curRec,
+                totalRemainingQty: curRem,
+                totalReceived: curRec,
+                receivingProgressPct: curOrd > 0 ? ((curRec / curOrd) * 100).toFixed(1) : '0.0',
+                grnCount: (Number(prevPO.grnCount) || 0) + 1,
+                items: processedItems.map(it => {
+                  const ord = Number(it.ordered || 0);
+                  const acc = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
+                  const prevIt = Number(it.prev || 0);
+                  const totIt = prevIt + acc;
+                  return {
+                    ...it,
+                    qty: ord,
+                    previouslyReceived: totIt,
+                    remainingQty: Math.max(0, ord - totIt)
+                  };
+                })
               }).catch(() => {});
             }
           } catch (_) {}
@@ -920,7 +948,7 @@ export default function GoodsReceiptNoteView(props) {
                   vendor: g.vendor || '—',
                   date: g.date || '—',
                   received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-                  status: g.status || 'Approved',
+                  status: g.status || 'OPEN / PARTIALLY RECEIVED',
                   val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
                   challanNo: g.challanNo || '',
                   receivedBy: g.receivedBy || '',
@@ -1036,17 +1064,26 @@ export default function GoodsReceiptNoteView(props) {
             const updated = [data.grn, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== (data.grn.grnNo || data.grn.id)) : [])];
             localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updated));
             localStorage.setItem('goods_receipt_notes', JSON.stringify(updated));
+            saveCloudStoreImmediate('grn_store', updated).catch(() => {});
             window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: data.grn }));
             window.dispatchEvent(new CustomEvent('storage'));
 
             const poTargetId = data.grn.poRef || data.grn.poNo || selectedGRNPo;
             if (poTargetId && poTargetId !== '—') {
+              const prevPO = livePOs.find(p => p.poNo === poTargetId || p.id === poTargetId || p.zohoId === poTargetId) || {};
+              const curOrd = totalAccepted > 0 ? totalAccepted : Number(prevPO.totalOrderedQty || 0);
               saveSafeZohoPO({
                 poNo: poTargetId,
                 id: poTargetId,
                 status: 'CLOSED / FULLY RECEIVED',
                 statusType: 'closed',
-                order_status: 'closed'
+                order_status: 'closed',
+                totalOrderedQty: curOrd,
+                totalReceivedQty: curOrd,
+                totalRemainingQty: 0,
+                totalReceived: curOrd,
+                receivingProgressPct: '100.0',
+                grnCount: (Number(prevPO.grnCount) || 0) + 1
               }).catch(() => {});
             }
           } catch (_) {}

@@ -76,10 +76,13 @@ export async function getSafeZohoPOs() {
                 const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
                 const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy, cloudMatch.paymentDetails, cloudMatch.proceedDetails);
                 const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy, zohoPo.paymentDetails, zohoPo.proceedDetails);
-                if (zRank > cRank) return zohoPo.status;
-                if (cRank > zRank) return (cRank >= 4 && !cloudMatch.status?.includes('Proceed')) ? 'Proceed PO' : (cRank === 3 && !cloudMatch.status?.includes('Payment')) ? 'Payment Processed' : cloudMatch.status;
-                if (effProceedDetails) return 'Proceed PO';
-                if (effPayDetails) return 'Payment Processed';
+                const effectiveRank = Math.max(cRank, zRank);
+                if (effectiveRank === 7) return 'REJECTED';
+                if (effectiveRank === 6) return 'CLOSED / FULLY RECEIVED';
+                if (effectiveRank === 5) return 'OPEN / PARTIALLY RECEIVED';
+                if (effectiveRank === 4) return 'Proceed PO';
+                if (effectiveRank === 3) return 'Payment Processed';
+                if (effectiveRank === 2) return 'MD Approved';
                 return cloudMatch.status || zohoPo.status || 'Draft';
               })(),
               statusType: (() => {
@@ -106,10 +109,13 @@ export async function getSafeZohoPOs() {
                 const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
                 const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy, cloudMatch.paymentDetails, cloudMatch.proceedDetails);
                 const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy, zohoPo.paymentDetails, zohoPo.proceedDetails);
-                if (zRank > cRank) return zohoPo.statusType || 'draft';
-                if (cRank > zRank) return (cRank >= 4 && !cloudMatch.statusType?.includes('proceed')) ? 'proceed_po' : (cRank === 3 && !cloudMatch.statusType?.includes('payment')) ? 'payment_processed' : (cloudMatch.statusType || 'draft');
-                if (effProceedDetails) return 'proceed_po';
-                if (effPayDetails) return 'payment_processed';
+                const effectiveRank = Math.max(cRank, zRank);
+                if (effectiveRank === 7) return 'rejected';
+                if (effectiveRank === 6) return 'closed';
+                if (effectiveRank === 5) return 'partially_received';
+                if (effectiveRank === 4) return 'proceed_po';
+                if (effectiveRank === 3) return 'payment_processed';
+                if (effectiveRank === 2) return 'md_approved';
                 return cloudMatch.statusType || zohoPo.statusType || 'draft';
               })(),
               approvedBy: cloudMatch.approvedBy || zohoPo.approvedBy,

@@ -1,5 +1,40 @@
 [
   {
+    "id": "GRN-2026-00114",
+    "grnNo": "GRN-2026-00114",
+    "poRef": "PO-00133",
+    "poNo": "PO-00133",
+    "poId": "4080449000000519001",
+    "vendor": "Paramount Industrial Supplies",
+    "date": "18 Sept 2026",
+    "challanNo": "DC-100-01",
+    "receivedQty": 100,
+    "acceptedQty": 100,
+    "rejectedQty": 0,
+    "receivedBy": "Store Manager",
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "100 Units received in good condition",
+    "items": [
+      {
+        "id": "PO-ITEM-0",
+        "code": "MR100N",
+        "name": "MINI RAIL 100mm (300mm) NEW",
+        "category": "Finished Goods",
+        "itemType": "Finished Goods",
+        "uom": "NOS",
+        "ordered": 2000,
+        "prev": 0,
+        "remaining": 1900,
+        "now": 100,
+        "accepted": 100,
+        "rejected": 0
+      }
+    ],
+    "documents": [],
+    "status": "OPEN / PARTIALLY RECEIVED",
+    "zohoBillPosted": false
+  },
+  {
     "id": "GRN-2026-00113",
     "grnNo": "GRN-2026-00113",
     "poRef": "PO-00135",

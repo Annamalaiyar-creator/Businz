@@ -182,11 +182,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     const totOrd = Number(po.totalOrderedQty || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.qty || it.quantity || 0), 0) : 0));
     const totRec = Number(po.totalReceivedQty || po.totalReceived || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.previouslyReceived || 0), 0) : 0));
-    if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+    if ((totOrd > 0 && totRec > 0 && totRec < totOrd) || s.toUpperCase().includes('PARTIAL') || st.includes('partial')) {
       return 'PARTIALLY_RECEIVED';
     }
 
-    if (s.includes('CLOSED') || st === 'closed') return 'CLOSED';
+    if (s.includes('CLOSED') || st === 'closed' || s.includes('FULLY RECEIVED') || (totOrd > 0 && totRec >= totOrd)) return 'CLOSED';
     if (s.toLowerCase().includes('proceed') || st.includes('proceed') || Boolean(po.proceedDetails)) return 'PROCEED_PO';
     if (s.toLowerCase().includes('payment') || st.includes('payment') || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
     if (s === 'MD Approved' || st === 'md_approved' || Boolean(po.approvedBy)) return 'MD_APPROVED';

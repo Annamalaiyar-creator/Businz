@@ -1077,6 +1077,10 @@ const loadLocalGRNs = () => {
 
 const saveLocalGRNs = (grns) => {
   supabaseMemoryStore.grn_store = grns;
+  const diskPath = getStoreFilePath('grn_store.json');
+  try {
+    fs.writeFileSync(diskPath, JSON.stringify(grns, null, 2), 'utf8');
+  } catch (_) {}
   saveDatabaseStore('grn_store', grns);
 };
 
