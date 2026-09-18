@@ -250,6 +250,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             const existingRank = stageRank[getPoStage(existing)] || 1;
             const incomingRank = stageRank[getPoStage(p)] || 1;
             const keepIncoming = incomingRank >= existingRank;
+            const incomingItems = Array.isArray(p.items) && p.items.length > 0 
+              ? p.items 
+              : (Array.isArray(p.line_items) && p.line_items.length > 0 ? p.line_items : []);
+            const existingItems = Array.isArray(existing.items) && existing.items.length > 0 
+              ? existing.items 
+              : (Array.isArray(existing.line_items) && existing.line_items.length > 0 ? existing.line_items : []);
 
             const effStatus = keepIncoming ? (p.status || existing.status) : existing.status;
             const effStatusType = keepIncoming ? (p.statusType || existing.statusType) : existing.statusType;
@@ -292,8 +298,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           return p;
         });
 
-        const existingKeys = new Set(mergedIncoming.map(p => normalize(p.poNo || p.id)));
-        const localOnly = currentPrev.filter(p => {
+        const existingKeys = new Set(mergedIncoming.map(p => normalize(p?.poNo || p?.id)));
+        const safePrev = Array.isArray(currentPrev) ? currentPrev : [];
+        const localOnly = safePrev.filter(p => {
+          if (!p) return false;
           const k1 = normalize(p.poNo);
           const k2 = normalize(p.id);
           return (k1 && !existingKeys.has(k1)) && (k2 && !existingKeys.has(k2));
