@@ -1,5 +1,35 @@
 [
   {
+    "id": "GRN-2026-00116",
+    "grnNo": "GRN-2026-00116",
+    "poRef": "PO-00140",
+    "poNo": "PO-00140",
+    "vendor": "Paramount Industrial Supplies",
+    "challanNo": "DC-140-01",
+    "date": "18 Sept 2026",
+    "receivedQty": 2000,
+    "acceptedQty": 2000,
+    "rejectedQty": 0,
+    "receivedBy": "Store Manager",
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "All 2000 units of LEG 1000 mm (HDG) accepted in full condition",
+    "items": [
+      {
+        "id": "PO-ITEM-0",
+        "name": "LEG 1000 mm (HDG)",
+        "sku": "L1000",
+        "code": "L1000",
+        "ordered": 2000,
+        "now": 2000,
+        "accepted": 2000,
+        "rejected": 0,
+        "reason": "—"
+      }
+    ],
+    "documents": [],
+    "status": "CLOSED / FULLY RECEIVED"
+  },
+  {
     "id": "GRN-2026-00115",
     "grnNo": "GRN-2026-00115",
     "poRef": "PO-00138",
