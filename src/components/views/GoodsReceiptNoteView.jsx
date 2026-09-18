@@ -17,6 +17,36 @@ import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCl
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
 
+
+const formatGrnItem = (g) => {
+  if (!g) return null;
+  const receivedCount = g.receivedQty !== undefined && g.receivedQty !== null
+    ? Number(g.receivedQty)
+    : (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted !== undefined ? it.accepted : (it.now || 0)), 0) : 0);
+
+  const rawVal = g.val !== undefined && g.val !== null
+    ? g.val
+    : `₹ ${(receivedCount * 1250).toLocaleString('en-IN')}`;
+
+  return {
+    id: g.grnNo || g.id || '—',
+    grnNo: g.grnNo || g.id || '—',
+    poRef: g.poRef || g.poNo || '—',
+    vendor: g.vendor || '—',
+    date: g.date || '—',
+    received: typeof g.received === 'string' && g.received.includes('Units') ? g.received : `${receivedCount} Units`,
+    receivedQty: receivedCount,
+    status: g.status || 'OPEN / PARTIALLY RECEIVED',
+    val: typeof rawVal === 'string' && rawVal.startsWith('₹') ? rawVal : `₹ ${Number(rawVal || 0).toLocaleString('en-IN')}`,
+    challanNo: g.challanNo || '',
+    receivedBy: g.receivedBy || '',
+    inspectorName: g.inspectorName || '',
+    inspectionRemarks: g.inspectionRemarks || '',
+    documents: Array.isArray(g.documents) ? g.documents : [],
+    items: Array.isArray(g.items) ? g.items : []
+  };
+};
+
 export default function GoodsReceiptNoteView(props) {
   const {
     activeTab,
@@ -40,20 +70,7 @@ export default function GoodsReceiptNoteView(props) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(g => ({
-            id: g.grnNo || g.id,
-            poRef: g.poRef || g.poNo || '—',
-            vendor: g.vendor || '—',
-            date: g.date || '—',
-            received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-            status: g.status || 'OPEN / PARTIALLY RECEIVED',
-            val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
-            challanNo: g.challanNo || '',
-            receivedBy: g.receivedBy || '',
-            inspectorName: g.inspectorName || '',
-            inspectionRemarks: g.inspectionRemarks || '',
-            documents: g.documents || []
-          }));
+          return parsed.map(formatGrnItem).filter(Boolean);
         }
       }
     } catch (_) {}
@@ -84,37 +101,69 @@ export default function GoodsReceiptNoteView(props) {
   const [grnListActiveTab, setGrnListActiveTab] = useState('All');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleManualRefresh = () => {
-    setIsRefreshing(true);
-    fetch('/api/grns')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const formattedList = data.map(g => ({
-            id: g.grnNo || g.id,
-            poRef: g.poRef || g.poNo || '—',
-            vendor: g.vendor || '—',
-            date: g.date || '—',
-            received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-            status: g.status || 'OPEN / PARTIALLY RECEIVED',
-            val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
-            challanNo: g.challanNo || '',
-            receivedBy: g.receivedBy || '',
-            inspectorName: g.inspectorName || '',
-            inspectionRemarks: g.inspectionRemarks || '',
-            documents: g.documents || []
-          }));
-          setGrnList(formattedList);
-          try {
-            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(data));
-            localStorage.setItem('goods_receipt_notes', JSON.stringify(data));
-          } catch (_) {}
+  // Reliable, multi-tiered fetch for GRNs: Supabase Cloud -> Local Express API -> LocalStorage
+  const fetchAndSetGRNs = useCallback(async () => {
+    try {
+      // 1. Primary Source: Supabase Cloud Database (Leaves table 'GRN_STORE')
+      const cloudGRNs = await fetchCloudStore('grn_store', []).catch(() => []);
+
+      // 2. Auxiliary Source: Local Express API endpoint (/api/grns)
+      let apiGRNs = [];
+      try {
+        const res = await fetch('/api/grns');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) apiGRNs = data;
         }
-      })
-      .catch(err => console.error('Error refreshing GRNs:', err))
-      .finally(() => {
-        setTimeout(() => setIsRefreshing(false), 400);
-      });
+      } catch (_) {}
+
+      // 3. Fallback Source: LocalStorage Cache
+      let localGRNs = [];
+      try {
+        const saved = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) localGRNs = parsed;
+        }
+      } catch (_) {}
+
+      // 4. Merge and deduplicate across all sources
+      const map = new Map();
+      const addList = (arr) => {
+        if (!Array.isArray(arr)) return;
+        arr.forEach(item => {
+          if (!item) return;
+          const key = String(item.grnNo || item.id || '').trim().toUpperCase();
+          if (key) {
+            const existing = map.get(key) || {};
+            map.set(key, { ...existing, ...item });
+          }
+        });
+      };
+
+      addList(localGRNs);
+      addList(apiGRNs);
+      addList(cloudGRNs);
+
+      const allMerged = Array.from(map.values());
+      if (allMerged.length > 0) {
+        const formatted = allMerged.map(formatGrnItem).filter(Boolean);
+        setGrnList(formatted);
+        try {
+          localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(allMerged));
+          localStorage.setItem('goods_receipt_notes', JSON.stringify(allMerged));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error('Error fetching GRNs:', err);
+    }
+  }, []);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAndSetGRNs();
+    await fetchLivePOs();
+    setTimeout(() => setIsRefreshing(false), 400);
   };
 
   const handleOpenViewGrn = (row) => {
@@ -562,37 +611,29 @@ export default function GoodsReceiptNoteView(props) {
     if (activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') {
       handlePendingPushToGrn(livePOs);
       fetchLivePOs();
+      fetchAndSetGRNs();
     }
-  }, [activeTab, fetchLivePOs]);
+  }, [activeTab, fetchLivePOs, fetchAndSetGRNs]);
 
   useEffect(() => {
-    fetch('/api/grns')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const formattedList = data.map(g => ({
-            id: g.grnNo || g.id,
-            poRef: g.poRef || g.poNo || '—',
-            vendor: g.vendor || '—',
-            date: g.date || '—',
-            received: `${g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)} Units`,
-            status: g.status || 'OPEN / PARTIALLY RECEIVED',
-            val: `₹ ${(g.receivedQty || (g.items ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : 0)) * 1250}`,
-            challanNo: g.challanNo || '',
-            receivedBy: g.receivedBy || '',
-            inspectorName: g.inspectorName || '',
-            inspectionRemarks: g.inspectionRemarks || '',
-            documents: g.documents || []
-          }));
-          setGrnList(formattedList);
-          try {
-            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(data));
-            localStorage.setItem('goods_receipt_notes', JSON.stringify(data));
-          } catch (_) {}
-        }
-      })
-      .catch(err => console.error('Error fetching stored GRNs:', err));
-  }, [activeTab]);
+    fetchAndSetGRNs();
+
+    // Subscribe to cloud updates for real-time multi-device sync
+    const unsubscribe = subscribeToCloudStore('grn_store', (updatedCloudData) => {
+      if (Array.isArray(updatedCloudData) && updatedCloudData.length > 0) {
+        const formatted = updatedCloudData.map(formatGrnItem).filter(Boolean);
+        setGrnList(formatted);
+        try {
+          localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedCloudData));
+          localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedCloudData));
+        } catch (_) {}
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [fetchAndSetGRNs]);
 
   // Function to load PO details and line items when a PO is selected
   const loadPOItems = (selectedId, currentLivePOs = livePOs, autoFillNow = false, pushedPoTarget = null) => {
@@ -1167,20 +1208,21 @@ export default function GoodsReceiptNoteView(props) {
     if (!grnToDelete) return;
     const targetId = grnToDelete;
 
+    const remaining = grnList.filter(g => g.id !== targetId && g.grnNo !== targetId);
+    setGrnList(remaining);
+    setGrnToDelete(null);
+
+    try {
+      localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(remaining));
+      localStorage.setItem('goods_receipt_notes', JSON.stringify(remaining));
+    } catch (_) {}
+    saveCloudStoreImmediate('grn_store', remaining).catch(() => {});
+
     fetch(`/api/grns/${encodeURIComponent(targetId)}`, { method: 'DELETE' })
       .then(res => res.json())
-      .then(() => {
-        setGrnList(prev => prev.filter(g => g.id !== targetId && g.grnNo !== targetId));
-        setGrnToDelete(null);
-        // Refresh live POs list
-        fetch('/api/zoho/purchaseorders')
-          .then(res => res.json())
-          .then(d => { if (Array.isArray(d)) setLivePOs(d); });
-      })
-      .catch(err => {
-        console.error('Error deleting GRN:', err);
-        setGrnToDelete(null);
-      });
+      .catch(err => console.error('Error deleting GRN on server:', err));
+
+    fetchLivePOs();
   };
 
   const handleAddStockSubmit = () => {
@@ -2979,8 +3021,14 @@ export default function GoodsReceiptNoteView(props) {
                         eligibleToDelete.forEach(id => {
                           fetch(`/api/grns/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
                         });
-                        setGrnList(prev => prev.filter(g => !eligibleToDelete.includes(g.id)));
+                        const remaining = grnList.filter(g => !eligibleToDelete.includes(g.id));
+                        setGrnList(remaining);
                         setSelectedGrnRows([]);
+                        try {
+                          localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(remaining));
+                          localStorage.setItem('goods_receipt_notes', JSON.stringify(remaining));
+                        } catch (_) {}
+                        saveCloudStoreImmediate('grn_store', remaining).catch(() => {});
                       }
                     }}
                     style={{
