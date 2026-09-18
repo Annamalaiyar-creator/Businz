@@ -27,6 +27,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // In-memory active cache for Supabase Database stores
 let supabaseMemoryStore = {};
 
+const getPoStageRank = (p) => {
+  if (!p) return 0;
+  const s = String(p.status || '').toLowerCase().trim();
+  const st = String(p.statusType || '').toLowerCase().trim();
+  if (s.includes('rejected') || st.includes('rejected')) return 7;
+  const ord = Number(p.totalOrderedQty || (Array.isArray(p.items) ? p.items.reduce((acc, it) => acc + Number(it.qty || it.quantity || 0), 0) : 0));
+  const rec = Number(p.totalReceivedQty || p.totalReceived || (Array.isArray(p.items) ? p.items.reduce((acc, it) => acc + Number(it.previouslyReceived || 0), 0) : 0));
+  if (s.includes('closed') || s.includes('fully received') || st.includes('closed')) {
+    if (ord > 0 && rec > 0 && rec < ord) return 5;
+    return 6;
+  }
+  if (s.includes('partially') || st.includes('partially') || (ord > 0 && rec > 0 && rec < ord)) return 5;
+  if (s.includes('proceed') || st.includes('proceed') || Boolean(p.proceedDetails)) return 4;
+  if (s.includes('payment') || st.includes('payment') || Boolean(p.paymentDetails)) return 3;
+  if (s.includes('md approved') || st.includes('md_approved') || Boolean(p.approvedBy)) return 2;
+  return 1;
+};
+
 // Authoritative Database Store functions directly with Supabase
 const getDatabaseStore = async (key) => {
   const employeeKey = key.toUpperCase();
@@ -71,26 +89,24 @@ const getDatabaseStore = async (key) => {
                     const k2 = normalize(d.id);
                     const k3 = normalize(d.zohoId);
                     const cloudItem = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || (k3 && poMap.get(k3)) || {};
-                    const isAdv = (p) => {
-                      const s = String(p?.status || '').toLowerCase();
-                      const st = String(p?.statusType || '').toLowerCase();
-                      return s.includes('md approved') || st.includes('md_approved') ||
-                             s.includes('payment') || st.includes('payment') ||
-                             s.includes('proceed') || st.includes('proceed') ||
-                             s.includes('closed') || st.includes('closed') ||
-                             s.includes('rejected') || st.includes('rejected') ||
-                             Boolean(p?.approvedBy);
-                    };
-                    const dAdv = isAdv(d);
-                    const cloudAdv = isAdv(cloudItem);
-                    const effStatus = dAdv ? d.status : (cloudAdv ? cloudItem.status : (d.status || cloudItem.status || 'Draft'));
-                    const effStatusType = dAdv ? (d.statusType || 'md_approved') : (cloudAdv ? (cloudItem.statusType || 'md_approved') : (d.statusType || cloudItem.statusType || 'draft'));
+                    const dRank = getPoStageRank(d);
+                    const cloudRank = getPoStageRank(cloudItem);
+                    const winner = dRank >= cloudRank ? d : cloudItem;
+                    let effStatus = winner.status || d.status || cloudItem.status || 'Draft';
+                    let effStatusType = winner.statusType || d.statusType || cloudItem.statusType || 'draft';
+                    const effPaymentDetails = d.paymentDetails || cloudItem.paymentDetails;
+                    const effProceedDetails = d.proceedDetails || cloudItem.proceedDetails;
+                    if (effProceedDetails && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 4) {
+                      effStatus = 'Proceed PO';
+                      effStatusType = 'proceed_po';
+                    } else if (effPaymentDetails && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 3) {
+                      effStatus = 'Payment Processed';
+                      effStatusType = 'payment_processed';
+                    }
                     const effApprovedBy = d.approvedBy || cloudItem.approvedBy;
                     const effApprovalDate = d.approvalDate || cloudItem.approvalDate;
                     const effApprovalTime = d.approvalTime || cloudItem.approvalTime;
                     const effApprovalRemarks = d.approvalRemarks || cloudItem.approvalRemarks;
-                    const effPaymentDetails = d.paymentDetails || cloudItem.paymentDetails;
-                    const effProceedDetails = d.proceedDetails || cloudItem.proceedDetails;
 
                     const mergedPO = {
                       ...cloudItem,
@@ -831,24 +847,17 @@ const loadLocalPOs = () => {
           const existing = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3)) || {};
           const items = (Array.isArray(d.items) && d.items.length > 0) ? d.items : (existing.items || []);
 
-          const isAdv = (st, stType, approver) => {
-            const s = String(st || '').toLowerCase();
-            const stt = String(stType || '').toLowerCase();
-            return s.includes('md approved') || stt.includes('md_approved') ||
-                   s.includes('payment') || stt.includes('payment') ||
-                   s.includes('proceed') || stt.includes('proceed') ||
-                   s.includes('closed') || stt.includes('closed') ||
-                   s.includes('rejected') || stt.includes('rejected') ||
-                   Boolean(approver);
-          };
-
           const dOrd = Number(d.totalOrderedQty || 0);
           const dRec = Number(d.totalReceivedQty || d.totalReceived || 0);
           const exOrd = Number(existing.totalOrderedQty || 0);
           const exRec = Number(existing.totalReceivedQty || existing.totalReceived || 0);
 
-          let effStatus = d.status || existing.status || 'Draft';
-          let effStatusType = d.statusType || existing.statusType || 'draft';
+          const dRank = getPoStageRank(d);
+          const exRank = getPoStageRank(existing);
+          const winner = dRank >= exRank ? d : existing;
+
+          let effStatus = winner.status || d.status || existing.status || 'Draft';
+          let effStatusType = winner.statusType || d.statusType || existing.statusType || 'draft';
 
           if (d.status === 'OPEN / PARTIALLY RECEIVED' || (dOrd > 0 && dRec > 0 && dRec < dOrd)) {
             effStatus = 'OPEN / PARTIALLY RECEIVED';
@@ -856,12 +865,6 @@ const loadLocalPOs = () => {
           } else if (existing.status === 'OPEN / PARTIALLY RECEIVED' || (exOrd > 0 && exRec > 0 && exRec < exOrd)) {
             effStatus = 'OPEN / PARTIALLY RECEIVED';
             effStatusType = 'partially_received';
-          } else if (isAdv(d.status, d.statusType, d.approvedBy)) {
-            effStatus = d.status;
-            effStatusType = d.statusType || 'md_approved';
-          } else if (isAdv(existing.status, existing.statusType, existing.approvedBy)) {
-            effStatus = existing.status;
-            effStatusType = existing.statusType || 'md_approved';
           }
 
           const effApprovedBy = d.approvedBy || existing.approvedBy;
@@ -870,6 +873,15 @@ const loadLocalPOs = () => {
           const effApprovalRemarks = d.approvalRemarks || existing.approvalRemarks;
           const effPaymentDetails = d.paymentDetails || existing.paymentDetails;
           const effProceedDetails = d.proceedDetails || existing.proceedDetails;
+
+          if (effProceedDetails && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 4) {
+            effStatus = 'Proceed PO';
+            effStatusType = 'proceed_po';
+          } else if (effPaymentDetails && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 3) {
+            effStatus = 'Payment Processed';
+            effStatusType = 'payment_processed';
+          }
+
           const effTotalOrdered = d.totalOrderedQty !== undefined ? d.totalOrderedQty : existing.totalOrderedQty;
           const effTotalReceived = d.totalReceivedQty !== undefined ? d.totalReceivedQty : existing.totalReceivedQty;
           const effTotalRemaining = d.totalRemainingQty !== undefined ? d.totalRemainingQty : existing.totalRemainingQty;
@@ -880,6 +892,8 @@ const loadLocalPOs = () => {
             ...d,
             status: effStatus,
             statusType: effStatusType,
+            paymentDetails: effPaymentDetails,
+            proceedDetails: effProceedDetails,
             totalOrderedQty: effTotalOrdered,
             totalReceivedQty: effTotalReceived,
             totalRemainingQty: effTotalRemaining,
@@ -3893,10 +3907,10 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         } else if (isPartial || po.status === 'received' || po.is_received === true) {
           statusType = 'partially_received';
           statusText = 'OPEN / PARTIALLY RECEIVED';
-        } else if (lpMatch && (lpMatch.status === 'Proceed PO' || lpMatch.statusType === 'proceed_po')) {
+        } else if (lpMatch && (lpMatch.status === 'Proceed PO' || lpMatch.statusType === 'proceed_po' || Boolean(lpMatch.proceedDetails))) {
           statusType = 'proceed_po';
           statusText = 'Proceed PO';
-        } else if (lpMatch && (lpMatch.status === 'Payment Processed' || lpMatch.statusType === 'payment_processed')) {
+        } else if (lpMatch && (lpMatch.status === 'Payment Processed' || lpMatch.statusType === 'payment_processed' || Boolean(lpMatch.paymentDetails))) {
           statusType = 'payment_processed';
           statusText = 'Payment Processed';
         } else if (lpMatch && (lpMatch.status === 'MD Approved' || lpMatch.statusType === 'md_approved' || Boolean(lpMatch.approvedBy))) {
@@ -4048,10 +4062,10 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           } else if (lp.status === 'CLOSED / FULLY RECEIVED' || lp.statusType === 'closed') {
             translated[existsIdx].status = 'CLOSED / FULLY RECEIVED';
             translated[existsIdx].statusType = 'closed';
-          } else if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po') {
+          } else if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po' || Boolean(lp.proceedDetails)) {
             translated[existsIdx].status = 'Proceed PO';
             translated[existsIdx].statusType = 'proceed_po';
-          } else if (lp.status === 'Payment Processed' || lp.statusType === 'payment_processed') {
+          } else if (lp.status === 'Payment Processed' || lp.statusType === 'payment_processed' || Boolean(lp.paymentDetails)) {
             translated[existsIdx].status = 'Payment Processed';
             translated[existsIdx].statusType = 'payment_processed';
           } else if (lp.status === 'MD Approved' || lp.statusType === 'md_approved' || Boolean(lp.approvedBy)) {
@@ -5838,6 +5852,12 @@ app.post('/api/zoho/purchaseorders/:id/approve', async (req, res) => {
     saveLocalPOs(localPOs);
   }
 
+  try {
+    await saveDatabaseStore('po_store', localPOs);
+  } catch (sbErr) {
+    console.warn('[approve] Supabase sync notice:', sbErr.message);
+  }
+
   // PO status remains Draft in Zoho Books until Accounts and Proceed PO is completed
   res.json({ success: true, message: `PO ${targetId} approved by ${approver} and marked as MD Approved!` });
 });
@@ -5908,6 +5928,12 @@ app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
     saveLocalPOs(localPOs);
   }
 
+  try {
+    await saveDatabaseStore('po_store', localPOs);
+  } catch (sbErr) {
+    console.warn('[process-payment] Supabase sync notice:', sbErr.message);
+  }
+
   res.json({ 
     success: true, 
     message: isCredit 
@@ -5970,6 +5996,12 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
       proceedDetails
     });
     saveLocalPOs(localPOs);
+  }
+
+  try {
+    await saveDatabaseStore('po_store', localPOs);
+  } catch (sbErr) {
+    console.warn('[proceed] Supabase sync notice:', sbErr.message);
   }
 
   // Transition Zoho Books PO status from Draft to Issued / Open once PO is Proceeded, and email vendor

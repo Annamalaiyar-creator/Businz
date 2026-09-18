@@ -58,7 +58,7 @@ export async function getSafeZohoPOs() {
                 if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
                   return 'OPEN / PARTIALLY RECEIVED';
                 }
-                const getStageRank = (st, stType, approver) => {
+                const getStageRank = (st, stType, approver, payDetails, proceedDetails) => {
                   const s = String(st || '').toLowerCase().trim();
                   const stt = String(stType || '').toLowerCase().trim();
                   if (s.includes('rejected') || stt.includes('rejected')) return 7;
@@ -67,15 +67,19 @@ export async function getSafeZohoPOs() {
                     return 6;
                   }
                   if (s.includes('partially') || stt.includes('partially')) return 5;
-                  if (s.includes('proceed') || stt.includes('proceed')) return 4;
-                  if (s.includes('payment') || stt.includes('payment')) return 3;
+                  if (s.includes('proceed') || stt.includes('proceed') || Boolean(proceedDetails)) return 4;
+                  if (s.includes('payment') || stt.includes('payment') || Boolean(payDetails)) return 3;
                   if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
                   return 1;
                 };
-                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy);
-                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy);
+                const effPayDetails = cloudMatch.paymentDetails || zohoPo.paymentDetails;
+                const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
+                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy, cloudMatch.paymentDetails, cloudMatch.proceedDetails);
+                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy, zohoPo.paymentDetails, zohoPo.proceedDetails);
                 if (zRank > cRank) return zohoPo.status;
-                if (cRank > zRank) return cloudMatch.status;
+                if (cRank > zRank) return (cRank >= 4 && !cloudMatch.status?.includes('Proceed')) ? 'Proceed PO' : (cRank === 3 && !cloudMatch.status?.includes('Payment')) ? 'Payment Processed' : cloudMatch.status;
+                if (effProceedDetails) return 'Proceed PO';
+                if (effPayDetails) return 'Payment Processed';
                 return cloudMatch.status || zohoPo.status || 'Draft';
               })(),
               statusType: (() => {
@@ -84,7 +88,7 @@ export async function getSafeZohoPOs() {
                 if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
                   return 'partially_received';
                 }
-                const getStageRank = (st, stType, approver) => {
+                const getStageRank = (st, stType, approver, payDetails, proceedDetails) => {
                   const s = String(st || '').toLowerCase().trim();
                   const stt = String(stType || '').toLowerCase().trim();
                   if (s.includes('rejected') || stt.includes('rejected')) return 7;
@@ -93,15 +97,19 @@ export async function getSafeZohoPOs() {
                     return 6;
                   }
                   if (s.includes('partially') || stt.includes('partially')) return 5;
-                  if (s.includes('proceed') || stt.includes('proceed')) return 4;
-                  if (s.includes('payment') || stt.includes('payment')) return 3;
+                  if (s.includes('proceed') || stt.includes('proceed') || Boolean(proceedDetails)) return 4;
+                  if (s.includes('payment') || stt.includes('payment') || Boolean(payDetails)) return 3;
                   if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
                   return 1;
                 };
-                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy);
-                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy);
+                const effPayDetails = cloudMatch.paymentDetails || zohoPo.paymentDetails;
+                const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
+                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy, cloudMatch.paymentDetails, cloudMatch.proceedDetails);
+                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy, zohoPo.paymentDetails, zohoPo.proceedDetails);
                 if (zRank > cRank) return zohoPo.statusType || 'draft';
-                if (cRank > zRank) return cloudMatch.statusType || 'draft';
+                if (cRank > zRank) return (cRank >= 4 && !cloudMatch.statusType?.includes('proceed')) ? 'proceed_po' : (cRank === 3 && !cloudMatch.statusType?.includes('payment')) ? 'payment_processed' : (cloudMatch.statusType || 'draft');
+                if (effProceedDetails) return 'proceed_po';
+                if (effPayDetails) return 'payment_processed';
                 return cloudMatch.statusType || zohoPo.statusType || 'draft';
               })(),
               approvedBy: cloudMatch.approvedBy || zohoPo.approvedBy,
@@ -175,15 +183,18 @@ export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
   try {
     // 1. Fetch current cloud list from Supabase
     const cloudList = await fetchCloudStore('po_store', []);
-    const targetId = newOrUpdatedPO.poNo || newOrUpdatedPO.id;
     const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-    const cleanTargetId = normalize(targetId);
+    const targetNo = normalize(newOrUpdatedPO.poNo);
+    const targetId = normalize(newOrUpdatedPO.id);
+    const targetZohoId = normalize(newOrUpdatedPO.zohoId);
 
     const existingIdx = cloudList.findIndex(p => {
       const pNo = normalize(p.poNo);
       const pId = normalize(p.id);
       const pZohoId = normalize(p.zohoId);
-      return (cleanTargetId && (pNo === cleanTargetId || pId === cleanTargetId || pZohoId === cleanTargetId));
+      return (targetNo && (pNo === targetNo || pId === targetNo || pZohoId === targetNo)) ||
+             (targetId && (pId === targetId || pNo === targetId || pZohoId === targetId)) ||
+             (targetZohoId && (pZohoId === targetZohoId || pId === targetZohoId || pNo === targetZohoId));
     });
 
     let updatedList;
@@ -197,7 +208,9 @@ export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
       cloudList[existingIdx] = {
         ...existingPo,
         ...newOrUpdatedPO,
-        items: preservedItems
+        items: preservedItems,
+        paymentDetails: newOrUpdatedPO.paymentDetails || existingPo.paymentDetails,
+        proceedDetails: newOrUpdatedPO.proceedDetails || existingPo.proceedDetails
       };
       updatedList = cloudList;
     } else {

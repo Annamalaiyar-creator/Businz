@@ -182,8 +182,8 @@
     "approver": "",
     "approvalPriority": "",
     "amount": "₹ 2,36,000.00",
-    "status": "MD Approved",
-    "statusType": "md_approved",
+    "status": "Payment Processed",
+    "statusType": "payment_processed",
     "grnCount": 0,
     "totalReceived": 0,
     "items": [
@@ -208,7 +208,16 @@
     "approvedBy": "Velmurugan Rathinam (MD)",
     "approvalDate": "17 Sept 2026",
     "approvalTime": "05:55 pm",
-    "approvalRemarks": "Test MD Approval"
+    "approvalRemarks": "Test MD Approval",
+    "paymentDetails": {
+      "mode": "Bank Transfer",
+      "refNo": "TXN-TEST-123",
+      "amount": "₹ 2,36,000.00",
+      "date": "18 Sep 2026",
+      "time": "09:30 am",
+      "remarks": "Payment recorded by Accounts",
+      "verifiedBy": "Accounts Team"
+    }
   },
   {
     "id": "4080449000000518001",
@@ -1716,6 +1725,57 @@
     "totalReceived": 0,
     "items": [],
     "total": 420000,
+    "grnHistory": []
+  },
+  {
+    "id": "PO-00092",
+    "poNo": "PO-00092",
+    "zohoId": "PO-00092",
+    "vendor": "Global Energy Solutions",
+    "branch": "Chennai",
+    "contactPerson": "Anna",
+    "contactNo": "—",
+    "email": "—",
+    "gstNo": "33ABCDE1234F1Z5",
+    "deliveryAddress": "Global Energy Solutions, Main Road, Industrial Estate, Tamil Nadu - 600028",
+    "billingAddress": "Global Energy Solutions, Main Road, Industrial Estate, Tamil Nadu - 600028",
+    "poDate": "17 Sept 2026",
+    "deliveryDate": "18 Sept 2026",
+    "paymentTerms": "Immediate",
+    "purchaser": "Ar Annamalaiyar",
+    "shipmentPref": "Transport",
+    "currency": "INR - Indian Rupee",
+    "project": "",
+    "priority": "High",
+    "scope": "Vendor Scope",
+    "transportName": "A2B",
+    "shippingCharges": 0,
+    "otherCharges": 0,
+    "discountPct": 0,
+    "notes": "",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "approvalRequired": "Yes",
+    "approver": "Velmurugan Rathinam (CEO)",
+    "approvalPriority": "High",
+    "amount": "₹4,24,800.00",
+    "status": "Draft / Pending Approval",
+    "statusType": "approved",
+    "grnCount": 0,
+    "totalReceived": 0,
+    "items": [
+      {
+        "name": "MINI RAIL 100mm (300mm) NEW",
+        "description": "—",
+        "account": "Finished Goods",
+        "qty": 3000,
+        "unit": "NOS",
+        "rate": 120,
+        "tax": 18,
+        "sku": ""
+      }
+    ],
+    "deliveryType": "Organization",
+    "pdfName": "purchase_order.pdf",
     "grnHistory": []
   },
   {

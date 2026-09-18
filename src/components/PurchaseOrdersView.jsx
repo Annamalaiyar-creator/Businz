@@ -188,8 +188,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     if (s.includes('CLOSED') || st === 'closed') return 'CLOSED';
     if (s.includes('PARTIALLY') || st === 'partially_received') return 'PARTIALLY_RECEIVED';
-    if (s === 'Proceed PO' || s === 'PROCEED PO' || st === 'proceed_po') return 'PROCEED_PO';
-    if (s === 'Payment Processed' || st === 'payment_processed') return 'PAYMENT_PROCESSED';
+    if (s === 'Proceed PO' || s === 'PROCEED PO' || st === 'proceed_po' || Boolean(po.proceedDetails)) return 'PROCEED_PO';
+    if (s === 'Payment Processed' || st === 'payment_processed' || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
     if (s === 'MD Approved' || st === 'md_approved' || Boolean(po.approvedBy)) return 'MD_APPROVED';
     return 'Draft';
   };
@@ -264,6 +264,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               statusType: effStatusType,
               approvedBy: existing.approvedBy || p.approvedBy,
               approvalRemarks: existing.approvalRemarks || p.approvalRemarks,
+              paymentDetails: p.paymentDetails || existing.paymentDetails,
+              proceedDetails: p.proceedDetails || existing.proceedDetails,
               items: incomingItems.length > 0 ? incomingItems : existingItems,
               vendor: (existing.vendor && existing.vendor !== 'Vendor' && existing.vendor !== 'Annamalaiyar') ? existing.vendor : (p.vendor || existing.vendor || 'Vendor'),
               deliveryAddress: (p.deliveryAddress && p.deliveryAddress !== '—' && p.deliveryAddress !== '') ? p.deliveryAddress : (existing.deliveryAddress || '—'),
@@ -891,7 +893,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     reader.readAsDataURL(file);
   };
 
-  const handleProcessPaymentSubmit = (poTarget) => {
+  const handleProcessPaymentSubmit = async (poTarget) => {
     if (!poTarget) return;
     const poId = poTarget.poNo || poTarget.id;
     const isCredit = payModeInput === 'Credit / Net Terms';
@@ -902,70 +904,90 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       return;
     }
 
-    fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/process-payment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        paymentMode: payModeInput,
-        paymentRef: payRefInput || (isCredit ? 'CREDIT-CONFIRMED' : ''),
-        amountPaid: payAmountInput ? `₹ ${Number(payAmountInput).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : poTarget.amount,
+    const clean = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const targetKey = clean(poId);
+
+    const updatedPaymentPo = {
+      ...poTarget,
+      status: 'Payment Processed',
+      statusType: 'payment_processed',
+      paymentDetails: {
+        mode: payModeInput,
+        refNo: payRefInput || (isCredit ? 'CREDIT-CONFIRMED' : ''),
+        amount: payAmountInput ? `₹ ${Number(payAmountInput).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : poTarget.amount,
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         remarks: payRemarksInput || (isCredit ? 'Credit terms verified by Accounts team' : 'Payment recorded by Accounts'),
-        isCredit: isCredit,
+        isCredit,
         creditTerms: payCreditTermsInput,
         paymentImage: payImageInput,
-        paymentImageMeta: payImageMeta
-      })
-    })
-      .then(res => (res.ok && res.headers.get('content-type')?.includes('application/json')) ? res.json() : null)
-      .then(() => {
-        setPaymentProcessingPo(null);
-        setPayImageInput(null);
-        setPayImageMeta(null);
-        // Immediately update status in active viewing state and poList
-        setViewingPoStatus('Payment Processed');
-        const updatedPaymentPo = {
-          ...poTarget,
-          status: 'Payment Processed',
-          statusType: 'payment_processed',
-          paymentDetails: {
-            mode: payModeInput,
-            refNo: payRefInput || (isCredit ? 'CREDIT-CONFIRMED' : ''),
-            amount: payAmountInput ? `₹ ${Number(payAmountInput).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : poTarget.amount,
-            date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-            time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-            remarks: payRemarksInput || (isCredit ? 'Credit terms verified by Accounts team' : 'Payment recorded by Accounts'),
-            isCredit,
-            creditTerms: payCreditTermsInput,
-            paymentImage: payImageInput,
-            paymentImageMeta: payImageMeta,
-            verifiedBy: 'Accounts Team'
-          }
-        };
-        setPoList(prev => prev.map(p => (p.poNo === poId || p.id === poId) ? { ...p, ...updatedPaymentPo } : p));
-        saveSafeZohoPO(updatedPaymentPo);
+        paymentImageMeta: payImageMeta,
+        verifiedBy: 'Accounts Team'
+      }
+    };
 
-        if (poTab === 'MD_APPROVED') {
-          setPoTab('PAYMENT_PROCESSED');
-        }
+    setPaymentProcessingPo(null);
+    setPayImageInput(null);
+    setPayImageMeta(null);
+    setViewingPoStatus('Payment Processed');
 
-        fetchZohoPOs(true);
-        if (isCredit) {
-          setCreditAlertPopup({
-            poNo: poId,
-            vendor: poTarget.vendor,
-            amount: poTarget.amount,
-            terms: payCreditTermsInput
-          });
-        } else {
-          showCustomAlert(`Payment verified and processed by Accounts for PO ${poId}. Now ready for Proceed PO.`, 'Payment Verified', 'success');
-        }
-      })
-      .catch(() => {
-        setPaymentProcessingPo(null);
-        setPayImageInput(null);
-        setPayImageMeta(null);
-        fetchZohoPOs();
+    // Update local state immediately with normalized matching
+    setPoList(prev => prev.map(p => {
+      const k1 = clean(p.poNo);
+      const k2 = clean(p.id);
+      const k3 = clean(p.zohoId);
+      return (targetKey && (k1 === targetKey || k2 === targetKey || k3 === targetKey)) ? { ...p, ...updatedPaymentPo } : p;
+    }));
+
+    if (poTab === 'MD_APPROVED') {
+      setPoTab('PAYMENT_PROCESSED');
+    }
+
+    // Persist immediately to cloud & disk
+    try {
+      await saveSafeZohoPO(updatedPaymentPo);
+    } catch (saveErr) {
+      console.warn('saveSafeZohoPO notice:', saveErr);
+    }
+
+    // Broadcast update to other tabs (Procurement team, etc.)
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: updatedPaymentPo }));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
+
+    // Call backend endpoint to ensure server memory & disk are updated synchronously
+    try {
+      await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/process-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentMode: payModeInput,
+          paymentRef: payRefInput || (isCredit ? 'CREDIT-CONFIRMED' : ''),
+          amountPaid: payAmountInput ? `₹ ${Number(payAmountInput).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : poTarget.amount,
+          remarks: payRemarksInput || (isCredit ? 'Credit terms verified by Accounts team' : 'Payment recorded by Accounts'),
+          isCredit: isCredit,
+          creditTerms: payCreditTermsInput,
+          paymentImage: payImageInput,
+          paymentImageMeta: payImageMeta
+        })
       });
+    } catch (e) {
+      console.warn('Backend process-payment notice:', e);
+    }
+
+    if (isCredit) {
+      setCreditAlertPopup({
+        poNo: poId,
+        vendor: poTarget.vendor,
+        amount: poTarget.amount,
+        terms: payCreditTermsInput
+      });
+    } else {
+      showCustomAlert(`Payment verified and processed by Accounts for PO ${poId}. Now ready for Proceed PO.`, 'Payment Verified', 'success');
+    }
+
+    await fetchZohoPOs(true);
   };
 
   const handleProceedPoSubmit = (poTarget) => {
@@ -2131,7 +2153,27 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                   // ACCOUNTS ROLE ACTIONS: Verify Payment or Payment Processed badge ONLY
                   if (isAccounts) {
-                    const isMdApproved = st === 'MD Approved' || st === 'OPEN' || st === 'Approved' || stt === 'md_approved';
+                    const rowStage = getPoStage(target);
+                    const isPaidOrBeyond = st === 'Payment Processed' || stt === 'payment_processed' || rowStage === 'PAYMENT_PROCESSED' || rowStage === 'PROCEED_PO' || Boolean(target.paymentDetails) || Boolean(target.proceedDetails) || st === 'Proceed PO' || stt === 'proceed_po' || st.includes('CLOSED') || st.includes('PARTIALLY');
+                    if (isPaidOrBeyond) {
+                      return (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#065F46',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          border: '1px solid #A7F3D0'
+                        }}>
+                          <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
+                        </div>
+                      );
+                    }
+                    const isMdApproved = (st === 'MD Approved' || st === 'OPEN' || st === 'Approved' || stt === 'md_approved' || rowStage === 'MD_APPROVED') && !Boolean(target.paymentDetails);
                     if (isMdApproved) {
                       return (
                         <button
@@ -2158,32 +2200,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                         </button>
                       );
                     }
-                    const isPaidOrBeyond = st === 'Payment Processed' || stt === 'payment_processed' || st === 'Proceed PO' || stt === 'proceed_po' || st.includes('CLOSED') || st.includes('PARTIALLY');
-                    if (isPaidOrBeyond) {
-                      return (
-                        <div style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '5px 12px',
-                          borderRadius: '8px',
-                          backgroundColor: '#ECFDF5',
-                          color: '#065F46',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          border: '1px solid #A7F3D0'
-                        }}>
-                          <CheckCircle size={13} style={{ color: '#059669' }} /> Payment Processed / Credit Verified
-                        </div>
-                      );
-                    }
                     return null;
                   }
 
                   // PROCUREMENT / ADMIN / CEO ACTIONS (isAccounts is FALSE)
-                  const isPaymentProcessed = st === 'Payment Processed' || stt === 'payment_processed';
-                  const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO' || stt === 'proceed_po';
-                  const isAlreadyApproved = isPaymentProcessed || isProceedPo || st === 'MD Approved' || stt === 'md_approved' || st.includes('CLOSED') || st.includes('PARTIALLY');
+                  const rowStage = getPoStage(target);
+                  const isPaymentProcessed = st === 'Payment Processed' || stt === 'payment_processed' || rowStage === 'PAYMENT_PROCESSED' || Boolean(target.paymentDetails);
+                  const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO' || stt === 'proceed_po' || rowStage === 'PROCEED_PO' || Boolean(target.proceedDetails);
+                  const isAlreadyApproved = isPaymentProcessed || isProceedPo || st === 'MD Approved' || stt === 'md_approved' || rowStage === 'MD_APPROVED' || st.includes('CLOSED') || st.includes('PARTIALLY');
                   const isDraftOrPending = !isAlreadyApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
 
                   // A) If CEO/MD and still Draft -> Show "Approve as MD"
@@ -2514,9 +2538,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       hasLocalGrn ||
                       grnCount > 0
                     );
-                    const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po');
+                    const isProceedPoOnly = !isClosed && !isAlreadyInGrnProcessOrPartial && (st === 'Proceed PO' || st === 'PROCEED PO' || objStatus === 'Proceed PO' || objStatusType === 'proceed_po' || Boolean(currentPoObj?.proceedDetails));
                     const isGrnProcess = isAlreadyInGrnProcessOrPartial || isProceedPoOnly;
-                    const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed');
+                    const isPaymentProcessed = !isClosed && !isGrnProcess && (st === 'Payment Processed' || objStatus === 'Payment Processed' || objStatusType === 'payment_processed' || Boolean(currentPoObj?.paymentDetails));
                     const isMdApproved = (st === 'MD Approved' || objStatus === 'MD Approved' || objStatusType === 'md_approved' || Boolean(currentPoObj?.approvedBy)) && !isClosed && !isGrnProcess && !isPaymentProcessed;
                     const isDraftOrPending = !isClosed && !isGrnProcess && !isPaymentProcessed && !isMdApproved;
 
@@ -3563,7 +3587,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                                 <CheckCircle size={14} style={{ color: isAccounts ? '#4F46E5' : '#16A34A' }} /> {isAccounts ? 'Awaiting Accounts Verification' : 'MD Approved'}
                               </div>
 
-                              {isAccounts && (st === 'MD Approved' || currentPoObj?.status === 'MD Approved') && (
+                              {isAccounts && (st === 'MD Approved' || currentPoObj?.status === 'MD Approved') && !Boolean(currentPoObj?.paymentDetails) && (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenPaymentProcessModal(currentPoObj)}
