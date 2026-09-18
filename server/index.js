@@ -6558,7 +6558,7 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
       });
 
       if (mat) {
-        const baseOpen = Math.max(0, parseFloat(mat.openingStock !== undefined ? mat.openingStock : (mat.physicalStock !== undefined ? mat.physicalStock : 2000)) || 2000);
+        const baseOpen = Math.max(0, parseFloat(mat.openingStock !== undefined ? mat.openingStock : (mat.physicalStock !== undefined ? mat.physicalStock : 0)) || 0);
         const curStock = parseFloat(mat.stock !== undefined ? mat.stock : (mat.physicalStock || baseOpen)) || 0;
         const newStock = Math.max(0, curStock - qty);
         mat.openingStock = baseOpen;
@@ -6582,7 +6582,7 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
       });
 
       if (itMatch) {
-        const baseOpen = Math.max(0, parseFloat(itMatch.openingStock !== undefined ? itMatch.openingStock : (itMatch.physicalStock !== undefined ? itMatch.physicalStock : 2000)) || 2000);
+        const baseOpen = Math.max(0, parseFloat(itMatch.openingStock !== undefined ? itMatch.openingStock : (itMatch.physicalStock !== undefined ? itMatch.physicalStock : 0)) || 0);
         const curStock = parseFloat(itMatch.stock !== undefined ? itMatch.stock : (itMatch.physicalStock || baseOpen)) || 0;
         const newStock = Math.max(0, curStock - qty);
         itMatch.openingStock = baseOpen;

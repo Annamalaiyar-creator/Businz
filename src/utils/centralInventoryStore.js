@@ -682,7 +682,7 @@ class CentralInventoryStore {
         return (pCode && mCode === pCode) || (normPName && mNorm === normPName) || (targetCode && mCode === targetCode);
       });
       if (mMatch) {
-        const baseOpen = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : (mMatch.physicalStock !== undefined ? mMatch.physicalStock : 2000)) || 2000);
+        const baseOpen = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : (mMatch.physicalStock !== undefined ? mMatch.physicalStock : 0)) || 0);
         const curPhysical = Math.max(0, parseFloat(mMatch.physicalStock !== undefined ? mMatch.physicalStock : (mMatch.stock !== undefined ? mMatch.stock : baseOpen)) || 0);
         const nextM = Math.max(0, curPhysical - qty);
         mMatch.stock = nextM;
