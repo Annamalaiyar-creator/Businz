@@ -252,6 +252,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             const keepIncoming = incomingRank >= existingRank;
 
             const effStatus = keepIncoming ? (p.status || existing.status) : existing.status;
+            const effStatusType = keepIncoming ? (p.statusType || existing.statusType) : existing.statusType;
             const effTotalOrd = (p.totalOrderedQty !== undefined && Number(p.totalOrderedQty) > 0) ? p.totalOrderedQty : (existing.totalOrderedQty !== undefined ? existing.totalOrderedQty : (incomingItems.length > 0 ? incomingItems.reduce((s, it) => s + Number(it.qty || 0), 0) : existingItems.reduce((s, it) => s + Number(it.qty || 0), 0)));
             const effTotalRec = (p.totalReceivedQty !== undefined && Number(p.totalReceivedQty) >= 0) ? p.totalReceivedQty : (existing.totalReceivedQty !== undefined ? existing.totalReceivedQty : (p.totalReceived !== undefined ? p.totalReceived : existing.totalReceived));
             const effRemaining = effTotalOrd !== undefined && effTotalRec !== undefined ? Math.max(0, Number(effTotalOrd) - Number(effTotalRec)) : (p.totalRemainingQty !== undefined ? p.totalRemainingQty : existing.totalRemainingQty);
