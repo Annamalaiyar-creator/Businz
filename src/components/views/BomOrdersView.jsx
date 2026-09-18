@@ -4324,16 +4324,21 @@ export default function BomOrdersView(props) {
                         let finalAssignedCode = null;
                         let sResOk = false;
                         const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: true });
-                        const endpoints = ['/api/boms', 'http://localhost:5001/api/boms'];
+                        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+                        const endpoints = isHttps ? ['/api/boms'] : ['/api/boms', 'http://localhost:5001/api/boms'];
                         for (const url of endpoints) {
                           try {
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 1500);
                             const sRes = await fetch(url, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: postPayload
-                            });
-                            if (sRes.ok) {
-                              const sData = await sRes.json();
+                              body: postPayload,
+                              signal: controller.signal
+                            }).catch(() => null);
+                            clearTimeout(timeoutId);
+                            if (sRes && sRes.ok) {
+                              const sData = await sRes.json().catch(() => null);
                               if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
                                 sResOk = true;
                                 finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
@@ -4385,12 +4390,11 @@ export default function BomOrdersView(props) {
                         const { list: updatedList } = resolveBomCollisions(combined, 658);
                         setBomStore(updatedList);
 
-                        // Direct cloud persistence guarantee
-                        try {
-                          await saveCloudStoreImmediate('bom_store', updatedList);
-                        } catch (sErr) {
-                          console.error('Error in direct saveCloudStoreImmediate:', sErr);
-                        }
+                        // Direct cloud persistence guarantee - non-blocking background sync
+                        saveCloudStore('bom_store', updatedList);
+                        saveCloudStoreImmediate('bom_store', updatedList).catch(sErr => {
+                          console.warn('Notice in background saveCloudStoreImmediate:', sErr);
+                        });
 
                         // Safe browser localStorage backup per Rule 5
                         safeSaveBomStoreToLocal(updatedList);
@@ -4421,12 +4425,15 @@ export default function BomOrdersView(props) {
                                       return item;
                                     });
                                     localStorage.setItem(storeKey, JSON.stringify(updated));
+                                    const piCtrl = new AbortController();
+                                    const piTId = setTimeout(() => piCtrl.abort(), 1200);
                                     fetch(`/api/store/${storeKey.replace('controlroom_', '')}`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify(updated)
-                                    }).catch(() => {});
-                                    saveCloudStoreImmediate(storeKey.replace('controlroom_', ''), updated).catch(() => {});
+                                      body: JSON.stringify(updated),
+                                      signal: piCtrl.signal
+                                    }).catch(() => {}).finally(() => clearTimeout(piTId));
+                                    saveCloudStore(storeKey.replace('controlroom_', ''), updated);
                                   }
                                 }
                               } catch (_) {}

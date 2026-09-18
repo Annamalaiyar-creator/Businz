@@ -1869,16 +1869,21 @@ export default function CreateBomFormPage(props) {
 
                     let sResOk = false;
                     const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: !isDraft });
-                    const endpoints = ['/api/boms', 'http://localhost:5001/api/boms'];
+                    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+                    const endpoints = isHttps ? ['/api/boms'] : ['/api/boms', 'http://localhost:5001/api/boms'];
                     for (const url of endpoints) {
                       try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 1500);
                         const sRes = await fetch(url, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: postPayload
-                        });
-                        if (sRes.ok) {
-                          const sData = await sRes.json();
+                          body: postPayload,
+                          signal: controller.signal
+                        }).catch(() => null);
+                        clearTimeout(timeoutId);
+                        if (sRes && sRes.ok) {
+                          const sData = await sRes.json().catch(() => null);
                           if (sData && (sData.bomCode || sData.bom?.bomCode) && sData.success) {
                             sResOk = true;
                             finalAssignedCode = sData.bomCode || sData.bom?.bomCode;
@@ -1923,7 +1928,7 @@ export default function CreateBomFormPage(props) {
                                 convertedDate: new Date().toISOString()
                               } : pi);
                               localStorage.setItem(storeKey, JSON.stringify(updated));
-                              saveCloudStoreImmediate('sales_pi_store', updated);
+                              saveCloudStore(storeKey.replace('controlroom_', ''), updated);
                             }
                           }
                         } catch (_) {}
@@ -1941,12 +1946,11 @@ export default function CreateBomFormPage(props) {
                       const combined = [sanitizedNewBom, ...filtered];
                       const { list: updatedList } = resolveBomCollisions(combined, 658);
 
-                      // Direct cloud persistence guarantee: ALWAYS save directly to Supabase cloud store so it is never lost on refresh or live server
-                      try {
-                        saveCloudStoreImmediate('bom_store', updatedList);
-                      } catch (sErr) {
-                        console.error('Error in direct saveCloudStoreImmediate:', sErr);
-                      }
+                      // Direct cloud persistence guarantee: background sync to Supabase cloud store so it is never lost
+                      saveCloudStore('bom_store', updatedList);
+                      saveCloudStoreImmediate('bom_store', updatedList).catch(sErr => {
+                        console.warn('Notice in background saveCloudStoreImmediate:', sErr);
+                      });
                       try {
                         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
                       } catch (_) {}

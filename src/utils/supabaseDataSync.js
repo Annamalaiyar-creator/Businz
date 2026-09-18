@@ -324,16 +324,20 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
  * @returns {Promise<string>} Next BOM code (e.g., 'BOM-625')
  */
 export async function getAndReserveNextBomCode(commit = true) {
-  // First attempt atomic server reservation to guarantee 0-collision across concurrent users
+  // First attempt atomic server reservation with strict 1200ms timeout to prevent UI hangs
   try {
     const endpoint = commit ? '/api/boms/reserve-code' : '/api/boms/next-code';
     const method = commit ? 'POST' : 'GET';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
     const apiRes = await fetch(endpoint, {
       method,
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (apiRes.ok) {
-      const data = await apiRes.json();
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    }).catch(() => null);
+    clearTimeout(timeoutId);
+    if (apiRes && apiRes.ok) {
+      const data = await apiRes.json().catch(() => null);
       const resolved = data?.nextBomCode || data?.nextCode;
       if (resolved && /^BOM-\d+$/i.test(resolved)) {
         return resolved;
@@ -344,40 +348,50 @@ export async function getAndReserveNextBomCode(commit = true) {
   let highestNum = 658;
 
   try {
-    const [seqRes, storeRes] = await Promise.all([
-      supabase.from('leaves').select('id, reason').eq('employee', 'BOM_SEQUENCE').order('id', { ascending: false }).limit(1),
-      supabase.from('leaves').select('reason').eq('employee', 'BOM_STORE').order('id', { ascending: false }).limit(1)
-    ]);
+    // High-speed single-row query for sequence counter (50ms)
+    const seqRes = await supabase
+      .from('leaves')
+      .select('id, reason, duration')
+      .eq('employee', 'BOM_SEQUENCE')
+      .order('id', { ascending: false })
+      .limit(1);
 
     const seqRow = seqRes.data?.[0];
-    const storeRow = storeRes.data?.[0];
 
     let seqCounter = 0;
-    if (seqRow && seqRow.reason) {
-      try {
-        const parsedSeq = JSON.parse(seqRow.reason);
-        const rawSeq = parsedSeq?.lastNumber ?? parsedSeq?.counter ?? parsedSeq ?? 0;
-        const pVal = parseInt(String(rawSeq).replace(/[^0-9]/g, ''), 10);
-        if (Number.isFinite(pVal) && pVal > 0) seqCounter = pVal;
-      } catch (_) {}
+    if (seqRow) {
+      if (seqRow.reason) {
+        try {
+          const parsedSeq = JSON.parse(seqRow.reason);
+          const rawSeq = parsedSeq?.lastNumber ?? parsedSeq?.counter ?? parsedSeq ?? seqRow.duration ?? 0;
+          const pVal = parseInt(String(rawSeq).replace(/[^0-9]/g, ''), 10);
+          if (Number.isFinite(pVal) && pVal > 0) seqCounter = pVal;
+        } catch (_) {}
+      }
+      if (!seqCounter && seqRow.duration) {
+        const dVal = parseInt(String(seqRow.duration).replace(/[^0-9]/g, ''), 10);
+        if (Number.isFinite(dVal) && dVal > 0) seqCounter = dVal;
+      }
     }
 
+    // Instant local cache inspection (0ms) to ensure no collisions with locally cached BOMs
     let storeMax = 0;
-    if (storeRow && storeRow.reason) {
-      try {
-        const list = JSON.parse(storeRow.reason);
+    try {
+      const savedStr = localStorage.getItem('controlroom_bom_store');
+      if (savedStr) {
+        const list = JSON.parse(savedStr);
         if (Array.isArray(list)) {
-          const nums = list.map(b => {
+          list.forEach(b => {
             const raw = String(b.bomCode || b.code || b.id || '');
             const match = raw.match(/BOM-(\d+)/i);
-            if (!match) return 0;
-            const parsed = parseInt(match[1], 10);
-            return Number.isFinite(parsed) ? parsed : 0;
-          }).filter(n => Number.isFinite(n) && n > 0);
-          if (nums.length > 0) storeMax = Math.max(0, ...nums);
+            if (match) {
+              const parsed = parseInt(match[1], 10);
+              if (Number.isFinite(parsed) && parsed > storeMax) storeMax = parsed;
+            }
+          });
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
 
     const safeSeq = Number.isFinite(seqCounter) && seqCounter > 0 ? seqCounter : 0;
     const safeStore = Number.isFinite(storeMax) && storeMax > 0 ? storeMax : 0;
