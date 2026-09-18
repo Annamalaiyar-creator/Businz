@@ -89,9 +89,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   receivedQty: prevQty + recQty 
                 };
                 grnMap.set(upperCode, grnEntry);
-                if (it.name) {
-                  grnMap.set(String(it.name).toUpperCase(), grnEntry);
-                }
               }
             });
           } else if (grn.materialCode || grn.itemCode || grn.code) {
@@ -338,19 +335,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
       if (matchedKey) {
         const existing = matMap.get(matchedKey);
-        if (!existing.grnNo || existing.grnNo !== grnItem.grnNo) {
-          const newGoodsRec = (existing.goodsReceived || 0) + recQty;
-          const newStock = (existing.openingStock !== undefined ? existing.openingStock : (existing.stock || 0)) + recQty;
-          matMap.set(matchedKey, {
-            ...existing,
-            stock: newStock,
-            goodsReceived: newGoodsRec,
-            status: newStock > 0 ? 'In Stock' : 'Out of Stock',
-            lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
-            grnNo: grnItem.grnNo,
-            name: (grnItem.name && grnItem.name.includes('300mm')) ? grnItem.name : existing.name
-          });
-        }
+        matMap.set(matchedKey, {
+          ...existing,
+          goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
+          grnNo: existing.grnNo || grnItem.grnNo,
+          name: (grnItem.name && grnItem.name.includes('300mm')) ? grnItem.name : existing.name
+        });
       } else {
         matMap.set(itemKey, {
           code: itemKey,
@@ -571,19 +561,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
         if (matchedKey) {
           const existing = matMap.get(matchedKey);
-          if (!existing.grnNo || existing.grnNo !== grnItem.grnNo) {
-            const newGoodsRec = (existing.goodsReceived || 0) + recQty;
-            const newStock = (existing.openingStock !== undefined ? existing.openingStock : (existing.stock || 0)) + recQty;
-            matMap.set(matchedKey, {
-              ...existing,
-              stock: newStock,
-              goodsReceived: newGoodsRec,
-              status: newStock > 0 ? 'In Stock' : 'Out of Stock',
-              lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
-              grnNo: grnItem.grnNo,
-              name: (grnItem.name && grnItem.name.includes('300mm')) ? grnItem.name : existing.name
-            });
-          }
+          matMap.set(matchedKey, {
+            ...existing,
+            goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
+            grnNo: existing.grnNo || grnItem.grnNo,
+            name: (grnItem.name && grnItem.name.includes('300mm')) ? grnItem.name : existing.name
+          });
         } else {
           matMap.set(itemKey, {
             code: itemKey,
@@ -976,19 +959,22 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     // 2. Authoritative Goods Receipts (GRN Inwarding from Procurement)
     try {
-      const gRaw = localStorage.getItem('controlroom_grn_store');
+      const gRaw = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || localStorage.getItem('controlroom_grn_store');
       let grns = [];
       if (gRaw) grns = JSON.parse(gRaw);
       if (Array.isArray(grns)) {
         grns.forEach(g => {
           (g.items || []).forEach(git => {
-            const gCode = String(git.materialCode || git.itemCode || git.code || '').toLowerCase().trim();
+            const gCode = String(git.materialCode || git.itemCode || git.code || git.sku || git.itemId || '').toLowerCase().trim();
             const gName = String(git.materialName || git.name || '').toLowerCase().trim();
-            const isMatch = (sCode && gCode === sCode) || (sName && gName === sName);
+            const gNorm = normalizeProductName(git.materialName || git.name || '');
+            const isMatch = (sCode && gCode && (gCode === sCode || gCode.includes(sCode) || sCode.includes(gCode))) || 
+                            (sName && gName && (gName === sName || gName.includes(sName) || sName.includes(gName))) ||
+                            (sNorm && gNorm && sNorm === gNorm);
             if (isMatch) {
-              const recQty = parseFloat(git.receivedQty || git.acceptedQty || git.qty || 0) || 0;
+              const recQty = parseFloat(git.accepted !== undefined && git.accepted !== '' ? git.accepted : (git.now !== undefined && git.now !== '' ? git.now : (git.receivedQty || git.qty || 0))) || 0;
               if (recQty > 0) {
-                const rawDate = g.createdAt || g.grnDate;
+                const rawDate = g.createdAt || g.grnDate || g.date;
                 let formattedDate = 'Recent Receipt';
                 try {
                   if (rawDate) {
@@ -1000,7 +986,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 } catch (_) {}
 
                 logs.push({
-                  id: `GRN-LOG-${g.grnNo || g.id}-${gCode}`,
+                  id: `GRN-LOG-${g.grnNo || g.id}-${gCode || 'item'}`,
                   timestamp: formattedDate,
                   type: 'GOODS_RECEIPT',
                   typeName: 'Goods Receipt Note (GRN)',
@@ -1011,13 +997,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   itemCode: selectedMat.code,
                   itemName: selectedMat.name,
                   qty: +recQty,
-                  unit: git.unit || selectedMat.unit || 'NOS',
-                  previousStock: selectedMat.stock - recQty,
+                  unit: git.unit || git.uom || selectedMat.unit || 'NOS',
+                  previousStock: Math.max(0, (selectedMat.stock || 0) - recQty),
                   newStock: selectedMat.stock,
-                  user: g.inspectedBy || g.verifiedBy || 'Store In-Charge',
+                  user: g.inspectedBy || g.verifiedBy || g.receivedBy || 'Store In-Charge',
                   role: 'Warehouse Receiving',
-                  reason: `Inwarded ${(Number(recQty) || 0).toLocaleString()} ${git.unit || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
-                  source: g.vendorName || g.supplier || 'Procurement Order',
+                  reason: `Inwarded ${(Number(recQty) || 0).toLocaleString()} ${git.unit || git.uom || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendor || g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
+                  source: g.vendor || g.vendorName || g.supplier || 'Procurement Order',
                   location: selectedMat.store || 'Main Store'
                 });
               }
