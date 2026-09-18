@@ -159,6 +159,35 @@ export default function GoodsReceiptNoteView(props) {
     }
   }, []);
 
+  const getEffectiveGrnStatus = useCallback((grn) => {
+    if (!grn) return 'OPEN / PARTIALLY RECEIVED';
+    const rawStatus = String(grn.status || '').trim();
+    if (rawStatus.toUpperCase().includes('CLOSED') || rawStatus.toUpperCase().includes('FULLY') || grn.forceClosePO === true) {
+      return 'CLOSED / FULLY RECEIVED';
+    }
+    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const pRef = normalize(grn.poRef || grn.poNo || grn.poId);
+    if (pRef) {
+      const matchedPO = (livePOs || []).find(p => {
+        const pNo = normalize(p.poNo);
+        const pId = normalize(p.id);
+        const pZohoId = normalize(p.zohoId);
+        return pNo === pRef || pId === pRef || pZohoId === pRef || (pNo && pRef.includes(pNo)) || (pNo && pNo.includes(pRef));
+      });
+      if (matchedPO) {
+        const isPoClosed = String(matchedPO.status || '').toUpperCase().includes('CLOSED') ||
+                           String(matchedPO.status || '').toUpperCase().includes('FULLY') ||
+                           matchedPO.statusType === 'closed' ||
+                           matchedPO.order_status === 'closed' ||
+                           (Number(matchedPO.totalOrderedQty) > 0 && Number(matchedPO.totalReceivedQty || matchedPO.totalReceived) >= Number(matchedPO.totalOrderedQty));
+        if (isPoClosed) {
+          return 'CLOSED / FULLY RECEIVED';
+        }
+      }
+    }
+    return rawStatus || 'OPEN / PARTIALLY RECEIVED';
+  }, [livePOs]);
+
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     await fetchAndSetGRNs();
@@ -618,6 +647,13 @@ export default function GoodsReceiptNoteView(props) {
   useEffect(() => {
     fetchAndSetGRNs();
 
+    const handlePoUpdate = () => {
+      fetchLivePOs();
+      fetchAndSetGRNs();
+    };
+    window.addEventListener('controlroom_po_updated', handlePoUpdate);
+    window.addEventListener('controlroom_storage_update', handlePoUpdate);
+
     // Subscribe to cloud updates for real-time multi-device sync
     const unsubscribe = subscribeToCloudStore('grn_store', (updatedCloudData) => {
       if (Array.isArray(updatedCloudData) && updatedCloudData.length > 0) {
@@ -631,9 +667,11 @@ export default function GoodsReceiptNoteView(props) {
     });
 
     return () => {
+      window.removeEventListener('controlroom_po_updated', handlePoUpdate);
+      window.removeEventListener('controlroom_storage_update', handlePoUpdate);
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [fetchAndSetGRNs]);
+  }, [fetchAndSetGRNs, fetchLivePOs]);
 
   // Function to load PO details and line items when a PO is selected
   const loadPOItems = (selectedId, currentLivePOs = livePOs, autoFillNow = false, pushedPoTarget = null) => {
@@ -2565,10 +2603,10 @@ export default function GoodsReceiptNoteView(props) {
               <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
                 {[
                   { id: 'All', label: 'All Receipts', count: grnList.length, bg: '#e2e8f0', fg: '#475569' },
-                  { id: 'CLOSED', label: 'Closed / Fully Received', count: grnList.filter(g => String(g.status || '').toUpperCase().includes('CLOSED') || String(g.status || '').toUpperCase().includes('FULLY')).length, bg: '#dcfce7', fg: '#15803d' },
-                  { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: grnList.filter(g => String(g.status || '').toUpperCase().includes('PARTIAL')).length, bg: '#fef3c7', fg: '#b45309' },
-                  { id: 'Approved', label: 'Approved', count: grnList.filter(g => String(g.status || '').toLowerCase() === 'approved').length, bg: '#dcfce7', fg: '#166534' },
-                  { id: 'Draft', label: 'Draft', count: grnList.filter(g => String(g.status || '').toLowerCase().includes('draft')).length, bg: '#fff7ed', fg: '#c2410c' }
+                  { id: 'CLOSED', label: 'Closed / Fully Received', count: grnList.filter(g => getEffectiveGrnStatus(g) === 'CLOSED / FULLY RECEIVED').length, bg: '#dcfce7', fg: '#15803d' },
+                  { id: 'PARTIALLY_RECEIVED', label: 'Open / Partially Received', count: grnList.filter(g => getEffectiveGrnStatus(g) === 'OPEN / PARTIALLY RECEIVED').length, bg: '#fef3c7', fg: '#b45309' },
+                  { id: 'Approved', label: 'Approved', count: grnList.filter(g => getEffectiveGrnStatus(g).toLowerCase() === 'approved').length, bg: '#dcfce7', fg: '#166534' },
+                  { id: 'Draft', label: 'Draft', count: grnList.filter(g => getEffectiveGrnStatus(g).toLowerCase().includes('draft')).length, bg: '#fff7ed', fg: '#c2410c' }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -2605,19 +2643,19 @@ export default function GoodsReceiptNoteView(props) {
                   const q = searchQuery.toLowerCase().trim();
                   const matchesSearch = !q || gId.includes(q) || pRef.includes(q) || vend.includes(q);
 
-                  const st = String(g.status || '').trim();
+                  const st = getEffectiveGrnStatus(g);
                   const stUpper = st.toUpperCase();
 
                   const matchesStatus = grnListStatusFilter === 'All' ||
-                    (grnListStatusFilter === 'CLOSED / FULLY RECEIVED' && (stUpper.includes('CLOSED') || stUpper.includes('FULLY'))) ||
-                    (grnListStatusFilter === 'OPEN / PARTIALLY RECEIVED' && stUpper.includes('PARTIAL')) ||
+                    (grnListStatusFilter === 'CLOSED / FULLY RECEIVED' && st === 'CLOSED / FULLY RECEIVED') ||
+                    (grnListStatusFilter === 'OPEN / PARTIALLY RECEIVED' && st === 'OPEN / PARTIALLY RECEIVED') ||
                     (grnListStatusFilter === 'Approved' && st.toLowerCase() === 'approved') ||
                     (grnListStatusFilter === 'Draft' && st.toLowerCase().includes('draft')) ||
                     st === grnListStatusFilter;
 
                   const matchesTab = grnListActiveTab === 'All' ||
-                    (grnListActiveTab === 'CLOSED' && (stUpper.includes('CLOSED') || stUpper.includes('FULLY'))) ||
-                    (grnListActiveTab === 'PARTIALLY_RECEIVED' && stUpper.includes('PARTIAL')) ||
+                    (grnListActiveTab === 'CLOSED' && st === 'CLOSED / FULLY RECEIVED') ||
+                    (grnListActiveTab === 'PARTIALLY_RECEIVED' && st === 'OPEN / PARTIALLY RECEIVED') ||
                     (grnListActiveTab === 'Approved' && st.toLowerCase() === 'approved') ||
                     (grnListActiveTab === 'Draft' && st.toLowerCase().includes('draft')) ||
                     st === grnListActiveTab;
@@ -2787,7 +2825,7 @@ export default function GoodsReceiptNoteView(props) {
                                     {row.val || '—'}
                                   </td>
                                   <td style={{ textAlign: 'center', padding: '12px 16px' }}>
-                                    <StatusBadge status={row.status} size="sm" />
+                                    <StatusBadge status={getEffectiveGrnStatus(row)} size="sm" />
                                   </td>
                                 </tr>
                               );

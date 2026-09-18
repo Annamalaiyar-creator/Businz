@@ -5621,7 +5621,36 @@ app.get('/api/po-receiving-history/{*poRef}', async (req, res) => {
 // Endpoint to list all stored GRNs
 app.get('/api/grns', async (req, res) => {
   const grns = await getDatabaseStore('grn_store');
-  const sorted = [...(Array.isArray(grns) ? grns : [])].sort((a, b) => {
+  const localPOs = loadLocalPOs();
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+
+  const reconciled = (Array.isArray(grns) ? grns : []).map(grn => {
+    const pRef = normalize(grn.poRef || grn.poNo || grn.poId);
+    const matchedPO = localPOs.find(p => {
+      const pNo = normalize(p.poNo);
+      const pId = normalize(p.id);
+      const pZohoId = normalize(p.zohoId);
+      return pRef && (pNo === pRef || pId === pRef || pZohoId === pRef || (pNo && pRef.includes(pNo)) || (pNo && pNo.includes(pRef)));
+    });
+
+    const isPoClosed = matchedPO && (
+      String(matchedPO.status || '').toUpperCase().includes('CLOSED') ||
+      String(matchedPO.status || '').toUpperCase().includes('FULLY') ||
+      matchedPO.statusType === 'closed' ||
+      matchedPO.order_status === 'closed' ||
+      (Number(matchedPO.totalOrderedQty) > 0 && Number(matchedPO.totalReceivedQty || matchedPO.totalReceived) >= Number(matchedPO.totalOrderedQty))
+    );
+
+    if (isPoClosed && grn.status !== 'CLOSED / FULLY RECEIVED') {
+      return {
+        ...grn,
+        status: 'CLOSED / FULLY RECEIVED'
+      };
+    }
+    return grn;
+  });
+
+  const sorted = reconciled.sort((a, b) => {
     const parseNum = (item) => {
       const str = String(item.grnNo || item.id || item.poRef || '');
       const match = str.match(/\d+/);
