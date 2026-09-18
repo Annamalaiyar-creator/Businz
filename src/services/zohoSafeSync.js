@@ -55,7 +55,19 @@ export async function getSafeZohoPOs() {
               status: (() => {
                 const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
                 const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
+                if (totOrd > 0 && totRec >= totOrd) {
+                  return 'CLOSED / FULLY RECEIVED';
+                }
                 if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+                  return 'OPEN / PARTIALLY RECEIVED';
+                }
+                const cStatus = String(cloudMatch.status || '').toUpperCase();
+                const zStatus = String(zohoPo.status || '').toUpperCase();
+                if (cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) {
+                  if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 'OPEN / PARTIALLY RECEIVED';
+                  return 'CLOSED / FULLY RECEIVED';
+                }
+                if (cStatus.includes('PARTIAL') || zStatus.includes('PARTIAL')) {
                   return 'OPEN / PARTIALLY RECEIVED';
                 }
                 const getStageRank = (st, stType, approver, payDetails, proceedDetails) => {
@@ -88,7 +100,19 @@ export async function getSafeZohoPOs() {
               statusType: (() => {
                 const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
                 const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
+                if (totOrd > 0 && totRec >= totOrd) {
+                  return 'closed';
+                }
                 if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+                  return 'partially_received';
+                }
+                const cStatus = String(cloudMatch.status || '').toUpperCase();
+                const zStatus = String(zohoPo.status || '').toUpperCase();
+                if (cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) {
+                  if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 'partially_received';
+                  return 'closed';
+                }
+                if (cStatus.includes('PARTIAL') || zStatus.includes('PARTIAL')) {
                   return 'partially_received';
                 }
                 const getStageRank = (st, stType, approver, payDetails, proceedDetails) => {
@@ -225,6 +249,11 @@ export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
 
     // 2. Persist immediately to Supabase Cloud & Local Server with zero debounce delay
     await saveCloudStoreImmediate('po_store', updatedList);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: newOrUpdatedPO }));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    }
 
     // 3. Post to Zoho Books API ONLY when explicitly asked (avoids 3x duplicate creations)
     if (syncWithZoho) {

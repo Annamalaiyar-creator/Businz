@@ -550,5 +550,136 @@
     ],
     "status": "OPEN / PARTIALLY RECEIVED",
     "zohoBillPosted": false
+  },
+  {
+    "id": "GRN-2026-44844",
+    "grnNo": "GRN-2026-44844",
+    "poRef": "PO-00139",
+    "poNo": "PO-00139",
+    "vendor": "Royal Steel Suppliers",
+    "challanNo": "123456",
+    "date": "18 Sept 2026",
+    "totalOrderedQty": 200,
+    "receivedQty": 101,
+    "acceptedQty": 101,
+    "rejectedQty": 0,
+    "receivedBy": "Annamalai",
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "",
+    "items": [
+      {
+        "id": "PO-ITEM-0",
+        "name": "MODULE - ADANI BIFACIAL DCR 550wp",
+        "sku": "SKU-101",
+        "desc": "—",
+        "uom": "NOS",
+        "ordered": 200,
+        "prev": 99,
+        "remaining": 101,
+        "now": 101,
+        "accepted": 101,
+        "rejected": 0,
+        "reason": "—",
+        "batch": "LOT-2026-1",
+        "error": null
+      }
+    ],
+    "documents": [
+      {
+        "title": "Delivery Challan *",
+        "filename": "9a3cfa17b148fcf02131eb4c62fff057.jpg",
+        "size": "0.2 MB",
+        "url": "blob:https://crm.vrmstructures.in/b0c3d88d-23dc-4180-8a83-110fd5e1fcac",
+        "fileObj": {}
+      }
+    ],
+    "status": "CLOSED / FULLY RECEIVED"
+  },
+  {
+    "id": "GRN-2026-20896",
+    "grnNo": "GRN-2026-20896",
+    "poRef": "PO-00139",
+    "poNo": "PO-00139",
+    "vendor": "Royal Steel Suppliers",
+    "challanNo": "1234567",
+    "date": "18 Sept 2026",
+    "totalOrderedQty": 200,
+    "receivedQty": 102,
+    "acceptedQty": 99,
+    "rejectedQty": 3,
+    "receivedBy": "Annamalai",
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "",
+    "items": [
+      {
+        "id": "PO-ITEM-0",
+        "name": "MODULE - ADANI BIFACIAL DCR 550wp",
+        "sku": "SKU-101",
+        "desc": "—",
+        "uom": "NOS",
+        "ordered": 200,
+        "prev": 0,
+        "remaining": 200,
+        "now": 102,
+        "accepted": 99,
+        "rejected": 3,
+        "reason": "—",
+        "batch": "LOT-2026-1",
+        "error": null
+      }
+    ],
+    "documents": [
+      {
+        "title": "Delivery Challan *",
+        "filename": "26df4464d75e353f3d2d8af5c9217a96.jpg",
+        "size": "0.1 MB",
+        "url": "blob:https://crm.vrmstructures.in/2d69b0d4-342e-4d19-bd8d-575db9ced686",
+        "fileObj": {}
+      }
+    ],
+    "status": "OPEN / PARTIALLY RECEIVED"
+  },
+  {
+    "id": "GRN-2026-55499",
+    "grnNo": "GRN-2026-55499",
+    "poRef": "PO-00138",
+    "poNo": "PO-00138",
+    "vendor": "Royal Steel Suppliers",
+    "challanNo": "1234567",
+    "date": "18 Sept 2026",
+    "totalOrderedQty": 200,
+    "receivedQty": 100,
+    "acceptedQty": 100,
+    "rejectedQty": 0,
+    "receivedBy": "Annamalaiyar",
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "",
+    "items": [
+      {
+        "id": "PO-ITEM-0",
+        "name": "MODULE - ADANI BIFACIAL DCR 545wp",
+        "sku": "SKU-101",
+        "desc": "—",
+        "uom": "NOS",
+        "ordered": 200,
+        "prev": 100,
+        "remaining": 100,
+        "now": 100,
+        "accepted": 100,
+        "rejected": 0,
+        "reason": "—",
+        "batch": "LOT-2026-1"
+      }
+    ],
+    "documents": [
+      {
+        "title": "Delivery Challan *",
+        "filename": "9a7c006404624aecd38a0c5f48bb67e5.jpg",
+        "size": "0.1 MB",
+        "url": "blob:https://crm.vrmstructures.in/577897d2-80c1-4a93-ac65-5c34b6f1d7f0",
+        "fileObj": {}
+      }
+    ],
+    "status": "CLOSED / FULLY RECEIVED"
   }
 ]

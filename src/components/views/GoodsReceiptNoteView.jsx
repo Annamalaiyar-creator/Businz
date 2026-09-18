@@ -3211,8 +3211,9 @@ export default function GoodsReceiptNoteView(props) {
                             });
 
                             const hasSelected = eligiblePOs.some(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo);
+                            const matchedTarget = livePOs.find(p => p.poNo === selectedGRNPo || p.id === selectedGRNPo);
                             const displayList = (!hasSelected && selectedGRNPo)
-                              ? [{ poNo: selectedGRNPo, id: selectedGRNPo, vendor: selectedGRNVendor || 'Vendor', status: 'Proceed PO' }, ...eligiblePOs]
+                              ? [{ poNo: selectedGRNPo, id: selectedGRNPo, vendor: selectedGRNVendor || matchedTarget?.vendor || 'Vendor', status: matchedTarget?.status || 'Proceed PO' }, ...eligiblePOs]
                               : eligiblePOs;
 
                             return (

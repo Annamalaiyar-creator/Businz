@@ -3926,20 +3926,26 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         });
         let totalReceived = 0;
         matchingGRNs.forEach(grn => {
-          (grn.items || []).forEach(it => {
-            totalReceived += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
-          });
+          if (Array.isArray(grn.items) && grn.items.length > 0) {
+            grn.items.forEach(it => {
+              totalReceived += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
+            });
+          } else {
+            totalReceived += Number(grn.acceptedQty !== undefined && grn.acceptedQty !== '' ? grn.acceptedQty : (grn.receivedQty || 0));
+          }
         });
 
         let statusType = 'pending';
         let statusText = 'Draft / Pending Approval';
 
-        const matchingClosedGRN = matchingGRNs.some(g => 
-          g.status === 'CLOSED / FULLY RECEIVED' || 
-          g.status === 'Fully Accepted' || 
-          g.status === 'Closed' || 
-          g.status === 'CLOSED'
-        );
+        const matchingClosedGRN = matchingGRNs.some(g => {
+          const gs = String(g.status || '').toUpperCase();
+          return gs.includes('CLOSED') || gs.includes('FULLY') || g.forceClosePO === true;
+        });
+        const matchingPartialGRN = matchingGRNs.some(g => {
+          const gs = String(g.status || '').toUpperCase();
+          return gs.includes('PARTIAL');
+        });
 
         const currentLocalPOs = loadLocalPOs();
         const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
@@ -3955,17 +3961,39 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
 
         const isNoApproval = lpMatch && String(lpMatch.approvalRequired).toUpperCase() === 'NO';
 
-        const totalOrdered = lpMatch && Number(lpMatch.totalOrderedQty) ? Number(lpMatch.totalOrderedQty) : (Array.isArray(lpMatch?.items) ? lpMatch.items.reduce((s, it) => s + Number(it.qty || it.quantity || 0), 0) : 0);
-        const isFullyReceived = (totalOrdered > 0 && totalReceived >= totalOrdered) || (matchingClosedGRN && (totalOrdered === 0 || totalReceived >= totalOrdered));
-        const isPartial = (totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered) || matchingGRNs.length > 0 || po.status === 'partially_received' || (lpMatch && (lpMatch.status === 'OPEN / PARTIALLY RECEIVED' || lpMatch.statusType === 'partially_received'));
+        let totalOrdered = lpMatch && Number(lpMatch.totalOrderedQty) ? Number(lpMatch.totalOrderedQty) : 0;
+        if (totalOrdered === 0 && Array.isArray(lpMatch?.items) && lpMatch.items.length > 0) {
+          totalOrdered = lpMatch.items.reduce((s, it) => s + Number(it.qty || it.quantity || 0), 0);
+        }
+        if (totalOrdered === 0 && matchingGRNs.length > 0) {
+          const gWithOrd = matchingGRNs.find(g => Number(g.totalOrderedQty) > 0);
+          if (gWithOrd) totalOrdered = Number(gWithOrd.totalOrderedQty);
+        }
+        if (totalOrdered === 0 && matchingGRNs.length > 0) {
+          matchingGRNs.forEach(g => {
+            if (Array.isArray(g.items)) {
+              const ordSum = g.items.reduce((s, it) => s + Number(it.ordered || 0), 0);
+              if (ordSum > totalOrdered) totalOrdered = ordSum;
+            }
+          });
+        }
 
-        if (isPartial && totalOrdered > 0 && totalReceived < totalOrdered) {
-          statusType = 'partially_received';
-          statusText = 'OPEN / PARTIALLY RECEIVED';
-        } else if (isFullyReceived || (totalOrdered > 0 && totalReceived >= totalOrdered) || (po.status === 'closed' && (totalOrdered === 0 || totalReceived >= totalOrdered))) {
+        const isFullyReceived = (totalOrdered > 0 && totalReceived >= totalOrdered) || 
+                                matchingClosedGRN || 
+                                (lpMatch && (lpMatch.status === 'CLOSED / FULLY RECEIVED' || lpMatch.statusType === 'closed')) ||
+                                (po.status === 'closed');
+        const isPartial = !isFullyReceived && ((totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered) || 
+                          matchingPartialGRN ||
+                          matchingGRNs.length > 0 || 
+                          po.status === 'partially_received' || 
+                          po.status === 'received' || 
+                          po.is_received === true ||
+                          (lpMatch && (lpMatch.status === 'OPEN / PARTIALLY RECEIVED' || lpMatch.statusType === 'partially_received')));
+
+        if (isFullyReceived) {
           statusType = 'closed';
           statusText = 'CLOSED / FULLY RECEIVED';
-        } else if (isPartial || po.status === 'received' || po.is_received === true) {
+        } else if (isPartial) {
           statusType = 'partially_received';
           statusText = 'OPEN / PARTIALLY RECEIVED';
         } else if (lpMatch && (lpMatch.status === 'Proceed PO' || lpMatch.statusType === 'proceed_po' || Boolean(lpMatch.proceedDetails))) {
@@ -4044,6 +4072,11 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           amount: calcTotalWithGst,
           status: statusText,
           statusType: statusType,
+          order_status: isFullyReceived ? 'closed' : (isPartial ? 'received' : (lpMatch?.order_status || po.status)),
+          totalOrderedQty: totalOrdered,
+          totalReceivedQty: totalReceived,
+          totalRemainingQty: Math.max(0, totalOrdered - totalReceived),
+          receivingProgressPct: totalOrdered > 0 ? ((totalReceived / totalOrdered) * 100).toFixed(1) : (isFullyReceived ? '100.0' : '0.0'),
           approvedBy: (lpMatch && lpMatch.approvedBy) ? lpMatch.approvedBy : (po.approvedBy || undefined),
           approvalDate: (lpMatch && lpMatch.approvalDate) ? lpMatch.approvalDate : undefined,
           approvalTime: (lpMatch && lpMatch.approvalTime) ? lpMatch.approvalTime : undefined,
@@ -5710,11 +5743,13 @@ app.post('/api/grns', async (req, res) => {
   try {
     const localPOs = loadLocalPOs();
     if (poRefTarget) {
+      let matched = false;
       const updatedPOs = localPOs.map(po => {
         const poNum = normalize(po.poNo);
         const poId = normalize(po.id);
         const poZohoId = normalize(po.zohoId);
         if (poRefTarget === poNum || poRefTarget === poId || poRefTarget === poZohoId || (poNum && poRefTarget.includes(poNum)) || (poNum && poNum.includes(poRefTarget))) {
+          matched = true;
           const ord = totalOrdered > 0 ? totalOrdered : Number(po.totalOrderedQty || (po.items ? po.items.reduce((s, it) => s + (Number(it.qty) || 0), 0) : 0));
           const rec = totalReceivedSoFar;
           const rem = Math.max(0, ord - rec);
@@ -5726,6 +5761,7 @@ app.post('/api/grns', async (req, res) => {
             totalOrderedQty: ord,
             totalReceivedQty: rec,
             totalRemainingQty: rem,
+            receivingProgressPct: ord > 0 ? ((rec / ord) * 100).toFixed(1) : (isFullyReceived ? '100.0' : '0.0'),
             grnCount: (Number(po.grnCount) || 0) + 1,
             totalReceived: rec,
             items: (po.items || []).map((poIt, idx) => {
@@ -5746,6 +5782,39 @@ app.post('/api/grns', async (req, res) => {
         }
         return po;
       });
+
+      if (!matched) {
+        const ord = totalOrdered > 0 ? totalOrdered : currentAccepted;
+        const rec = totalReceivedSoFar;
+        const rem = Math.max(0, ord - rec);
+        updatedPOs.unshift({
+          id: grnData.poRef || grnData.poNo || `PO-${Date.now()}`,
+          poNo: grnData.poNo || grnData.poRef,
+          zohoId: grnData.poId || grnData.poRef,
+          vendor: grnData.vendor || 'Vendor',
+          status: calculatedStatus,
+          statusType: isFullyReceived ? 'closed' : 'partially_received',
+          order_status: isFullyReceived ? 'closed' : 'received',
+          totalOrderedQty: ord,
+          totalReceivedQty: rec,
+          totalRemainingQty: rem,
+          grnCount: 1,
+          totalReceived: rec,
+          receivingProgressPct: ord > 0 ? ((rec / ord) * 100).toFixed(1) : (isFullyReceived ? '100.0' : '0.0'),
+          items: (grnData.items || []).map(it => {
+            const itOrd = Number(it.ordered || it.now || 0);
+            const itAcc = Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
+            return {
+              name: it.name || 'Material Item',
+              sku: it.sku || it.code || '',
+              qty: itOrd,
+              previouslyReceived: itAcc,
+              remainingQty: Math.max(0, itOrd - itAcc)
+            };
+          })
+        });
+      }
+
       saveLocalPOs(updatedPOs);
       saveDatabaseStore('po_store', updatedPOs).catch(() => {});
     }

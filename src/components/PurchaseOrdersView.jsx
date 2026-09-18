@@ -252,15 +252,21 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             const keepIncoming = incomingRank >= existingRank;
 
             const effStatus = keepIncoming ? (p.status || existing.status) : existing.status;
-            const effStatusType = keepIncoming ? (p.statusType || existing.statusType) : existing.statusType;
+            const effTotalOrd = (p.totalOrderedQty !== undefined && Number(p.totalOrderedQty) > 0) ? p.totalOrderedQty : (existing.totalOrderedQty !== undefined ? existing.totalOrderedQty : (incomingItems.length > 0 ? incomingItems.reduce((s, it) => s + Number(it.qty || 0), 0) : existingItems.reduce((s, it) => s + Number(it.qty || 0), 0)));
+            const effTotalRec = (p.totalReceivedQty !== undefined && Number(p.totalReceivedQty) >= 0) ? p.totalReceivedQty : (existing.totalReceivedQty !== undefined ? existing.totalReceivedQty : (p.totalReceived !== undefined ? p.totalReceived : existing.totalReceived));
+            const effRemaining = effTotalOrd !== undefined && effTotalRec !== undefined ? Math.max(0, Number(effTotalOrd) - Number(effTotalRec)) : (p.totalRemainingQty !== undefined ? p.totalRemainingQty : existing.totalRemainingQty);
 
-            const existingItems = Array.isArray(existing.items) && existing.items.length > 0 ? existing.items : [];
-            const incomingItems = Array.isArray(p.items) && p.items.length > 0 ? p.items : [];
             return {
               ...existing,
               ...p,
               status: effStatus,
               statusType: effStatusType,
+              totalOrderedQty: effTotalOrd,
+              totalReceivedQty: effTotalRec,
+              totalRemainingQty: effRemaining,
+              totalReceived: effTotalRec,
+              receivingProgressPct: (Number(effTotalOrd) > 0 && Number(effTotalRec) >= 0) ? ((Number(effTotalRec) / Number(effTotalOrd)) * 100).toFixed(1) : (p.receivingProgressPct || existing.receivingProgressPct || '0.0'),
+              grnCount: p.grnCount !== undefined ? p.grnCount : existing.grnCount,
               approvedBy: existing.approvedBy || p.approvedBy,
               approvalRemarks: existing.approvalRemarks || p.approvalRemarks,
               paymentDetails: p.paymentDetails || existing.paymentDetails,
@@ -361,8 +367,42 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const handlePoPush = () => {
       fetchZohoPOs(true);
     };
+
+    const handleGrnCompleted = (e) => {
+      const grn = e?.detail;
+      if (grn) {
+        const poRef = String(grn.poRef || grn.poNo || '').toLowerCase();
+        setPoList(prev => prev.map(p => {
+          const pNo = String(p.poNo || p.id || '').toLowerCase();
+          if (pNo && (pNo === poRef || poRef.includes(pNo) || pNo.includes(poRef))) {
+            const isClosed = String(grn.status || '').toUpperCase().includes('CLOSED') || 
+                             String(grn.status || '').toUpperCase().includes('FULLY') || 
+                             grn.forceClosePO === true;
+            const newStatus = isClosed ? 'CLOSED / FULLY RECEIVED' : 'OPEN / PARTIALLY RECEIVED';
+            const accepted = Number(grn.acceptedQty !== undefined ? grn.acceptedQty : (grn.receivedQty || 0));
+            const newRec = Number(p.totalReceivedQty || p.totalReceived || 0) + accepted;
+            const newOrd = Number(p.totalOrderedQty || 0);
+            return {
+              ...p,
+              status: newStatus,
+              statusType: isClosed ? 'closed' : 'partially_received',
+              order_status: isClosed ? 'closed' : 'received',
+              totalReceivedQty: newRec,
+              totalReceived: newRec,
+              totalRemainingQty: Math.max(0, newOrd - newRec),
+              receivingProgressPct: newOrd > 0 ? ((newRec / newOrd) * 100).toFixed(1) : (isClosed ? '100.0' : '0.0'),
+              grnCount: (Number(p.grnCount) || 0) + 1
+            };
+          }
+          return p;
+        }));
+      }
+      fetchZohoPOs(true);
+    };
+
     window.addEventListener('controlroom_po_updated', handlePoPush);
     window.addEventListener('controlroom_storage_update', handlePoPush);
+    window.addEventListener('controlroom_grn_completed', handleGrnCompleted);
 
     // Auto-poll Zoho Books POs silently in background every 30 seconds as fallback
     const pollInterval = setInterval(() => {
@@ -372,6 +412,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     return () => {
       window.removeEventListener('controlroom_po_updated', handlePoPush);
       window.removeEventListener('controlroom_storage_update', handlePoPush);
+      window.removeEventListener('controlroom_grn_completed', handleGrnCompleted);
       clearInterval(pollInterval);
     };
   }, []);
