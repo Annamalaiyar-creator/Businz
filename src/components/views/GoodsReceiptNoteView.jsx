@@ -869,7 +869,7 @@ export default function GoodsReceiptNoteView(props) {
 
   const [grnValidationModal, setGrnValidationModal] = useState(null);
 
-  const handleSaveAndReceive = () => {
+  const handleSaveAndReceive = async () => {
     const missing = [];
     if (!selectedGRNPo) missing.push('Purchase Order');
     if (!selectedGRNVendor) missing.push('Vendor');
@@ -963,9 +963,12 @@ export default function GoodsReceiptNoteView(props) {
       const rawStored = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]';
       const parsed = JSON.parse(rawStored);
       const updatedGrns = [newGRNRecord, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== newGRNRecord.id) : [])];
-      localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedGrns));
-      localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedGrns));
-      saveCloudStoreImmediate('grn_store', updatedGrns).catch(() => {});
+      try {
+        localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedGrns));
+        localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedGrns));
+      } catch (_) {}
+      const sanitizedGrns = updatedGrns.map(stripDataUrlsFromRecord);
+      saveCloudStoreImmediate('grn_store', sanitizedGrns).catch(() => {});
     } catch (_) {}
 
     // 3. IMMEDIATE PERSISTENCE: PO Store (Supabase Cloud + LocalStorage)
@@ -1000,8 +1003,14 @@ export default function GoodsReceiptNoteView(props) {
 
     // 4. IMMEDIATE PERSISTENCE: Inward Inventory Stock
     try {
-      const rawStored = localStorage.getItem('controlroom_raw_materials_store') || '[]';
-      const rawMats = JSON.parse(rawStored);
+      let rawMats = [];
+      try {
+        const rawStored = localStorage.getItem('controlroom_raw_materials_store');
+        if (rawStored) rawMats = JSON.parse(rawStored);
+      } catch (_) {}
+      if (!Array.isArray(rawMats) || rawMats.length === 0) {
+        rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []);
+      }
       if (Array.isArray(rawMats) && rawMats.length > 0) {
         let anyUpdated = false;
         const updatedRaw = rawMats.map(rm => {
@@ -1033,7 +1042,9 @@ export default function GoodsReceiptNoteView(props) {
           return rm;
         });
         if (anyUpdated) {
-          localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+          } catch (_) {}
           saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
           window.dispatchEvent(new Event('central_inventory_updated'));
           window.dispatchEvent(new Event('controlroom_raw_materials_update'));
@@ -1060,7 +1071,7 @@ export default function GoodsReceiptNoteView(props) {
     resetCreateGRNForm();
   };
 
-  const handleFullyReceived = () => {
+  const handleFullyReceived = async () => {
     if (!selectedGRNPo) {
       setGrnValidationModal({ title: 'Purchase Order Required', message: 'Please select a Purchase Order to mark as Fully Received.' });
       return;
@@ -1141,9 +1152,12 @@ export default function GoodsReceiptNoteView(props) {
       const rawStored = localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]';
       const parsed = JSON.parse(rawStored);
       const updatedGrns = [newGRNRecord, ...(Array.isArray(parsed) ? parsed.filter(g => (g.grnNo || g.id) !== newGRNRecord.id) : [])];
-      localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedGrns));
-      localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedGrns));
-      saveCloudStoreImmediate('grn_store', updatedGrns).catch(() => {});
+      try {
+        localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(updatedGrns));
+        localStorage.setItem('goods_receipt_notes', JSON.stringify(updatedGrns));
+      } catch (_) {}
+      const sanitizedGrns = updatedGrns.map(stripDataUrlsFromRecord);
+      saveCloudStoreImmediate('grn_store', sanitizedGrns).catch(() => {});
     } catch (_) {}
 
     // 2. IMMEDIATE PERSISTENCE: PO Store
@@ -1168,8 +1182,14 @@ export default function GoodsReceiptNoteView(props) {
 
     // 3. IMMEDIATE PERSISTENCE: Inward Inventory Stock
     try {
-      const rawStored = localStorage.getItem('controlroom_raw_materials_store') || '[]';
-      const rawMats = JSON.parse(rawStored);
+      let rawMats = [];
+      try {
+        const rawStored = localStorage.getItem('controlroom_raw_materials_store');
+        if (rawStored) rawMats = JSON.parse(rawStored);
+      } catch (_) {}
+      if (!Array.isArray(rawMats) || rawMats.length === 0) {
+        rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []);
+      }
       if (Array.isArray(rawMats) && rawMats.length > 0) {
         let anyUpdated = false;
         const updatedRaw = rawMats.map(rm => {
@@ -1201,7 +1221,9 @@ export default function GoodsReceiptNoteView(props) {
           return rm;
         });
         if (anyUpdated) {
-          localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedRaw));
+          } catch (_) {}
           saveCloudStoreImmediate('raw_materials_store', updatedRaw).catch(() => {});
           window.dispatchEvent(new Event('central_inventory_updated'));
           window.dispatchEvent(new Event('controlroom_raw_materials_update'));
