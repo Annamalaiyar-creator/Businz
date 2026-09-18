@@ -1,5 +1,34 @@
 [
   {
+    "id": "4080449000000525001",
+    "poNo": "PO-00136",
+    "zohoId": "4080449000000525001",
+    "vendor": "Annamalaiyar",
+    "poDate": "2026-09-18",
+    "deliveryDate": "2026-09-19",
+    "paymentTerms": "Due on Receipt",
+    "deliveryAddress": "Tamil Nadu, India",
+    "billingAddress": "Annamalaiyar, Main Road, Industrial Estate, Tamil Nadu - 600028, India",
+    "notes": "",
+    "terms": "1. Material: Aluminium Profile as per approved drawing/specification.\n2. Quantity: As per Purchase Order.\n3. Quality: Material should be free from dents, scratches, bends, and manufacturing defects.\n4. Test Certificate: Material Test Certificate (MTC) to be provided along with the material.\n5. Delivery: Material to be supplied as per the delivery schedule mentioned in the PO.\n6. Packing: Proper packing to be ensured to avoid transit damage.\n7. Inspection: Material is subject to inspection and acceptance at our site.\n8. Payment Terms: 30 days credit from the date of material receipt and invoice submission.\n9. Taxes: GST shall be applicable as per government norms.\n10. Rejected or damaged material, if any, shall be replaced by the supplier at no additional cost.",
+    "amount": "₹ 19,50,000.00",
+    "status": "Draft",
+    "items": [
+      {
+        "name": "MODULE - ADANI BIFACIAL DCR 540wp",
+        "sku": "",
+        "description": "",
+        "account": "Cost of Goods Sold",
+        "qty": 150,
+        "unit": "NOS",
+        "rate": 13000,
+        "tax": 18,
+        "previouslyReceived": 0,
+        "remainingQty": 150
+      }
+    ]
+  },
+  {
     "id": "4080449000000521001",
     "poNo": "PO-00135",
     "zohoId": "4080449000000521001",
@@ -134,7 +163,6 @@
     "status": "Draft",
     "statusType": "draft",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -182,8 +210,8 @@
     "approver": "",
     "approvalPriority": "",
     "amount": "₹ 2,36,000.00",
-    "status": "Payment Processed",
-    "statusType": "payment_processed",
+    "status": "Proceed PO",
+    "statusType": "proceed_po",
     "grnCount": 0,
     "totalReceived": 0,
     "items": [
@@ -217,6 +245,16 @@
       "time": "09:30 am",
       "remarks": "Payment recorded by Accounts",
       "verifiedBy": "Accounts Team"
+    },
+    "proceedDetails": {
+      "date": "18 Sept 2026",
+      "time": "10:12 am",
+      "remarks": "Authorized for dispatch and GRN creation",
+      "authorizedBy": "Procurement Head",
+      "vendorEmail": "",
+      "emailDispatched": false,
+      "emailSentAt": "2026-09-18T04:42:56.302Z",
+      "deliveryStatus": "Authorized (Ready for GRN)"
     }
   },
   {
@@ -361,7 +399,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MODULE - ADANI BIFACIAL DCR 540wp",
@@ -413,7 +450,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MODULE - ADANI BIFACIAL DCR 540wp",
@@ -465,7 +501,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MODULE - ADANI BIFACIAL DCR 540wp",
@@ -517,7 +552,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -569,7 +603,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -621,7 +654,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 500000,
     "grnHistory": []
@@ -660,7 +692,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "Solar Aluminum Mounting Rail",
@@ -711,7 +742,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -762,7 +792,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -813,7 +842,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 950000,
     "grnHistory": []
@@ -852,7 +880,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -903,7 +930,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -942,7 +968,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -981,7 +1006,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -1020,7 +1044,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -1059,7 +1082,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -1098,7 +1120,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -1137,7 +1158,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -1176,7 +1196,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1225000,
     "grnHistory": []
@@ -1215,7 +1234,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 640000,
     "grnHistory": []
@@ -1254,7 +1272,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 640000,
     "grnHistory": []
@@ -1293,7 +1310,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 640000,
     "grnHistory": []
@@ -1332,7 +1348,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 76800,
     "grnHistory": []
@@ -1371,7 +1386,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 76800,
     "grnHistory": []
@@ -1410,7 +1424,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 76800,
     "grnHistory": []
@@ -1449,7 +1462,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 614500,
     "grnHistory": []
@@ -1488,7 +1500,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 420000,
     "grnHistory": []
@@ -1527,7 +1538,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 554400,
     "grnHistory": []
@@ -1566,7 +1576,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 110000,
     "grnHistory": []
@@ -1605,7 +1614,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 554400,
     "grnHistory": []
@@ -1644,7 +1652,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 525000,
     "grnHistory": []
@@ -1683,7 +1690,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1440000,
     "grnHistory": []
@@ -1722,7 +1728,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 420000,
     "grnHistory": []
@@ -1761,7 +1766,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [
       {
         "name": "MINI RAIL 100mm (300mm) NEW",
@@ -1812,7 +1816,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 7500,
     "grnHistory": []
@@ -1851,7 +1854,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 17500,
     "grnHistory": []
@@ -1890,7 +1892,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 30000,
     "grnHistory": []
@@ -1929,7 +1930,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 172500,
     "grnHistory": []
@@ -1968,7 +1968,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 300000,
     "grnHistory": []
@@ -2007,7 +2006,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 30000,
     "grnHistory": []
@@ -2046,7 +2044,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 12500,
     "grnHistory": []
@@ -2085,7 +2082,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 12500,
     "grnHistory": []
@@ -2124,7 +2120,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5000,
     "grnHistory": []
@@ -2163,7 +2158,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 7500,
     "grnHistory": []
@@ -2202,7 +2196,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5000,
     "grnHistory": []
@@ -2241,7 +2234,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 2301,
     "grnHistory": []
@@ -2280,7 +2272,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5900000,
     "grnHistory": []
@@ -2319,7 +2310,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 472000,
     "grnHistory": []
@@ -2358,7 +2348,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 472000,
     "grnHistory": []
@@ -2397,7 +2386,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 472000,
     "grnHistory": []
@@ -2436,7 +2424,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5900000,
     "grnHistory": []
@@ -2475,7 +2462,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5900000,
     "grnHistory": []
@@ -2514,7 +2500,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 47200,
     "grnHistory": []
@@ -2553,7 +2538,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5900000,
     "grnHistory": []
@@ -2592,7 +2576,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5900000,
     "grnHistory": []
@@ -2631,7 +2614,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 500000,
     "grnHistory": []
@@ -2670,7 +2652,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5000000,
     "grnHistory": []
@@ -2709,7 +2690,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 500000,
     "grnHistory": []
@@ -2748,7 +2728,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 40000,
     "grnHistory": []
@@ -2787,7 +2766,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 500000,
     "grnHistory": []
@@ -2826,7 +2804,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 1100000,
     "grnHistory": []
@@ -2865,7 +2842,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5000000,
     "grnHistory": []
@@ -2904,7 +2880,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -2943,7 +2918,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5000000,
     "grnHistory": []
@@ -2982,7 +2956,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 500000,
     "grnHistory": []
@@ -3021,7 +2994,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3060,7 +3032,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 240000,
     "grnHistory": []
@@ -3099,7 +3070,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3138,7 +3108,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3177,7 +3146,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3216,7 +3184,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3255,7 +3222,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3294,7 +3260,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3333,7 +3298,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3372,7 +3336,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 20000,
     "grnHistory": []
@@ -3411,7 +3374,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3450,7 +3412,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3489,7 +3450,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3528,7 +3488,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3567,7 +3526,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3606,7 +3564,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 40000,
     "grnHistory": []
@@ -3645,7 +3602,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3684,7 +3640,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3723,7 +3678,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3762,7 +3716,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3801,7 +3754,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3840,7 +3792,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3879,7 +3830,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3918,7 +3868,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 5000000,
     "grnHistory": []
@@ -3957,7 +3906,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -3996,7 +3944,6 @@
     "status": "Draft / Pending Approval",
     "statusType": "pending",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -4035,7 +3982,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 60000,
     "grnHistory": []
@@ -4074,7 +4020,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []
@@ -4113,7 +4058,6 @@
     "status": "OPEN",
     "statusType": "approved",
     "grnCount": 0,
-    "totalReceived": 0,
     "items": [],
     "total": 10000,
     "grnHistory": []

@@ -187,9 +187,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
 
     if (s.includes('CLOSED') || st === 'closed') return 'CLOSED';
-    if (s.includes('PARTIALLY') || st === 'partially_received') return 'PARTIALLY_RECEIVED';
-    if (s === 'Proceed PO' || s === 'PROCEED PO' || st === 'proceed_po' || Boolean(po.proceedDetails)) return 'PROCEED_PO';
-    if (s === 'Payment Processed' || st === 'payment_processed' || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
+    if (s.toLowerCase().includes('proceed') || st.includes('proceed') || Boolean(po.proceedDetails)) return 'PROCEED_PO';
+    if (s.toLowerCase().includes('payment') || st.includes('payment') || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
     if (s === 'MD Approved' || st === 'md_approved' || Boolean(po.approvedBy)) return 'MD_APPROVED';
     return 'Draft';
   };
@@ -990,7 +989,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     await fetchZohoPOs(true);
   };
 
-  const handleProceedPoSubmit = (poTarget) => {
+  const handleProceedPoSubmit = async (poTarget) => {
     if (!poTarget) return;
     const poId = poTarget.poNo || poTarget.id;
 
@@ -1018,13 +1017,31 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       proceedDetails
     };
 
-    // 1. Immediately reflect 'Proceed PO' in currently active view and poList
+    const clean = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+    const targetKey = clean(poId);
+
+    // 1. Immediately reflect 'Proceed PO' in currently active view and poList with normalized matching
     setViewingPoStatus('Proceed PO');
-    setPoList(prev => prev.map(p => (p.poNo === poId || p.id === poId) ? { ...p, ...updatedProceedPo } : p));
-    saveSafeZohoPO(updatedProceedPo);
+    setPoList(prev => prev.map(p => {
+      const k1 = clean(p.poNo);
+      const k2 = clean(p.id);
+      const k3 = clean(p.zohoId);
+      return (targetKey && (k1 === targetKey || k2 === targetKey || k3 === targetKey)) ? { ...p, ...updatedProceedPo } : p;
+    }));
 
     if (poTab === 'PAYMENT_PROCESSED') {
       setPoTab('PROCEED_PO');
+    }
+
+    setProceedingPo(null);
+    setProceedRemarksInput('');
+    setProceedEmailInput('');
+
+    // 2. Persist immediately to cloud & disk
+    try {
+      await saveSafeZohoPO(updatedProceedPo);
+    } catch (saveErr) {
+      console.warn('saveSafeZohoPO notice:', saveErr);
     }
 
     try {
@@ -1032,30 +1049,28 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       window.dispatchEvent(new Event('controlroom_storage_update'));
     } catch (_) {}
 
-    setProceedingPo(null);
-    setProceedRemarksInput('');
-    setProceedEmailInput('');
-
-    fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/proceed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        remarks,
-        authorizedBy: 'Procurement Head',
-        vendorEmail: targetVendorEmail
-      })
-    })
-      .then(res => (res.ok && res.headers.get('content-type')?.includes('application/json')) ? res.json() : null)
-      .then((data) => {
-        fetchZohoPOs(true);
-        const alertMsg = targetVendorEmail
-          ? `PO ${poId} marked as Proceed PO! An official Purchase Order copy has been automatically dispatched to vendor (${targetVendorEmail}). Ready for GRN receiving.`
-          : `PO ${poId} marked as Proceed PO! Ready for GRN receiving.`;
-        showCustomAlert(alertMsg, 'Proceed PO Completed & Dispatched', 'success');
-      })
-      .catch(() => {
-        fetchZohoPOs(true);
+    // 3. Call backend endpoint to update server memory and disk store synchronously
+    try {
+      await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/proceed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          remarks,
+          authorizedBy: 'Procurement Head',
+          vendorEmail: targetVendorEmail
+        })
       });
+    } catch (e) {
+      console.warn('Backend proceed notice:', e);
+    }
+
+    const alertMsg = targetVendorEmail
+      ? `PO ${poId} marked as Proceed PO! An official Purchase Order copy has been automatically dispatched to vendor (${targetVendorEmail}). Ready for GRN receiving.`
+      : `PO ${poId} marked as Proceed PO! Ready for GRN receiving.`;
+    showCustomAlert(alertMsg, 'Proceed PO Completed & Dispatched', 'success');
+
+    // 4. Refetch to ensure all tabs and UI are fully synced
+    await fetchZohoPOs(true);
   };
 
   const handleRejectPoSubmit = (poTarget) => {

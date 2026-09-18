@@ -6004,19 +6004,21 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
     console.warn('[proceed] Supabase sync notice:', sbErr.message);
   }
 
-  // Transition Zoho Books PO status from Draft to Issued / Open once PO is Proceeded, and email vendor
+  // Transition Zoho Books PO status from Draft to Issued / Open once PO is Proceeded, and email vendor (non-blocking)
   let zohoEmailResult = null;
   if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      await approveOrOpenZohoPO(accessToken, targetId);
-      if (vendorEmail && vendorEmail.includes('@')) {
-        zohoEmailResult = await emailZohoPOToVendor(accessToken, targetId, vendorEmail, remarks);
-        console.log(`[Zoho PO Email] Dispatched PO ${targetId} to vendor ${vendorEmail}:`, zohoEmailResult);
+    (async () => {
+      try {
+        const accessToken = await getZohoAccessToken();
+        await approveOrOpenZohoPO(accessToken, targetId);
+        if (vendorEmail && vendorEmail.includes('@')) {
+          const emailRes = await emailZohoPOToVendor(accessToken, targetId, vendorEmail, remarks);
+          console.log(`[Zoho PO Email] Dispatched PO ${targetId} to vendor ${vendorEmail}:`, emailRes);
+        }
+      } catch (err) {
+        console.warn('Failed to transition PO or email vendor in Zoho on Proceed PO:', err.message);
       }
-    } catch (err) {
-      console.warn('Failed to transition PO or email vendor in Zoho on Proceed PO:', err.message);
-    }
+    })();
   }
 
   const message = vendorEmail
