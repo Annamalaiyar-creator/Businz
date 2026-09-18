@@ -3,6 +3,21 @@
 ## Application Identity & Branding
 - This application is **BUSINZ** (not Control Room). All user-facing references, communications, and documentation MUST strictly use the name **BUSINZ**.
 
+## Strict Frozen Workflows (LOCKED BY USER)
+The following core workflows and modules have been thoroughly tested, verified, and are **STRICTLY LOCKED & FROZEN**. Do NOT alter, refactor, or modify these flows without explicit written user instruction:
+1. **PI Flow (Proforma Invoices)**:
+   - File references: `SalesProformaInvoicesView.jsx`, `CreateProformaInvoiceModal.jsx`, and associated PI store routines.
+   - Status: **LOCKED & FROZEN**.
+2. **BOM Flow (Bill of Materials)**:
+   - File references: `BomOrdersView.jsx`, `CreateBomFormPage.jsx`, BOM order synchronization, document upload & compression, and sales confirmation.
+   - Status: **LOCKED & FROZEN**.
+3. **PO Flow (Purchase Orders & Zoho Books Integration)**:
+   - File references: `PurchaseOrdersView.jsx`, `CreatePurchaseOrderModal.jsx`, Zoho sequence numbering (`PO-000XX`), disk persistence (`po_store.json`), and payload formatting.
+   - Status: **LOCKED & FROZEN**.
+4. **Inventory Flow**:
+   - File references: `RawMaterialInventoryView.jsx`, `GoodsReceiptNoteView.jsx`, `centralInventoryStore.js`, GRN inwarding, stock deduction reconciliation, and live item audit log tracking.
+   - Status: **LOCKED & FROZEN**.
+
 ## Purchase Order (PO) & Zoho Books Integration Rules
 
 1. **PO Numbering Sequence**:
