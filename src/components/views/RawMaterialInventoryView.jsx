@@ -3158,7 +3158,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       {/* 4. MAIN DATA TABLE (EXACT MATCH FOR BOM & PO DESIGN) */}
       <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
         <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table className="custom-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+          <table className="custom-table" style={{ width: '100%', minWidth: '1150px', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold' }}>
                 <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
@@ -3169,15 +3169,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                   />
                 </th>
-                <th style={{ padding: '12px 14px', width: '140px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Code</th>
-                <th style={{ padding: '12px 14px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Description</th>
-                <th style={{ padding: '12px 14px', width: '130px', fontWeight: 'bold', boxSizing: 'border-box' }}>Category</th>
-                <th style={{ padding: '12px 14px', width: '80px', fontWeight: 'bold', boxSizing: 'border-box' }}>UOM</th>
-                <th style={{ padding: '12px 14px', width: '130px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Available Stock</th>
-                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Reserved</th>
-                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Physical Stock</th>
-                <th style={{ padding: '12px 14px', width: '90px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Min. Level</th>
-                <th style={{ padding: '12px 14px', width: '110px', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                <th style={{ padding: '12px 14px', width: '140px', minWidth: '130px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Code</th>
+                <th style={{ padding: '12px 14px', minWidth: '220px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Description</th>
+                <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', fontWeight: 'bold', boxSizing: 'border-box' }}>Category</th>
+                <th style={{ padding: '12px 14px', width: '80px', minWidth: '70px', fontWeight: 'bold', boxSizing: 'border-box' }}>UOM</th>
+                <th style={{ padding: '12px 14px', width: '125px', minWidth: '115px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Available Stock</th>
+                <th style={{ padding: '12px 14px', width: '105px', minWidth: '95px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Reserved</th>
+                <th style={{ padding: '12px 14px', width: '115px', minWidth: '105px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Physical Stock</th>
+                <th style={{ padding: '12px 14px', width: '95px', minWidth: '85px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Min. Level</th>
+                <th style={{ padding: '12px 16px', width: '135px', minWidth: '135px', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -3193,7 +3193,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                     <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                     <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'center' }}><div style={{ width: '70px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                    <td style={{ padding: '14px 16px', width: '135px', textAlign: 'center', boxSizing: 'border-box' }}><div style={{ width: '85px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                   </tr>
                 ))
               ) : currentMaterialsPage.map((m, idx) => {
@@ -3310,8 +3310,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     </td>
 
                     {/* Status Badge */}
-                    <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <td style={{ padding: '12px 16px', width: '135px', minWidth: '135px', textAlign: 'center', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
+                      <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: stFg }}></span>
                         {m.status}
                       </span>
