@@ -253,7 +253,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             name: it.name || existing.name,
             stock: itStock,
             openingStock: it.openingStock !== undefined ? Number(it.openingStock) : 0,
-            goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
+            goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
             status: itStock > 0 ? 'In Stock' : 'Out of Stock',
             lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
             grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
@@ -506,7 +506,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               name: it.name || existing.name,
               stock: finalStock,
               openingStock: existing.openingStock || 0,
-              goodsReceived: recQty > 0 ? (existing.goodsReceived || 0) + recQty : (existing.goodsReceived || 0),
+              goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
               status: finalStock === 0 ? 'Out of Stock' : (finalStock <= (existing.minLevel || 50) ? 'Low Stock' : 'In Stock'),
               lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
               grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
@@ -653,8 +653,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           isMr300Only ? (bomAllocations.get('MR-300MM') || bomAllocations.get('MR300') || 0) : 0
         );
 
-        let base = Math.max(0, parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0);
         const grnQty = Number(m.goodsReceived || 0);
+        let base = Math.max(0, parseFloat(
+          m.openingStock !== undefined 
+            ? m.openingStock 
+            : (grnQty > 0 ? 0 : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0)))
+        ) || 0);
 
         if (base === 0 && grnQty === 0) {
           m.openingStock = 0;
@@ -667,23 +671,24 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           return;
         }
 
-        // If the item already has an authoritative stock and reserved count from server / cloud
-        // (e.g. stock: 4800, reserved: 200, physical: 5000), prioritize that authoritative state directly
-        // rather than double-recalculating from un-synchronized local storage.
+        // Authoritative physical warehouse stock is initial opening baseline + all received GRNs
+        const totalPhysical = base + grnQty;
+
+        // Reconcile available free stock and reserved allocations
         let rem;
         let finalReserved = allocated;
         if (allocated > 0) {
           finalReserved = allocated;
-          rem = Math.max(0, base + grnQty - allocated);
-        } else if (m.stock !== undefined && m.reserved !== undefined && Number(m.reserved) > 0 && Number(m.stock) + Number(m.reserved) === base + grnQty) {
+          rem = Math.max(0, totalPhysical - allocated);
+        } else if (m.stock !== undefined && m.reserved !== undefined && Number(m.reserved) > 0 && Number(m.stock) + Number(m.reserved) === totalPhysical) {
           rem = Number(m.stock);
           finalReserved = Number(m.reserved);
         } else {
-          rem = Math.max(0, base + grnQty - (Number(m.reserved) || 0));
+          rem = Math.max(0, totalPhysical - (Number(m.reserved) || 0));
         }
 
         m.openingStock = base;
-        m.physicalStock = base;
+        m.physicalStock = totalPhysical;
         m.stock = rem;
         m.availableStock = rem;
         m.reserved = finalReserved;
@@ -1024,17 +1029,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             id: entry.id || `TX-${Date.now()}`,
             timestamp: entry.dateTime || entry.timestamp || 'Production Log',
             type: entry.type || 'PRODUCTION_LOG',
-            typeName: entry.type === 'PRODUCTION_RECEIPT' ? 'Production Output Inward' : (entry.type === 'PRODUCTION_CONSUMPTION' ? 'Raw Material Consumption' : 'Inventory Transaction'),
-            typeColor: entry.type === 'PRODUCTION_RECEIPT' ? '#16A34A' : '#4F46E5',
-            typeBg: entry.type === 'PRODUCTION_RECEIPT' ? '#F0FDF4' : '#EEF2FF',
-            typeBorder: entry.type === 'PRODUCTION_RECEIPT' ? '#DCFCE7' : '#E0E7FF',
+            typeName: entry.type === 'PRODUCTION_RECEIPT' ? 'Production Output Inward' : (entry.type === 'PRODUCTION_CONSUMPTION' ? 'Raw Material Consumption' : (entry.type === 'OPENING_STOCK' ? 'Opening Stock Balance' : 'Inventory Transaction')),
+            typeColor: entry.type === 'PRODUCTION_RECEIPT' ? '#16A34A' : (entry.type === 'OPENING_STOCK' ? '#2563EB' : '#4F46E5'),
+            typeBg: entry.type === 'PRODUCTION_RECEIPT' ? '#F0FDF4' : (entry.type === 'OPENING_STOCK' ? '#EFF6FF' : '#EEF2FF'),
+            typeBorder: entry.type === 'PRODUCTION_RECEIPT' ? '#DCFCE7' : (entry.type === 'OPENING_STOCK' ? '#DBEAFE' : '#E0E7FF'),
             referenceDoc: entry.refNo || entry.sourceDoc || 'WO-Record',
             itemCode: selectedMat.code,
             itemName: selectedMat.name,
             qty: entry.direction === 'IN' ? +(entry.qty || 0) : -(entry.qty || 0),
             unit: entry.unit || selectedMat.unit || 'NOS',
-            previousStock: entry.previousStock,
-            newStock: entry.newStock,
+            previousStock: entry.previousStock !== undefined ? entry.previousStock : (entry.type === 'OPENING_STOCK' ? 0 : undefined),
+            newStock: entry.newStock !== undefined ? entry.newStock : (entry.type === 'OPENING_STOCK' ? (entry.qty || 0) : undefined),
             user: entry.user || 'Production Head',
             role: entry.department || 'Production & Quality',
             reason: entry.remarks || `Production operation entry for ${selectedMat.name}.`,
@@ -1046,7 +1051,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     } catch (_) {}
 
     // 4. Initial Physical Stock Baseline Setup
-    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
+    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : 0) || 0);
     logs.push({
       id: `INIT-${selectedMat.code}`,
       timestamp: 'Initial Setup Baseline',
@@ -2242,7 +2247,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const stFg = isOut ? '#B91C1C' : isLow ? '#C2410C' : '#15803D';
     const stBorder = isOut ? '1px solid #FEE2E2' : isLow ? '1px solid #FFEDD5' : '1px solid #DCFCE7';
 
-    const physicalStockVal = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
+    const physicalStockVal = Math.max(0, parseFloat(selectedMat.physicalStock !== undefined ? selectedMat.physicalStock : (selectedMat.stock !== undefined ? selectedMat.stock : (selectedMat.openingStock || 0))) || 0);
     const reservedVal = Math.max(0, parseFloat(selectedMat.reserved !== undefined ? selectedMat.reserved : (selectedMat.blockedForBom || 0)) || 0);
     const availableVal = Math.max(0, parseFloat(selectedMat.stock !== undefined ? selectedMat.stock : (physicalStockVal - reservedVal)) || 0);
     const minLevelVal = Math.max(0, parseFloat(selectedMat.minLevel !== undefined ? selectedMat.minLevel : (selectedMat.reorderLevel || 50)) || 50);
