@@ -7,28 +7,37 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-# dist included for Plesk Windows deployment
-dist-ssr
-*.local
-server/zoho_token_cache.json
+# Node dependencies
+node_modules/
 
-# Editor directories and files
+# Production build artifacts
+dist/
+dist-ssr/
+build/
+*.local
+
+# Token and cache files
+server/zoho_token_cache.json
+server/backups/
+backups/
+backup_recovered/
+
+# Environment files & Secrets
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.env
-backup_recovered/
-backups/
-server/backups/
 
-.vercel
-
-# Mobile builds
+# Deployment & Mobile builds
+.vercel/
 android/

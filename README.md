@@ -1,16 +1,52 @@
-# React + Vite
+# BUSINZ - CRM & Operations Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Enterprise-grade CRM, Sales, Bill of Materials (BOM), Procurement, and Operations Management Platform built for agile enterprise manufacturing and trading operations.
 
-Currently, two official plugins are available:
+## Tech Stack
+- **Frontend**: React 19, Vite, Lucide React, Custom Responsive UI Design System
+- **Backend**: Node.js, Express, Local JSON Zero-Data-Loss Store Engine, Supabase PostgreSQL Sync Engine
+- **Mobile**: Capacitor (Android / iOS)
+- **Integrations**: Zoho Books API, Tally ERP / Prime Sync Engine
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Project Structure
+- `src/` - React frontend application and components
+  - `components/` - Module views (BOM, PI, PO, Inventory, CRM, Accounting, Dispatch)
+  - `utils/` - Synchronization engines, XML generators, formatters
+- `server/` - Backend Express API and persistence services
+  - `index.js` - API server endpoints
+  - `tallyService.js` - Tally integration service
+  - `backupEngine.js` - Automated snapshot and backup engine
+  - `*.json` - Local persistent data stores (Zero-data-loss system)
+- `scripts/` - Administrative and maintenance utilities
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Prerequisites
+- Node.js >= 18.0.0
+- npm >= 9.0.0
 
-## Expanding the Oxlint configuration
+### 2. Environment Configuration
+Copy `.env.example` to `.env` and fill in your credentials:
+```bash
+cp .env.example .env
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+### 3. Install Dependencies
+```bash
+npm install
+```
+
+### 4. Running Locally
+Start backend proxy server:
+```bash
+npm run server
+```
+Start frontend development server:
+```bash
+npm run dev
+```
+
+### 5. Production Build
+```bash
+npm run build
+```

@@ -88,7 +88,7 @@ export default function MobileDashboardView({ userRole, onNavigateTab }) {
       }}>
         <div>
           <div style={{ fontSize: '11px', color: '#38BDF8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Control Room Mobile
+            BUSINZ Mobile
           </div>
           <h2 style={{ fontSize: '18px', fontWeight: '800', margin: '4px 0 2px 0' }}>
             {userName}

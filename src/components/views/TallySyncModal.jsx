@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, RefreshCw, CheckCircle, AlertTriangle, FileCode, Check, Server, ExternalLink, HelpCircle } from 'lucide-react';
+import { X, Download, RefreshCw, CheckCircle, AlertTriangle, FileCode, Check, Server, ExternalLink, HelpCircle, Zap, Layers } from 'lucide-react';
 import { generateTallySalesInvoicesXml, generateTallyPurchaseOrdersXml, downloadTallyXmlFile } from '../../utils/tallyXmlGenerator';
 
 export default function TallySyncModal({
@@ -11,7 +11,7 @@ export default function TallySyncModal({
 }) {
   if (!isOpen) return null;
 
-  const [companyName, setCompanyName] = useState(() => localStorage.getItem('businz_tally_company') || 'VRM ENERGY PVT LTD');
+  const [companyName, setCompanyName] = useState(() => localStorage.getItem('businz_tally_company') || 'VRM STRUCTURES INDIA PRIVATE LIMITED');
   const [salesLedger, setSalesLedger] = useState('Sales - GST');
   const [tallyStatus, setTallyStatus] = useState({ checking: true, online: false, message: 'Checking Tally HTTP server...' });
   const [syncingDirect, setSyncingDirect] = useState(false);
@@ -81,8 +81,8 @@ export default function TallySyncModal({
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setSyncResult({ success: true, message: `✅ Successfully posted ${records.length} voucher(s) directly to TallyPrime!` });
-        if (showAlert) showAlert(`✅ Success! Vouchers synchronized with TallyPrime.`);
+        setSyncResult({ success: true, message: `Successfully posted ${records.length} voucher(s) directly to TallyPrime!` });
+        if (showAlert) showAlert(`Success! Vouchers synchronized with TallyPrime.`);
       } else {
         setSyncResult({
           success: false,
@@ -152,7 +152,7 @@ export default function TallySyncModal({
               fontSize: '20px',
               fontWeight: '900'
             }}>
-              📊
+              <Layers size={20} style={{ color: '#FFFFFF' }} />
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', letterSpacing: '-0.02em' }}>
@@ -254,7 +254,7 @@ export default function TallySyncModal({
                 type="text"
                 value={companyName}
                 onChange={(e) => handleSaveCompany(e.target.value)}
-                placeholder="e.g. VRM ENERGY PVT LTD"
+                placeholder="e.g. VRM STRUCTURES INDIA PRIVATE LIMITED"
                 style={{
                   width: '100%',
                   padding: '9px 12px',
@@ -303,23 +303,20 @@ export default function TallySyncModal({
             </div>
           )}
 
-          {/* Import Guide instructions */}
+          {/* Automated Direct Sync Notice */}
           <div style={{
-            backgroundColor: '#F8FAFC',
-            border: '1px solid #E2E8F0',
+            backgroundColor: '#ECFEFF',
+            border: '1px solid #A5F3FC',
             borderRadius: '12px',
             padding: '14px 18px'
           }}>
-            <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <HelpCircle size={14} style={{ color: '#0E7490' }} />
-              How to Import in TallyPrime:
+            <div style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={14} style={{ color: '#0E7490' }} />
+              100% Automated Direct Sync (Zero Files Required):
             </div>
-            <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '11.5px', color: '#475569', lineHeight: '1.6' }}>
-              <li>Click <strong>Download Tally XML (.xml)</strong> below.</li>
-              <li>Open <strong>TallyPrime</strong> and select your Company.</li>
-              <li>Go to <strong>Import (Alt + O)</strong> ➔ <strong>Transactions</strong>.</li>
-              <li>Select File Format <strong>XML</strong> and choose the downloaded file.</li>
-            </ol>
+            <p style={{ margin: 0, fontSize: '12px', color: '#155E75', lineHeight: '1.5' }}>
+              When you click <strong>"Sync Now to Tally Prime"</strong>, BUSINZ sends data directly across Port 9000 into Tally's live memory in milliseconds. No files need to be exported, saved, or manually imported.
+            </p>
           </div>
 
           {/* Optional XML Preview collapsible */}
@@ -330,9 +327,9 @@ export default function TallySyncModal({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#0E7490',
-                fontSize: '12px',
-                fontWeight: '700',
+                color: '#64748B',
+                fontSize: '11.5px',
+                fontWeight: '600',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -341,7 +338,7 @@ export default function TallySyncModal({
               }}
             >
               <FileCode size={13} />
-              {showXmlPreview ? 'Hide Raw Tally XML' : 'Preview Raw Tally XML'}
+              {showXmlPreview ? 'Hide Technical Payload' : 'View Technical Payload (For Audit)'}
             </button>
             {showXmlPreview && (
               <pre style={{
@@ -369,70 +366,73 @@ export default function TallySyncModal({
           backgroundColor: '#F8FAFC',
           borderTop: '1px solid #E2E8F0',
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
           gap: '12px'
         }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              backgroundColor: '#FFFFFF',
-              color: '#475569',
-              fontSize: '13px',
-              fontWeight: '700',
-              cursor: 'pointer'
-            }}
-          >
-            Cancel
-          </button>
-
-          {/* Direct Sync (Available when Tally HTTP server is reachable) */}
-          <button
-            onClick={handleDirectSync}
-            disabled={syncingDirect}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '8px',
-              border: '1px solid #0E7490',
-              backgroundColor: '#ECFEFF',
-              color: '#0E7490',
-              fontSize: '13px',
-              fontWeight: '800',
-              cursor: syncingDirect ? 'wait' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            title="Post directly to local Tally HTTP Server (Port 9000)"
-          >
-            <RefreshCw size={14} style={{ animation: syncingDirect ? 'spin 1s linear infinite' : 'none' }} />
-            {syncingDirect ? 'Syncing...' : 'Direct Sync to Tally'}
-          </button>
-
-          {/* Download XML Button (100% Guaranteed works offline & online) */}
+          {/* Secondary fallback */}
           <button
             onClick={handleDownload}
             style={{
-              padding: '10px 20px',
-              borderRadius: '8px',
+              background: 'none',
               border: 'none',
-              backgroundColor: '#0E7490',
-              color: '#FFFFFF',
-              fontSize: '13px',
-              fontWeight: '800',
+              color: '#94A3B8',
+              fontSize: '11px',
+              fontWeight: '600',
               cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+              textDecoration: 'underline'
             }}
+            title="Download offline XML file only if Tally is running on a disconnected air-gapped PC"
           >
-            <Download size={15} />
-            Download Tally XML (.xml)
+            Offline XML Export (Air-gapped only)
           </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={onClose}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                fontSize: '13px',
+                fontWeight: '700',
+                cursor: 'pointer'
+              }}
+            >
+              Close
+            </button>
+
+            {/* Direct Automated Sync (Primary Action) */}
+            <button
+              onClick={handleDirectSync}
+              disabled={syncingDirect}
+              style={{
+                padding: '10px 22px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#0E7490',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: '800',
+                cursor: syncingDirect ? 'wait' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(14, 116, 144, 0.25)'
+              }}
+              title="Post directly to local Tally HTTP Server (Port 9000)"
+            >
+              <RefreshCw size={14} style={{ animation: syncingDirect ? 'spin 1s linear infinite' : 'none' }} />
+              {syncingDirect ? 'Syncing to Tally...' : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={14} />
+                  Sync Now to Tally Prime
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

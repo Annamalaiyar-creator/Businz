@@ -16,6 +16,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { createFullBackup, listBackups, restoreFromBackup } from './backupEngine.js';
+import { checkTallyStatus, fetchTallyPnl, pushDirectVoucher } from './tallyService.js';
 
 dotenv.config();
 
@@ -591,112 +592,101 @@ const saveCredentialsToEnv = (orgId, apiToken, clientId, clientSecret) => {
 // BUSINZ - TALLYPRIME & TALLY.ERP 9 HTTP CONNECTOR & XML INTEGRATION
 // ============================================================================
 
-// Check connectivity to local Tally HTTP Server (Default port 9000)
-app.get('/api/tally/status', (req, res) => {
-  const tallyUrl = process.env.TALLY_URL || 'http://127.0.0.1:9000';
-  let urlObj;
+// Check connectivity to local Tally HTTP Server (Default port 9000) & active companies
+let customTallyUrl = process.env.TALLY_URL || 'http://127.0.0.1:9000';
+let customTallyCompany = 'VRM STRUCTURES INDIA PRIVATE LIMITED';
+
+app.get('/api/tally/status', async (req, res) => {
   try {
-    urlObj = new URL(tallyUrl);
-  } catch (_) {
-    urlObj = new URL('http://127.0.0.1:9000');
+    const targetUrl = req.query.url || customTallyUrl;
+    const result = await checkTallyStatus(targetUrl);
+    if (result.primaryCompany) {
+      customTallyCompany = result.primaryCompany;
+    }
+    res.json({
+      ...result,
+      configuredCompany: customTallyCompany
+    });
+  } catch (err) {
+    res.json({
+      online: false,
+      host: customTallyUrl,
+      message: err.message || 'Tally HTTP Server is offline or unreachable on port 9000.'
+    });
   }
-
-  const testReq = http.request({
-    hostname: urlObj.hostname,
-    port: parseInt(urlObj.port, 10) || 9000,
-    path: '/',
-    method: 'GET',
-    timeout: 2000
-  }, (tResp) => {
-    res.json({
-      online: true,
-      host: `${urlObj.hostname}:${urlObj.port || 9000}`,
-      statusCode: tResp.statusCode,
-      message: 'Tally HTTP Server is online and responding.'
-    });
-  });
-
-  testReq.on('error', () => {
-    res.json({
-      online: false,
-      host: `${urlObj.hostname}:${urlObj.port || 9000}`,
-      message: 'Tally HTTP Server is offline or unreachable on port 9000.'
-    });
-  });
-
-  testReq.on('timeout', () => {
-    testReq.destroy();
-    res.json({
-      online: false,
-      host: `${urlObj.hostname}:${urlObj.port || 9000}`,
-      message: 'Connection to Tally timed out.'
-    });
-  });
-
-  testReq.end();
 });
 
-// Post XML Vouchers directly to Tally HTTP Server
-app.post('/api/tally/sync', (req, res) => {
+// Update Tally configuration (Host URL, Company Name)
+app.post('/api/tally/config', (req, res) => {
+  const { url, company } = req.body || {};
+  if (url) customTallyUrl = url;
+  if (company) customTallyCompany = company;
+  res.json({
+    success: true,
+    url: customTallyUrl,
+    company: customTallyCompany,
+    message: 'Tally configuration updated successfully'
+  });
+});
+
+// Fetch Live Profit & Loss statement directly from Tally Prime (Zero files)
+app.get('/api/tally/pnl', async (req, res) => {
+  const { fromDate, toDate, company } = req.query;
+  const companyName = company || customTallyCompany;
+  try {
+    const pnlData = await fetchTallyPnl(customTallyUrl, companyName, fromDate, toDate);
+    res.json(pnlData);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: 'Failed to retrieve P&L from Tally Prime'
+    });
+  }
+});
+
+// Direct automated voucher sync to Tally HTTP Server (Zero files)
+app.post('/api/tally/direct-sync', async (req, res) => {
+  const { xml, voucherType, recordCount, companyName } = req.body;
+  if (!xml) {
+    return res.status(400).json({ success: false, message: 'Voucher XML payload is required' });
+  }
+
+  try {
+    const targetCompany = companyName || customTallyCompany;
+    const result = await pushDirectVoucher(xml, customTallyUrl);
+    res.json({
+      ...result,
+      company: targetCompany,
+      recordCount: recordCount || 1,
+      voucherType: voucherType || 'Voucher'
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: 'Direct sync to Tally Prime failed'
+    });
+  }
+});
+
+// Post XML Vouchers directly to Tally HTTP Server (Legacy / Direct)
+app.post('/api/tally/sync', async (req, res) => {
   const { xml, type, recordCount, companyName } = req.body;
   if (!xml) {
     return res.status(400).json({ success: false, message: 'Tally XML payload is required' });
   }
 
-  const tallyUrl = process.env.TALLY_URL || 'http://127.0.0.1:9000';
-  let urlObj;
   try {
-    urlObj = new URL(tallyUrl);
-  } catch (_) {
-    urlObj = new URL('http://127.0.0.1:9000');
+    const result = await pushDirectVoucher(xml, customTallyUrl);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: 'Tally HTTP server not reachable on port 9000'
+    });
   }
-
-  const xmlBuffer = Buffer.from(xml, 'utf8');
-
-  const tallyReq = http.request({
-    hostname: urlObj.hostname,
-    port: parseInt(urlObj.port, 10) || 9000,
-    path: '/',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml;charset=utf-8',
-      'Content-Length': xmlBuffer.length
-    },
-    timeout: 8000
-  }, (tResp) => {
-    let tBody = '';
-    tResp.on('data', chunk => tBody += chunk);
-    tResp.on('end', () => {
-      console.log(`[BUSINZ Tally Sync] Received response from Tally (${tResp.statusCode})`);
-      const hasErrors = tBody.includes('<LINEERROR>') || tBody.includes('<ERROR>');
-      res.json({
-        success: !hasErrors,
-        statusCode: tResp.statusCode,
-        tallyRawResponse: tBody.slice(0, 500),
-        message: hasErrors ? 'Tally returned an import notice or error.' : `Successfully synchronized ${recordCount || 1} voucher(s) with Tally!`
-      });
-    });
-  });
-
-  tallyReq.on('error', (err) => {
-    console.warn('[BUSINZ Tally Sync] Tally HTTP server not reachable:', err.message);
-    res.status(503).json({
-      success: false,
-      offline: true,
-      message: `Could not connect to Tally HTTP server on ${urlObj.hostname}:${urlObj.port || 9000}. Please ensure TallyPrime HTTP server is enabled or download the XML file for manual import.`
-    });
-  });
-
-  tallyReq.on('timeout', () => {
-    tallyReq.destroy();
-    res.status(504).json({
-      success: false,
-      message: 'Connection to Tally timed out.'
-    });
-  });
-
-  tallyReq.write(xmlBuffer);
-  tallyReq.end();
 });
 
 // 1. Check Connection Status and Credentials

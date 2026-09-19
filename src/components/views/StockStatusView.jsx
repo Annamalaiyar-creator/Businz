@@ -3056,7 +3056,7 @@ export default function StockStatusView(props) {
                                   border: `1px solid ${badgeColors.border}`,
                                   whiteSpace: 'nowrap'
                                 }}>
-                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: badgeColors.color, display: 'inline-block' }} />
+                                  <span style={{ width: '6px', height: '6px', minWidth: '6px', minHeight: '6px', borderRadius: '50%', backgroundColor: badgeColors.color, display: 'inline-block', flexShrink: 0 }} />
                                   {row.status}
                                 </span>
                               </td>

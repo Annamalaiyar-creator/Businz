@@ -1,13 +1,14 @@
 #!/bin/bash
 # ==============================================================================
 # Control Room Enterprise ERP - Zero-Data-Loss Safe Deployment Script
+# BUSINZ Enterprise ERP - Zero-Data-Loss Safe Deployment Script
 # This script ensures an automated full backup (Data + Media) is created and
 # verified BEFORE any code updates or service restarts are performed.
 # ==============================================================================
 
 set -e
 
-echo "🚀 [Control Room] Initiating Zero-Data-Loss Safe Deployment..."
+echo "🚀 [BUSINZ] Initiating Zero-Data-Loss Safe Deployment..."
 echo "🕒 Timestamp: $(date)"
 
 # STEP 1: Execute Full Pre-Deployment Backup

@@ -74,11 +74,11 @@ export default function MobileLayout({
             fontWeight: '900',
             fontSize: '15px'
           }}>
-            CR
+            BZ
           </div>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.1 }}>
-              Control Room
+              BUSINZ
             </div>
             <div
               onClick={() => setShowRoleDrawer(!showRoleDrawer)}

@@ -2347,8 +2347,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
                   {selectedMat.name}
                 </h2>
-                <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: stFg }}></span>
+                <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                  <span style={{ width: '6px', height: '6px', minWidth: '6px', minHeight: '6px', borderRadius: '50%', backgroundColor: stFg, flexShrink: 0, display: 'inline-block' }}></span>
                   {selectedMat.status || 'In Stock'}
                 </span>
               </div>
@@ -3311,8 +3311,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
                     {/* Status Badge */}
                     <td style={{ padding: '12px 16px', width: '135px', minWidth: '135px', textAlign: 'center', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
-                      <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: stFg }}></span>
+                      <span style={{ backgroundColor: stBg, color: stFg, border: stBorder, padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                        <span style={{ width: '6px', height: '6px', minWidth: '6px', minHeight: '6px', maxWidth: '6px', maxHeight: '6px', borderRadius: '50%', backgroundColor: stFg, flexShrink: 0, display: 'inline-block' }}></span>
                         {m.status}
                       </span>
                     </td>

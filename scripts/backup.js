@@ -16,7 +16,7 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6Ik
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 console.log('====================================================');
-console.log('🛡️  CONTROL ROOM ERP - FULL DISASTER RECOVERY BACKUP');
+console.log('🛡️  BUSINZ ERP - FULL DISASTER RECOVERY BACKUP');
 console.log('====================================================');
 
 (async () => {

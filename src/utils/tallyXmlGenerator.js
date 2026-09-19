@@ -71,7 +71,7 @@ export function detectGstType(gstin = '', stateStr = '') {
  * @param {Object} options - Configuration (companyName, defaultSalesLedger, etc.)
  */
 export function generateTallySalesInvoicesXml(invoices = [], options = {}) {
-  const companyName = options.companyName || 'VRM ENERGY PVT LTD';
+  const companyName = options.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
   const salesLedger = options.salesLedger || 'Sales - GST';
 
   const voucherXmlList = (Array.isArray(invoices) ? invoices : [invoices]).map(inv => {
@@ -225,7 +225,7 @@ ${voucherXmlList}
  * @param {Object} options - Configuration
  */
 export function generateTallyPurchaseOrdersXml(pos = [], options = {}) {
-  const companyName = options.companyName || 'VRM ENERGY PVT LTD';
+  const companyName = options.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
   const purchaseLedger = options.purchaseLedger || 'Purchase - GST';
 
   const voucherXmlList = (Array.isArray(pos) ? pos : [pos]).map(po => {
