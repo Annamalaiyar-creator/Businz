@@ -341,13 +341,12 @@ export async function getSafeZohoCustomers() {
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
-        saveCloudStore('customer_store', data);
         return data;
       }
     }
   } catch (_) {}
 
-  // 2. Fallback to Supabase cloud store
+  // 2. Fallback to Supabase canonical customers table
   try {
     const cloudCustomers = await fetchCloudStore('customer_store', []);
     if (Array.isArray(cloudCustomers) && cloudCustomers.length > 0) {
@@ -363,18 +362,8 @@ export async function getSafeZohoCustomers() {
 export async function saveSafeZohoCustomer(customer) {
   if (!customer) return;
   try {
-    const cloudList = await fetchCloudStore('customer_store', []);
-    const cId = customer.contact_id || customer.customerCode || customer.id || customer.code;
-    const existingIdx = cloudList.findIndex(c => (c.customerCode && c.customerCode === cId) || (c.id && c.id === cId) || (c.code && c.code === cId));
-    let updatedList;
-    if (existingIdx !== -1) {
-      cloudList[existingIdx] = { ...cloudList[existingIdx], ...customer };
-      updatedList = cloudList;
-    } else {
-      updatedList = [customer, ...cloudList];
-    }
-
-    saveCloudStore('customer_store', updatedList);
+    // Save single customer directly to public.customers (single-record upsert)
+    saveCloudStore('customer_store', customer);
 
     try {
       fetch('/api/zoho/customers', {
@@ -384,7 +373,7 @@ export async function saveSafeZohoCustomer(customer) {
       }).catch(() => {});
     } catch (_) {}
 
-    return updatedList;
+    return customer;
   } catch (err) {
     console.warn('[saveSafeZohoCustomer] Error:', err);
   }

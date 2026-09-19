@@ -98,7 +98,6 @@ export default function SalesCrmEngine({
                 }
               });
               const unified = Array.from(map.values());
-              saveCloudStore('customer_store', unified);
               return unified;
             });
           }
@@ -196,30 +195,10 @@ export default function SalesCrmEngine({
     setCustomers(updated);
     saveCrmStore('customers', updated);
 
-    // Also sync to Supabase customer store so BOM creation picks it up immediately
+    // Also sync to Supabase canonical customers table so BOM creation and all views pick it up immediately
     try {
-      fetchCloudStore('customer_store', []).then(existingBOMCust => {
-        const list = Array.isArray(existingBOMCust) ? existingBOMCust : [];
-        const filtered = list.filter(c => {
-          const cCode = (c.customerCode || c.code || c.id || '').toLowerCase().trim();
-          const targetCode = (customer.customerCode || customer.id || customer.code || '').toLowerCase().trim();
-          return cCode !== targetCode;
-        });
-        const bomRecord = {
-          code: customer.companyName || customer.customerName || customer.customerCode,
-          c2: customer.companyName || customer.customerName || customer.customerCode,
-          gstNo: customer.gstNumber || '',
-          c3: (customer.primaryContact && customer.primaryContact.name) || '',
-          c4: (customer.primaryContact && customer.primaryContact.phone) || '',
-          c5: (customer.primaryContact && customer.primaryContact.email) || '',
-          status: 'ACTIVE',
-          customerCode: customer.customerCode || customer.id,
-          ...customer
-        };
-        const updatedBOMCust = [bomRecord, ...filtered];
-        saveCloudStore('customer_store', updatedBOMCust);
-        window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: bomRecord }));
-      });
+      saveCloudStore('customer_store', customer);
+      window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: customer }));
     } catch (e) {
       console.warn('Error syncing customer to cloud store:', e);
     }

@@ -460,21 +460,10 @@ export default function CrmCustomersView({
     // 1. Immediately save to CRM store
     onSaveCustomer(record);
 
-    // 2. Also save to Supabase customer_store so BOM Creation & whole app picks it up
+    // 2. Also save to Supabase canonical customers table so BOM Creation & whole app picks it up
     try {
-      fetchCloudStore('customer_store', []).then(existingBOMCust => {
-        const list = Array.isArray(existingBOMCust) ? existingBOMCust : [];
-        const filtered = list.filter(c => {
-          const cCode = (c.code || c.customerName || c.customerCode || '').toLowerCase().trim();
-          const cComp = (c.c2 || c.companyName || '').toLowerCase().trim();
-          const targetName = (record.code || '').toLowerCase().trim();
-          const targetComp = (record.c2 || '').toLowerCase().trim();
-          return cCode !== targetName && cComp !== targetComp;
-        });
-        const updatedBOMCust = [record, ...filtered];
-        saveCloudStore('customer_store', updatedBOMCust);
-        window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: record }));
-      });
+      saveCloudStore('customer_store', record);
+      window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: record }));
     } catch (e) {
       console.error('Error syncing customer to cloud store:', e);
     }
@@ -490,18 +479,7 @@ export default function CrmCustomersView({
       if (resJson.customer) {
         const mergedFinal = { ...record, ...resJson.customer };
         onSaveCustomer(mergedFinal);
-        try {
-          fetchCloudStore('customer_store', []).then(existingList => {
-            const list = Array.isArray(existingList) ? existingList : [];
-            const idx = list.findIndex(c => c.id === record.id || c.code === record.code);
-            if (idx >= 0) {
-              list[idx] = { ...list[idx], ...resJson.customer };
-            } else {
-              list.unshift(mergedFinal);
-            }
-            saveCloudStore('customer_store', list);
-          });
-        } catch (e) {}
+        saveCloudStore('customer_store', mergedFinal);
       }
       setZohoSyncMessage({
         type: 'success',

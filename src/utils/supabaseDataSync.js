@@ -41,12 +41,168 @@ function mergeDatasets(localArray, remoteArray) {
 }
 
 /**
+ * Convert canonical public.customers database row to consumer-ready shape
+ * Preserving all legacy camelCase and c2-c8 aliases so no existing views break
+ */
+export function toConsumerCustomer(c) {
+  if (!c || typeof c !== 'object') return c;
+  const code = c.customer_code || c.id || '';
+  const comp = c.company_name || c.customer_name || 'Customer';
+  const name = c.customer_name || comp;
+  const billAddr = c.billing_address || '';
+  const dispAddr = c.dispatch_address || billAddr;
+  const billObj = (c.billing_address_obj && Object.keys(c.billing_address_obj).length > 0) ? c.billing_address_obj : {
+    address: billAddr,
+    city: c.city || '',
+    state: c.state || '',
+    pincode: c.pincode || ''
+  };
+  const dispObj = (c.delivery_address_obj && Object.keys(c.delivery_address_obj).length > 0) ? c.delivery_address_obj : {
+    address: dispAddr,
+    city: c.dispatch_city || c.city || '',
+    state: c.dispatch_state || c.state || '',
+    pincode: c.dispatch_pincode || c.pincode || ''
+  };
+  const phone = (c.phone && c.phone !== '—') ? c.phone : '';
+  const email = (c.email && c.email !== '—') ? c.email : '';
+  const gst = (c.gst_number && c.gst_number !== '—') ? c.gst_number : '';
+  const pan = (c.pan_number && c.pan_number !== '—') ? c.pan_number : '';
+  const rep = c.assigned_salesperson || 'Sales Rep';
+
+  return {
+    ...c,
+    id: code,
+    customerCode: code,
+    code: code,
+    companyName: comp,
+    c2: comp,
+    customerName: name,
+    c3: name,
+    customerType: c.customer_type || 'Customer',
+    industry: c.industry || 'Solar Energy / Infrastructure',
+    gstNumber: gst || '—',
+    gstNo: gst || '—',
+    panNumber: pan || '—',
+    address: billAddr,
+    city: c.city || billObj.city || '',
+    state: c.state || billObj.state || '',
+    pincode: c.pincode || billObj.pincode || '',
+    billingAddress: billAddr,
+    c6: billAddr,
+    billingAddressObj: billObj,
+    dispatchAddress: dispAddr,
+    deliveryAddress: dispAddr,
+    c7: dispAddr,
+    dispatchCity: c.dispatch_city || dispObj.city || '',
+    dispatchState: c.dispatch_state || dispObj.state || '',
+    dispatchPincode: c.dispatch_pincode || dispObj.pincode || '',
+    deliveryAddressObj: dispObj,
+    sameAsBilling: Boolean(c.same_as_billing),
+    creditLimit: Number(c.credit_limit || 0),
+    creditDays: Number(c.credit_days || 0),
+    paymentTerms: c.payment_terms || 'Due on Receipt',
+    assignedSalesperson: rep,
+    salesPerson: rep,
+    c8: rep,
+    source: c.source || (c.zoho_contact_id ? 'Zoho Books' : 'Manual'),
+    zohoContactId: c.zoho_contact_id || null,
+    primaryContact: c.primary_contact || {
+      name: name,
+      phone: phone,
+      whatsapp: phone,
+      email: email
+    },
+    email: email || '—',
+    c5: email || '—',
+    phone: phone || '—',
+    c4: phone || '—',
+    status: (c.status || 'Active').toUpperCase(),
+    notes: c.notes || '',
+    createdAt: c.created_at || new Date().toISOString(),
+    updatedAt: c.updated_at || new Date().toISOString()
+  };
+}
+
+/**
+ * Convert customer object from any component to canonical public.customers database row
+ */
+export function toDatabaseCustomerRow(item) {
+  if (!item || typeof item !== 'object') return null;
+  const code = item.customerCode || item.customer_code || item.code || item.id || `CUST-${Date.now()}`;
+  const comp = item.companyName || item.company_name || item.c2 || item.customerName || item.name || 'Customer';
+  const name = item.customerName || item.customer_name || item.c3 || comp;
+  const billAddr = item.billingAddress || item.c6 || item.address || item.billing_address || '';
+  const dispAddr = item.dispatchAddress || item.deliveryAddress || item.c7 || item.dispatch_address || billAddr;
+  const billObj = item.billingAddressObj || item.billing_address_obj || {};
+  const dispObj = item.deliveryAddressObj || item.delivery_address_obj || {};
+
+  return {
+    id: code,
+    customer_code: code,
+    company_name: comp,
+    customer_name: name,
+    customer_type: item.customerType || item.customer_type || 'Customer',
+    industry: item.industry || 'Solar Energy / Infrastructure',
+    gst_number: item.gstNumber || item.gst_number || item.gstNo || '—',
+    pan_number: item.panNumber || item.pan_number || '—',
+    billing_address: billAddr,
+    city: item.city || billObj.city || '',
+    state: item.state || billObj.state || '',
+    pincode: item.pincode || billObj.pincode || '',
+    billing_address_obj: billObj,
+    dispatch_address: dispAddr,
+    dispatch_city: item.dispatchCity || item.dispatch_city || dispObj.city || '',
+    dispatch_state: item.dispatchState || item.dispatch_state || dispObj.state || '',
+    dispatch_pincode: item.dispatchPincode || item.dispatch_pincode || dispObj.pincode || '',
+    delivery_address_obj: dispObj,
+    same_as_billing: Boolean(item.sameAsBilling !== undefined ? item.sameAsBilling : item.same_as_billing),
+    credit_limit: Number(item.creditLimit || item.credit_limit || 0),
+    credit_days: Number(item.creditDays || item.credit_days || 0),
+    payment_terms: item.paymentTerms || item.payment_terms || 'Due on Receipt',
+    assigned_salesperson: item.assignedSalesperson || item.assigned_salesperson || item.salesPerson || item.c8 || 'Sales Rep',
+    source: item.source || (item.zohoContactId || item.zoho_contact_id ? 'Zoho Books' : 'Manual'),
+    zoho_contact_id: item.zohoContactId || item.zoho_contact_id || null,
+    primary_contact: item.primaryContact || item.primary_contact || {},
+    email: item.email || item.c5 || '—',
+    phone: item.phone || item.c4 || '—',
+    status: item.status || 'Active',
+    notes: item.notes || '',
+    updated_at: new Date().toISOString()
+  };
+}
+
+/**
  * Fetch a data collection DIRECTLY from Supabase cloud database
  * @param {string} storeKey - Unique identifier (e.g. 'bom_store', 'invoice_store', 'customer_store')
  * @param {Array|Object} fallbackData - Default initial data if cloud is empty
  * @returns {Promise<Array|Object>}
  */
 export async function fetchCloudStore(storeKey, fallbackData = []) {
+  // CANONICAL CUSTOMER READ PATH: Query public.customers directly (Zero leaves table egress)
+  if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Customers cloud fetch timeout')), 3000));
+      const fetchPromise = supabase
+        .from('customers')
+        .select(`
+          id, customer_code, company_name, customer_name, customer_type, industry,
+          gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
+          dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
+          same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
+          source, zoho_contact_id, primary_contact, email, phone, status, notes, created_at, updated_at
+        `)
+        .order('company_name', { ascending: true });
+
+      const { data: dbCustomers, error: custErr } = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (!custErr && Array.isArray(dbCustomers) && dbCustomers.length > 0) {
+        return dbCustomers.map(c => toConsumerCustomer(c));
+      }
+    } catch (err) {
+      console.warn('[SupabaseSync] Direct customers fetch fallback notice:', err?.message || err);
+    }
+  }
+
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
     const controller = new AbortController();
@@ -57,6 +213,9 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
       const json = await res.json();
       if (json && json.data !== undefined && json.data !== null) {
         if (Array.isArray(json.data) && json.data.length > 0) {
+          if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
+            return json.data.map(c => toConsumerCustomer(c));
+          }
           return json.data;
         } else if (json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
           return json.data;
@@ -97,33 +256,37 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     } catch (err) {}
   }
 
-  // 1. Fetch directly from Supabase leaves table store (with 5s safety timeout)
-  try {
-    const fetchPromise = supabase
-      .from('leaves')
-      .select('reason')
-      .eq('employee', storeKey.toUpperCase())
-      .order('id', { ascending: false })
-      .limit(1);
+  // 1. Fetch directly from Supabase leaves table store (for unmigrated stores only, with 5s safety timeout)
+  if (storeKey !== 'customer_store' && storeKey !== 'crm_customers') {
+    try {
+      const fetchPromise = supabase
+        .from('leaves')
+        .select('reason')
+        .eq('employee', storeKey.toUpperCase())
+        .order('id', { ascending: false })
+        .limit(1);
 
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
-    const { data: records, error } = await Promise.race([fetchPromise, timeoutPromise]);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
+      const { data: records, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
-    const record = (records && records.length > 0) ? records[0] : null;
+      const record = (records && records.length > 0) ? records[0] : null;
 
-    if (!error && record && record.reason) {
-      try {
-        const cloudParsed = JSON.parse(record.reason);
-        if (Array.isArray(cloudParsed)) {
-          return cloudParsed;
-        } else if (cloudParsed && typeof cloudParsed === 'object') {
-          return cloudParsed;
-        }
-      } catch (pErr) {}
+      if (!error && record && record.reason) {
+        try {
+          const cloudParsed = JSON.parse(record.reason);
+          if (Array.isArray(cloudParsed)) {
+            return cloudParsed;
+          } else if (cloudParsed && typeof cloudParsed === 'object') {
+            return cloudParsed;
+          }
+        } catch (pErr) {}
+      }
+    } catch (err) {
+      // continue to server API fallback
     }
-  } catch (err) {
-    // continue to server API fallback
   }
+
+
 
   // 2. Fallback to Node server endpoint /api/store/:key (which queries Supabase)
   try {
@@ -194,6 +357,47 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     } catch (err) {
       console.error('Error syncing employees to users table:', err);
     }
+  }
+
+  // CANONICAL CUSTOMER WRITE PATH: Direct normalized upsert to public.customers table (Zero leaves table egress)
+  if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
+    try {
+      if (Array.isArray(storeData)) {
+        const rows = storeData.map(c => toDatabaseCustomerRow(c)).filter(Boolean);
+        if (rows.length > 0) {
+          for (let i = 0; i < rows.length; i += 20) {
+            const batch = rows.slice(i, i + 20);
+            await supabase.from('customers').upsert(batch, { onConflict: 'customer_code' });
+          }
+        }
+      } else if (storeData && typeof storeData === 'object') {
+        const row = toDatabaseCustomerRow(storeData);
+        if (row) {
+          await supabase.from('customers').upsert(row, { onConflict: 'customer_code' });
+        }
+      }
+
+      // Broadcast update locally to all listening React components in current window
+      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+        detail: { storeKey: 'customer_store', data: storeData }
+      }));
+      window.dispatchEvent(new CustomEvent('controlroom_customer_update', {
+        detail: storeData
+      }));
+    } catch (err) {
+      console.warn('[SupabaseSync] Error persisting to public.customers:', err?.message || err);
+    }
+
+    // Keep lightweight async fallback to local server disk json backup
+    try {
+      fetch(`/api/store/${storeKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storeData)
+      }).catch(() => {});
+    } catch (_) {}
+
+    return; // STOP! NEVER touch leaves table for customers!
   }
 
   try {
@@ -463,12 +667,15 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
         {
           event: '*',
           schema: 'public',
-          table: storeKey === 'employees_store' ? 'users' : 'leaves',
-          filter: storeKey === 'employees_store' ? undefined : `employee=eq.${employeeKey}`
+          table: storeKey === 'employees_store' ? 'users' : (storeKey === 'customer_store' || storeKey === 'crm_customers' ? 'customers' : 'leaves'),
+          filter: (storeKey === 'employees_store' || storeKey === 'customer_store' || storeKey === 'crm_customers') ? undefined : `employee=eq.${employeeKey}`
         },
         async (payload) => {
           if (storeKey === 'employees_store') {
             const list = await fetchCloudStore('employees_store', []);
+            onUpdateCallback(list);
+          } else if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
+            const list = await fetchCloudStore('customer_store', []);
             onUpdateCallback(list);
           } else if (payload && payload.new && payload.new.reason) {
             try {

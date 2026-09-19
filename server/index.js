@@ -46,8 +46,105 @@ const getPoStageRank = (p) => {
   return 1;
 };
 
+// Canonical Supabase Customers Data Layer (Zero leaves table egress)
+const loadDatabaseCustomers = async () => {
+  if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
+    return supabaseMemoryStore.customer_store;
+  }
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select(`
+        id, customer_code, company_name, customer_name, customer_type, industry,
+        gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
+        dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
+        same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
+        source, zoho_contact_id, primary_contact, email, phone, status, notes, created_at, updated_at
+      `)
+      .order('company_name', { ascending: true });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const mapped = data.map(c => ({
+        id: c.customer_code || c.id,
+        customerCode: c.customer_code,
+        code: c.customer_code,
+        companyName: c.company_name,
+        c2: c.company_name,
+        customerName: c.customer_name || c.company_name,
+        c3: c.customer_name || c.company_name,
+        customerType: c.customer_type || 'Customer',
+        industry: c.industry || '',
+        gstNumber: c.gst_number || '—',
+        gstNo: c.gst_number || '—',
+        panNumber: c.pan_number || '—',
+        address: c.billing_address || '',
+        city: c.city || '',
+        state: c.state || '',
+        pincode: c.pincode || '',
+        billingAddress: c.billing_address || '',
+        c6: c.billing_address || '',
+        billingAddressObj: c.billing_address_obj || {},
+        dispatchAddress: c.dispatch_address || '',
+        deliveryAddress: c.dispatch_address || '',
+        c7: c.dispatch_address || '',
+        dispatchCity: c.dispatch_city || '',
+        dispatchState: c.dispatch_state || '',
+        dispatchPincode: c.dispatch_pincode || '',
+        deliveryAddressObj: c.delivery_address_obj || {},
+        sameAsBilling: Boolean(c.same_as_billing),
+        creditLimit: Number(c.credit_limit || 0),
+        creditDays: Number(c.credit_days || 0),
+        paymentTerms: c.payment_terms || 'Due on Receipt',
+        assignedSalesperson: c.assigned_salesperson || 'Sales Rep',
+        salesPerson: c.assigned_salesperson || 'Sales Rep',
+        c8: c.assigned_salesperson || 'Sales Rep',
+        source: c.source || (c.zoho_contact_id ? 'Zoho Books' : 'Manual'),
+        zohoContactId: c.zoho_contact_id || null,
+        primaryContact: c.primary_contact || {},
+        email: c.email || '—',
+        c5: c.email || '—',
+        phone: c.phone || '—',
+        c4: c.phone || '—',
+        status: (c.status || 'Active').toUpperCase(),
+        notes: c.notes || '',
+        createdAt: c.created_at || new Date().toISOString(),
+        updatedAt: c.updated_at || new Date().toISOString()
+      }));
+
+      supabaseMemoryStore.customer_store = mapped;
+      supabaseMemoryStore.crm_customers = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('[loadDatabaseCustomers] Supabase fetch notice:', err?.message || err);
+  }
+
+  // Fallback to disk JSON
+  try {
+    const diskPath = path.resolve(__dirname, 'customer_store.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      supabaseMemoryStore.customer_store = diskData;
+      supabaseMemoryStore.crm_customers = diskData;
+      return diskData;
+    }
+  } catch (_) {}
+
+  return supabaseMemoryStore.customer_store || [];
+};
+
+const loadLocalCustomers = () => {
+  if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
+    return supabaseMemoryStore.customer_store;
+  }
+  return [];
+};
+
 // Authoritative Database Store functions directly with Supabase
 const getDatabaseStore = async (key) => {
+  if (key === 'customer_store' || key === 'crm_customers') {
+    return await loadDatabaseCustomers();
+  }
   const employeeKey = key.toUpperCase();
   try {
     const { data: records, error } = await supabase
@@ -257,8 +354,79 @@ const broadcastRealtimeEvent = (eventType, payload) => {
   }
 };
 
+const saveLocalCustomers = async (customers) => {
+  if (!customers) return;
+  const list = Array.isArray(customers) ? customers : [customers];
+  supabaseMemoryStore.customer_store = list;
+  supabaseMemoryStore.crm_customers = list;
+
+  // 1. Persist to disk files for zero data loss
+  try {
+    const custPath = getStoreFilePath('customer_store.json');
+    fs.writeFileSync(custPath, JSON.stringify(list, null, 2), 'utf8');
+    const crmPath = getStoreFilePath('crm_customers.json');
+    fs.writeFileSync(crmPath, JSON.stringify(list, null, 2), 'utf8');
+  } catch (diskErr) {
+    console.warn('[saveLocalCustomers disk write error]:', diskErr?.message);
+  }
+
+  // 2. Broadcast via SSE to all connected clients
+  try {
+    broadcastRealtimeEvent('store_updated', { key: 'customer_store', storeData: list });
+    broadcastRealtimeEvent('crm_updated', { type: 'customers_updated', customers: list });
+  } catch (_) {}
+
+  // 3. Upsert to canonical public.customers table (Zero leaves table interaction)
+  try {
+    const rows = list.map(c => ({
+      id: c.customerCode || c.id || c.code,
+      customer_code: c.customerCode || c.id || c.code,
+      company_name: c.companyName || c.c2 || c.customerName || 'Customer',
+      customer_name: c.customerName || c.c3 || c.companyName || 'Customer',
+      customer_type: c.customerType || 'Customer',
+      industry: c.industry || 'Solar Energy / Infrastructure',
+      gst_number: c.gstNumber || c.gstNo || '—',
+      pan_number: c.panNumber || '—',
+      billing_address: c.billingAddress || c.c6 || c.address || '',
+      city: c.city || (c.billingAddressObj && c.billingAddressObj.city) || '',
+      state: c.state || (c.billingAddressObj && c.billingAddressObj.state) || '',
+      pincode: c.pincode || (c.billingAddressObj && c.billingAddressObj.pincode) || '',
+      billing_address_obj: c.billingAddressObj || {},
+      dispatch_address: c.dispatchAddress || c.c7 || c.deliveryAddress || '',
+      dispatch_city: c.dispatchCity || (c.deliveryAddressObj && c.deliveryAddressObj.city) || '',
+      dispatch_state: c.dispatchState || (c.deliveryAddressObj && c.deliveryAddressObj.state) || '',
+      dispatch_pincode: c.dispatch_pincode || (c.deliveryAddressObj && c.deliveryAddressObj.pincode) || '',
+      delivery_address_obj: c.deliveryAddressObj || {},
+      same_as_billing: Boolean(c.sameAsBilling),
+      credit_limit: Number(c.creditLimit || 0),
+      credit_days: Number(c.creditDays || 0),
+      payment_terms: c.paymentTerms || 'Due on Receipt',
+      assigned_salesperson: c.assignedSalesperson || c.salesPerson || c.c8 || 'Sales Rep',
+      source: c.source || (c.zohoContactId ? 'Zoho Books' : 'Manual'),
+      zoho_contact_id: c.zohoContactId || null,
+      primary_contact: c.primaryContact || {},
+      email: c.email || c.c5 || '—',
+      phone: c.phone || c.c4 || '—',
+      status: c.status || 'Active',
+      notes: c.notes || '',
+      updated_at: new Date().toISOString()
+    }));
+
+    for (let i = 0; i < rows.length; i += 20) {
+      const batch = rows.slice(i, i + 20);
+      await supabase.from('customers').upsert(batch, { onConflict: 'customer_code' });
+    }
+  } catch (sbErr) {
+    console.warn('[saveLocalCustomers Supabase upsert notice]:', sbErr?.message || sbErr);
+  }
+};
+
 const saveDatabaseStore = async (key, storeData) => {
   if (storeData === undefined || storeData === null) return storeData;
+  if (key === 'customer_store' || key === 'crm_customers') {
+    await saveLocalCustomers(storeData);
+    return storeData;
+  }
   supabaseMemoryStore[key] = storeData;
 
   // Persist to disk files for raw_materials_store and item_store
@@ -950,19 +1118,6 @@ const loadLocalVendors = () => {
 const saveLocalVendors = (vendors) => {
   supabaseMemoryStore.vendor_store = vendors;
   saveDatabaseStore('vendor_store', vendors);
-};
-
-const loadLocalCustomers = () => {
-  if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
-    return supabaseMemoryStore.customer_store;
-  }
-  return [];
-};
-
-const saveLocalCustomers = (customers) => {
-  supabaseMemoryStore.customer_store = customers;
-  saveDatabaseStore('customer_store', customers);
-  saveDatabaseStore('crm_customers', customers);
 };
 
 const loadLocalItems = () => {
