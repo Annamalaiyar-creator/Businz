@@ -2107,10 +2107,41 @@ export default function VendorManagementView(props) {
                 ) : (
                   <button
                     onClick={() => setShowForm(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', backgroundColor: '#2563eb', color: 'white', fontWeight: 'bold', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
+                    style={{
+                      backgroundColor: '#0E7490',
+                      border: 'none',
+                      color: 'white',
+                      height: '40px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '0 6px 0 20px',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
+                      transition: 'all 0.2s ease',
+                      letterSpacing: '0.2px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
                   >
-                    <PlusCircle style={{ width: '16px', height: '16px' }} />
-                    Onboard Vendor
+                    <span>Onboard Vendor</span>
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#0E7490',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}>
+                      <ArrowRight size={16} strokeWidth={2.5} />
+                    </div>
                   </button>
                 )}
               </div>

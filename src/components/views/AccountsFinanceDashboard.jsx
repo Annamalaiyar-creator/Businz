@@ -28,6 +28,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
 
   // Quick link active modal
   const [activeQuickReport, setActiveQuickReport] = useState(null);
+  const [hoveredBreakupIdx, setHoveredBreakupIdx] = useState(null);
 
   // Invoices & PO data
   const [invoices, setInvoices] = useState([]);
@@ -196,31 +197,78 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
     };
   }, [mult, selectedPeriod]);
 
-  // Donut slices coordinates calculation
-  const donutSlices = useMemo(() => {
-    // Proportions: COGS 94.4%, Sales 2.1%, Office 2.0%, Factory 0.6%, Statutory 0.5%, Employee 0.3%, Finance 0.1%
-    const slices = [
-      { name: 'Cost of Goods Sold', pct: 94.4, color: '#0F172A' },
-      { name: 'Sales & Marketing', pct: 2.1, color: '#2563EB' },
-      { name: 'Office & Admin', pct: 2.0, color: '#0E7490' },
-      { name: 'Factory & Machinery', pct: 0.6, color: '#F59E0B' },
-      { name: 'Statutory & Other', pct: 0.5, color: '#8B5CF6' },
-      { name: 'Employee', pct: 0.3, color: '#EF4444' },
-      { name: 'Finance Cost', pct: 0.1, color: '#64748B' }
+  // Expense Breakup items matching unified POStatusOverview design
+  const breakupItems = useMemo(() => {
+    return [
+      { name: 'Cost of Goods Sold', count: '₹ 1.56 Cr', color: '#0E7490', pct: 0.944 },
+      { name: 'Sales & Marketing', count: '₹ 3.45 L', color: '#2563EB', pct: 0.021 },
+      { name: 'Office & Admin', count: '₹ 3.36 L', color: '#16A34A', pct: 0.020 },
+      { name: 'Factory & Machinery', count: '₹ 1.07 L', color: '#CA8A04', pct: 0.006 },
+      { name: 'Statutory & Other', count: '₹ 85.6 K', color: '#9333EA', pct: 0.005 },
+      { name: 'Employee Exp', count: '₹ 55.5 K', color: '#EA580C', pct: 0.003 },
+      { name: 'Finance Cost', count: '₹ 867', color: '#DC2626', pct: 0.001 }
     ];
-
-    let cumulative = 0;
-    return slices.map(s => {
-      const strokeDasharray = `${s.pct * 2.83} 283`;
-      const strokeDashoffset = -cumulative * 2.83;
-      cumulative += s.pct;
-      return {
-        ...s,
-        strokeDasharray,
-        strokeDashoffset
-      };
-    });
   }, []);
+
+  // Segmented Donut SVG calculations matching POStatusOverview exactly
+  const numSegments = breakupItems.length;
+  const cx = 110;
+  const cy = 110;
+  const outerR = 90;
+  const innerR = 60;
+  const gapRad = 0.05;
+
+  const totalGaps = numSegments * gapRad;
+  const availableAngle = (2 * Math.PI) - totalGaps;
+
+  let currentAngle = -Math.PI / 2;
+
+  const breakupPaths = breakupItems.map((item, idx) => {
+    const arcSpan = (item.pct || 0) * availableAngle;
+    const a1 = currentAngle + (gapRad / 2);
+    const a2 = a1 + Math.max(0.04, arcSpan);
+
+    currentAngle = a2 + (gapRad / 2);
+
+    if (a2 <= a1) return null;
+
+    const x1_out = cx + outerR * Math.cos(a1);
+    const y1_out = cy + outerR * Math.sin(a1);
+    const x2_out = cx + outerR * Math.cos(a2);
+    const y2_out = cy + outerR * Math.sin(a2);
+
+    const x1_in = cx + innerR * Math.cos(a1);
+    const y1_in = cy + innerR * Math.sin(a1);
+    const x2_in = cx + innerR * Math.cos(a2);
+    const y2_in = cy + innerR * Math.sin(a2);
+
+    const largeArc = (a2 - a1) > Math.PI ? 1 : 0;
+
+    const pathData = `M ${x1_out} ${y1_out} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2_out} ${y2_out} L ${x2_in} ${y2_in} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1_in} ${y1_in} Z`;
+
+    const isHovered = hoveredBreakupIdx === idx;
+
+    return (
+      <path
+        key={idx}
+        d={pathData}
+        fill={item.color}
+        stroke="#FFFFFF"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        style={{
+          cursor: 'pointer',
+          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          transformOrigin: `${cx}px ${cy}px`,
+          transform: isHovered ? 'scale(1.05)' : 'scale(1)',
+          opacity: hoveredBreakupIdx !== null && !isHovered ? 0.5 : 1,
+          filter: isHovered ? `drop-shadow(0px 6px 12px ${item.color}55)` : 'none'
+        }}
+        onMouseEnter={() => setHoveredBreakupIdx(idx)}
+        onMouseLeave={() => setHoveredBreakupIdx(null)}
+      />
+    );
+  });
 
   // Quick report options
   const quickLinks = [
@@ -269,564 +317,217 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
   };
 
   return (
-    <div style={{
-      padding: '20px 28px 80px',
-      backgroundColor: '#F8FAFC',
-      minHeight: '100vh',
-      fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-      color: '#0F172A'
-    }}>
-      {/* 1. TOP HEADER - BRANDING & TALLY STATUS */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '20px',
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
+      
+      {/* 1. PERSONALIZED WELCOME BANNER CARD */}
+      <div className="welcome-banner-card" style={{
         backgroundColor: '#FFFFFF',
-        padding: '16px 24px',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
-        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
-      }}>
-        {/* Left: Company Branding */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '8px 14px',
-            backgroundColor: '#0E7490',
-            borderRadius: '10px',
-            color: '#FFFFFF',
-            fontWeight: '900',
-            fontSize: '15px',
-            letterSpacing: '1px'
-          }}>
-            BUSINZ
-          </div>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', letterSpacing: '0.3px' }}>
-              VRM STRUCTURES INDIA PVT. LTD.
-            </div>
-            <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', letterSpacing: '0.5px' }}>
-              MANAGEMENT CONTROL & ACCOUNTS DIVISION
-            </div>
-          </div>
-        </div>
-
-        {/* Center: Title */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            fontSize: '18px',
-            fontWeight: '800',
-            color: '#0F172A',
-            letterSpacing: '1.2px',
-            textTransform: 'uppercase'
-          }}>
-            FINANCE DASHBOARD
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-            One System. One Process. One Goal.
-          </div>
-        </div>
-
-        {/* Right: Tally Sync Status & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* Tally Live Status Indicator */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            padding: '6px 12px',
-            backgroundColor: tallyOnline ? '#ECFDF5' : '#FFFBEB',
-            borderRadius: '8px',
-            border: `1px solid ${tallyOnline ? '#A7F3D0' : '#FDE68A'}`
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: tallyOnline ? '#10B981' : '#F59E0B',
-                boxShadow: tallyOnline ? '0 0 8px #10B981' : 'none'
-              }} />
-              <span style={{
-                fontSize: '12px',
-                fontWeight: '700',
-                color: tallyOnline ? '#065F46' : '#92400E'
-              }}>
-                {tallyOnline ? 'Tally Connected' : 'Tally Offline (Port 9000)'}
-              </span>
-            </div>
-            <span style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
-              Last synced: {lastSyncedTime}
-            </span>
-          </div>
-
-          {/* Sync Trigger / Tally Modal */}
-          <button
-            onClick={() => {
-              setTallyModalType('Sales Invoice');
-              setShowTallyModal(true);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 14px',
-              backgroundColor: '#ECFEFF',
-              color: '#0E7490',
-              border: '1px solid #A5F3FC',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              transition: 'all 0.15s'
-            }}
-            title="Export / Push vouchers to TallyPrime"
-          >
-            <Zap size={14} /> Sync Tally
-          </button>
-
-          {/* Refresh Button */}
-          <button
-            onClick={handleRefresh}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 16px',
-              backgroundColor: '#0E7490',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)',
-              transition: 'all 0.15s'
-            }}
-          >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} style={{
-              animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
-            }} />
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {/* 2. DATE RANGE & FINANCIAL YEAR FILTER BAR */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '14px',
-        border: '1px solid #E2E8F0',
-        padding: '12px 18px',
-        marginBottom: '16px',
+        padding: '12px 20px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '12px',
-        boxShadow: '0 1px 4px rgba(15, 23, 42, 0.03)'
+        boxShadow: '0 4px 16px -2px rgba(15, 23, 42, 0.04)',
+        background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+        position: 'relative',
+        overflow: 'hidden'
       }}>
-        {/* Filter Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          {['Today', 'MTD', 'This Month', 'This Quarter', 'This Year', 'Yesterday', 'Last Month', 'Last Quarter', 'Last Year', 'Custom'].map(period => {
-            const active = selectedPeriod === period;
-            return (
-              <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  fontWeight: active ? '700' : '600',
-                  border: active ? '1px solid #0E7490' : '1px solid transparent',
-                  backgroundColor: active ? '#ECFEFF' : 'transparent',
-                  color: active ? '#0E7490' : '#475569',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', zIndex: 2, minWidth: 0 }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em', wordBreak: 'break-word' }}>
+              Welcome back, {(() => {
+                const storedName = localStorage.getItem('controlroom_logged_user_name');
+                if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
+                if (userRole === 'Accounts Head') return 'Venkatesh';
+                if (userRole === 'Accounts Executive') return 'Priya';
+                if (userRole === 'Invoice Executive') return 'Anand';
+                return 'Accounts Team';
+              })()}!
+            </h2>
+            <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0', fontWeight: '500' }}>
+              Here is your financial summary, live invoice clearances & enterprise cash flow metrics for today.
+            </p>
+          </div>
+        </div>
+
+
+
+        <div style={{
+          position: 'absolute',
+          right: '-20px',
+          top: '-20px',
+          width: '180px',
+          height: '180px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(14, 116, 144, 0.05) 0%, rgba(255,255,255,0) 70%)',
+          pointerEvents: 'none'
+        }} />
+      </div>
+
+
+      {/* 3. ROW 1: 6 MODERN KPI CARDS MATCHING UNIFIED DESIGN */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
+        {[
+          {
+            title: 'TOTAL REVENUE (MTD)',
+            value: metrics.revenue.val,
+            trend: metrics.revenue.trend.replace('↑ ', ''),
+            trendUp: metrics.revenue.isPositive,
+            bottomPrefix: 'Selected period ',
+            bottomHighlight: metrics.revenue.val
+          },
+          {
+            title: 'GROSS PROFIT',
+            value: metrics.grossProfit.val,
+            trend: metrics.grossProfit.trend.replace('↑ ', ''),
+            trendUp: metrics.grossProfit.isPositive,
+            bottomPrefix: 'Gross margin ',
+            bottomHighlight: `${metrics.grossProfitPct.val}%`
+          },
+          {
+            title: 'GROSS PROFIT %',
+            value: `${metrics.grossProfitPct.val}%`,
+            trend: metrics.grossProfitPct.trend.replace('↑ ', ''),
+            trendUp: true,
+            bottomPrefix: 'Operating efficiency ',
+            bottomHighlight: 'Strong'
+          },
+          {
+            title: 'NET PROFIT',
+            value: metrics.netProfit.val,
+            trend: metrics.netProfit.trend.replace('↑ ', ''),
+            trendUp: metrics.netProfit.isPositive,
+            bottomPrefix: 'Net profit ratio ',
+            bottomHighlight: '23.7%'
+          },
+          {
+            title: 'CASH & BANK BALANCE',
+            value: metrics.cashBank.val,
+            trend: metrics.cashBank.trend.replace('↑ ', ''),
+            trendUp: true,
+            bottomPrefix: 'Liquid liquidity ',
+            bottomHighlight: metrics.cashBank.val
+          },
+          {
+            title: 'OUTSTANDING PAYMENT',
+            value: metrics.outstanding.val,
+            trend: metrics.outstanding.trend.replace('↓ ', '').replace('↑ ', ''),
+            trendUp: false,
+            bottomPrefix: 'Vendor payables ',
+            bottomHighlight: metrics.outstanding.val
+          }
+        ].map((kpi, kIdx) => (
+          <div 
+            key={kIdx}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #EAEFEF',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+              transition: 'all 0.2s ease',
+              minWidth: 0,
+              boxSizing: 'border-box'
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+              <span 
+                style={{ 
+                  fontSize: '11px', 
+                  fontWeight: '800', 
+                  color: '#64748B',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
                 }}
               >
-                {period}
-              </button>
-            );
-          })}
-        </div>
+                {kpi.title}
+              </span>
 
-        {/* Right Date Selectors */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* From Date */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>FROM DATE</span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              style={{
-                padding: '6px 10px',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: '600',
-                color: '#0F172A',
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px', lineHeight: '1.1' }}>
+                  {kpi.value}
+                </span>
+                
+                <span 
+                  style={{ 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    fontSize: '11px', 
+                    fontWeight: '800', 
+                    color: kpi.trendUp ? '#059669' : '#DC2626',
+                    backgroundColor: kpi.trendUp ? '#ECFDF5' : '#FEF2F2',
+                    border: kpi.trendUp ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                    padding: '1.5px 6px',
+                    borderRadius: '6px',
+                    lineHeight: '1.2'
+                  }}
+                >
+                  {kpi.trendUp ? (
+                    <ArrowUpRight style={{ width: '12px', height: '12px' }} />
+                  ) : (
+                    <ArrowDownRight style={{ width: '12px', height: '12px' }} />
+                  )}
+                  {kpi.trend}
+                </span>
+              </div>
+            </div>
+
+            {/* Bottom Sub-Card Box */}
+            <div 
+              style={{ 
                 backgroundColor: '#F8FAFC',
-                outline: 'none'
-              }}
-            />
-          </div>
-
-          <span style={{ color: '#94A3B8', fontWeight: 'bold' }}>→</span>
-
-          {/* To Date */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>TO DATE</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              style={{
+                border: '1px solid #F1F5F9',
+                borderRadius: '10px',
                 padding: '6px 10px',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: '600',
-                color: '#0F172A',
-                backgroundColor: '#F8FAFC',
-                outline: 'none'
-              }}
-            />
-          </div>
-
-          {/* Financial Year Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>FINANCIAL YEAR</span>
-            <select
-              value={financialYear}
-              onChange={(e) => setFinancialYear(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: '700',
-                color: '#0E7490',
-                backgroundColor: '#ECFEFF',
-                outline: 'none',
-                cursor: 'pointer'
+                fontSize: '11px',
+                fontWeight: '500',
+                color: '#64748B',
+                lineHeight: '1.3',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
               }}
             >
-              <option value="2026-27">2026–27</option>
-              <option value="2025-26">2025–26</option>
-              <option value="2024-25">2024–25</option>
-            </select>
+              <span>{kpi.bottomPrefix}</span>
+              <span style={{ color: kpi.trendUp ? '#059669' : '#DC2626', fontWeight: '800' }}>
+                {kpi.bottomHighlight}
+              </span>
+            </div>
           </div>
-        </div>
+        ))}
       </div>
 
-      {/* Date context subtitle bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '16px',
-        padding: '0 4px',
-        fontSize: '12px',
-        fontWeight: '600',
-        color: '#64748B'
-      }}>
-        <div>
-          <span>{selectedPeriod}</span> · <span style={{ color: '#0F172A' }}>{fromDate} — {toDate}</span>
-        </div>
-        <div>
-          <span>Amounts in Indian Rupees</span> · <span style={{ color: '#0E7490', fontWeight: '700' }}>Tally Live</span>
-        </div>
-      </div>
-
-      {/* 3. 6 KPI METRIC CARDS ROW */}
+      {/* 4. MAIN THREE PANELS (PROFIT & LOSS, EXPENSE CATEGORIES, EXPENSE BREAKUP) */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(6, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: '14px',
-        marginBottom: '20px'
-      }}>
-        {/* Card 1: Total Revenue */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          border: '1px solid #E2E8F0',
-          padding: '16px',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: '#E0F2FE',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#0284C7'
-            }}>
-              <ArrowUpRight size={18} />
-            </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981' }}>
-              {metrics.revenue.trend}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              TOTAL REVENUE
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', marginTop: '4px' }}>
-              {metrics.revenue.val}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', marginTop: '10px' }}>
-            <span>Selected period</span>
-            <span>vs previous</span>
-          </div>
-        </div>
-
-        {/* Card 2: Gross Profit */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          border: '1px solid #E2E8F0',
-          padding: '16px',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: '#DCFCE7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#15803D'
-            }}>
-              <Layers size={16} />
-            </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981' }}>
-              {metrics.grossProfit.trend}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              GROSS PROFIT
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', marginTop: '4px' }}>
-              {metrics.grossProfit.val}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', marginTop: '10px' }}>
-            <span>Selected period</span>
-            <span>vs previous</span>
-          </div>
-        </div>
-
-        {/* Card 3: Gross Profit % */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          border: '1px solid #E2E8F0',
-          padding: '16px',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: '#FEF3C7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#D97706'
-            }}>
-              <Clock size={16} />
-            </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981' }}>
-              {metrics.grossProfitPct.trend}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              GROSS PROFIT %
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', marginTop: '4px' }}>
-              {metrics.grossProfitPct.val}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', marginTop: '10px' }}>
-            <span>Selected period</span>
-            <span>vs previous</span>
-          </div>
-        </div>
-
-        {/* Card 4: Net Profit */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          border: '1px solid #E2E8F0',
-          padding: '16px',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: '#EDE9FE',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#7C3AED'
-            }}>
-              <Zap size={16} />
-            </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981' }}>
-              {metrics.netProfit.trend}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              NET PROFIT
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', marginTop: '4px' }}>
-              {metrics.netProfit.val}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', marginTop: '10px' }}>
-            <span>Selected period</span>
-            <span>vs previous</span>
-          </div>
-        </div>
-
-        {/* Card 5: Cash & Bank Balance */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          border: '1px solid #E2E8F0',
-          padding: '16px',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: '#ECFEFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#0E7490'
-            }}>
-              <Landmark size={16} />
-            </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#10B981' }}>
-              {metrics.cashBank.trend}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              CASH & BANK BALANCE
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', marginTop: '4px' }}>
-              {metrics.cashBank.val}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', marginTop: '10px' }}>
-            <span>As on end date</span>
-            <span>vs previous</span>
-          </div>
-        </div>
-
-        {/* Card 6: Outstanding Payment */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          border: '1px solid #E2E8F0',
-          padding: '16px',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: '#FFE4E6',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#E11D48'
-            }}>
-              <Receipt size={16} />
-            </div>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#EF4444' }}>
-              {metrics.outstanding.trend}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-              OUTSTANDING PAYMENT
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', marginTop: '4px' }}>
-              {metrics.outstanding.val}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', marginTop: '10px' }}>
-            <span>Selected period</span>
-            <span>vs previous</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. THREE MAIN CARDS (PROFIT & LOSS, EXPENSE CATEGORIES, EXPENSE BREAKUP) */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1.05fr 1.05fr 0.9fr',
-        gap: '16px',
-        marginBottom: '20px'
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {/* Panel 1: Financial Output - Profit & Loss Summary */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: '16px',
           border: '1px solid #E2E8F0',
-          padding: '20px',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+          padding: '18px',
+          boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div>
-              <div style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                FINANCIAL OUTPUT
-              </div>
-              <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
                 Profit & Loss Summary
               </div>
             </div>
@@ -836,7 +537,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
                 background: 'none',
                 border: '1px solid #E2E8F0',
                 borderRadius: '8px',
-                padding: '5px 8px',
+                padding: '4px 8px',
                 cursor: 'pointer',
                 color: '#64748B'
               }}
@@ -846,13 +547,13 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
             </button>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <th style={{ textAlign: 'left', padding: '8px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                <th style={{ textAlign: 'left', padding: '6px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
                   PARTICULARS
                 </th>
-                <th style={{ textAlign: 'right', padding: '8px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
                   AMOUNT (₹)
                 </th>
               </tr>
@@ -868,14 +569,14 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
                   }}
                 >
                   <td style={{
-                    padding: '10px 0',
+                    padding: '8px 0',
                     fontWeight: row.bold ? '700' : '500',
                     color: row.highlight ? '#15803D' : '#334155'
                   }}>
                     {row.label}
                   </td>
                   <td style={{
-                    padding: '10px 0',
+                    padding: '8px 0',
                     textAlign: 'right',
                     fontWeight: row.bold ? '700' : '600',
                     color: row.color
@@ -893,17 +594,14 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
           backgroundColor: '#FFFFFF',
           borderRadius: '16px',
           border: '1px solid #E2E8F0',
-          padding: '20px',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+          padding: '18px',
+          boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div>
-              <div style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                COST CONTROL
-              </div>
-              <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
                 Expense Categories
               </div>
             </div>
@@ -912,20 +610,20 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
               color: '#475569',
               fontSize: '11px',
               fontWeight: '700',
-              padding: '4px 10px',
+              padding: '3px 8px',
               borderRadius: '20px'
             }}>
               8 categories
             </span>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <th style={{ textAlign: 'left', padding: '8px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                <th style={{ textAlign: 'left', padding: '6px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
                   CATEGORY
                 </th>
-                <th style={{ textAlign: 'right', padding: '8px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
                   AMOUNT (₹)
                 </th>
               </tr>
@@ -933,20 +631,19 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
             <tbody>
               {metrics.expenses.map((row, idx) => (
                 <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                  <td style={{ padding: '9px 0', fontWeight: '500', color: '#334155' }}>
+                  <td style={{ padding: '7px 0', fontWeight: '500', color: '#334155' }}>
                     {row.name}
                   </td>
-                  <td style={{ padding: '9px 0', textAlign: 'right', fontWeight: '600', color: '#0F172A' }}>
+                  <td style={{ padding: '7px 0', textAlign: 'right', fontWeight: '600', color: '#0F172A' }}>
                     {row.val}
                   </td>
                 </tr>
               ))}
-              {/* Total Expenses Row */}
               <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #E2E8F0' }}>
-                <td style={{ padding: '10px 8px', fontWeight: '800', color: '#0F172A' }}>
+                <td style={{ padding: '8px 6px', fontWeight: '800', color: '#0F172A' }}>
                   Total Expenses
                 </td>
-                <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
                   {metrics.totalExpensesStr}
                 </td>
               </tr>
@@ -954,24 +651,21 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
           </table>
         </div>
 
-        {/* Panel 3: Distribution - Expense Breakup (Donut Chart) */}
+        {/* Panel 3: Expense Breakup (matching unified POStatusOverview design) */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: '16px',
           border: '1px solid #E2E8F0',
-          padding: '20px',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+          padding: '18px',
+          boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          minWidth: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div>
-              <div style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                DISTRIBUTION
-              </div>
-              <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
-                Expense Breakup
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+              Expense Breakup
             </div>
             <button
               onClick={() => setActiveQuickReport('ledger')}
@@ -983,94 +677,133 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
                 cursor: 'pointer',
                 color: '#64748B'
               }}
+              title="View detailed ledger"
             >
-              •••
+              <ExternalLink size={14} />
             </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-            {/* SVG Donut */}
-            <div style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0 }}>
-              <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
-                {donutSlices.map((slice, i) => (
-                  <circle
-                    key={i}
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="transparent"
-                    stroke={slice.color}
-                    strokeWidth="15"
-                    strokeDasharray={slice.strokeDasharray}
-                    strokeDashoffset={slice.strokeDashoffset}
-                  />
-                ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '12px', minWidth: 0 }}>
+            {/* LEFT SIDE: Segmented Donut SVG with Center Counter */}
+            <div style={{ position: 'relative', width: '126px', height: '126px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ width: '100%', height: '100%' }}>
+                {breakupPaths}
               </svg>
-              {/* Center text */}
-              <div style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                pointerEvents: 'none'
-              }}>
-                <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
-                  {metrics.totalExpensesCr}
-                </div>
-                <div style={{ fontSize: '9px', color: '#64748B', fontWeight: '600' }}>
-                  Total Expenses
-                </div>
+
+              {/* Center Counter */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                  padding: '10px'
+                }}
+              >
+                <span 
+                  style={{ 
+                    fontSize: hoveredBreakupIdx !== null ? '12px' : '14px', 
+                    fontWeight: '900', 
+                    color: hoveredBreakupIdx !== null ? breakupItems[hoveredBreakupIdx].color : '#0F172A', 
+                    lineHeight: '1.1',
+                    textAlign: 'center',
+                    maxWidth: '82px',
+                    wordBreak: 'break-word',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {hoveredBreakupIdx !== null ? breakupItems[hoveredBreakupIdx].count : metrics.totalExpensesCr}
+                </span>
+                <span style={{ fontSize: '8px', color: '#64748B', fontWeight: '800', letterSpacing: '0.4px', marginTop: '2px', textTransform: 'uppercase', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '78px' }}>
+                  {hoveredBreakupIdx !== null ? breakupItems[hoveredBreakupIdx].name : 'TOTAL EXPENSES'}
+                </span>
               </div>
             </div>
 
-            {/* Legend List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
-              {donutSlices.map((slice, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: slice.color, flexShrink: 0 }} />
-                    <span style={{ color: '#475569', fontWeight: '500' }}>{slice.name}</span>
+            {/* RIGHT SIDE: Legend Breakdown matching POStatusOverview */}
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '4px', flex: '1 1 130px', minWidth: '120px', height: '100%' }}>
+              {breakupItems.map((item, idx) => {
+                const pctDisplay = `${(item.pct * 100).toFixed(item.pct < 0.01 ? 1 : 1)}%`;
+
+                return (
+                  <div 
+                    key={idx} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      gap: '4px',
+                      cursor: 'pointer',
+                      opacity: hoveredBreakupIdx !== null && hoveredBreakupIdx !== idx ? 0.45 : 1,
+                      padding: '4px 7px',
+                      borderRadius: '8px',
+                      backgroundColor: hoveredBreakupIdx === idx ? `${item.color}15` : '#F8FAFC',
+                      border: hoveredBreakupIdx === idx ? `1px solid ${item.color}` : '1px solid #E2E8F0',
+                      transition: 'all 0.2s ease',
+                      minWidth: 0,
+                      flex: 1
+                    }}
+                    onMouseEnter={() => setHoveredBreakupIdx(idx)}
+                    onMouseLeave={() => setHoveredBreakupIdx(null)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
+                      <span style={{ 
+                        width: '7px', 
+                        height: '7px', 
+                        borderRadius: '50%', 
+                        backgroundColor: item.color, 
+                        flexShrink: 0 
+                      }} />
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                      <span style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B' }}>
+                        {pctDisplay}
+                      </span>
+                      <span style={{ fontSize: '11px', fontWeight: '900', color: '#0F172A', minWidth: '18px', textAlign: 'right' }}>
+                        {item.count}
+                      </span>
+                    </div>
                   </div>
-                  <span style={{ fontWeight: '700', color: '#0F172A' }}>
-                    {slice.pct}%
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 5. BOTTOM BAR - QUICK LINKS & EXPORT BUTTONS */}
+      {/* 5. CLEAN QUICK FINANCIAL REPORTS SECTION (REPLACES CLUMSY FIXED BLACK BAR) */}
       <div style={{
-        position: 'fixed',
-        bottom: '0',
-        left: '0',
-        right: '0',
-        backgroundColor: '#0F172A',
-        color: '#FFFFFF',
-        padding: '12px 28px',
+        backgroundColor: '#FFFFFF',
+        borderRadius: '16px',
+        border: '1px solid #E2E8F0',
+        padding: '16px 20px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        zIndex: 50,
-        boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.15)',
-        borderTop: '1px solid #1E293B'
+        flexWrap: 'wrap',
+        gap: '12px',
+        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.02)'
       }}>
-        {/* Left Quick Links */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{
             fontSize: '11px',
             fontWeight: '800',
-            color: '#94A3B8',
-            letterSpacing: '1px',
-            marginRight: '6px',
-            textTransform: 'uppercase'
+            color: '#64748B',
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase',
+            marginRight: '4px'
           }}>
-            QUICK LINKS
+            QUICK REPORTS:
           </div>
 
           {quickLinks.map(link => (
@@ -1078,25 +811,25 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
               key={link.id}
               onClick={() => setActiveQuickReport(link.id)}
               style={{
-                backgroundColor: '#1E293B',
-                color: '#E2E8F0',
-                border: '1px solid #334155',
+                backgroundColor: '#F8FAFC',
+                color: '#334155',
+                border: '1px solid #E2E8F0',
                 borderRadius: '8px',
                 padding: '6px 12px',
                 fontSize: '12px',
                 fontWeight: '600',
                 cursor: 'pointer',
-                transition: 'all 0.15s'
+                transition: 'all 0.15s ease'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#0E7490';
+                e.currentTarget.style.backgroundColor = '#ECFEFF';
                 e.currentTarget.style.borderColor = '#0E7490';
-                e.currentTarget.style.color = '#FFFFFF';
+                e.currentTarget.style.color = '#0E7490';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#1E293B';
-                e.currentTarget.style.borderColor = '#334155';
-                e.currentTarget.style.color = '#E2E8F0';
+                e.currentTarget.style.backgroundColor = '#F8FAFC';
+                e.currentTarget.style.borderColor = '#E2E8F0';
+                e.currentTarget.style.color = '#334155';
               }}
             >
               {link.label}
@@ -1104,27 +837,25 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
           ))}
         </div>
 
-        {/* Right Action Buttons: PDF & Excel */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={handleExportPdf}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              backgroundColor: '#1E293B',
-              color: '#FFFFFF',
-              border: '1px solid #475569',
+              backgroundColor: '#FFFFFF',
+              color: '#475569',
+              border: '1px solid #CBD5E1',
               borderRadius: '8px',
               padding: '6px 14px',
               fontSize: '12px',
-              fontWeight: '700',
+              fontWeight: '600',
               cursor: 'pointer'
             }}
           >
-            PDF <Download size={13} />
+            <Printer size={13} /> Print Summary
           </button>
-
           <button
             onClick={handleExportExcel}
             style={{
@@ -1135,14 +866,14 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '8px',
-              padding: '6px 14px',
+              padding: '6px 16px',
               fontSize: '12px',
               fontWeight: '700',
               cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(14, 116, 144, 0.4)'
+              boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
             }}
           >
-            Excel <Download size={13} />
+            <Download size={13} /> Export Statements
           </button>
         </div>
       </div>

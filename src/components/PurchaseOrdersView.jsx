@@ -195,7 +195,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   const [statusFilter, setStatusFilter] = useState('All');
   const [filterDate, setFilterDate] = useState('');
-  const [poTab, setPoTab] = useState(isExecutiveOrMD ? 'Draft' : isAccounts ? 'MD_APPROVED' : 'All');
+  const [poTab, setPoTab] = useState('All');
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -1780,41 +1780,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
-                  onClick={handleManualRefresh}
-                  disabled={isRefreshing}
-                  title="Refresh Purchase Orders from Zoho Books"
-                  style={{
-                    height: '40px',
-                    padding: '0 16px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    backgroundColor: '#FFFFFF',
-                    color: '#1E293B',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: isRefreshing ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => { if (!isRefreshing) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                  onMouseLeave={(e) => { if (!isRefreshing) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
-                >
-                  <RotateCcw
-                    style={{
-                      width: '15px',
-                      height: '15px',
-                      color: '#0E7490',
-                      animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none'
-                    }}
-                  />
-                  <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-                </button>
-
-                {!isExecutiveOrMD && (
+                {!isExecutiveOrMD && !isAccounts && (
                   <button
                     onClick={() => handleStartFreshPO()}
                     style={{
@@ -1917,14 +1883,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             {/* 2. STATUS TABS ROW */}
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
               {(isExecutiveOrMD ? [
+                { id: 'All', label: 'All Purchase Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
                 { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'MD_APPROVED', label: 'Approved by MD', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'All', label: 'All Purchase Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' }
+                { id: 'MD_APPROVED', label: 'Approved by MD', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' }
               ] : isAccounts ? [
-                { id: 'MD_APPROVED', label: 'Awaiting Accounts Verification', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
-                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' },
+                { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
                 { id: 'Draft', label: 'Pending MD Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' }
+                { id: 'MD_APPROVED', label: 'Awaiting Accounts Verification', count: poList.filter(po => getPoStage(po) === 'MD_APPROVED').length, bg: '#e0e7ff', fg: '#3730a3' },
+                { id: 'PAYMENT_PROCESSED', label: 'Payment Processed / Credit Verified', count: poList.filter(po => getPoStage(po) === 'PAYMENT_PROCESSED').length, bg: '#fef3c7', fg: '#92400e' }
               ] : [
                 { id: 'All', label: 'All Orders', count: poList.length, bg: '#e2e8f0', fg: '#475569' },
                 { id: 'Draft', label: 'Draft / Pending Approval', count: poList.filter(po => getPoStage(po) === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
@@ -2270,9 +2236,17 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                   // PROCUREMENT / ADMIN / CEO ACTIONS (isAccounts is FALSE)
                   const rowStage = getPoStage(target);
-                  const isPaymentProcessed = st === 'Payment Processed' || stt === 'payment_processed' || rowStage === 'PAYMENT_PROCESSED' || Boolean(target.paymentDetails);
+                  const isClosed = rowStage === 'CLOSED' || st.toUpperCase().includes('CLOSED') || st.toUpperCase().includes('FULLY RECEIVED') || stt === 'closed';
+                  const isPartiallyReceived = rowStage === 'PARTIALLY_RECEIVED' || st.toUpperCase().includes('PARTIAL') || stt.includes('partial');
+
+                  // If Closed / Fully Received or already in GRN receiving, no lifecycle progression actions needed here
+                  if (isClosed || isPartiallyReceived) {
+                    return null;
+                  }
+
                   const isProceedPo = st === 'Proceed PO' || st === 'PROCEED PO' || stt === 'proceed_po' || rowStage === 'PROCEED_PO' || Boolean(target.proceedDetails);
-                  const isAlreadyApproved = isPaymentProcessed || isProceedPo || st === 'MD Approved' || stt === 'md_approved' || rowStage === 'MD_APPROVED' || st.includes('CLOSED') || st.includes('PARTIALLY');
+                  const isPaymentProcessed = !isProceedPo && (st === 'Payment Processed' || stt === 'payment_processed' || rowStage === 'PAYMENT_PROCESSED' || Boolean(target.paymentDetails));
+                  const isAlreadyApproved = isPaymentProcessed || isProceedPo || st === 'MD Approved' || stt === 'md_approved' || rowStage === 'MD_APPROVED';
                   const isDraftOrPending = !isAlreadyApproved && (st === 'Draft' || st.includes('Pending') || st.includes('WAITING') || st === 'Draft / Pending Approval' || st === 'OPEN');
 
                   // A) If CEO/MD and still Draft -> Show "Approve as MD"

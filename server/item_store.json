@@ -5048,10 +5048,7 @@
     "category": "General",
     "stock": 0,
     "openingStock": 0,
-    "reorderLevel": 100,
-    "availableStock": 0,
-    "physicalStock": 0,
-    "cat": "General"
+    "reorderLevel": 100
   },
   {
     "id": "4080449000000366354",
@@ -5072,11 +5069,7 @@
     "category": "General",
     "stock": 1497,
     "openingStock": 0,
-    "reorderLevel": 100,
-    "availableStock": 1497,
-    "physicalStock": 1497,
-    "cat": "General",
-    "lastUpdated": "Inwarded from GRN GRN-2026-00113"
+    "reorderLevel": 100
   },
   {
     "id": "4080449000000366378",
@@ -5254,7 +5247,7 @@
     "rate": 0,
     "price": 0,
     "sku": "ABD545",
-    "status": "In Stock",
+    "status": "Active",
     "description": "—",
     "purchaseRate": 0,
     "purchaseDescription": "",
@@ -5265,9 +5258,7 @@
     "category": "General",
     "stock": 100,
     "openingStock": 0,
-    "reorderLevel": 100,
-    "availableStock": 100,
-    "physicalStock": 100
+    "reorderLevel": 100
   },
   {
     "id": "4080449000000367898",

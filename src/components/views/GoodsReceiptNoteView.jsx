@@ -2474,40 +2474,6 @@ export default function GoodsReceiptNoteView(props) {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <button
-                    onClick={handleManualRefresh}
-                    disabled={isRefreshing}
-                    title="Refresh GRNs"
-                    style={{
-                      height: '40px',
-                      padding: '0 16px',
-                      borderRadius: '8px',
-                      border: '1px solid #E2E8F0',
-                      backgroundColor: '#FFFFFF',
-                      color: '#1E293B',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      cursor: isRefreshing ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => { if (!isRefreshing) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                    onMouseLeave={(e) => { if (!isRefreshing) e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
-                  >
-                    <RotateCcw
-                      style={{
-                        width: '15px',
-                        height: '15px',
-                        color: '#0E7490',
-                        animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none'
-                      }}
-                    />
-                    <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-                  </button>
-
-                  <button
                     onClick={() => {
                       setSelectedGRNPo('');
                       setSelectedGRNVendor('');

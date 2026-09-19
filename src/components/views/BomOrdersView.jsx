@@ -3,7 +3,7 @@ import {
   Plus, Check, Trash2, Eye, FileText, Search, AlertCircle, AlertTriangle, X, XCircle,
   CheckCircle, Clock, Calendar, Edit3, RotateCcw, UploadCloud, ChevronDown, ChevronUp,
   Truck, ShoppingCart, Upload, Printer, Download, Layers, CreditCard, Bell, MoreHorizontal, FileCheck, CheckSquare,
-  Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save
+  Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';

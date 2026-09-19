@@ -244,7 +244,8 @@ export default function DashboardFullReference({ userRole }) {
                   if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
                 } catch(e) {}
                 if (userRole === 'Production Head') return 'Senthil Kumar';
-                if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
+                if (userRole === 'Technical Administrator') return 'Annamalaiyar';
+                if (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director') return 'Velmurugan Rathinam';
                 if (userRole === 'Dispatch Head') return 'Kalpana';
                 if (userRole === 'Floor Supervisor') return 'Floor Supervisor';
                 if (userRole === 'Floor Employee') return 'Floor Employee';

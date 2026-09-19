@@ -20,6 +20,7 @@ import VRMTemplateStudioView from './components/VRMTemplateStudioView';
 import ProductionAdminView from './components/ProductionAdminView';
 import SalesExecutiveDashboardView from './components/views/SalesExecutiveDashboardView';
 import AccountsFinanceDashboard from './components/views/AccountsFinanceDashboard';
+import CeoExecutiveDashboardView from './components/views/CeoExecutiveDashboardView';
 import LoginScreen from './components/LoginScreen';
 import DeveloperPortalView from './components/DeveloperPortalView';
 import NotificationToast from './components/NotificationToast';
@@ -546,7 +547,7 @@ function App() {
               clearTargetPoTab={() => setTargetPoTab(null)}
               onNavigateTab={handleTabChange}
             />
-          ) : activeTab === 'Zoho Integration' ? (
+          ) : (activeTab === 'Integration' || activeTab === 'Zoho Integration') ? (
             <ZohoIntegrationView userRole={userRole} />
           ) : activeTab === 'Material Calculation Engine' ? (
             <MaterialCalculationEngine onBack={() => handleTabChange('BOM')} />
@@ -569,6 +570,8 @@ function App() {
             <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
             <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
+          ) : (activeTab === 'Dashboard' && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
+            <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (
             <DashboardFullReference userRole={userRole} />
           )}

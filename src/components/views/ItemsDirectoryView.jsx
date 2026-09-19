@@ -2443,34 +2443,6 @@ export default function ItemsDirectoryView(props) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <button
-                    onClick={() => fetchZohoItems(true)}
-                    disabled={isSyncingZohoItems || itemsLoading}
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
-                      color: '#334155',
-                      height: '40px',
-                      padding: '0 16px',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      cursor: (isSyncingZohoItems || itemsLoading) ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s ease',
-                      opacity: (isSyncingZohoItems || itemsLoading) ? 0.7 : 1
-                    }}
-                    onMouseEnter={(e) => { if (!isSyncingZohoItems && !itemsLoading) e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
-                    onMouseLeave={(e) => { if (!isSyncingZohoItems && !itemsLoading) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                    title="Fetch and synchronize latest items catalog directly from Zoho Books"
-                  >
-                    <RefreshCw size={15} style={{ color: '#0E7490', animation: isSyncingZohoItems ? 'spin 1s linear infinite' : 'none' }} />
-                    <span>{isSyncingZohoItems ? 'Syncing...' : 'Sync with Zoho'}</span>
-                  </button>
-
-                  <button
                     onClick={() => {
                       setNewItemData({
                         name: '',

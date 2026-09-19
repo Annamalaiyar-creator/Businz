@@ -102,7 +102,16 @@ export default function OtherViews(props) {
         {activeTab === 'Vendor Management' && <VendorManagementView {...props} />}
         {(activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') && <GoodsReceiptNoteView {...props} />}
         {activeTab === 'Upload Invoice' && <InvoiceUploadView {...props} />}
-        {activeTab === 'Payments' && <PaymentsView {...props} />}
+        {activeTab === 'Payments' && (
+          userRole === 'Procurement Head' || userRole === 'Procurement Admin' || userRole?.includes('Procurement') ? (
+            <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
+              <p style={{ fontSize: '13px', color: '#64748B' }}>The Payments screen is not available for Procurement Head.</p>
+            </div>
+          ) : (
+            <PaymentsView {...props} />
+          )
+        )}
         {activeTab === 'Vendor Performance' && <VendorPerformanceView {...props} />}
         {activeTab === 'Spend Analytics' && <SpendAnalyticsView {...props} />}
         {activeTab === 'Material Reorder' && <MaterialReorderView {...props} />}

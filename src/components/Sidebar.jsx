@@ -85,8 +85,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         { label: 'Vendor Performance', icon: Award },
         { label: 'Material Calculation Engine', icon: Calculator },
         { label: 'Material Reorder', icon: RefreshCw, badge: '3' },
-        { label: 'Price Comparison', icon: Scale },
-        { label: 'Payments', icon: Wallet }
+        { label: 'Price Comparison', icon: Scale }
       ]
     }
   ];
@@ -122,7 +121,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     {
       category: 'SYSTEM & CONFIG',
       items: [
-        { label: 'Zoho Integration', icon: GitBranch }
+        { label: 'Integration', targetTab: 'Integration', icon: GitBranch }
       ]
     }
   ];
@@ -291,7 +290,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'CEO') {
+    } else if (role === 'CEO' || role === 'MD' || role === 'Managing Director') {
       sections = [
         {
           category: 'MAIN MENU',
@@ -303,16 +302,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               icon: ShoppingCart, 
               badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined 
             },
-            { label: 'Proforma Invoice', icon: FileText },
-            { label: 'Preset Management', icon: Layers }
-          ]
-        },
-        {
-          category: 'WORKSPACE & REPORTS',
-          items: [
-            { label: 'Spend Analytics', icon: PieChart },
-            { label: 'Production Reports', icon: FileBarChart },
-            { label: 'Spend Reports', icon: TrendingUp }
+            { label: 'Proforma Invoice', icon: FileText }
           ]
         }
       ];
@@ -320,19 +310,21 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       sections = [...procurementSections];
     }
 
+    const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director');
+
     // Always ensure Zoho Integration, Templates & Backup Vault are accessible under SYSTEM & CONFIG
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.targetTab === 'Templates'));
     const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     if (sysSection) {
-      if (!hasTemplates) sysSection.items.unshift({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
+      if (!hasTemplates && !isCeo) sysSection.items.unshift({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
       if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
     } else {
       const sysItems = [];
-      if (!hasTemplates) {
+      if (!hasTemplates && !isCeo) {
         sysItems.push({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
       }
-      sysItems.push({ label: 'Zoho Integration', icon: GitBranch });
+      sysItems.push({ label: 'Integration', targetTab: 'Integration', icon: GitBranch });
       sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
       sections.push({
         category: 'SYSTEM & CONFIG',
@@ -348,6 +340,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
     if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes') return 'Templates';
+    if (tab === 'Zoho Integration' || tab === 'Integration') return 'Integration';
     return tab;
   };
 
