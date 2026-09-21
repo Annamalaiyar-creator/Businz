@@ -11,7 +11,6 @@ lerna-debug.log*
 node_modules/
 
 # Production build artifacts
-dist/
 dist-ssr/
 build/
 *.local
