@@ -567,8 +567,12 @@ app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
 // 📁 STATIC MEDIA UPLOADS & STREAMING DIRECTORY (Supports byte-range video streaming)
 const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Uploads Directory Warning]:', err.message);
 }
 app.use('/uploads', express.static(uploadsDir, { acceptRanges: true }));
 app.use('/api/uploads', express.static(uploadsDir, { acceptRanges: true }));
