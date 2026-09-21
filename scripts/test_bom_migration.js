@@ -186,6 +186,9 @@ async function runTestSuite() {
   assert(Number(readBack?.grand_total) === 59000, `Persisted grand_total matches`);
   assert(readBack?.status === 'Draft', `Persisted status matches Draft`);
 
+  // Allow async server notification from creation to complete before updating
+  await new Promise(r => setTimeout(r, 800));
+
   // ----------------------------------------------------
   // Test 7: Update/Edit single BOM (status, confirmation, amount)
   // ----------------------------------------------------
