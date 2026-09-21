@@ -7,129 +7,145 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error('❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment');
+  process.exit(1);
+}
 
-async function runStorageTest() {
+// Frontend / anon client
+const anonClient = createClient(supabaseUrl, anonKey);
+
+// Backend / service-role administrative client
+const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
+
+async function runStorageSecurityTestSuite() {
   console.log('====================================================');
-  console.log('🔒 BUSINZ PHASE D1 — STORAGE VERIFICATION TEST');
+  console.log('🔒 BUSINZ PHASE D1 — STORAGE SECURITY VERIFICATION');
   console.log('====================================================\n');
 
-  // 1. Check bucket existence
-  console.log('Test 1: Check bucket existence and privacy');
-  const { data: buckets, error: bErr } = await supabase.storage.listBuckets();
-  if (bErr) {
-    console.error('  ❌ Error listing buckets:', bErr.message);
+  let passedCount = 0;
+  let failedCount = 0;
+
+  function assert(condition, message) {
+    if (condition) {
+      console.log(`  ✅ PASS: ${message}`);
+      passedCount++;
+    } else {
+      console.error(`  ❌ FAIL: ${message}`);
+      failedCount++;
+    }
+  }
+
+  // STEP 4: VERIFY BUCKET CONFIGURATION
+  console.log('Step 4: Verify bom-documents bucket configuration');
+  const { data: bucket, error: bErr } = await adminClient.storage.getBucket('bom-documents');
+  if (bErr || !bucket) {
+    console.error('  ❌ Error fetching bom-documents bucket:', bErr?.message);
     return false;
   }
 
-  const bomBucket = buckets?.find(b => b.id === 'bom-documents' || b.name === 'bom-documents');
-  if (!bomBucket) {
-    console.warn('  ⚠️ Bucket "bom-documents" not found yet.');
-    console.log('     Please execute "supabase_storage_setup.sql" in Supabase SQL Editor.');
-    return false;
-  }
+  assert(bucket.id === 'bom-documents', 'Bucket id is "bom-documents"');
+  assert(bucket.public === false, 'Bucket is strictly private (public = false)');
+  assert(bucket.file_size_limit === 52428800, 'File size limit is 50 MB (52428800 bytes)');
+  const mimes = bucket.allowed_mime_types || [];
+  const expectedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4'];
+  const mimesMatch = expectedMimes.every(m => mimes.includes(m)) && mimes.length === expectedMimes.length;
+  assert(mimesMatch, `MIME restrictions matched expected [${expectedMimes.join(', ')}]`);
 
-  console.log(`  ✅ PASS: Bucket "bom-documents" exists.`);
-  console.log(`  ✅ PASS: Bucket public = ${bomBucket.public} (Private: ${!bomBucket.public})`);
-  console.log(`  ✅ PASS: File size limit: ${bomBucket.file_size_limit || 'Default'} bytes`);
-  console.log(`  ✅ PASS: Allowed MIME types:`, bomBucket.allowed_mime_types);
-
-  // 2. Upload tiny temporary test file
-  console.log('\nTest 2: Upload temporary test file to _system-tests/phase-d1-storage-test.txt');
+  // STEP 5: RUN STORAGE SECURITY TEST
+  console.log('\nStep 5: Run storage security test (A through G)');
   const testPath = '_system-tests/phase-d1-storage-test.txt';
   const testContent = 'BUSINZ Phase D1 Storage Security Test Content - ' + new Date().toISOString();
+  const testBuffer = Buffer.from(testContent, 'utf-8');
 
-  const { data: uploadData, error: upErr } = await supabase.storage
+  // Test A: BACKEND AUTHORIZED UPLOAD
+  console.log('\nTest A: Backend Authorized Upload (using service_role)');
+  const { data: uploadData, error: upErr } = await adminClient.storage
     .from('bom-documents')
-    .upload(testPath, Buffer.from(testContent, 'utf-8'), {
-      contentType: 'text/plain',
+    .upload(testPath, testBuffer, {
+      contentType: 'image/png',
       upsert: true
     });
+  assert(!upErr && uploadData?.path, `Backend authorized upload succeeded (${uploadData?.path})`);
 
-  if (upErr) {
-    console.error('  ❌ Upload failed:', upErr.message);
-    return false;
-  }
-  console.log('  ✅ PASS: Upload succeeded:', uploadData.path);
+  // Test B: ANONYMOUS UPLOAD
+  console.log('\nTest B: Anonymous Upload (using public anon key)');
+  const anonTestPath = '_system-tests/phase-d1-anon-upload-test.txt';
+  const { data: anonData, error: anonErr } = await anonClient.storage
+    .from('bom-documents')
+    .upload(anonTestPath, testBuffer, {
+      contentType: 'image/png',
+      upsert: true
+    });
+  const anonDenied = Boolean(anonErr || !anonData);
+  assert(anonDenied, `Anonymous upload strictly DENIED (status: ${anonErr?.statusCode || anonErr?.message || 'AccessDenied'})`);
 
-  // 3. Verify direct unauthenticated public access does NOT work
-  console.log('\nTest 3: Verify direct unauthenticated public access is DENIED');
-  const { data: pubData } = supabase.storage
+  // Test C: PUBLIC URL ACCESS
+  console.log('\nTest C: Public URL Access (direct unauthenticated access)');
+  const { data: pubData } = adminClient.storage
     .from('bom-documents')
     .getPublicUrl(testPath);
 
+  let pubDenied = false;
   try {
     const pubRes = await fetch(pubData.publicUrl);
-    // For a private bucket, Supabase returns 400 or 404 or 403 when hitting publicUrl
-    const isDenied = pubRes.status === 400 || pubRes.status === 403 || pubRes.status === 404;
-    if (isDenied) {
-      console.log(`  ✅ PASS: Public direct URL returned HTTP ${pubRes.status} (Access Denied as expected for private bucket)`);
-    } else {
-      console.error(`  ❌ FAIL: Public direct URL returned HTTP ${pubRes.status}`);
-      return false;
-    }
-  } catch (netErr) {
-    console.log(`  ✅ PASS: Public URL request failed/blocked (${netErr.message})`);
+    pubDenied = pubRes.status === 400 || pubRes.status === 403 || pubRes.status === 404;
+    assert(pubDenied, `Public URL direct access DENIED (HTTP ${pubRes.status})`);
+  } catch (err) {
+    assert(true, `Public URL access blocked by network error: ${err.message}`);
   }
 
-  // 4. Verify signed URL can be generated and accesses the file
-  console.log('\nTest 4: Verify signed URL creation and content retrieval');
-  const { data: signData, error: signErr } = await supabase.storage
+  // Test D: SIGNED URL GENERATION
+  console.log('\nTest D: Signed URL Generation (using service_role)');
+  const { data: signData, error: signErr } = await adminClient.storage
     .from('bom-documents')
     .createSignedUrl(testPath, 60);
+  assert(!signErr && signData?.signedUrl, 'Signed URL generated successfully');
 
-  if (signErr || !signData?.signedUrl) {
-    console.error('  ❌ Signed URL generation failed:', signErr?.message);
-    return false;
-  }
-  console.log('  ✅ PASS: Signed URL generated successfully');
-
-  const signedRes = await fetch(signData.signedUrl);
-  if (signedRes.ok) {
-    const fetchedText = await signedRes.text();
-    if (fetchedText === testContent) {
-      console.log('  ✅ PASS: Fetched content from signed URL matches uploaded content exactly');
-    } else {
-      console.error('  ❌ Content mismatch from signed URL');
-      return false;
+  // Test E: SIGNED URL RETRIEVAL
+  console.log('\nTest E: Signed URL Retrieval');
+  let fetchPassed = false;
+  if (signData?.signedUrl) {
+    const signedRes = await fetch(signData.signedUrl);
+    if (signedRes.ok) {
+      const text = await signedRes.text();
+      fetchPassed = text === testContent;
     }
-  } else {
-    console.error(`  ❌ Failed to fetch from signed URL: HTTP ${signedRes.status}`);
-    return false;
   }
+  assert(fetchPassed, 'Signed URL successfully fetched uploaded test content with exact match');
 
-  // 5. Delete temporary test file
-  console.log('\nTest 5: Clean up temporary test file');
-  const { error: delErr } = await supabase.storage
+  // Test F: DELETE
+  console.log('\nTest F: Authorized Deletion (using service_role)');
+  const { data: delData, error: delErr } = await adminClient.storage
     .from('bom-documents')
     .remove([testPath]);
+  assert(!delErr && delData?.length > 0, 'Authorized deletion succeeded');
 
-  if (delErr) {
-    console.error('  ❌ Failed to delete test file:', delErr.message);
-    return false;
-  }
-  console.log('  ✅ PASS: Temporary test file cleanly deleted from bucket');
-
-  // 6. Confirm bucket is empty of test artifacts
-  const { data: listData } = await supabase.storage
+  // Test G: CLEANUP CHECK
+  console.log('\nTest G: Cleanup Check (verify object no longer exists)');
+  const { data: listData } = await adminClient.storage
     .from('bom-documents')
     .list('_system-tests');
-
-  const remaining = listData?.filter(f => f.name === 'phase-d1-storage-test.txt') || [];
-  if (remaining.length === 0) {
-    console.log('  ✅ PASS: Bucket confirmed 100% clean with zero test artifacts remaining');
-  } else {
-    console.error('  ❌ Test file still visible in list');
-    return false;
-  }
+  const stillExists = (listData || []).some(f => f.name === 'phase-d1-storage-test.txt');
+  assert(!stillExists, 'Test artifact _system-tests/phase-d1-storage-test.txt confirmed completely removed');
 
   console.log('\n====================================================');
-  console.log('🎉 ALL PHASE D1 STORAGE SECURITY TESTS PASSED!');
+  console.log(`SUMMARY: ${passedCount} PASSED | ${failedCount} FAILED`);
   console.log('====================================================');
+
+  if (failedCount > 0) {
+    process.exit(1);
+  }
   return true;
 }
 
-runStorageTest().catch(console.error);
+runStorageSecurityTestSuite().catch((err) => {
+  console.error('Unexpected error in test suite:', err);
+  process.exit(1);
+});
