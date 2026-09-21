@@ -24,7 +24,7 @@ import {
   INITIAL_WHATSAPP_CONVERSATIONS,
   INITIAL_CRM_QUOTATIONS
 } from '../../services/crmStore';
-import { fetchCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudOpportunityRow, deleteCloudOpportunityRow } from '../../utils/supabaseDataSync';
 
 export default function SalesCrmEngine({
   userRole = 'Sales Executive',
@@ -149,12 +149,32 @@ export default function SalesCrmEngine({
       }
     };
 
+    // Real-Time single-row listener for Opportunities
+    const handleOppRealtime = (e) => {
+      const { opportunity, action, id } = e?.detail || {};
+      if (action === 'delete' && id) {
+        setOpportunities(prev => (Array.isArray(prev) ? prev.filter(o => o.id !== id) : []));
+      } else if (opportunity && opportunity.id) {
+        setOpportunities(prev => {
+          const list = Array.isArray(prev) ? [...prev] : [];
+          const idx = list.findIndex(o => o.id === opportunity.id);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...opportunity };
+            return list;
+          }
+          return [opportunity, ...list];
+        });
+      }
+    };
+
+    window.addEventListener('controlroom_opportunity_update', handleOppRealtime);
     window.addEventListener('controlroom_whatsapp_message', handleCrmPush);
     window.addEventListener('controlroom_crm_updated', syncCloudCrm);
     window.addEventListener('controlroom_storage_update', syncCloudCrm);
 
     return () => {
       isMounted = false;
+      window.removeEventListener('controlroom_opportunity_update', handleOppRealtime);
       window.removeEventListener('controlroom_whatsapp_message', handleCrmPush);
       window.removeEventListener('controlroom_crm_updated', syncCloudCrm);
       window.removeEventListener('controlroom_storage_update', syncCloudCrm);
@@ -235,13 +255,18 @@ export default function SalesCrmEngine({
   const handleSaveOpportunity = (opp) => {
     const updated = [opp, ...opportunities.filter(o => o.id !== opp.id)];
     setOpportunities(updated);
-    saveCrmStore('opportunities', updated);
+    saveCloudOpportunityRow(opp);
   };
 
   const handleUpdateOpportunity = (opp) => {
     const updated = opportunities.map(o => o.id === opp.id ? opp : o);
     setOpportunities(updated);
-    saveCrmStore('opportunities', updated);
+    saveCloudOpportunityRow(opp);
+  };
+
+  const handleDeleteOpportunity = (oppId) => {
+    setOpportunities(prev => prev.filter(o => o.id !== oppId));
+    deleteCloudOpportunityRow(oppId);
   };
 
   const handleSaveFollowup = (fu) => {
@@ -430,6 +455,7 @@ export default function SalesCrmEngine({
             customers={customers}
             onUpdateOpportunity={handleUpdateOpportunity}
             onCreateOpportunity={handleSaveOpportunity}
+            onDeleteOpportunity={handleDeleteOpportunity}
             onNavigateTab={(tab) => {
               if (tab === 'Sales BOM' || tab === 'BOM') onNavigateTab(tab);
               else setActiveTab(tab);

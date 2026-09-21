@@ -140,10 +140,84 @@ const loadLocalCustomers = () => {
   return [];
 };
 
+// Canonical Supabase Opportunities Data Layer (Zero leaves table egress)
+const loadDatabaseOpportunities = async () => {
+  if (supabaseMemoryStore.crm_opportunities && Array.isArray(supabaseMemoryStore.crm_opportunities) && supabaseMemoryStore.crm_opportunities.length > 0) {
+    return supabaseMemoryStore.crm_opportunities;
+  }
+  try {
+    const { data, error } = await supabase
+      .from('opportunities')
+      .select('id, customer_id, company_name, title, deal_value, stage, probability, assigned_salesperson, target_close_date, notes, created_at, updated_at')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const mapped = data.map(o => {
+        let extra = {};
+        let userNotes = o.notes || '';
+        if (typeof o.notes === 'string' && o.notes.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(o.notes);
+            if (parsed && typeof parsed === 'object') {
+              extra = parsed;
+              userNotes = parsed._userNotes || '';
+            }
+          } catch (_) {}
+        }
+        return {
+          id: o.id,
+          oppNumber: extra.oppNumber || o.id,
+          customerId: o.customer_id || extra.customerId || '',
+          companyName: o.company_name || extra.companyName || '',
+          title: o.title || extra.title || '',
+          dealValue: Number(o.deal_value !== undefined && o.deal_value !== null ? o.deal_value : (extra.dealValue || 0)),
+          stage: o.stage || extra.stage || 'Qualification',
+          probability: Number(o.probability !== undefined && o.probability !== null ? o.probability : (extra.probability ?? 20)),
+          assignedSalesperson: o.assigned_salesperson || extra.assignedSalesperson || 'Sales Team',
+          targetCloseDate: o.target_close_date || extra.targetCloseDate || '',
+          notes: userNotes,
+          createdAt: o.created_at || extra.createdAt || new Date().toISOString(),
+          updatedAt: o.updated_at || extra.updatedAt || new Date().toISOString(),
+          ...extra
+        };
+      });
+
+      supabaseMemoryStore.crm_opportunities = mapped;
+      supabaseMemoryStore.opportunities = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('[loadDatabaseOpportunities] Supabase fetch notice:', err?.message || err);
+  }
+
+  // Fallback to disk JSON
+  try {
+    const diskPath = path.resolve(__dirname, 'crm_opportunities.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      supabaseMemoryStore.crm_opportunities = diskData;
+      supabaseMemoryStore.opportunities = diskData;
+      return diskData;
+    }
+  } catch (_) {}
+
+  return supabaseMemoryStore.crm_opportunities || [];
+};
+
+const loadLocalOpportunities = () => {
+  if (supabaseMemoryStore.crm_opportunities && Array.isArray(supabaseMemoryStore.crm_opportunities) && supabaseMemoryStore.crm_opportunities.length > 0) {
+    return supabaseMemoryStore.crm_opportunities;
+  }
+  return [];
+};
+
 // Authoritative Database Store functions directly with Supabase
 const getDatabaseStore = async (key) => {
   if (key === 'customer_store' || key === 'crm_customers') {
     return await loadDatabaseCustomers();
+  }
+  if (key === 'crm_opportunities' || key === 'opportunities') {
+    return await loadDatabaseOpportunities();
   }
   const employeeKey = key.toUpperCase();
   try {
@@ -421,10 +495,85 @@ const saveLocalCustomers = async (customers) => {
   }
 };
 
+const saveLocalOpportunities = async (opportunities) => {
+  if (!opportunities) return;
+  const list = Array.isArray(opportunities) ? opportunities : [opportunities];
+  supabaseMemoryStore.crm_opportunities = list;
+  supabaseMemoryStore.opportunities = list;
+
+  // 1. Persist to disk file for zero data loss
+  try {
+    const oppPath = getStoreFilePath('crm_opportunities.json');
+    fs.writeFileSync(oppPath, JSON.stringify(list, null, 2), 'utf8');
+  } catch (diskErr) {
+    console.warn('[saveLocalOpportunities disk write error]:', diskErr?.message);
+  }
+
+  // 2. Broadcast via SSE to all connected clients
+  try {
+    broadcastRealtimeEvent('store_updated', { key: 'crm_opportunities', storeData: list });
+    broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', opportunities: list });
+  } catch (_) {}
+
+  // 3. Upsert to canonical public.opportunities table (Zero leaves table interaction)
+  try {
+    const rows = list.map(item => {
+      const id = item.id || item.oppNumber || `OPP-${Date.now()}`;
+      const customerId = item.customerId || item.customer_id || null;
+      const companyName = item.companyName || item.company_name || 'Prospect';
+      const title = item.title || `${companyName} Opportunity`;
+      const dealValue = Number(item.dealValue || item.deal_value || 0);
+      const stage = item.stage || 'Qualification';
+      const probability = Number(item.probability !== undefined && item.probability !== null ? item.probability : 20);
+      const assignedSalesperson = item.assignedSalesperson || item.assigned_salesperson || 'Sales Team';
+      const targetCloseDate = item.targetCloseDate || item.target_close_date || null;
+      const createdAt = item.createdAt || item.created_at || new Date().toISOString();
+      const updatedAt = new Date().toISOString();
+
+      const extraMetadata = { ...item, _userNotes: item.notes || '' };
+      delete extraMetadata.id;
+      delete extraMetadata.customerId;
+      delete extraMetadata.companyName;
+      delete extraMetadata.title;
+      delete extraMetadata.dealValue;
+      delete extraMetadata.stage;
+      delete extraMetadata.probability;
+      delete extraMetadata.assignedSalesperson;
+      delete extraMetadata.targetCloseDate;
+
+      return {
+        id,
+        customer_id: customerId,
+        company_name: companyName,
+        title,
+        deal_value: dealValue,
+        stage,
+        probability,
+        assigned_salesperson: assignedSalesperson,
+        target_close_date: targetCloseDate,
+        notes: JSON.stringify(extraMetadata),
+        created_at: createdAt,
+        updated_at: updatedAt
+      };
+    });
+
+    for (let i = 0; i < rows.length; i += 20) {
+      const batch = rows.slice(i, i + 20);
+      await supabase.from('opportunities').upsert(batch, { onConflict: 'id' });
+    }
+  } catch (sbErr) {
+    console.warn('[saveLocalOpportunities Supabase upsert notice]:', sbErr?.message || sbErr);
+  }
+};
+
 const saveDatabaseStore = async (key, storeData) => {
   if (storeData === undefined || storeData === null) return storeData;
   if (key === 'customer_store' || key === 'crm_customers') {
     await saveLocalCustomers(storeData);
+    return storeData;
+  }
+  if (key === 'crm_opportunities' || key === 'opportunities') {
+    await saveLocalOpportunities(storeData);
     return storeData;
   }
   supabaseMemoryStore[key] = storeData;
@@ -1326,6 +1475,40 @@ app.post('/api/store/:key', async (req, res) => {
   } catch (err) {
     res.json({ success: false, error: err.message });
   }
+});
+
+app.delete('/api/store/:key/:id', async (req, res) => {
+  const { key, id } = req.params;
+  if (key === 'crm_opportunities' || key === 'opportunities') {
+    try {
+      // 1. Delete from Supabase public.opportunities
+      const { error } = await supabase.from('opportunities').delete().eq('id', id);
+      if (error) {
+        console.warn('[DELETE opportunity Supabase notice]:', error.message);
+      }
+      // 2. Update memory store & disk
+      let current = supabaseMemoryStore.crm_opportunities || [];
+      if (!Array.isArray(current) || current.length === 0) {
+        current = await loadDatabaseOpportunities();
+      }
+      const updated = current.filter(item => (item.id || item.oppNumber) !== id);
+      supabaseMemoryStore.crm_opportunities = updated;
+      supabaseMemoryStore.opportunities = updated;
+      try {
+        const oppPath = getStoreFilePath('crm_opportunities.json');
+        fs.writeFileSync(oppPath, JSON.stringify(updated, null, 2), 'utf8');
+      } catch (_) {}
+
+      // 3. Broadcast event
+      broadcastRealtimeEvent('store_updated', { key: 'crm_opportunities', storeData: updated });
+      broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', opportunities: updated });
+
+      return res.json({ success: true, message: `Opportunity ${id} deleted successfully`, data: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+  return res.status(400).json({ success: false, error: `Deletion not supported for store key: ${key}` });
 });
 
 let pendingTokenPromise = null;

@@ -172,8 +172,210 @@ export function toDatabaseCustomerRow(item) {
 }
 
 /**
+ * Convert canonical public.opportunities database row to consumer-ready shape
+ * Preserves all legacy properties (capacityKw, structureType, contactPerson, bomCode, etc.)
+ */
+export function toConsumerOpportunity(o) {
+  if (!o || typeof o !== 'object') return o;
+
+  let extraMeta = {};
+  let plainNotes = o.notes || '';
+  if (o.notes && typeof o.notes === 'string' && o.notes.startsWith('{') && o.notes.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(o.notes);
+      if (parsed && typeof parsed === 'object') {
+        extraMeta = parsed;
+        plainNotes = parsed._userNotes !== undefined ? parsed._userNotes : '';
+      }
+    } catch (_) {}
+  }
+
+  const salesperson = o.assigned_salesperson || extraMeta.salesperson || 'Sales Representative';
+  const closeDate = o.target_close_date || extraMeta.expectedClosingDate || '';
+
+  return {
+    ...extraMeta,
+    id: o.id,
+    oppNumber: extraMeta.oppNumber || o.id,
+    title: o.title,
+    customerId: o.customer_id || extraMeta.customerId || '',
+    customerName: o.company_name,
+    companyName: o.company_name,
+    dealValue: Number(o.deal_value || 0),
+    stage: o.stage || 'Requirement Received',
+    probability: Number(o.probability !== null && o.probability !== undefined ? o.probability : 20),
+    assignedSalesperson: salesperson,
+    salesperson: salesperson,
+    targetCloseDate: closeDate,
+    expectedClosingDate: closeDate,
+    capacityKw: extraMeta.capacityKw || 100,
+    structureType: extraMeta.structureType || 'Aluminium Rooftop Rails',
+    contactPerson: extraMeta.contactPerson || '',
+    phone: extraMeta.phone || '',
+    requirement: extraMeta.requirement || '',
+    productCategory: extraMeta.productCategory || 'Aluminium Mounting Structures',
+    estimatedQty: extraMeta.estimatedQty || '',
+    priority: extraMeta.priority || 'HIGH',
+    bomCode: extraMeta.bomCode || '',
+    quotationNumber: extraMeta.quotationNumber || '',
+    lastActivity: extraMeta.lastActivity || '',
+    nextFollowup: extraMeta.nextFollowup || '',
+    notes: plainNotes,
+    createdAt: o.created_at || new Date().toISOString(),
+    updatedAt: o.updated_at || new Date().toISOString()
+  };
+}
+
+/**
+ * Convert opportunity object from any component to canonical public.opportunities database row
+ */
+export function toDatabaseOpportunityRow(item) {
+  if (!item || typeof item !== 'object') return null;
+
+  const id = item.id || item.oppNumber || `OPP-${Date.now()}`;
+  const companyName = item.companyName || item.customerName || 'Customer';
+  const title = item.title || `${companyName} Opportunity`;
+  const customerId = item.customerId || item.customer_id || null;
+  const dealValue = Number(item.dealValue || item.deal_value || 0);
+  const stage = item.stage || 'Requirement Received';
+  const probability = Number.isInteger(Number(item.probability)) ? Number(item.probability) : 20;
+  const salesperson = item.assignedSalesperson || item.salesperson || item.assigned_salesperson || 'Sales Representative';
+
+  let targetCloseDate = null;
+  const rawDate = item.targetCloseDate || item.expectedClosingDate || item.target_close_date;
+  if (rawDate) {
+    try {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        targetCloseDate = d.toISOString().split('T')[0];
+      }
+    } catch (_) {}
+  }
+
+  // Pack extra non-column fields into notes JSON metadata
+  const extraMetadata = {};
+  if (item.capacityKw !== undefined) extraMetadata.capacityKw = item.capacityKw;
+  if (item.structureType !== undefined) extraMetadata.structureType = item.structureType;
+  if (item.oppNumber !== undefined) extraMetadata.oppNumber = item.oppNumber;
+  if (item.contactPerson !== undefined) extraMetadata.contactPerson = item.contactPerson;
+  if (item.phone !== undefined) extraMetadata.phone = item.phone;
+  if (item.requirement !== undefined) extraMetadata.requirement = item.requirement;
+  if (item.productCategory !== undefined) extraMetadata.productCategory = item.productCategory;
+  if (item.estimatedQty !== undefined) extraMetadata.estimatedQty = item.estimatedQty;
+  if (item.priority !== undefined) extraMetadata.priority = item.priority;
+  if (item.bomCode !== undefined) extraMetadata.bomCode = item.bomCode;
+  if (item.quotationNumber !== undefined) extraMetadata.quotationNumber = item.quotationNumber;
+  if (item.lastActivity !== undefined) extraMetadata.lastActivity = item.lastActivity;
+  if (item.nextFollowup !== undefined) extraMetadata.nextFollowup = item.nextFollowup;
+
+  let notesVal = item.notes || '';
+  if (Object.keys(extraMetadata).length > 0) {
+    extraMetadata._userNotes = item.notes || '';
+    notesVal = JSON.stringify(extraMetadata);
+  }
+
+  return {
+    id,
+    customer_id: customerId,
+    company_name: companyName,
+    title,
+    deal_value: dealValue,
+    stage,
+    probability,
+    assigned_salesperson: salesperson,
+    target_close_date: targetCloseDate,
+    notes: notesVal,
+    created_at: item.createdAt || item.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Single-row atomic save/upsert for an Opportunity (Zero leaves table interaction)
+ */
+export async function saveCloudOpportunityRow(opp) {
+  if (!opp) return null;
+  const row = toDatabaseOpportunityRow(opp);
+  if (!row) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('opportunities')
+      .upsert(row, { onConflict: 'id' })
+      .select();
+
+    if (error) {
+      console.warn('[SupabaseSync] Single opportunity save error:', error.message);
+    }
+
+    const consumerOpp = toConsumerOpportunity(data?.[0] || row);
+
+    // Broadcast local event
+    window.dispatchEvent(new CustomEvent('controlroom_opportunity_update', {
+      detail: { opportunity: consumerOpp, action: 'upsert' }
+    }));
+    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+      detail: { storeKey: 'crm_opportunities', action: 'upsert', item: consumerOpp }
+    }));
+
+    // Async disk backup fallback
+    try {
+      fetch('/api/store/crm_opportunities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(consumerOpp)
+      }).catch(() => {});
+    } catch (_) {}
+
+    return consumerOpp;
+  } catch (err) {
+    console.warn('[SupabaseSync] Single opportunity upsert error:', err?.message || err);
+    return opp;
+  }
+}
+
+/**
+ * Single-row atomic delete for an Opportunity (Zero leaves table interaction)
+ */
+export async function deleteCloudOpportunityRow(oppId) {
+  if (!oppId) return false;
+
+  try {
+    const { error } = await supabase
+      .from('opportunities')
+      .delete()
+      .eq('id', oppId);
+
+    if (error) {
+      console.warn('[SupabaseSync] Single opportunity delete error:', error.message);
+      return false;
+    }
+
+    // Broadcast local event
+    window.dispatchEvent(new CustomEvent('controlroom_opportunity_update', {
+      detail: { id: oppId, action: 'delete' }
+    }));
+    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+      detail: { storeKey: 'crm_opportunities', action: 'delete', id: oppId }
+    }));
+
+    // Async server deletion
+    try {
+      fetch(`/api/store/crm_opportunities/${encodeURIComponent(oppId)}`, {
+        method: 'DELETE'
+      }).catch(() => {});
+    } catch (_) {}
+
+    return true;
+  } catch (err) {
+    console.warn('[SupabaseSync] Single opportunity delete error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
  * Fetch a data collection DIRECTLY from Supabase cloud database
- * @param {string} storeKey - Unique identifier (e.g. 'bom_store', 'invoice_store', 'customer_store')
+ * @param {string} storeKey - Unique identifier (e.g. 'bom_store', 'invoice_store', 'customer_store', 'crm_opportunities')
  * @param {Array|Object} fallbackData - Default initial data if cloud is empty
  * @returns {Promise<Array|Object>}
  */
@@ -203,6 +405,28 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     }
   }
 
+  // CANONICAL OPPORTUNITIES READ PATH: Query public.opportunities directly (Zero leaves table egress)
+  if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Opportunities cloud fetch timeout')), 3000));
+      const fetchPromise = supabase
+        .from('opportunities')
+        .select(`
+          id, customer_id, company_name, title, deal_value, stage,
+          probability, assigned_salesperson, target_close_date, notes, created_at, updated_at
+        `)
+        .order('created_at', { ascending: false });
+
+      const { data: dbOpps, error: oppErr } = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (!oppErr && Array.isArray(dbOpps) && dbOpps.length > 0) {
+        return dbOpps.map(o => toConsumerOpportunity(o));
+      }
+    } catch (err) {
+      console.warn('[SupabaseSync] Direct opportunities fetch fallback notice:', err?.message || err);
+    }
+  }
+
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
     const controller = new AbortController();
@@ -215,6 +439,9 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
         if (Array.isArray(json.data) && json.data.length > 0) {
           if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
             return json.data.map(c => toConsumerCustomer(c));
+          }
+          if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
+            return json.data.map(o => toConsumerOpportunity(o));
           }
           return json.data;
         } else if (json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
@@ -257,7 +484,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   }
 
   // 1. Fetch directly from Supabase leaves table store (for unmigrated stores only, with 5s safety timeout)
-  if (storeKey !== 'customer_store' && storeKey !== 'crm_customers') {
+  if (storeKey !== 'customer_store' && storeKey !== 'crm_customers' && storeKey !== 'crm_opportunities' && storeKey !== 'opportunities') {
     try {
       const fetchPromise = supabase
         .from('leaves')
@@ -398,6 +625,47 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     } catch (_) {}
 
     return; // STOP! NEVER touch leaves table for customers!
+  }
+
+  // CANONICAL OPPORTUNITIES WRITE PATH: Direct normalized upsert to public.opportunities table (Zero leaves table egress)
+  if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
+    try {
+      if (Array.isArray(storeData)) {
+        const rows = storeData.map(o => toDatabaseOpportunityRow(o)).filter(Boolean);
+        if (rows.length > 0) {
+          for (let i = 0; i < rows.length; i += 20) {
+            const batch = rows.slice(i, i + 20);
+            await supabase.from('opportunities').upsert(batch, { onConflict: 'id' });
+          }
+        }
+      } else if (storeData && typeof storeData === 'object') {
+        const row = toDatabaseOpportunityRow(storeData);
+        if (row) {
+          await supabase.from('opportunities').upsert(row, { onConflict: 'id' });
+        }
+      }
+
+      // Broadcast update locally to all listening React components in current window
+      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+        detail: { storeKey: 'crm_opportunities', data: storeData }
+      }));
+      window.dispatchEvent(new CustomEvent('controlroom_opportunity_update', {
+        detail: { opportunity: storeData, action: 'upsert' }
+      }));
+    } catch (err) {
+      console.warn('[SupabaseSync] Error persisting to public.opportunities:', err?.message || err);
+    }
+
+    // Keep lightweight async fallback to local server disk json backup
+    try {
+      fetch(`/api/store/${storeKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storeData)
+      }).catch(() => {});
+    } catch (_) {}
+
+    return; // STOP! NEVER touch leaves table for opportunities!
   }
 
   try {
@@ -667,8 +935,8 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
         {
           event: '*',
           schema: 'public',
-          table: storeKey === 'employees_store' ? 'users' : (storeKey === 'customer_store' || storeKey === 'crm_customers' ? 'customers' : 'leaves'),
-          filter: (storeKey === 'employees_store' || storeKey === 'customer_store' || storeKey === 'crm_customers') ? undefined : `employee=eq.${employeeKey}`
+          table: storeKey === 'employees_store' ? 'users' : ((storeKey === 'customer_store' || storeKey === 'crm_customers') ? 'customers' : ((storeKey === 'crm_opportunities' || storeKey === 'opportunities') ? 'opportunities' : 'leaves')),
+          filter: (storeKey === 'employees_store' || storeKey === 'customer_store' || storeKey === 'crm_customers' || storeKey === 'crm_opportunities' || storeKey === 'opportunities') ? undefined : `employee=eq.${employeeKey}`
         },
         async (payload) => {
           if (storeKey === 'employees_store') {
@@ -676,6 +944,9 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
             onUpdateCallback(list);
           } else if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
             const list = await fetchCloudStore('customer_store', []);
+            onUpdateCallback(list);
+          } else if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
+            const list = await fetchCloudStore('crm_opportunities', []);
             onUpdateCallback(list);
           } else if (payload && payload.new && payload.new.reason) {
             try {

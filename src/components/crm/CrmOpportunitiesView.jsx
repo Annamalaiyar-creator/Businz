@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Briefcase, Plus, Search, Filter, ArrowRight, CheckCircle2, ChevronRight,
   DollarSign, Calculator, Layers, X, Clock, AlertCircle, Sparkles, User,
-  Calendar, Phone, MessageSquare
+  Calendar, Phone, MessageSquare, Trash2
 } from 'lucide-react';
 import { STAGE_PROBABILITIES } from '../../services/crmStore';
 
@@ -11,6 +11,7 @@ export default function CrmOpportunitiesView({
   customers = [],
   onUpdateOpportunity,
   onCreateOpportunity,
+  onDeleteOpportunity,
   onNavigateTab
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -302,6 +303,31 @@ export default function CrmOpportunitiesView({
                           >
                             <Layers size={13} /> + Create BOM
                           </button>
+                          {onDeleteOpportunity && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to delete opportunity "${opp.title}" (${opp.id})?`)) {
+                                  onDeleteOpportunity(opp.id);
+                                }
+                              }}
+                              title="Delete Opportunity"
+                              style={{
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #FECACA',
+                                backgroundColor: '#FEF2F2',
+                                color: '#DC2626',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
