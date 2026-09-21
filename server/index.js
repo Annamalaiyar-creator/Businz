@@ -17,6 +17,14 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { createFullBackup, listBackups, restoreFromBackup } from './backupEngine.js';
 import { checkTallyStatus, fetchTallyPnl, pushDirectVoucher } from './tallyService.js';
+import {
+  uploadBomDocument,
+  createBomDocumentSignedUrl,
+  deleteBomDocument,
+  getBomDocumentMetadata,
+  validateBusinzSession,
+  validateBomCode
+} from './bomDocumentService.js';
 
 dotenv.config();
 
@@ -4396,6 +4404,185 @@ app.delete('/api/boms/:id', async (req, res) => {
     res.json({ success: true, message: `BOM ${cleanId} deleted successfully`, total: updated.length });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==============================================================================
+// BOM SECURE DOCUMENT STORAGE ENDPOINTS (Phase D2)
+// Bucket: bom-documents (STRICTLY PRIVATE)
+// All storage operations are executed server-side via service-role client.
+// Browser receives ZERO direct storage CRUD access.
+// ==============================================================================
+
+// Session validation middleware for BOM document operations
+const requireBusinzSession = async (req, res, next) => {
+  const sessionId = req.headers['x-session-id'] ||
+    (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].slice(7) : null) ||
+    req.cookies?.['controlroom_device_session_id'] ||
+    req.body?.sessionId ||
+    req.query?.sessionId;
+
+  // Check admin key header for automated internal test suites
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey && process.env.SUPABASE_SERVICE_ROLE_KEY && adminKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    req.userSession = { valid: true, role: 'Technical Administrator', user: 'System Admin' };
+    return next();
+  }
+
+  if (!sessionId) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Active BUSINZ session required (x-session-id)'
+    });
+  }
+
+  const sessionResult = await validateBusinzSession(sessionId);
+  if (!sessionResult.valid) {
+    return res.status(401).json({
+      success: false,
+      error: `Unauthorized: ${sessionResult.error || 'Invalid session'}`
+    });
+  }
+
+  req.userSession = sessionResult;
+  next();
+};
+
+// POST /api/boms/:bomCode/documents - Upload document to bom-documents private bucket
+app.post('/api/boms/:bomCode/documents', requireBusinzSession, async (req, res) => {
+  try {
+    const { bomCode } = req.params;
+    const { fileName, mimeType, fileData, category } = req.body;
+
+    if (!fileData) {
+      return res.status(400).json({ success: false, error: 'File data is required (base64 string or dataUrl)' });
+    }
+
+    // Convert fileData (dataUrl or base64 string) to Buffer
+    let buffer;
+    let resolvedMime = mimeType;
+
+    if (typeof fileData === 'string') {
+      if (fileData.startsWith('data:')) {
+        const matches = fileData.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          resolvedMime = resolvedMime || matches[1];
+          buffer = Buffer.from(matches[2], 'base64');
+        } else {
+          return res.status(400).json({ success: false, error: 'Malformed data URL' });
+        }
+      } else {
+        buffer = Buffer.from(fileData, 'base64');
+      }
+    } else if (Buffer.isBuffer(fileData)) {
+      buffer = fileData;
+    } else {
+      return res.status(400).json({ success: false, error: 'Unsupported file payload format' });
+    }
+
+    const metadata = await uploadBomDocument({
+      bomCode,
+      category,
+      fileBuffer: buffer,
+      fileName,
+      mimeType: resolvedMime
+    });
+
+    res.json({
+      success: true,
+      metadata
+    });
+  } catch (err) {
+    console.error('[BOM Document Upload Error]:', err.message);
+    const statusCode = err.message.includes('exceeds') ? 413 :
+      (err.message.includes('Invalid') || err.message.includes('Unsupported')) ? 400 : 500;
+    res.status(statusCode).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/boms/:bomCode/documents/signed-url - Generate short-lived signed URL
+app.get('/api/boms/:bomCode/documents/signed-url', requireBusinzSession, async (req, res) => {
+  try {
+    const { bomCode } = req.params;
+    const storagePath = req.query.path || req.query.storagePath;
+    const expiresIn = req.query.expiresIn || 900; // 15 mins default
+
+    if (!storagePath) {
+      return res.status(400).json({ success: false, error: 'Storage path is required (?path=...)' });
+    }
+
+    const result = await createBomDocumentSignedUrl({
+      bomCode,
+      storagePath,
+      expiresIn: Number(expiresIn)
+    });
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (err) {
+    const isForbidden = err.message.includes('Access denied') || err.message.includes('Path traversal');
+    const isBadReq = err.message.includes('Invalid');
+    const statusCode = isForbidden ? 403 : isBadReq ? 400 : 500;
+    res.status(statusCode).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/boms/:bomCode/documents - Delete document from bom-documents bucket
+app.delete('/api/boms/:bomCode/documents', requireBusinzSession, async (req, res) => {
+  try {
+    const { bomCode } = req.params;
+    const storagePath = req.body?.path || req.query?.path || req.body?.storagePath;
+
+    if (!storagePath) {
+      return res.status(400).json({ success: false, error: 'Storage path is required' });
+    }
+
+    const result = await deleteBomDocument({
+      bomCode,
+      storagePath
+    });
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (err) {
+    const isForbidden = err.message.includes('Access denied') || err.message.includes('Path traversal');
+    const isBadReq = err.message.includes('Invalid');
+    const statusCode = isForbidden ? 403 : isBadReq ? 400 : 500;
+    res.status(statusCode).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/boms/:bomCode/documents/metadata - Inspect metadata
+app.get('/api/boms/:bomCode/documents/metadata', requireBusinzSession, async (req, res) => {
+  try {
+    const { bomCode } = req.params;
+    const storagePath = req.query.path || req.query.storagePath;
+
+    if (!storagePath) {
+      return res.status(400).json({ success: false, error: 'Storage path is required (?path=...)' });
+    }
+
+    const metadata = await getBomDocumentMetadata({
+      bomCode,
+      storagePath
+    });
+
+    if (!metadata) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+
+    res.json({
+      success: true,
+      metadata
+    });
+  } catch (err) {
+    const isForbidden = err.message.includes('Access denied') || err.message.includes('Path traversal');
+    const statusCode = isForbidden ? 403 : 400;
+    res.status(statusCode).json({ success: false, error: err.message });
   }
 });
 
