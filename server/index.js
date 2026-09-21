@@ -4103,10 +4103,9 @@ app.get('/api/boms/:id', async (req, res) => {
 
 app.post('/api/reset-all-testing-data', async (req, res) => {
   try {
-    // 1. Wipe Supabase BOM_STORE, INVOICE_STORE, and BOM_SEQUENCE
-    await supabase.from('leaves').delete().in('employee', ['BOM_STORE', 'INVOICE_STORE', 'BOM_SEQUENCE']);
+    // 1. Reset invoice store and sequence (Preserve legacy public.leaves BOM_STORE row 2 for rollback)
+    await supabase.from('leaves').delete().in('employee', ['INVOICE_STORE', 'BOM_SEQUENCE']);
     await supabase.from('leaves').insert([
-      { employee: 'BOM_STORE', reason: '[]', status: 'active', duration: '0', dates: new Date().toISOString(), type: 'Store' },
       { employee: 'INVOICE_STORE', reason: '[]', status: 'active', duration: '0', dates: new Date().toISOString(), type: 'Store' },
       { employee: 'BOM_SEQUENCE', reason: JSON.stringify({ lastNumber: 0, reservedAt: new Date().toISOString() }), status: 'active', duration: '0', dates: new Date().toISOString(), type: 'Store' }
     ]);
@@ -4130,11 +4129,15 @@ app.post('/api/reset-all-testing-data', async (req, res) => {
 // Reconcile and deduct inventory across all active BOMs
 const reconcileServerInventoryWithBoms = async (bomsList = null) => {
   try {
-    const bomsPath = getStoreFilePath('bom_store.json');
     let boms = bomsList;
     if (!Array.isArray(boms)) {
-      if (fs.existsSync(bomsPath)) {
-        try { boms = JSON.parse(fs.readFileSync(bomsPath, 'utf8')); } catch (_) {}
+      if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+        boms = supabaseMemoryStore.bom_store;
+      } else {
+        const bomsPath = getStoreFilePath('bom_store.json');
+        if (fs.existsSync(bomsPath)) {
+          try { boms = JSON.parse(fs.readFileSync(bomsPath, 'utf8')); } catch (_) {}
+        }
       }
     }
     if (!Array.isArray(boms)) boms = [];
@@ -4343,13 +4346,13 @@ app.post('/api/boms', async (req, res) => {
         let cachedCloud = supabaseMemoryStore.bom_store || [];
         if (!Array.isArray(cachedCloud)) cachedCloud = [];
 
-        // Merge map: cachedCloud first, then diskList (diskList is authoritative local store)
+        // Authoritative merge: diskList (passive fallback) first, then cachedCloud (authoritative public.bom_orders)
         const map = new Map();
-        cachedCloud.forEach(item => {
+        diskList.forEach(item => {
           const c = item?.bomCode || item?.code || item?.id;
           if (c) map.set(c, item);
         });
-        diskList.forEach(item => {
+        cachedCloud.forEach(item => {
           const c = item?.bomCode || item?.code || item?.id;
           if (c) {
             if (map.has(c)) {
