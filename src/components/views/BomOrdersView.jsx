@@ -11,6 +11,8 @@ import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCl
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
+import { uploadBomDocumentFile, validateClientFile } from '../../utils/bomStorageClient';
+import { resolveDocumentUrlAsync } from '../../utils/documentResolver';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import SearchablePresetSelector from '../SearchablePresetSelector';
@@ -41,6 +43,7 @@ export default function BomOrdersView(props) {
   const [isExportingFormat, setIsExportingFormat] = useState(null); // 'pdf' | 'jpg' | 'csv' | null
   const [bomCancelPromptModal, setBomCancelPromptModal] = useState(null);
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
+  const [uploadingPayment, setUploadingPayment] = useState(false);
 
   // Safe localStorage saver that catches QuotaExceededError and trims cache to top 50 recent records per Rule 5
   const safeSaveBomStoreToLocal = (list) => {
@@ -1451,6 +1454,21 @@ export default function BomOrdersView(props) {
           resolvedData = URL.createObjectURL(rawDoc);
         } catch (e) { }
       }
+    }
+
+    // Resolve private Supabase Storage documents via secure signed URLs
+    if (!resolvedData && rawDoc && typeof rawDoc === 'object' && (rawDoc.storageBucket || rawDoc.storagePath) && !rawDoc._fetchingStorage) {
+      if (typeof rawDoc === 'object') rawDoc._fetchingStorage = true;
+      const bCode = previewDocModal.bomCode || rawDoc.bomCode;
+      resolveDocumentUrlAsync(rawDoc, bCode)
+        .then(url => {
+          if (url) {
+            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: url, dataUrl: url, _fetchingStorage: false } } : null);
+          } else {
+            if (typeof rawDoc === 'object') rawDoc._fetchingStorageDone = true;
+          }
+        })
+        .catch(() => {});
     }
 
     // Auto-fetch from server if not found in local memory/IndexedDB
@@ -3062,12 +3080,18 @@ export default function BomOrdersView(props) {
                                 e.preventDefault();
                                 const file = e.dataTransfer.files && e.dataTransfer.files[0];
                                 if (file) {
-                                  compressAndSaveFile(file, (docMeta) => {
-                                    if (docMeta) {
-                                      if (docMeta.name && docMeta.dataUrl) saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                                      setNewBomDeliveryProofDoc(docMeta);
-                                    }
-                                  });
+                                  try {
+                                    validateClientFile(file);
+                                    setNewBomDeliveryProofDoc({
+                                      name: file.name,
+                                      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                      mimeType: file.type || 'application/pdf',
+                                      _rawFile: file,
+                                      previewUrl: URL.createObjectURL(file)
+                                    });
+                                  } catch (err) {
+                                    alert(err.message);
+                                  }
                                 }
                               }}
                               style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '16px 20px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
@@ -3087,18 +3111,24 @@ export default function BomOrdersView(props) {
                                     onChange={(e) => {
                                       const file = e.target.files && e.target.files[0];
                                       if (file) {
-                                        compressAndSaveFile(file, (docMeta) => {
-                                          if (docMeta) {
-                                            if (docMeta.name && docMeta.dataUrl) saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                                            setNewBomDeliveryProofDoc(docMeta);
-                                          }
-                                        });
+                                        try {
+                                          validateClientFile(file);
+                                          setNewBomDeliveryProofDoc({
+                                            name: file.name,
+                                            size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                            mimeType: file.type || 'application/pdf',
+                                            _rawFile: file,
+                                            previewUrl: URL.createObjectURL(file)
+                                          });
+                                        } catch (err) {
+                                          alert(err.message);
+                                        }
                                       }
                                     }}
                                   />
                                 </label>
                               </div>
-                              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported: PDF, JPG, PNG (720p HD auto-compressed)</span>
+                              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported: PDF, JPG, PNG (Max 50MB)</span>
                             </div>
                           )}
                         </div>
@@ -4008,19 +4038,25 @@ export default function BomOrdersView(props) {
                             onChange={(e) => {
                               const file = e.target.files && e.target.files[0];
                               if (file) {
-                                compressAndSaveFile(file, (res) => {
-                                  if (res) {
-                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                    setNewBomPaymentProofDoc(res);
-                                    setFormErrors(prev => ({ ...prev, paymentProof: null }));
-                                  }
-                                });
+                                try {
+                                  validateClientFile(file);
+                                  setNewBomPaymentProofDoc({
+                                    name: file.name,
+                                    size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                    mimeType: file.type || 'application/pdf',
+                                    _rawFile: file,
+                                    previewUrl: URL.createObjectURL(file)
+                                  });
+                                  setFormErrors(prev => ({ ...prev, paymentProof: null }));
+                                } catch (err) {
+                                  alert(err.message);
+                                }
                               }
                             }}
                           />
                         </label>
                       </div>
-                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG (Max 5MB)</span>
+                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG (Max 50MB)</span>
                     </div>
                   )}
                   {formErrors.paymentProof && (
@@ -4387,6 +4423,43 @@ export default function BomOrdersView(props) {
                         sanitizedNewBom.bomCode = finalAssignedCode;
                         sanitizedNewBom.code = finalAssignedCode;
                         sanitizedNewBom.id = finalAssignedCode;
+
+                        // Upload any attached files to private Supabase Storage under the final BOM code
+                        if (newBomDeliveryProofDoc && newBomDeliveryProofDoc._rawFile && !sameAsBilling) {
+                          try {
+                            const meta = await uploadBomDocumentFile({
+                              file: newBomDeliveryProofDoc._rawFile,
+                              bomCode: finalAssignedCode,
+                              category: 'delivery-proof'
+                            });
+                            sanitizedNewBom.deliveryAddressProofDoc = meta;
+                          } catch (upErr) {
+                            console.error('Failed to upload delivery proof doc:', upErr);
+                            alert('Failed to upload delivery address proof to storage: ' + upErr.message);
+                            setBomSubmitStage('');
+                            return;
+                          }
+                        }
+
+                        if (newBomPaymentProofDoc && newBomPaymentProofDoc._rawFile) {
+                          try {
+                            const meta = await uploadBomDocumentFile({
+                              file: newBomPaymentProofDoc._rawFile,
+                              bomCode: finalAssignedCode,
+                              category: 'payment-proof'
+                            });
+                            sanitizedNewBom.paymentProofDoc = meta;
+                            if (sanitizedNewBom.payments) {
+                              sanitizedNewBom.payments.proofDocObj = meta;
+                              sanitizedNewBom.payments.proofDoc = meta.originalName || newBomPaymentProofDoc.name;
+                            }
+                          } catch (upErr) {
+                            console.error('Failed to upload payment proof doc:', upErr);
+                            alert('Failed to upload payment proof to storage: ' + upErr.message);
+                            setBomSubmitStage('');
+                            return;
+                          }
+                        }
 
                         // Stage: Reserving inventory & stock allocation
                         setBomSubmitStage('reserving');
@@ -5404,31 +5477,38 @@ export default function BomOrdersView(props) {
                                   type="file"
                                   accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                   style={{ display: 'none' }}
-                                  onChange={(e) => {
+                                  onChange={async (e) => {
                                     const file = e.target.files && e.target.files[0];
                                     if (file) {
-                                      compressAndSaveFile(file, (docMeta) => {
-                                        if (docMeta) {
-                                          saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                                          const prevDoc = confirmingBomModal.deliveryAddressProofDoc;
-                                          const existingHistory = Array.isArray(prevDoc.history) ? prevDoc.history : [];
-                                          const updatedHistory = [...existingHistory, {
-                                            name: prevDoc.name,
-                                            size: prevDoc.size,
-                                            uploadedAt: prevDoc.uploadedAt || new Date().toISOString(),
-                                            dataUrl: prevDoc.dataUrl
-                                          }];
-                                          setConfirmingBomModal(prev => ({
-                                            ...prev,
-                                            addressProofReuploadRequested: false,
-                                            deliveryAddressProofDoc: {
-                                              ...docMeta,
-                                              uploadedAt: new Date().toISOString(),
-                                              history: updatedHistory
-                                            }
-                                          }));
-                                        }
-                                      });
+                                      try {
+                                        validateClientFile(file);
+                                        const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
+                                        const metadata = await uploadBomDocumentFile({
+                                          file,
+                                          bomCode: bCode,
+                                          category: 'delivery-proof'
+                                        });
+                                        const prevDoc = confirmingBomModal.deliveryAddressProofDoc || {};
+                                        const existingHistory = Array.isArray(prevDoc.history) ? prevDoc.history : [];
+                                        const updatedHistory = [...existingHistory, {
+                                          name: prevDoc.name || prevDoc.originalName,
+                                          size: prevDoc.size,
+                                          storageBucket: prevDoc.storageBucket,
+                                          storagePath: prevDoc.storagePath,
+                                          uploadedAt: prevDoc.uploadedAt || new Date().toISOString()
+                                        }];
+                                        setConfirmingBomModal(prev => ({
+                                          ...prev,
+                                          addressProofReuploadRequested: false,
+                                          deliveryAddressProofDoc: {
+                                            ...metadata,
+                                            uploadedAt: new Date().toISOString(),
+                                            history: updatedHistory
+                                          }
+                                        }));
+                                      } catch (err) {
+                                        alert(`Address proof upload failed: ${err.message}`);
+                                      }
                                     }
                                   }}
                                 />
@@ -5444,7 +5524,7 @@ export default function BomOrdersView(props) {
                               </span>
                               {confirmingBomModal.deliveryAddressProofDoc.history.map((histItem, hIdx) => (
                                 <div key={hIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#475569' }}>
-                                  <span>• {histItem.name} ({histItem.size || 'Cached'})</span>
+                                  <span>• {histItem.name} ({histItem.size || 'Saved'})</span>
                                   <span style={{ fontSize: '10px', color: '#94A3B8' }}>{new Date(histItem.uploadedAt || Date.now()).toLocaleDateString('en-IN')}</span>
                                 </div>
                               ))}
@@ -5462,23 +5542,29 @@ export default function BomOrdersView(props) {
                               type="file"
                               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                               style={{ display: 'none' }}
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files && e.target.files[0];
                                 if (file) {
-                                  compressAndSaveFile(file, (docMeta) => {
-                                    if (docMeta) {
-                                      saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                                      setConfirmingBomModal(prev => ({
-                                        ...prev,
-                                        addressProofReuploadRequested: false,
-                                        deliveryAddressProofDoc: {
-                                          ...docMeta,
-                                          uploadedAt: new Date().toISOString(),
-                                          history: []
-                                        }
-                                      }));
-                                    }
-                                  });
+                                  try {
+                                    validateClientFile(file);
+                                    const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
+                                    const metadata = await uploadBomDocumentFile({
+                                      file,
+                                      bomCode: bCode,
+                                      category: 'delivery-proof'
+                                    });
+                                    setConfirmingBomModal(prev => ({
+                                      ...prev,
+                                      addressProofReuploadRequested: false,
+                                      deliveryAddressProofDoc: {
+                                        ...metadata,
+                                        uploadedAt: new Date().toISOString(),
+                                        history: []
+                                      }
+                                    }));
+                                  } catch (err) {
+                                    alert(`Address proof upload failed: ${err.message}`);
+                                  }
                                 }
                               }}
                             />
@@ -7354,9 +7440,12 @@ export default function BomOrdersView(props) {
                           onChange={(e) => {
                             const f = e.target.files && e.target.files[0];
                             if (f) {
-                              compressAndSaveFile(f, (res) => {
-                                if (res) setPaymentProofFile(res);
-                              });
+                              try {
+                                validateClientFile(f);
+                                setPaymentProofFile(f);
+                              } catch (err) {
+                                alert(err.message);
+                              }
                             }
                           }}
                           style={{ width: '100%', padding: '10px', border: '1px dashed #0E7490', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
@@ -7377,56 +7466,71 @@ export default function BomOrdersView(props) {
               </button>
               {(!uploadPaymentModal.paymentProofDoc || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
                 <button
-                  onClick={() => {
+                  disabled={uploadingPayment}
+                  onClick={async () => {
                     if (!paymentProofFile) {
                       alert('Please attach or select payment proof file!');
                       return;
                     }
-                    const pDocObj = typeof paymentProofFile === 'object' ? paymentProofFile : { name: paymentProofFile, dataUrl: null };
-                    const isPartial = uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment';
-                    const balPaid = parseFloat(modalBalanceAmount) || 0;
-                    const prevBal = uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0));
-                    const newBal = isPartial && balPaid > 0 ? Math.max(0, prevBal - balPaid) : prevBal;
-
-                    const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
-                      ...b,
-                      status: isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : b.status) : 'Payment Uploaded & Verified',
-                      paymentProofDoc: b.paymentProofDoc || pDocObj,
-                      balanceProofDoc: pDocObj,
-                      balanceAmount: newBal,
-                      paymentUpdated: true,
-                      payments: {
-                        ...b.payments,
-                        proofDoc: b.payments?.proofDoc || pDocObj.name,
-                        proofDocObj: b.payments?.proofDocObj || pDocObj,
-                        proofDocData: b.payments?.proofDocData || pDocObj.dataUrl,
-                        balanceProofDoc: pDocObj.name,
-                        balanceProofDocObj: pDocObj,
-                        balanceUploaded: true,
-                        paymentUpdated: true
+                    setUploadingPayment(true);
+                    try {
+                      let pDocObj;
+                      if (paymentProofFile instanceof File) {
+                        pDocObj = await uploadBomDocumentFile({
+                          file: paymentProofFile,
+                          bomCode: uploadPaymentModal.bomCode,
+                          category: 'payment-proof'
+                        });
+                      } else {
+                        pDocObj = typeof paymentProofFile === 'object' ? paymentProofFile : { name: paymentProofFile };
                       }
-                    } : b);
-                    setBomStore(updatedList);
-                    saveCloudStore('bom_store', updatedList);
-                    safeSaveBomStoreToLocal(updatedList);
+                      const isPartial = uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment';
+                      const balPaid = parseFloat(modalBalanceAmount) || 0;
+                      const prevBal = uploadPaymentModal.balanceAmount != null ? uploadPaymentModal.balanceAmount : Math.max(0, (uploadPaymentModal.grandTotal || 0) - (uploadPaymentModal.partialAmount || 0));
+                      const newBal = isPartial && balPaid > 0 ? Math.max(0, prevBal - balPaid) : prevBal;
 
-                    const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
-                    if (targetBom) {
-                      fetch('/api/boms', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
-                      }).catch(() => {});
+                      const updatedList = (bomStore || []).map(b => b.bomCode === uploadPaymentModal.bomCode ? {
+                        ...b,
+                        status: isPartial ? (newBal <= 0 ? 'Payment Uploaded & Verified' : b.status) : 'Payment Uploaded & Verified',
+                        paymentProofDoc: b.paymentProofDoc || pDocObj,
+                        balanceProofDoc: pDocObj,
+                        balanceAmount: newBal,
+                        paymentUpdated: true,
+                        payments: {
+                          ...b.payments,
+                          proofDoc: b.payments?.proofDoc || pDocObj.originalName || pDocObj.name,
+                          proofDocObj: b.payments?.proofDocObj || pDocObj,
+                          balanceProofDoc: pDocObj.originalName || pDocObj.name,
+                          balanceProofDocObj: pDocObj,
+                          balanceUploaded: true,
+                          paymentUpdated: true
+                        }
+                      } : b);
+                      setBomStore(updatedList);
+                      saveCloudStore('bom_store', updatedList);
+                      safeSaveBomStoreToLocal(updatedList);
+
+                      const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
+                      if (targetBom) {
+                        fetch('/api/boms', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+                        }).catch(() => {});
+                      }
+                      setUploadPaymentModal(null);
+                      setPaymentProofFile(null);
+                      setModalBalanceAmount('');
+                      alert('✅ Payment proof uploaded and saved successfully!');
+                    } catch (err) {
+                      alert(`Payment upload failed: ${err.message}`);
+                    } finally {
+                      setUploadingPayment(false);
                     }
-
-                    setUploadPaymentModal(null);
-                    setPaymentProofFile(null);
-                    setModalBalanceAmount('');
-                    alert('✅ Payment proof uploaded and saved successfully!');
                   }}
-                  style={{ padding: '9px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#0E7490', color: 'white', fontSize: '13px', fontWeight: '800', cursor: 'pointer' }}
+                  style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: uploadingPayment ? '#94A3B8' : '#0E7490', color: 'white', fontSize: '13px', fontWeight: '800', cursor: uploadingPayment ? 'not-allowed' : 'pointer' }}
                 >
-                  Save & Update Payment Proof
+                  {uploadingPayment ? 'Uploading...' : 'Save & Update Payment Proof'}
                 </button>
               )}
             </div>

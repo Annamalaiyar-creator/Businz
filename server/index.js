@@ -323,7 +323,7 @@ const toConsumerBomServer = (row) => {
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
-    dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || []),
+    dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
     createdAt: row.created_at || new Date().toISOString(),
@@ -361,11 +361,47 @@ const toDatabaseBomRowServer = (item) => {
     return isNaN(n) ? defaultVal : n;
   };
 
-  const serializeDoc = (doc) => {
+  const sanitizeBomDocForStorage = (doc) => {
     if (!doc) return null;
-    if (typeof doc === 'string') return doc;
+    let target = doc;
+    if (typeof doc === 'string' && (doc.startsWith('{') || doc.startsWith('['))) {
+      try { target = JSON.parse(doc); } catch (_) { return doc; }
+    }
+    if (typeof target === 'object' && target !== null) {
+      const clean = { ...target };
+      // Strip embedded binary payloads from document metadata (D4 Zero-Base64 Guard)
+      delete clean.dataUrl;
+      delete clean.fileData;
+      delete clean.proofDocData;
+      if (Array.isArray(clean.history)) {
+        clean.history = clean.history.map(h => {
+          if (h && typeof h === 'object') {
+            const hClean = { ...h };
+            delete hClean.dataUrl;
+            delete hClean.fileData;
+            return hClean;
+          }
+          return h;
+        });
+      }
+      return clean;
+    }
+    // If raw string starts with data: or is long Base64 string, disallow persisting
+    if (typeof target === 'string') {
+      const trimmed = target.trim();
+      if (trimmed.startsWith('data:') || (trimmed.length > 200 && /^[A-Za-z0-9+/=\s]+$/.test(trimmed.slice(0, 100)) && !trimmed.startsWith('http'))) {
+        return null;
+      }
+    }
+    return target;
+  };
+
+  const serializeDoc = (doc) => {
+    const sanitized = sanitizeBomDocForStorage(doc);
+    if (!sanitized) return null;
+    if (typeof sanitized === 'string') return sanitized;
     try {
-      return JSON.stringify(doc);
+      return JSON.stringify(sanitized);
     } catch (_) {
       return null;
     }
@@ -385,7 +421,7 @@ const toDatabaseBomRowServer = (item) => {
     'presetKitPrice', 'presetSetCount', 'presetGroups', 'subTotal',
     'gstAmount', 'cgstAmount', 'sgstAmount', 'grandTotal', 'stockDeducted',
     'stockDeductionDate', 'createdAt', 'updatedAt', 'cancelled', 'cancelledAt',
-    'cancelledBy', 'cancellationReason', 'invoiceNo', 'dispatchPackingMedia', 'proofDoc',
+    'cancelledBy', 'cancellationReason', 'invoiceNo', 'proofDoc',
     'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'
   ]);
 
@@ -396,9 +432,70 @@ const toDatabaseBomRowServer = (item) => {
     }
   });
 
+  // Strip Base64 from extraData
+  if (extraData.dispatchPackingMedia && typeof extraData.dispatchPackingMedia === 'object') {
+    if (Array.isArray(extraData.dispatchPackingMedia.photos)) {
+      extraData.dispatchPackingMedia.photos = extraData.dispatchPackingMedia.photos.map(p => {
+        if (p && typeof p === 'object') {
+          const cp = { ...p };
+          delete cp.dataUrl;
+          delete cp.fileData;
+          return cp;
+        }
+        return p;
+      });
+    }
+    if (Array.isArray(extraData.dispatchPackingMedia.videos)) {
+      extraData.dispatchPackingMedia.videos = extraData.dispatchPackingMedia.videos.map(v => {
+        if (v && typeof v === 'object') {
+          const cv = { ...v };
+          delete cv.dataUrl;
+          delete cv.fileData;
+          return cv;
+        }
+        return v;
+      });
+    }
+  }
+  if (extraData.vehicleLoading && typeof extraData.vehicleLoading === 'object') {
+    if (Array.isArray(extraData.vehicleLoading.photos)) {
+      extraData.vehicleLoading.photos = extraData.vehicleLoading.photos.map(p => {
+        if (p && typeof p === 'object') {
+          const cp = { ...p };
+          delete cp.dataUrl;
+          delete cp.fileData;
+          return cp;
+        }
+        return p;
+      });
+    }
+    if (Array.isArray(extraData.vehicleLoading.videos)) {
+      extraData.vehicleLoading.videos = extraData.vehicleLoading.videos.map(v => {
+        if (v && typeof v === 'object') {
+          const cv = { ...v };
+          delete cv.dataUrl;
+          delete cv.fileData;
+          return cv;
+        }
+        return v;
+      });
+    }
+  }
+
+  const existingExtra = (item.accountsVerification && typeof item.accountsVerification === 'object' && item.accountsVerification._extra_data) || {};
+  const mergedExtra = { ...existingExtra, ...extraData };
+  if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
+  if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
+
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
-    ? { ...item.accountsVerification, _extra_data: extraData }
-    : { _extra_data: extraData };
+    ? { ...item.accountsVerification, _extra_data: mergedExtra }
+    : { _extra_data: mergedExtra };
+
+  const cleanPayments = typeof item.payments === 'object' && item.payments !== null ? { ...item.payments } : {};
+  delete cleanPayments.proofDocData;
+  if (cleanPayments.proofDocObj) {
+    cleanPayments.proofDocObj = sanitizeBomDocForStorage(cleanPayments.proofDocObj);
+  }
 
   return {
     id,
@@ -436,7 +533,7 @@ const toDatabaseBomRowServer = (item) => {
     created_by: item.createdBy || '',
     created_by_id: item.createdById || extraData.createdById || '',
     items: Array.isArray(item.items) ? item.items : [],
-    payments: typeof item.payments === 'object' && item.payments !== null ? item.payments : {},
+    payments: cleanPayments,
     dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
     accounts_verification: accountsVerification,
     invoice_confirmed: Boolean(item.invoiceConfirmed),
@@ -4341,13 +4438,13 @@ app.post('/api/boms', async (req, res) => {
         cachedBomsResult = mergedList;
         lastBomFetchTimestamp = Date.now();
 
-        // Non-blocking background upsert to public.bom_orders (Zero leaves table interaction)
+        // Upsert to public.bom_orders (Zero leaves table interaction)
         try {
-          const dbRow = toDatabaseBomRowServer(bom);
+          const mergedBom = map.get(finalCode) || bom;
+          const dbRow = toDatabaseBomRowServer(mergedBom);
           if (dbRow) {
-            supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' }).then(({ error }) => {
-              if (error) console.error('Error upserting BOM to public.bom_orders:', error.message);
-            }).catch(e => console.error('Error upserting BOM to public.bom_orders:', e));
+            const { error: upsertErr } = await supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
+            if (upsertErr) console.error('Error upserting BOM to public.bom_orders:', upsertErr.message);
           }
         } catch (e) {
           console.error('Error preparing BOM row for Supabase:', e);

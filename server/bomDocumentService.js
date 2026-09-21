@@ -172,7 +172,9 @@ export async function uploadBomDocument({ bomCode, category, fileBuffer, fileNam
     storageBucket: BUCKET_NAME,
     storagePath: data.path || storagePath,
     name: safeName,
+    originalName: safeName,
     type: cleanMime,
+    mimeType: cleanMime,
     size: fileSize,
     uploadedAt: new Date().toISOString()
   };

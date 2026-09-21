@@ -3,6 +3,7 @@ import {
   Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle
 } from "lucide-react";
 import { getMediaFromCache } from "../../utils/otherViewsShared";
+import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
       export function CompletedBomSummaryModal({ completedBomSummaryModal, onClose }) {
   return (
@@ -167,6 +168,15 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
   const [mediaUrl, setMediaUrl] = React.useState(initialUrl);
 
   React.useEffect(() => {
+    if (activeMediaPreviewModal.storageBucket && activeMediaPreviewModal.storagePath) {
+      resolveDocumentUrlAsync(activeMediaPreviewModal, activeMediaPreviewModal.bomCode || activeMediaPreviewModal.storagePath.split('/')[0])
+        .then(url => {
+          if (url) setMediaUrl(url);
+        })
+        .catch(() => {});
+      return;
+    }
+
     const direct = (activeMediaPreviewModal.url && !activeMediaPreviewModal.url.startsWith('blob:'))
       ? activeMediaPreviewModal.url
       : (activeMediaPreviewModal.dataUrl || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id) || '');

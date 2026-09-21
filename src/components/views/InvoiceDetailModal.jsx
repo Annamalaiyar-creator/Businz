@@ -5,6 +5,8 @@ import {
   Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode
 } from "lucide-react";
 import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
+import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
+import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
@@ -1368,14 +1370,30 @@ export default function InvoiceDetailModal({
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files && e.target.files[0];
                           if (file) {
-                            compressAndSaveFile(file, (res) => {
+                            try {
+                              validateClientFile(file);
+                              const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
+                              const isBom = targetCode && /^BOM-/i.test(targetCode);
+                              let res;
+                              if (isBom) {
+                                res = await uploadBomDocumentFile({
+                                  file,
+                                  bomCode: targetCode,
+                                  category: 'delivery-proof'
+                                });
+                              } else {
+                                await new Promise((resolve) => {
+                                  compressAndSaveFile(file, (cRes) => {
+                                    res = cRes;
+                                    resolve();
+                                  });
+                                });
+                              }
                               if (res) {
-                                if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
                                 const nowIso = new Date().toISOString();
-                                const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
                                 const prevHistory = addressProofDoc?.history || (addressProofDoc ? [addressProofDoc] : []);
                                 const updatedDoc = {
                                   ...res,
@@ -1408,9 +1426,11 @@ export default function InvoiceDetailModal({
                                   addressProofReissuedAt: nowIso
                                 } : b));
 
-                                alert(`✅ Address proof has been successfully reissued with: ${res.name || file.name}`);
+                                alert(`✅ Address proof has been successfully reissued with: ${res.originalName || res.name || file.name}`);
                               }
-                            });
+                            } catch (err) {
+                              alert(`Address proof reissue failed: ${err.message}`);
+                            }
                           }
                         }}
                       />
@@ -1418,7 +1438,7 @@ export default function InvoiceDetailModal({
                   </div>
 
                   {(() => {
-                    const proofName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Delivery Address Proof Document");
+                    const proofName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.originalName || addressProofDoc?.name || "Delivery Address Proof Document");
                     let proofDataUrl = (typeof addressProofDoc === "string" && addressProofDoc.startsWith("data:"))
                       ? addressProofDoc
                       : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || null);
