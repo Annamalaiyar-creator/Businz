@@ -23,6 +23,10 @@ backup_recovered/
 
 # Environment files & Secrets
 .env
+.env.local
+.env.production
+.env.development
+.env.staging
 .env.*
 !.env.example
 
