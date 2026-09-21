@@ -1,4 +1,5 @@
 // IISNode CommonJS entrypoint for Windows Plesk hosting (compatible with Node 16+)
+try { process.chdir(__dirname); } catch (_) {}
 
 // 1. Polyfill web standards (fetch, Headers, Request, Response, WebSocket) for Node 16
 try {

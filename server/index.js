@@ -7662,14 +7662,17 @@ setInterval(async () => {
 }, 24 * 60 * 60 * 1000);
 
 // 🌐 SERVE PRODUCTION DIST (FOR PLESK & STANDALONE HOSTING)
-const distPath = path.resolve(process.cwd(), 'dist');
+const distPath = fs.existsSync(path.resolve(__dirname, '../dist'))
+  ? path.resolve(__dirname, '../dist')
+  : path.resolve(process.cwd(), 'dist');
+
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('/{0,}', (req, res) => {
-    // If request is not an API call, serve the index.html for client-side routing
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(distPath, 'index.html'));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(distPath, 'index.html'));
     }
+    next();
   });
 }
 
