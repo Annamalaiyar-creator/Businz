@@ -66,7 +66,18 @@ export default function ProductionAdminView({ activeTab, userRole }) {
     };
 
     loadBoms();
-    const pollInterval = setInterval(loadBoms, 5000);
+    // Gentle 90s safety fallback check only when active and tab is visible (replaces aggressive 5s polling)
+    const fallbackInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        loadBoms();
+      }
+    }, 90000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        loadBoms();
+      }
+    };
 
     const handleUpdate = (e) => {
       if (e?.detail?.bom) {
@@ -76,16 +87,22 @@ export default function ProductionAdminView({ activeTab, userRole }) {
           const filtered = (prev || []).filter(b => b && (b.bomCode !== k && b.code !== k && b.id !== k));
           return [newBom, ...filtered];
         });
+      } else {
+        loadBoms();
       }
-      loadBoms();
     };
 
     window.addEventListener('controlroom_bom_store_updated', handleUpdate);
     window.addEventListener('controlroom_storage_update', handleUpdate);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
     return () => {
-      clearInterval(pollInterval);
+      clearInterval(fallbackInterval);
       window.removeEventListener('controlroom_bom_store_updated', handleUpdate);
       window.removeEventListener('controlroom_storage_update', handleUpdate);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
 
