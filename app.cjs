@@ -1,35 +1,37 @@
 // IISNode CommonJS entrypoint for Windows Plesk hosting (compatible with Node 16+)
 
-// Polyfill web standards (fetch, Headers, Request, Response) for Node 16
-if (typeof globalThis.Headers === 'undefined' || typeof globalThis.fetch === 'undefined') {
-  try {
-    const undici = require('undici');
-    if (!globalThis.Headers && undici.Headers) {
-      globalThis.Headers = undici.Headers;
-      global.Headers = undici.Headers;
-    }
-    if (!globalThis.fetch && undici.fetch) {
-      globalThis.fetch = undici.fetch;
-      global.fetch = undici.fetch;
-    }
-    if (!globalThis.Request && undici.Request) {
-      globalThis.Request = undici.Request;
-      global.Request = undici.Request;
-    }
-    if (!globalThis.Response && undici.Response) {
-      globalThis.Response = undici.Response;
-      global.Response = undici.Response;
-    }
-    if (!globalThis.FormData && undici.FormData) {
-      globalThis.FormData = undici.FormData;
-      global.FormData = undici.FormData;
-    }
-  } catch (err) {
-    console.warn('[Polyfill Warning] Undici not found, using basic polyfill:', err.message);
+// 1. Polyfill web standards (fetch, Headers, Request, Response, WebSocket) for Node 16
+try {
+  const undici = require('undici');
+  if (!globalThis.Headers && undici.Headers) {
+    globalThis.Headers = undici.Headers;
+    global.Headers = undici.Headers;
   }
+  if (!globalThis.fetch && undici.fetch) {
+    globalThis.fetch = undici.fetch;
+    global.fetch = undici.fetch;
+  }
+  if (!globalThis.Request && undici.Request) {
+    globalThis.Request = undici.Request;
+    global.Request = undici.Request;
+  }
+  if (!globalThis.Response && undici.Response) {
+    globalThis.Response = undici.Response;
+    global.Response = undici.Response;
+  }
+  if (!globalThis.FormData && undici.FormData) {
+    globalThis.FormData = undici.FormData;
+    global.FormData = undici.FormData;
+  }
+  if (!globalThis.WebSocket && undici.WebSocket) {
+    globalThis.WebSocket = undici.WebSocket;
+    global.WebSocket = undici.WebSocket;
+  }
+} catch (err) {
+  // Undici not installed yet, fallbacks below will handle it
 }
 
-// Fallback in-memory Headers polyfill if still undefined
+// 2. Fallback in-memory Headers polyfill if still undefined
 if (typeof globalThis.Headers === 'undefined') {
   class HeadersPolyfill {
     constructor(init) {
@@ -73,7 +75,24 @@ if (typeof globalThis.Headers === 'undefined') {
   global.Headers = HeadersPolyfill;
 }
 
-// Dynamically import the ES Module server
+// 3. Fallback WebSocket polyfill if still undefined
+if (typeof globalThis.WebSocket === 'undefined') {
+  class WebSocketPolyfill {
+    constructor(url, protocols) {
+      this.url = url;
+      this.protocols = protocols;
+      this.readyState = 3; // CLOSED
+    }
+    addEventListener() {}
+    removeEventListener() {}
+    send() {}
+    close() {}
+  }
+  globalThis.WebSocket = WebSocketPolyfill;
+  global.WebSocket = WebSocketPolyfill;
+}
+
+// 4. Dynamically import the ES Module server
 import('./server/index.js').catch((err) => {
   console.error('[IISNode Startup Error]:', err);
   process.exit(1);
