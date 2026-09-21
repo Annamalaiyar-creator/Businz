@@ -211,13 +211,324 @@ const loadLocalOpportunities = () => {
   return [];
 };
 
+// ==========================================
+// 📦 CANONICAL BOM_ORDERS ADAPTERS & STORE (PHASE C)
+// ==========================================
+const toConsumerBomServer = (row) => {
+  if (!row || typeof row !== 'object') return row;
+
+  let extraData = {};
+  if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
+    extraData = { ...row.accounts_verification._extra_data };
+  }
+
+  const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
+    ? { ...row.accounts_verification }
+    : {};
+  delete cleanAccountsVerification._extra_data;
+
+  const parseDoc = (doc) => {
+    if (!doc) return null;
+    if (typeof doc === 'object') return doc;
+    if (typeof doc === 'string' && (doc.startsWith('{') || doc.startsWith('['))) {
+      try {
+        return JSON.parse(doc);
+      } catch (_) {}
+    }
+    return doc;
+  };
+
+  const id = row.id || row.bom_code || '';
+  const bomCode = row.bom_code || row.id || '';
+  const customerName = row.customer_name || row.company_name || '';
+  const companyName = row.company_name || row.customer_name || '';
+  const phone = row.mobile || '';
+  const email = row.email || '';
+  const billingAddr = row.billing_address || '';
+  const deliveryAddr = row.delivery_address || '';
+  const salesRep = row.sales_person || '';
+
+  return {
+    ...extraData,
+    id,
+    bomCode,
+    code: bomCode,
+    customerName,
+    companyName,
+    c2: companyName,
+    c3: customerName,
+    date: row.date || '',
+    deliveryDate: row.delivery_date || '',
+    mobile: phone,
+    phone,
+    c4: phone,
+    email,
+    c5: email,
+    billingAddress: billingAddr,
+    c6: billingAddr,
+    billingAddressObj: row.billing_address_obj || {},
+    deliveryAddress: deliveryAddr,
+    c7: deliveryAddr,
+    deliveryAddressObj: row.delivery_address_obj || {},
+    deliveryAddressProofDoc: parseDoc(row.delivery_address_proof_doc),
+    paymentProofDoc: parseDoc(row.payment_proof_doc),
+    transportMode: row.transport_mode || 'Transport',
+    transportScope: row.transport_scope || 'VRM Structures',
+    transporterName: row.transporter_name || '',
+    vehicleNo: row.vehicle_no || '',
+    lrNo: row.lr_no || '',
+    paymentType: row.payment_type || 'Credit Payment',
+    partialAmount: Number(row.partial_amount || 0),
+    balanceAmount: Number(row.balance_amount || 0),
+    creditDays: Number(row.credit_days || 0),
+    creditDueDate: row.credit_due_date || '',
+    remarks: row.remarks || '',
+    status: row.status || 'Draft',
+    salesConfirmed: Boolean(row.sales_confirmed),
+    salesConfirmedAt: row.sales_confirmed_at || null,
+    salesPerson: salesRep,
+    salesPersonCode: row.sales_person_code || extraData.salesPersonCode || '',
+    c8: salesRep,
+    createdBy: row.created_by || '',
+    createdById: row.created_by_id || extraData.createdById || '',
+    items: Array.isArray(row.items) ? row.items : [],
+    payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
+    dispatchPacking: (Array.isArray(row.dispatch_packing) || (row.dispatch_packing && typeof row.dispatch_packing === 'object')) ? row.dispatch_packing : [],
+    accountsVerification: cleanAccountsVerification,
+    invoiceConfirmed: Boolean(row.invoice_confirmed),
+    invoiceDeducted: Boolean(row.invoice_deducted),
+    invoiceNo: row.invoice_no || extraData.invoiceNo || '',
+    stockBlocked: Boolean(row.stock_blocked),
+    stockBlockedAt: row.stock_blocked_at || null,
+    stockDeducted: Boolean(row.stock_deducted),
+    stockDeductionDate: row.stock_deduction_date || extraData.stockDeductionDate || null,
+    presetName: row.preset_name || extraData.presetName || '',
+    presetKitPrice: Number(row.preset_kit_price || extraData.presetKitPrice || 0),
+    presetSetCount: Number(row.preset_set_count || extraData.presetSetCount || 0),
+    presetGroups: Array.isArray(row.preset_groups) ? row.preset_groups : (extraData.presetGroups || []),
+    subTotal: Number(row.sub_total || 0),
+    gstAmount: Number(row.gst_amount || 0),
+    cgstAmount: Number(row.cgst_amount || 0),
+    sgstAmount: Number(row.sgst_amount || 0),
+    grandTotal: Number(row.grand_total || 0),
+    cancelled: Boolean(row.cancelled || extraData.cancelled),
+    cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
+    cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
+    cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
+    dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || []),
+    proofDoc: row.proof_doc || extraData.proofDoc || null,
+    sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString()
+  };
+};
+
+const toDatabaseBomRowServer = (item) => {
+  if (!item || typeof item !== 'object') return null;
+
+  const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
+  const bomCode = item.bomCode || item.code || id;
+  const code = item.code || bomCode;
+  const sourcePiNo = item.sourcePiNo || null;
+
+  const sanitizeDate = (d) => {
+    if (!d) return null;
+    const str = String(d).trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : null;
+  };
+
+  const sanitizeTimestamp = (ts) => {
+    if (!ts) return null;
+    try {
+      const d = new Date(ts);
+      return !isNaN(d.getTime()) ? d.toISOString() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const sanitizeNumber = (val, defaultVal = 0) => {
+    if (val === null || val === undefined || val === '') return defaultVal;
+    const n = Number(val);
+    return isNaN(n) ? defaultVal : n;
+  };
+
+  const serializeDoc = (doc) => {
+    if (!doc) return null;
+    if (typeof doc === 'string') return doc;
+    try {
+      return JSON.stringify(doc);
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const standardFields = new Set([
+    'id', 'bomCode', 'code', 'sourcePiNo', 'date', 'deliveryDate',
+    'customerName', 'companyName', 'mobile', 'phone', 'email', 'billingAddress',
+    'billingAddressObj', 'deliveryAddress', 'deliveryAddressObj',
+    'deliveryAddressProofDoc', 'transportMode', 'transportScope',
+    'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
+    'balanceAmount', 'creditDays', 'creditDueDate', 'paymentProofDoc',
+    'remarks', 'status', 'salesConfirmed', 'salesConfirmedAt', 'salesPerson',
+    'salesPersonCode', 'createdBy', 'createdById', 'items', 'payments',
+    'dispatchPacking', 'accountsVerification', 'invoiceConfirmed',
+    'invoiceDeducted', 'stockBlocked', 'stockBlockedAt', 'presetName',
+    'presetKitPrice', 'presetSetCount', 'presetGroups', 'subTotal',
+    'gstAmount', 'cgstAmount', 'sgstAmount', 'grandTotal', 'stockDeducted',
+    'stockDeductionDate', 'createdAt', 'updatedAt', 'cancelled', 'cancelledAt',
+    'cancelledBy', 'cancellationReason', 'invoiceNo', 'dispatchPackingMedia', 'proofDoc',
+    'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'
+  ]);
+
+  const extraData = {};
+  Object.keys(item).forEach(k => {
+    if (!standardFields.has(k)) {
+      extraData[k] = item[k];
+    }
+  });
+
+  const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
+    ? { ...item.accountsVerification, _extra_data: extraData }
+    : { _extra_data: extraData };
+
+  return {
+    id,
+    bom_code: bomCode,
+    code,
+    source_pi_no: sourcePiNo,
+    date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
+    delivery_date: sanitizeDate(item.deliveryDate),
+    customer_name: item.customerName || item.companyName || 'Customer',
+    company_name: item.companyName || item.customerName || '',
+    mobile: item.mobile || item.phone || '',
+    email: item.email || '',
+    billing_address: item.billingAddress || item.c6 || '',
+    billing_address_obj: item.billingAddressObj || {},
+    delivery_address: item.deliveryAddress || item.c7 || '',
+    delivery_address_obj: item.deliveryAddressObj || {},
+    delivery_address_proof_doc: serializeDoc(item.deliveryAddressProofDoc),
+    transport_mode: item.transportMode || 'Transport',
+    transport_scope: item.transportScope || 'VRM Structures',
+    transporter_name: item.transporterName || '',
+    vehicle_no: item.vehicleNo || '',
+    lr_no: item.lrNo || '',
+    payment_type: item.paymentType || 'Credit Payment',
+    partial_amount: sanitizeNumber(item.partialAmount, 0),
+    balance_amount: sanitizeNumber(item.balanceAmount, 0),
+    credit_days: Math.round(sanitizeNumber(item.creditDays, 0)),
+    credit_due_date: sanitizeDate(item.creditDueDate),
+    payment_proof_doc: serializeDoc(item.paymentProofDoc),
+    remarks: item.remarks || '',
+    status: item.status || 'Draft',
+    sales_confirmed: Boolean(item.salesConfirmed),
+    sales_confirmed_at: sanitizeTimestamp(item.salesConfirmedAt),
+    sales_person: item.salesPerson || item.c8 || '',
+    sales_person_code: item.salesPersonCode || extraData.salesPersonCode || '',
+    created_by: item.createdBy || '',
+    created_by_id: item.createdById || extraData.createdById || '',
+    items: Array.isArray(item.items) ? item.items : [],
+    payments: typeof item.payments === 'object' && item.payments !== null ? item.payments : {},
+    dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
+    accounts_verification: accountsVerification,
+    invoice_confirmed: Boolean(item.invoiceConfirmed),
+    invoice_deducted: Boolean(item.invoiceDeducted),
+    stock_blocked: Boolean(item.stockBlocked),
+    stock_blocked_at: sanitizeTimestamp(item.stockBlockedAt),
+    preset_name: item.presetName || '',
+    preset_kit_price: sanitizeNumber(item.presetKitPrice, 0),
+    preset_set_count: Math.round(sanitizeNumber(item.presetSetCount, 0)),
+    preset_groups: Array.isArray(item.presetGroups) ? item.presetGroups : [],
+    sub_total: sanitizeNumber(item.subTotal, 0),
+    gst_amount: sanitizeNumber(item.gstAmount, 0),
+    cgst_amount: sanitizeNumber(item.cgstAmount, 0),
+    sgst_amount: sanitizeNumber(item.sgstAmount, 0),
+    grand_total: sanitizeNumber(item.grandTotal, 0),
+    stock_deducted: Boolean(item.stockDeducted),
+    created_at: sanitizeTimestamp(item.createdAt || item.date) || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+};
+
+const loadDatabaseBoms = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('bom_orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const mapped = data.map(r => toConsumerBomServer(r));
+      supabaseMemoryStore.bom_store = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('[loadDatabaseBoms] Supabase fetch notice:', err?.message || err);
+  }
+
+  // Fallback to memory store or disk JSON
+  if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+    return supabaseMemoryStore.bom_store;
+  }
+
+  try {
+    const diskPath = path.resolve(__dirname, 'bom_store.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskData) && diskData.length > 0) {
+        supabaseMemoryStore.bom_store = diskData;
+        return diskData;
+      }
+    }
+  } catch (_) {}
+
+  return supabaseMemoryStore.bom_store || [];
+};
+
+const loadLocalBoms = () => {
+  if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+    return supabaseMemoryStore.bom_store;
+  }
+  return [];
+};
+
+const saveLocalBoms = async (boms) => {
+  if (!boms) return;
+  const list = Array.isArray(boms) ? boms : [boms];
+  supabaseMemoryStore.bom_store = list;
+
+  // 1. Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
+  // and is NOT rewritten on every normal BOM operation.
+
+  // 2. Broadcast via SSE to all connected clients
+  try {
+    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: list });
+    broadcastRealtimeEvent('bom_updated', { bomList: list });
+  } catch (_) {}
+
+  // 3. Upsert to canonical public.bom_orders table (Zero leaves table interaction)
+  try {
+    const rows = list.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
+    for (let i = 0; i < rows.length; i += 20) {
+      const batch = rows.slice(i, i + 20);
+      await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
+    }
+  } catch (sbErr) {
+    console.warn('[saveLocalBoms Supabase upsert notice]:', sbErr?.message || sbErr);
+  }
+};
+
 // Authoritative Database Store functions directly with Supabase
 const getDatabaseStore = async (key) => {
-  if (key === 'customer_store' || key === 'crm_customers') {
+  const cleanKey = String(key || '').toLowerCase();
+  if (cleanKey === 'customer_store' || cleanKey === 'crm_customers') {
     return await loadDatabaseCustomers();
   }
-  if (key === 'crm_opportunities' || key === 'opportunities') {
+  if (cleanKey === 'crm_opportunities' || cleanKey === 'opportunities') {
     return await loadDatabaseOpportunities();
+  }
+  if (cleanKey === 'bom_store' || cleanKey === 'boms') {
+    return await loadDatabaseBoms();
   }
   const employeeKey = key.toUpperCase();
   try {
@@ -568,28 +879,33 @@ const saveLocalOpportunities = async (opportunities) => {
 
 const saveDatabaseStore = async (key, storeData) => {
   if (storeData === undefined || storeData === null) return storeData;
-  if (key === 'customer_store' || key === 'crm_customers') {
+  const cleanKey = String(key || '').toLowerCase();
+  if (cleanKey === 'customer_store' || cleanKey === 'crm_customers') {
     await saveLocalCustomers(storeData);
     return storeData;
   }
-  if (key === 'crm_opportunities' || key === 'opportunities') {
+  if (cleanKey === 'crm_opportunities' || cleanKey === 'opportunities') {
     await saveLocalOpportunities(storeData);
+    return storeData;
+  }
+  if (cleanKey === 'bom_store' || cleanKey === 'boms') {
+    await saveLocalBoms(storeData);
     return storeData;
   }
   supabaseMemoryStore[key] = storeData;
 
   // Persist to disk files for raw_materials_store and item_store
   try {
-    if (key === 'raw_materials_store' && Array.isArray(storeData)) {
+    if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
       fs.writeFileSync(rawMatsPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (key === 'item_store' && Array.isArray(storeData)) {
+    } else if (cleanKey === 'item_store' && Array.isArray(storeData)) {
       const itemPath = getStoreFilePath('item_store.json');
       fs.writeFileSync(itemPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (key === 'po_store' && Array.isArray(storeData)) {
+    } else if (cleanKey === 'po_store' && Array.isArray(storeData)) {
       const poPath = getStoreFilePath('po_store.json');
       fs.writeFileSync(poPath, JSON.stringify(storeData, null, 2), 'utf8');
-    } else if (key === 'grn_store' && Array.isArray(storeData)) {
+    } else if (cleanKey === 'grn_store' && Array.isArray(storeData)) {
       const grnPath = getStoreFilePath('grn_store.json');
       fs.writeFileSync(grnPath, JSON.stringify(storeData, null, 2), 'utf8');
     }
@@ -600,15 +916,21 @@ const saveDatabaseStore = async (key, storeData) => {
   // Real-time broadcast to all connected users immediately
   try {
     broadcastRealtimeEvent('store_updated', { key, storeData });
-    if (key === 'raw_materials_store') {
+    if (cleanKey === 'raw_materials_store') {
       broadcastRealtimeEvent('inventory_updated', { rawMaterials: storeData });
-    } else if (key === 'item_store' || key === 'vrm_prod_inventory') {
+    } else if (cleanKey === 'item_store' || cleanKey === 'vrm_prod_inventory') {
       broadcastRealtimeEvent('item_store_updated', { items: storeData });
-    } else if (key === 'bom_store') {
+    } else if (cleanKey === 'bom_store') {
       broadcastRealtimeEvent('bom_updated', { bomList: storeData });
     }
   } catch (_) {}
+
   const employeeKey = key.toUpperCase();
+  // STRICT: Do not write migrated stores into legacy public.leaves
+  if (['BOM_STORE', 'CUSTOMER_STORE', 'CRM_CUSTOMERS', 'CRM_OPPORTUNITIES', 'OPPORTUNITIES'].includes(employeeKey)) {
+    return storeData;
+  }
+
   try {
     const { data: records } = await supabase
       .from('leaves')
@@ -1504,6 +1826,28 @@ app.delete('/api/store/:key/:id', async (req, res) => {
       broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', opportunities: updated });
 
       return res.json({ success: true, message: `Opportunity ${id} deleted successfully`, data: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+  if (key === 'bom_store' || key === 'boms') {
+    try {
+      const cleanId = String(id).trim();
+      const { error } = await supabase.from('bom_orders').delete().or(`id.eq.${cleanId},bom_code.eq.${cleanId}`);
+      if (error) {
+        console.warn('[DELETE BOM Supabase notice]:', error.message);
+      }
+      let current = supabaseMemoryStore.bom_store || [];
+      if (!Array.isArray(current) || current.length === 0) {
+        current = await loadDatabaseBoms();
+      }
+      const updated = current.filter(b => (b.id !== cleanId && b.bomCode !== cleanId && b.code !== cleanId));
+      // Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
+      // and is not rewritten on normal BOM delete operations.
+
+      broadcastRealtimeEvent('bom_updated', { id: cleanId, action: 'delete', bomList: updated });
+      broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: updated });
+      return res.json({ success: true, message: `BOM ${cleanId} deleted successfully`, data: updated });
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -3483,12 +3827,11 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
         }
 
         try {
-          const [seqRes, storeRes] = await Promise.all([
+          const [seqRes, bomsRes] = await Promise.all([
             supabase.from('leaves').select('reason').eq('employee', 'BOM_SEQUENCE').order('id', { ascending: false }).limit(1),
-            supabase.from('leaves').select('reason').eq('employee', 'BOM_STORE').order('id', { ascending: false }).limit(1)
+            supabase.from('bom_orders').select('bom_code, id').order('created_at', { ascending: false }).limit(100)
           ]);
           const seqRecord = seqRes.data?.[0];
-          const storeRecord = storeRes.data?.[0];
           if (seqRecord && seqRecord.reason) {
             try {
               const parsed = JSON.parse(seqRecord.reason);
@@ -3496,11 +3839,15 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
               if (Number.isFinite(seqVal) && seqVal > maxNum) maxNum = seqVal;
             } catch (_) {}
           }
-          if (storeRecord && storeRecord.reason) {
-            try {
-              const cloudBoms = JSON.parse(storeRecord.reason);
-              if (Array.isArray(cloudBoms)) allRecords = [...allRecords, ...cloudBoms];
-            } catch (_) {}
+          if (Array.isArray(bomsRes.data)) {
+            bomsRes.data.forEach(b => {
+              const str = String(b?.bom_code || b?.id || '');
+              const match = str.match(/^BOM-(\d+)$/i);
+              if (match) {
+                const val = parseInt(match[1], 10);
+                if (Number.isFinite(val) && val > maxNum) maxNum = val;
+              }
+            });
           }
         } catch (_) {}
 
@@ -3580,28 +3927,17 @@ app.post('/api/reset-bom-workflow-data', async (req, res) => {
   }
 });
 
-// Centralized GET all BOMs endpoint - reads authoritative list from disk & memory with fast caching
+// Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching
 let cachedBomsResult = null;
 let lastBomFetchTimestamp = 0;
 
 app.get('/api/boms', async (req, res) => {
   try {
     const now = Date.now();
-    // 1. Serve immediately from high-speed memory cache if fresh (< 30s)
-    if (cachedBomsResult && (now - lastBomFetchTimestamp < 30000)) {
+    // 1. Serve immediately from high-speed memory cache if fresh (< 30s) unless refresh requested
+    if (!req.query.refresh && cachedBomsResult && (now - lastBomFetchTimestamp < 30000)) {
       return res.json({ success: true, data: cachedBomsResult, total: cachedBomsResult.length });
     }
-
-    const filePath = getStoreFilePath('bom_store.json');
-    let diskList = [];
-    if (fs.existsSync(filePath)) {
-      try {
-        diskList = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      } catch (e) {
-        diskList = [];
-      }
-    }
-    if (!Array.isArray(diskList)) diskList = [];
 
     // Helper to sort BOMs by code sequence descending
     const sortBoms = (list) => {
@@ -3619,69 +3955,44 @@ app.get('/api/boms', async (req, res) => {
       });
     };
 
-    // If we have records on disk or in memory store, prepare fast response
-    let cloudList = (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store)) 
-      ? supabaseMemoryStore.bom_store 
-      : [];
-
-    // Only block on Supabase if memory and disk are both completely empty
-    if (cloudList.length === 0 && diskList.length === 0) {
-      try {
-        const { data: records } = await supabase
-          .from('leaves')
-          .select('reason')
-          .eq('employee', 'BOM_STORE')
-          .order('id', { ascending: false })
-          .limit(1);
-        const record = (records && records.length > 0) ? records[0] : null;
-        if (record && record.reason) {
-          const parsed = JSON.parse(record.reason);
-          if (Array.isArray(parsed)) {
-            cloudList = parsed;
-            supabaseMemoryStore.bom_store = parsed;
-          }
-        }
-      } catch (e) {}
-    } else if (now - lastBomFetchTimestamp > 60000) {
-      // Background revalidation without blocking client response
-      supabase.from('leaves').select('reason').eq('employee', 'BOM_STORE').order('id', { ascending: false }).limit(1)
-        .then(({ data: records }) => {
-          const rec = records?.[0];
-          if (rec && rec.reason) {
-            try {
-              const parsed = JSON.parse(rec.reason);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                supabaseMemoryStore.bom_store = parsed;
-              }
-            } catch (_) {}
-          }
-        }).catch(() => {});
-    }
-
-    // Merge cloud and disk records
-    const map = new Map();
-    cloudList.forEach(item => {
-      const c = item?.bomCode || item?.code || item?.id;
-      if (c) map.set(c, item);
-    });
-    diskList.forEach(item => {
-      const c = item?.bomCode || item?.code || item?.id;
-      if (c) {
-        if (map.has(c)) {
-          map.set(c, { ...map.get(c), ...item });
-        } else {
-          map.set(c, item);
-        }
-      }
-    });
-
-    const finalBoms = sortBoms(Array.from(map.values()));
+    // Load authoritative list directly from public.bom_orders (Zero leaves table interaction)
+    const boms = await loadDatabaseBoms();
+    const finalBoms = sortBoms(Array.isArray(boms) ? boms : []);
     cachedBomsResult = finalBoms;
     lastBomFetchTimestamp = Date.now();
     return res.json({ success: true, data: finalBoms, total: finalBoms.length });
   } catch (err) {
     console.error('Error fetching BOMs:', err);
     return res.status(500).json({ success: false, message: err.message, data: [] });
+  }
+});
+
+// Single BOM read endpoint by ID or bom_code
+app.get('/api/boms/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const cleanId = String(id).trim();
+    // 1. Check memory cache first
+    if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+      const found = supabaseMemoryStore.bom_store.find(b => b.id === cleanId || b.bomCode === cleanId || b.code === cleanId);
+      if (found) return res.json({ success: true, data: found });
+    }
+
+    // 2. Fetch single row from public.bom_orders
+    const { data, error } = await supabase
+      .from('bom_orders')
+      .select('*')
+      .or(`id.eq.${cleanId},bom_code.eq.${cleanId}`)
+      .maybeSingle();
+
+    if (!error && data) {
+      const consumer = toConsumerBomServer(data);
+      return res.json({ success: true, data: consumer });
+    }
+
+    return res.status(404).json({ success: false, message: `BOM ${cleanId} not found` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -3961,17 +4272,17 @@ app.post('/api/boms', async (req, res) => {
         const incomingCode = String(bom.bomCode || bom.code || bom.id || '').trim();
         const isPlaceholderCode = !incomingCode || incomingCode.toLowerCase().includes('auto') || incomingCode.toLowerCase().includes('pending');
         const alreadyExists = incomingCode && map.has(incomingCode);
-        const isValidIncomingCode = /^BOM-\d+$/i.test(incomingCode);
+        const hasValidCode = Boolean(incomingCode && !isPlaceholderCode);
         
         let finalCode = incomingCode;
         let shouldAssignNewCode = false;
 
         const shouldUpdate = Boolean(isUpdate || req.body.isUpdate || req.body.isEdit || bom.isUpdate || (alreadyExists && !isNew));
 
-        // If client sent a valid reserved code (e.g. BOM-663) that doesn't collide with a different existing order, honor it directly!
-        if (isValidIncomingCode && (!alreadyExists || shouldUpdate)) {
+        // If client sent a valid code (e.g. BOM-663 or custom ID) that doesn't collide with a different existing order, honor it directly!
+        if (hasValidCode && (!alreadyExists || shouldUpdate)) {
           finalCode = incomingCode;
-          const numMatch = incomingCode.match(/^BOM-(\d+)/i);
+          const numMatch = incomingCode.match(/^BOM-(\d+)$/i);
           if (numMatch) {
             const cNum = parseInt(numMatch[1], 10);
             if (Number.isFinite(cNum) && cNum > maxNum) maxNum = cNum;
@@ -3998,14 +4309,9 @@ app.post('/api/boms', async (req, res) => {
         const mergedList = Array.from(map.values());
         supabaseMemoryStore.bom_store = mergedList;
 
-        // IMMEDIATE SYNCHRONOUS DISK WRITE - 0ms latency guarantee
-        try {
-          fs.writeFileSync(filePath, JSON.stringify(mergedList, null, 2), 'utf8');
-        } catch (e) {
-          console.error('Error writing bom_store.json:', e);
-        }
-
-        console.log(`[BOM Store] BOM ${finalCode} saved immediately to disk (isNew: ${shouldAssignNewCode}). Total: ${mergedList.length}`);
+        // Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
+        // and is NOT rewritten on every normal BOM operation.
+        console.log(`[BOM Store] BOM ${finalCode} saved to normalized public.bom_orders (isNew: ${shouldAssignNewCode}).`);
 
         // Automatically reconcile and deduct inventory in raw_materials_store and item_store
         try {
@@ -4027,10 +4333,17 @@ app.post('/api/boms', async (req, res) => {
         cachedBomsResult = mergedList;
         lastBomFetchTimestamp = Date.now();
 
-        // Non-blocking background push to Supabase to guarantee 0ms latency for client
-        pushStoreToSupabase('bom_store', mergedList).catch((e) => {
-          console.error('Error pushing bom_store to Supabase:', e);
-        });
+        // Non-blocking background upsert to public.bom_orders (Zero leaves table interaction)
+        try {
+          const dbRow = toDatabaseBomRowServer(bom);
+          if (dbRow) {
+            supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' }).then(({ error }) => {
+              if (error) console.error('Error upserting BOM to public.bom_orders:', error.message);
+            }).catch(e => console.error('Error upserting BOM to public.bom_orders:', e));
+          }
+        } catch (e) {
+          console.error('Error preparing BOM row for Supabase:', e);
+        }
 
         try {
           await supabase.from('leaves').update({
@@ -4054,6 +4367,36 @@ app.post('/api/boms', async (req, res) => {
       resolveOuter();
     });
   });
+});
+
+// Dedicated DELETE /api/boms/:id endpoint
+app.delete('/api/boms/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const cleanId = String(id).trim();
+    // 1. Delete from Supabase public.bom_orders
+    const { error } = await supabase.from('bom_orders').delete().or(`id.eq.${cleanId},bom_code.eq.${cleanId}`);
+    if (error) {
+      console.warn('[DELETE BOM Supabase notice]:', error.message);
+    }
+    // 2. Update memory store & disk
+    let current = supabaseMemoryStore.bom_store || [];
+    if (!Array.isArray(current) || current.length === 0) {
+      current = await loadDatabaseBoms();
+    }
+    const updated = current.filter(b => (b.id !== cleanId && b.bomCode !== cleanId && b.code !== cleanId));
+    supabaseMemoryStore.bom_store = updated;
+    // Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
+    // and is not rewritten on normal BOM delete operations.
+
+    // 3. Broadcast real-time deletion
+    broadcastRealtimeEvent('bom_updated', { id: cleanId, action: 'delete', bomList: updated });
+    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: updated });
+
+    res.json({ success: true, message: `BOM ${cleanId} deleted successfully`, total: updated.length });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // Real-time synchronization endpoint retrieving live purchase orders from Zoho Books
