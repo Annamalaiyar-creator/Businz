@@ -200,7 +200,12 @@ export default function BomOrdersView(props) {
       }
     });
 
-    const pollInterval = setInterval(() => syncFromCloud(false), 12000);
+    // Gentle 90s safety fallback check only when active and tab is visible (replaces aggressive 12s polling)
+    const fallbackInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden && !isSubmittingBomRef.current) {
+        syncFromCloud(false);
+      }
+    }, 90000);
 
     const debouncedSync = () => {
       if (isSubmittingBomRef.current) return;
@@ -208,6 +213,12 @@ export default function BomOrdersView(props) {
       debounceSyncTimerRef.current = setTimeout(() => {
         syncFromCloud(false);
       }, 500);
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && !isSubmittingBomRef.current) {
+        debouncedSync();
+      }
     };
 
     const handleStoreUpdate = (e) => {
@@ -229,9 +240,11 @@ export default function BomOrdersView(props) {
     window.addEventListener('controlroom_customer_update', handleStorageUpdate);
     window.addEventListener('controlroom_bom_updated', handleStorageUpdate);
     window.addEventListener('controlroom_bom_store_updated', handleStorageUpdate);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
-      clearInterval(pollInterval);
+      clearInterval(fallbackInterval);
       if (debounceSyncTimerRef.current) clearTimeout(debounceSyncTimerRef.current);
       if (realtimeSub && realtimeSub.unsubscribe) realtimeSub.unsubscribe();
       window.removeEventListener('storage', handleStorageUpdate);
@@ -240,6 +253,8 @@ export default function BomOrdersView(props) {
       window.removeEventListener('controlroom_customer_update', handleStorageUpdate);
       window.removeEventListener('controlroom_bom_updated', handleStorageUpdate);
       window.removeEventListener('controlroom_bom_store_updated', handleStorageUpdate);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
 
