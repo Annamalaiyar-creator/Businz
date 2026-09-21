@@ -1,10 +1,59 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Trash2, X, CheckCircle, Phone, UploadCloud, Truck, Package,
-  Upload, Camera, Image, Video, Film
+  Upload, Camera, Image, Video, Film, Loader2
 } from "lucide-react";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
+import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
+import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+
+function VehicleMediaImg({ photo, bomCode, onClick }) {
+  const [resolvedSrc, setResolvedSrc] = useState(photo.url || photo.dataUrl || '');
+  useEffect(() => {
+    let active = true;
+    if (!resolvedSrc && (photo.storageBucket || photo.storagePath)) {
+      resolveDocumentUrlAsync(photo, bomCode).then(url => {
+        if (active && url) setResolvedSrc(url);
+      });
+    }
+    return () => { active = false; };
+  }, [photo, bomCode, resolvedSrc]);
+
+  return (
+    <div
+      onClick={() => onClick && onClick(resolvedSrc)}
+      style={{ height: '120px', width: '100%', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      {resolvedSrc ? (
+        <img src={resolvedSrc} alt={photo.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <Loader2 className="animate-spin text-cyan-400" size={20} />
+      )}
+    </div>
+  );
+}
+
+function VehicleMediaVideo({ video, bomCode }) {
+  const [resolvedSrc, setResolvedSrc] = useState(video.url || video.dataUrl || '');
+  useEffect(() => {
+    let active = true;
+    if (!resolvedSrc && (video.storageBucket || video.storagePath)) {
+      resolveDocumentUrlAsync(video, bomCode).then(url => {
+        if (active && url) setResolvedSrc(url);
+      });
+    }
+    return () => { active = false; };
+  }, [video, bomCode, resolvedSrc]);
+
+  return (
+    <video
+      controls
+      src={resolvedSrc}
+      style={{ width: '100%', height: '180px', backgroundColor: '#0F172A', objectFit: 'contain' }}
+    />
+  );
+}
 
 export default function VehicleLoadingModal({
   vehicleLoadingModal,
@@ -22,6 +71,8 @@ export default function VehicleLoadingModal({
   });
   const [loadingPhotos, setLoadingPhotos] = useState([]);
   const [loadingVideos, setLoadingVideos] = useState([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 const bom = vehicleLoadingModal;
 const bCode = bom.bomCode || bom.code || 'BOM-2026';
 const invNo = bom.invoiceNo || (bom.invoiceConfirmed ? `INV-${bCode.replace('BOM-', '')}` : 'INV-2026-FINAL');
@@ -45,40 +96,70 @@ const packedItems = (bom.dispatchPacking && Array.isArray(bom.dispatchPacking) &
   ? bom.dispatchPacking.filter(p => Boolean(p.packed))
   : (bom.items || []).filter(i => i.selected !== false);
 
-const handleAddPhotoFiles = (files) => {
+const handleAddPhotoFiles = async (files) => {
   if (!files || files.length === 0) return;
-  Array.from(files).forEach((file) => {
-    const reader = new FileReader();
-    reader.onload = (loadEvt) => {
+  setUploadingMedia(true);
+  setUploadError('');
+  try {
+    for (const file of Array.from(files)) {
+      validateClientFile(file);
+      const metadata = await uploadBomDocumentFile({
+        file,
+        bomCode: bCode,
+        category: 'dispatch/images'
+      });
       const newPhoto = {
         id: `photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: file.name,
+        name: metadata.originalName || file.name,
         size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-        dataUrl: loadEvt.target.result,
+        storageBucket: metadata.storageBucket,
+        storagePath: metadata.storagePath,
+        mimeType: metadata.mimeType,
+        uploadedAt: metadata.uploadedAt,
         capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       };
       setLoadingPhotos(prev => [...prev, newPhoto]);
-    };
-    reader.readAsDataURL(file);
-  });
+    }
+  } catch (err) {
+    console.error('Photo upload error:', err);
+    setUploadError(err.message || 'Failed to upload photo');
+    alert(`Failed to upload photo: ${err.message}`);
+  } finally {
+    setUploadingMedia(false);
+  }
 };
 
-const handleAddVideoFiles = (files) => {
+const handleAddVideoFiles = async (files) => {
   if (!files || files.length === 0) return;
-  Array.from(files).forEach((file) => {
-    const reader = new FileReader();
-    reader.onload = (loadEvt) => {
+  setUploadingMedia(true);
+  setUploadError('');
+  try {
+    for (const file of Array.from(files)) {
+      validateClientFile(file);
+      const metadata = await uploadBomDocumentFile({
+        file,
+        bomCode: bCode,
+        category: 'dispatch/videos'
+      });
       const newVideo = {
         id: `video_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: file.name,
+        name: metadata.originalName || file.name,
         size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-        dataUrl: loadEvt.target.result,
+        storageBucket: metadata.storageBucket,
+        storagePath: metadata.storagePath,
+        mimeType: metadata.mimeType,
+        uploadedAt: metadata.uploadedAt,
         recordedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       };
       setLoadingVideos(prev => [...prev, newVideo]);
-    };
-    reader.readAsDataURL(file);
-  });
+    }
+  } catch (err) {
+    console.error('Video upload error:', err);
+    setUploadError(err.message || 'Failed to upload video');
+    alert(`Failed to upload video: ${err.message}`);
+  } finally {
+    setUploadingMedia(false);
+  }
 };
 
 const handleAddSamplePhoto = () => {
@@ -120,18 +201,41 @@ const handleAddSamplePhoto = () => {
   ctx.fillStyle = '#86EFAC';
   ctx.fillText(`VEHICLE: ${vNo || 'TN-09-CB-4821'} • TIME: ${new Date().toLocaleTimeString()}`, 380, 36);
 
-  const dataUrl = canvas.toDataURL('image/jpeg');
-  const samplePhoto = {
-    id: `photo_sample_${Date.now()}`,
-    name: `Truck_Loading_LivePhoto_${Date.now().toString().slice(-4)}.jpg`,
-    size: '1.4 MB',
-    dataUrl: dataUrl,
-    capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-  };
-  setLoadingPhotos(prev => [...prev, samplePhoto]);
+  canvas.toBlob(async (blob) => {
+    if (!blob) return;
+    setUploadingMedia(true);
+    try {
+      const fileName = `Truck_Loading_LivePhoto_${Date.now().toString().slice(-4)}.jpg`;
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      const metadata = await uploadBomDocumentFile({
+        file,
+        bomCode: bCode,
+        category: 'dispatch/images'
+      });
+      const samplePhoto = {
+        id: `photo_sample_${Date.now()}`,
+        name: fileName,
+        size: '1.4 MB',
+        storageBucket: metadata.storageBucket,
+        storagePath: metadata.storagePath,
+        mimeType: metadata.mimeType,
+        uploadedAt: metadata.uploadedAt,
+        capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      };
+      setLoadingPhotos(prev => [...prev, samplePhoto]);
+    } catch (err) {
+      alert(`Sample photo upload failed: ${err.message}`);
+    } finally {
+      setUploadingMedia(false);
+    }
+  }, 'image/jpeg', 0.85);
 };
 
 const handleFinalizeVehicleLoading = () => {
+  if (uploadingMedia) {
+    alert('⏳ Media is currently uploading to secure storage. Please wait until upload completes.');
+    return;
+  }
   if (!isReadOnly) {
     if (!vNo) {
       alert('⚠️ Please enter the Vehicle / Lorry Registration Number before completing dispatch!');
@@ -476,17 +580,23 @@ return (
                 </div>
               )}
 
+              {/* Uploading indicator */}
+              {uploadingMedia && (
+                <div style={{ padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #06B6D4', borderRadius: '8px', color: '#0E7490', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Loader2 size={16} className="animate-spin" /> Uploading media files to secure storage...
+                </div>
+              )}
+
               {/* Photo Grid Gallery */}
               {currentPhotos.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '14px' }}>
                   {currentPhotos.map((p, pIdx) => (
                     <div key={p.id || pIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                      <div
-                        onClick={() => setActiveMediaPreviewModal({ type: 'image', url: p.dataUrl, name: p.name })}
-                        style={{ height: '120px', width: '100%', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        <img src={p.dataUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </div>
+                      <VehicleMediaImg
+                        photo={p}
+                        bomCode={bCode}
+                        onClick={(resolvedUrl) => setActiveMediaPreviewModal({ type: 'image', url: resolvedUrl, name: p.name, bomCode: bCode })}
+                      />
                       <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
                           <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
@@ -553,16 +663,19 @@ return (
                 </div>
               )}
 
+              {/* Uploading indicator */}
+              {uploadingMedia && (
+                <div style={{ padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #06B6D4', borderRadius: '8px', color: '#0E7490', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Loader2 size={16} className="animate-spin" /> Uploading media files to secure storage...
+                </div>
+              )}
+
               {/* Video Player Gallery */}
               {currentVideos.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
                   {currentVideos.map((vid, vIdx) => (
                     <div key={vid.id || vIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-                      <video
-                        controls
-                        src={vid.dataUrl}
-                        style={{ width: '100%', height: '180px', backgroundColor: '#0F172A', objectFit: 'contain' }}
-                      />
+                      <VehicleMediaVideo video={vid} bomCode={bCode} />
                       <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>{vid.name}</div>
@@ -629,22 +742,31 @@ return (
             <button
               type="button"
               onClick={handleFinalizeVehicleLoading}
+              disabled={uploadingMedia}
               style={{
                 padding: '10px 24px',
                 borderRadius: '10px',
                 border: 'none',
-                backgroundColor: '#16A34A',
+                backgroundColor: uploadingMedia ? '#94A3B8' : '#16A34A',
                 color: '#FFFFFF',
                 fontSize: '13px',
                 fontWeight: '800',
-                cursor: 'pointer',
+                cursor: uploadingMedia ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 3px 10px rgba(22,163,74,0.3)'
+                boxShadow: uploadingMedia ? 'none' : '0 3px 10px rgba(22,163,74,0.3)'
               }}
             >
-              <CheckCircle size={16} /> Complete Vehicle Loading & Finalize BOM
+              {uploadingMedia ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Uploading Media...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={16} /> Complete Vehicle Loading & Finalize BOM
+                </>
+              )}
             </button>
           )}
         </div>

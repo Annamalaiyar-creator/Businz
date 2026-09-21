@@ -1,0 +1,10 @@
+# LEGACY ROLLBACK ONLY — NOT ACTIVE SOURCE OF TRUTH
+
+This directory contains `bom_store.json`.
+
+IMPORTANT NOTICE:
+1. `bom_store.json` is a PASSIVE ROLLBACK AND EMERGENCY OFFLINE FALLBACK ONLY.
+2. It is NOT the active source of truth.
+3. The authoritative source of truth for all BOM operations is PostgreSQL table `public.bom_orders`.
+4. Document binaries are stored in private Supabase Storage bucket `bom-documents`.
+5. DO NOT alter, delete, or rely on this file for active production runtime data.

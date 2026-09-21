@@ -150,7 +150,18 @@ export default function DispatchDashboardView(props) {
     };
 
     syncBoms();
-    const pollInterval = setInterval(syncBoms, 5000);
+    // Gentle 90s safety fallback check only when active and tab is visible (replaces aggressive 5s polling)
+    const fallbackInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncBoms();
+      }
+    }, 90000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncBoms();
+      }
+    };
 
     const handleBomUpdate = (e) => {
       if (e?.detail?.bom) {
@@ -168,11 +179,15 @@ export default function DispatchDashboardView(props) {
 
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdate);
     window.addEventListener('controlroom_storage_update', handleBomUpdate);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
-      clearInterval(pollInterval);
+      clearInterval(fallbackInterval);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdate);
       window.removeEventListener('controlroom_storage_update', handleBomUpdate);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
 

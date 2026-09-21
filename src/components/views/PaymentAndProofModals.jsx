@@ -1,16 +1,19 @@
 import React, { useState } from "react";
 import {
   Eye, FileText, X, CheckCircle, RotateCcw,
-  CreditCard, AlertCircle
+  CreditCard, AlertCircle, Loader2
 } from "lucide-react";
-import { saveMediaToCache, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
+import { saveMediaToCache, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { uploadBomDocumentFile } from "../../utils/bomStorageClient";
+import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
 export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore }) {
   const [paymentProofFile, setPaymentProofFile] = useState(null);
   const [paymentStageType, setPaymentStageType] = useState('100% Paid');
   const [balanceProofFile, setBalanceProofFile] = useState(null);
   const [balancePaidInput, setBalancePaidInput] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const grandTotal = Number(uploadPaymentModal.grandTotal || uploadPaymentModal.subTotal || 0);
   const partialAdvance = Number(uploadPaymentModal.partialAmount || 0);
@@ -117,27 +120,20 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                         {typeof proofObj === 'object' && proofObj?.size ? proofObj.size : 'Attached Document'} • Verified
                       </span>
                     </div>
-                    {proofData ? (
-                      <button
-                        onClick={() => {
-                          const win = window.open('');
-                          if (win) {
-                            if (proofData.startsWith('data:image/')) {
-                              win.document.write(`<!DOCTYPE html><html><head><title>${proofName || 'Payment Proof'}</title></head><body style="margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${proofData}" style="max-width:95vw;max-height:95vh;object-fit:contain;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);border-radius:12px;"/></body></html>`);
-                            } else {
-                              win.location.href = proofData;
-                            }
-                          }
-                        }}
-                        style={{ fontSize: '12px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '6px 12px', borderRadius: '8px', border: '1px solid #BFDBFE', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                      >
-                        <Eye size={13} /> View File
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669', backgroundColor: '#DCFCE7', padding: '4px 10px', borderRadius: '6px' }}>
-                        Attached
-                      </span>
-                    )}
+                    <button
+                      onClick={async () => {
+                        const targetDoc = proofObj || { name: proofName, dataUrl: proofData };
+                        const url = await resolveDocumentUrlAsync(targetDoc, uploadPaymentModal.bomCode);
+                        if (url) {
+                          window.open(url, '_blank');
+                        } else {
+                          alert('Unable to load document preview');
+                        }
+                      }}
+                      style={{ fontSize: '12px', fontWeight: '700', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '6px 12px', borderRadius: '8px', border: '1px solid #BFDBFE', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Eye size={13} /> View File
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -173,24 +169,21 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
 
                   <input
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    disabled={isUploading}
                     onChange={(e) => {
                       const f = e.target.files && e.target.files[0];
                       if (f) {
-                        const reader = new FileReader();
-                        reader.onload = (loadEvt) => {
-                          setPaymentProofFile({
-                            name: f.name,
-                            size: `${(f.size / (1024 * 1024)).toFixed(2)} MB`,
-                            dataUrl: loadEvt.target.result,
-                            uploadedAt: new Date().toISOString()
-                          });
-                        };
-                        reader.readAsDataURL(f);
+                        setPaymentProofFile(f);
                       }
                     }}
                     style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
                   />
+                  {paymentProofFile && (
+                    <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
+                      <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {paymentProofFile.name} ({Math.round(paymentProofFile.size / 1024)} KB)
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -219,23 +212,20 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                           Settled Amount: ₹{balancePaidSoFar.toLocaleString('en-IN', { minimumFractionDigits: 2 })} • Verified
                         </span>
                       </div>
-                      {balanceDocData && (
-                        <button
-                          onClick={() => {
-                            const win = window.open('');
-                            if (win) {
-                              if (balanceDocData.startsWith('data:image/')) {
-                                win.document.write(`<!DOCTYPE html><html><body style="margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${balanceDocData}" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:12px;"/></body></html>`);
-                              } else {
-                                win.location.href = balanceDocData;
-                              }
-                            }
-                          }}
-                          style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', backgroundColor: '#CCFBF1', padding: '6px 12px', borderRadius: '8px', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                        >
-                          View File
-                        </button>
-                      )}
+                      <button
+                        onClick={async () => {
+                          const targetDoc = balanceDocObj || { name: balanceDocName, dataUrl: balanceDocData };
+                          const url = await resolveDocumentUrlAsync(targetDoc, uploadPaymentModal.bomCode);
+                          if (url) {
+                            window.open(url, '_blank');
+                          } else {
+                            alert('Unable to load balance settlement document');
+                          }
+                        }}
+                        style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', backgroundColor: '#CCFBF1', padding: '6px 12px', borderRadius: '8px', border: '1px solid #99F6E4', cursor: 'pointer' }}
+                      >
+                        View File
+                      </button>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 14px' }}>
@@ -259,58 +249,69 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                           </label>
                           <input
                             type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            disabled={isUploading}
                             onChange={(e) => {
                               const f = e.target.files && e.target.files[0];
                               if (f) {
-                                const reader = new FileReader();
-                                reader.onload = (loadEvt) => {
-                                  setBalanceProofFile({
-                                    name: f.name,
-                                    size: `${(f.size / (1024 * 1024)).toFixed(2)} MB`,
-                                    dataUrl: loadEvt.target.result,
-                                    uploadedAt: new Date().toISOString()
-                                  });
-                                };
-                                reader.readAsDataURL(f);
+                                setBalanceProofFile(f);
                               }
                             }}
                             style={{ width: '100%', fontSize: '11px', boxSizing: 'border-box' }}
                           />
+                          {balanceProofFile && (
+                            <span style={{ fontSize: '10px', color: '#0F766E', fontWeight: '700' }}>
+                              Selected: {balanceProofFile.name} ({Math.round(balanceProofFile.size / 1024)} KB)
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button
-                        onClick={() => {
+                        disabled={isUploading}
+                        onClick={async () => {
                           if (!balanceProofFile) {
                             alert('Please select a file for balance payment proof!');
                             return;
                           }
-                          const settledVal = parseFloat(balancePaidInput) || currentOutstanding;
-                          const bDocObj = typeof balanceProofFile === 'object' ? balanceProofFile : { name: balanceProofFile, dataUrl: null };
-                          setBomStore(prev => {
-                            const updated = prev.map(b => b.bomCode === uploadPaymentModal.bomCode ? {
-                              ...b,
-                              balancePaymentProofDoc: bDocObj,
-                              balanceAmountPaid: settledVal,
-                              balancePaidAt: new Date().toISOString(),
-                              status: 'Payment Completed & Verified',
-                              payments: {
-                                ...b.payments,
-                                balanceSettled: true,
-                                balanceProofDoc: bDocObj.name,
-                                balanceProofDocObj: bDocObj,
-                                balanceAmountPaid: settledVal
-                              }
-                            } : b);
-                            saveCloudStore('bom_store', updated);
-                            return updated;
-                          });
-                          onClose();
-                          alert(`✅ Balance payment of ₹${settledVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })} recorded and verified successfully!`);
+                          try {
+                            setIsUploading(true);
+                            const bomCode = uploadPaymentModal.bomCode || uploadPaymentModal.id;
+                            const metadata = await uploadBomDocumentFile({
+                              file: balanceProofFile,
+                              bomCode,
+                              category: 'payment-proof'
+                            });
+                            const settledVal = parseFloat(balancePaidInput) || currentOutstanding;
+                            setBomStore(prev => {
+                              const updated = prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
+                                ...b,
+                                balancePaymentProofDoc: metadata,
+                                balanceAmountPaid: settledVal,
+                                balancePaidAt: new Date().toISOString(),
+                                status: 'Payment Completed & Verified',
+                                payments: {
+                                  ...b.payments,
+                                  balanceSettled: true,
+                                  balanceProofDoc: metadata.name,
+                                  balanceProofDocObj: metadata,
+                                  balanceAmountPaid: settledVal
+                                }
+                              } : b);
+                              saveCloudStore('bom_store', updated);
+                              return updated;
+                            });
+                            onClose();
+                            alert(`✅ Balance settlement proof for (${bomCode}) uploaded to secure storage!`);
+                          } catch (err) {
+                            alert(`❌ Upload failed: ${err.message}`);
+                          } finally {
+                            setIsUploading(false);
+                          }
                         }}
-                        style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', backgroundColor: '#0D9488', color: 'white', fontSize: '12px', fontWeight: '800', cursor: 'pointer', alignSelf: 'flex-end' }}
+                        style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', backgroundColor: '#0D9488', color: 'white', fontSize: '12px', fontWeight: '800', cursor: isUploading ? 'not-allowed' : 'pointer', alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: '6px' }}
                       >
-                        Record Balance Settlement
+                        {isUploading && <Loader2 size={12} className="animate-spin" />}
+                        {isUploading ? 'Uploading to Storage...' : 'Record Balance Settlement'}
                       </button>
                     </div>
                   )}
@@ -330,37 +331,50 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                 Cancel
               </button>
               <button
-                onClick={() => {
+                disabled={isUploading}
+                onClick={async () => {
                   if (!paymentProofFile) {
                     alert('Please attach or select payment proof file!');
                     return;
                   }
-                  const pDocObj = typeof paymentProofFile === 'object' ? paymentProofFile : { name: paymentProofFile, dataUrl: null };
-                  setBomStore(prev => {
-                    const updated = prev.map(b => b.bomCode === uploadPaymentModal.bomCode ? {
-                      ...b,
-                      status: 'Payment Uploaded & Verified',
-                      paymentProofDoc: pDocObj,
-                      payments: {
-                        ...b.payments,
-                        proofDoc: pDocObj.name,
-                        proofDocObj: pDocObj,
-                        proofDocData: pDocObj.dataUrl,
-                        advance100Uploaded: paymentStageType === '100% Paid' || paymentStageType === '100% Advance',
-                        advance50Uploaded: paymentStageType === '50% Advance' || paymentStageType === 'Partial Advance' || b.payments?.advance50Uploaded,
-                        dispatch50Uploaded: paymentStageType === '50% Dispatch' || paymentStageType === 'Balance Payment' || b.payments?.dispatch50Uploaded,
-                        net30Uploaded: paymentStageType === 'Credit Payment' || paymentStageType === 'Net 30 Days'
-                      }
-                    } : b);
-                    saveCloudStore('bom_store', updated);
-                    return updated;
-                  });
-                  onClose();
-                  alert(`✅ Payment details for (${paymentStageType}) uploaded and recorded successfully!`);
+                  try {
+                    setIsUploading(true);
+                    const bomCode = uploadPaymentModal.bomCode || uploadPaymentModal.id;
+                    const metadata = await uploadBomDocumentFile({
+                      file: paymentProofFile,
+                      bomCode,
+                      category: 'payment-proof'
+                    });
+                    setBomStore(prev => {
+                      const updated = prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
+                        ...b,
+                        status: 'Payment Uploaded & Verified',
+                        paymentProofDoc: metadata,
+                        payments: {
+                          ...b.payments,
+                          proofDoc: metadata.name,
+                          proofDocObj: metadata,
+                          advance100Uploaded: paymentStageType === '100% Paid' || paymentStageType === '100% Advance',
+                          advance50Uploaded: paymentStageType === '50% Advance' || paymentStageType === 'Partial Advance' || b.payments?.advance50Uploaded,
+                          dispatch50Uploaded: paymentStageType === '50% Dispatch' || paymentStageType === 'Balance Payment' || b.payments?.dispatch50Uploaded,
+                          net30Uploaded: paymentStageType === 'Credit Payment' || paymentStageType === 'Net 30 Days'
+                        }
+                      } : b);
+                      saveCloudStore('bom_store', updated);
+                      return updated;
+                    });
+                    onClose();
+                    alert(`✅ Payment details for (${paymentStageType}) uploaded to secure storage!`);
+                  } catch (err) {
+                    alert(`❌ Upload failed: ${err.message}`);
+                  } finally {
+                    setIsUploading(false);
+                  }
                 }}
-                style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#10B981', color: 'white', fontSize: '13px', fontWeight: '800', cursor: 'pointer' }}
+                style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#10B981', color: 'white', fontSize: '13px', fontWeight: '800', cursor: isUploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                Record Payment
+                {isUploading && <Loader2 size={13} className="animate-spin" />}
+                {isUploading ? 'Uploading to Storage...' : 'Record Payment'}
               </button>
             </>
           ) : (
@@ -382,6 +396,7 @@ export function UpdatePaymentModal({
 }) {
   const [updatePaymentFile, setUpdatePaymentFile] = useState(null);
   const [updatePaymentNotes, setUpdatePaymentNotes] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif" }}>
@@ -392,8 +407,8 @@ export function UpdatePaymentModal({
               <CreditCard style={{ width: '20px', height: '20px' }} />
             </div>
             <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Update Payment Details</h3>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>{updatePaymentModal.bomCode} — {updatePaymentModal.paymentType}</span>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Update & Record Payment</h3>
+              <span style={{ fontSize: '12px', color: '#64748B' }}>{updatePaymentModal.bomCode} — {updatePaymentModal.customerName}</span>
             </div>
           </div>
           <button onClick={() => onClose()} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
@@ -401,14 +416,15 @@ export function UpdatePaymentModal({
           </button>
         </div>
 
-        <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '12px 14px', fontSize: '12px', color: '#166534', lineHeight: '1.4' }}>
-          <div><strong>Customer:</strong> {updatePaymentModal.customerName}</div>
-          <div><strong>Order Total:</strong> ₹{parseFloat(updatePaymentModal.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-          {updatePaymentModal.creditDays && (
-            <div style={{ marginTop: '4px', color: '#6D28D9' }}>
-              <strong>Credit Term:</strong> {updatePaymentModal.creditDays} Days (Due: {updatePaymentModal.creditDueDate || 'Within 7 Days'})
-            </div>
-          )}
+        <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#64748B' }}>Payment Terms:</span>
+            <strong style={{ color: '#0F172A' }}>{updatePaymentModal.paymentType}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#64748B' }}>Total Amount:</span>
+            <strong style={{ color: '#059669', fontWeight: '800' }}>₹ {(updatePaymentModal.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+          </div>
         </div>
 
         <div>
@@ -417,23 +433,19 @@ export function UpdatePaymentModal({
           </label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            accept=".pdf,.jpg,.jpeg,.png,.webp"
+            disabled={isUploading}
             onChange={(e) => {
               const f = e.target.files && e.target.files[0];
               if (f) {
-                compressAndSaveFile(f, (res) => {
-                  if (res) {
-                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                    setUpdatePaymentFile(res);
-                  }
-                });
+                setUpdatePaymentFile(f);
               }
             }}
             style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
           />
           {updatePaymentFile && (
             <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
-              <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {updatePaymentFile.name} ({updatePaymentFile.size})
+              <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {updatePaymentFile.name} ({Math.round(updatePaymentFile.size / 1024)} KB)
             </span>
           )}
         </div>
@@ -457,47 +469,55 @@ export function UpdatePaymentModal({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
           <button
             onClick={() => onClose()}
+            disabled={isUploading}
             style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
           >
             Cancel
           </button>
           <button
-            onClick={() => {
+            disabled={isUploading}
+            onClick={async () => {
               if (!updatePaymentFile) {
                 alert('Please select or upload payment slip file!');
                 return;
               }
-              const updatedDoc = {
-                name: updatePaymentFile.name,
-                size: updatePaymentFile.size || `${(updatePaymentFile.size / (1024 * 1024)).toFixed(2)} MB`,
-                type: updatePaymentFile.type,
-                dataUrl: updatePaymentFile.dataUrl || null,
-                uploadedAt: new Date().toISOString(),
-                notes: updatePaymentNotes
-              };
-              if (updatedDoc.name && updatedDoc.dataUrl) {
-                saveMediaToCache(updatedDoc.name, updatedDoc.dataUrl);
+              try {
+                setIsUploading(true);
+                const bomCode = updatePaymentModal.bomCode || updatePaymentModal.id;
+                const metadata = await uploadBomDocumentFile({
+                  file: updatePaymentFile,
+                  bomCode,
+                  category: 'payment-proof'
+                });
+                const updatedDoc = {
+                  ...metadata,
+                  notes: updatePaymentNotes
+                };
+                setBomStore(prev => prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
+                  ...b,
+                  status: 'Payment Uploaded & Settled',
+                  paymentUpdated: true,
+                  paymentUpdatedDate: new Date().toISOString(),
+                  paymentProofDoc: updatedDoc,
+                  payments: {
+                    ...b.payments,
+                    proofDoc: metadata.name,
+                    proofDocObj: updatedDoc,
+                    paymentUpdated: true
+                  }
+                } : b));
+                onClose();
+                alert(`✅ Payment details for (${bomCode}) successfully recorded and locked in secure storage!`);
+              } catch (err) {
+                alert(`❌ Upload failed: ${err.message}`);
+              } finally {
+                setIsUploading(false);
               }
-              setBomStore(prev => prev.map(b => b.bomCode === updatePaymentModal.bomCode ? {
-                ...b,
-                status: 'Payment Uploaded & Settled',
-                paymentUpdated: true,
-                paymentUpdatedDate: new Date().toISOString(),
-                paymentProofDoc: updatedDoc,
-                payments: {
-                  ...b.payments,
-                  proofDoc: updatePaymentFile.name,
-                  proofDocObj: updatedDoc,
-                  proofDocData: updatedDoc.dataUrl,
-                  paymentUpdated: true
-                }
-              } : b));
-              onClose();
-              alert(`✅ Payment details for (${updatePaymentModal.bomCode}) successfully recorded and locked!`);
             }}
-            style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#059669', color: 'white', fontSize: '13px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(5,150,105,0.2)' }}
+            style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#059669', color: 'white', fontSize: '13px', fontWeight: '800', cursor: isUploading ? 'not-allowed' : 'pointer', boxShadow: '0 2px 4px rgba(5,150,105,0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            Record & Lock Payment Details
+            {isUploading && <Loader2 size={13} className="animate-spin" />}
+            {isUploading ? 'Uploading to Storage...' : 'Record & Lock Payment Details'}
           </button>
         </div>
       </div>
@@ -509,6 +529,7 @@ export function ReuploadAddressProofModal({
   reuploadAddressProofModal, onClose, setBomStore, setInvoiceList
 }) {
   const [reuploadProofFile, setReuploadProofFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif" }}>
@@ -519,8 +540,8 @@ export function ReuploadAddressProofModal({
               <RotateCcw style={{ width: '20px', height: '20px' }} />
             </div>
             <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Re-upload Address Proof</h3>
-              <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: '700' }}>Invoice Desk Action Required</span>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>Re-upload Verified Address Proof</h3>
+              <span style={{ fontSize: '12px', color: '#64748B' }}>Invoice Desk Reissue Request</span>
             </div>
           </div>
           <button onClick={() => onClose()} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
@@ -545,22 +566,19 @@ export function ReuploadAddressProofModal({
           </label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            accept=".pdf,.jpg,.jpeg,.png,.webp"
+            disabled={isUploading}
             onChange={(e) => {
               const f = e.target.files && e.target.files[0];
               if (f) {
-                compressAndSaveFile(f, (res) => {
-                  if (res) {
-                    setReuploadProofFile(res);
-                  }
-                });
+                setReuploadProofFile(f);
               }
             }}
             style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
           />
           {reuploadProofFile && (
             <span style={{ fontSize: '11px', color: '#166534', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
-              <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {reuploadProofFile.name} ({reuploadProofFile.size})
+              <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {reuploadProofFile.name} ({Math.round(reuploadProofFile.size / 1024)} KB)
             </span>
           )}
         </div>
@@ -568,62 +586,67 @@ export function ReuploadAddressProofModal({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
           <button
             onClick={() => onClose()}
+            disabled={isUploading}
             style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
           >
             Cancel
           </button>
           <button
-            onClick={() => {
+            disabled={isUploading}
+            onClick={async () => {
               if (!reuploadProofFile) {
                 alert('Please select or upload the verified address proof file!');
                 return;
               }
-              const targetCode = reuploadAddressProofModal.bomCode;
-              const reuploadedTime = new Date().toISOString();
-              const newDoc = {
-                name: reuploadProofFile.name,
-                size: reuploadProofFile.size,
-                type: reuploadProofFile.type,
-                dataUrl: reuploadProofFile.dataUrl,
-                uploadedAt: reuploadedTime
-              };
-              if (newDoc.name && newDoc.dataUrl) {
-                saveMediaToCache(newDoc.name, newDoc.dataUrl);
-              }
+              try {
+                setIsUploading(true);
+                const targetCode = reuploadAddressProofModal.bomCode || reuploadAddressProofModal.id;
+                const metadata = await uploadBomDocumentFile({
+                  file: reuploadProofFile,
+                  bomCode: targetCode,
+                  category: 'delivery-proof'
+                });
+                const reuploadedTime = new Date().toISOString();
 
-              setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.code === targetCode) ? {
-                ...b,
-                status: 'Pending Verification for Invoice',
-                addressProofStatus: 'Pending Verification for Invoice',
-                deliveryAddressProofDoc: {
-                  ...newDoc,
-                  history: [...((b.deliveryAddressProofDoc?.history) || (b.deliveryAddressProofDoc ? [b.deliveryAddressProofDoc] : [])), newDoc]
-                },
-                addressProofReuploadRequested: false,
-                addressProofReuploaded: true,
-                addressProofReuploadedAt: reuploadedTime
-              } : b));
-
-              if (typeof setInvoiceList === 'function') {
-                setInvoiceList(prev => prev.map(i => (i.poNo === targetCode || i.invNo === targetCode || i.code === targetCode) ? {
-                  ...i,
-                  status: 'Pending Address Proof',
+                setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? {
+                  ...b,
+                  status: 'Pending Verification for Invoice',
                   addressProofStatus: 'Pending Verification for Invoice',
                   deliveryAddressProofDoc: {
-                    ...newDoc,
-                    history: [...((i.deliveryAddressProofDoc?.history) || (i.deliveryAddressProofDoc ? [i.deliveryAddressProofDoc] : [])), newDoc]
+                    ...metadata,
+                    history: [...((b.deliveryAddressProofDoc?.history) || (b.deliveryAddressProofDoc ? [b.deliveryAddressProofDoc] : [])), metadata]
                   },
                   addressProofReuploadRequested: false,
+                  addressProofReuploaded: true,
                   addressProofReuploadedAt: reuploadedTime
-                } : i));
-              }
+                } : b));
 
-              onClose();
-              alert(`✅ Verified address proof attached for BOM (${targetCode}) and synced with Invoice Desk!`);
+                if (typeof setInvoiceList === 'function') {
+                  setInvoiceList(prev => prev.map(i => (i.poNo === targetCode || i.invNo === targetCode || i.code === targetCode) ? {
+                    ...i,
+                    status: 'Pending Address Proof',
+                    addressProofStatus: 'Pending Verification for Invoice',
+                    deliveryAddressProofDoc: {
+                      ...metadata,
+                      history: [...((i.deliveryAddressProofDoc?.history) || (i.deliveryAddressProofDoc ? [i.deliveryAddressProofDoc] : [])), metadata]
+                    },
+                    addressProofReuploadRequested: false,
+                    addressProofReuploadedAt: reuploadedTime
+                  } : i));
+                }
+
+                onClose();
+                alert(`✅ Verified address proof attached for BOM (${targetCode}) and synced with Invoice Desk!`);
+              } catch (err) {
+                alert(`❌ Upload failed: ${err.message}`);
+              } finally {
+                setIsUploading(false);
+              }
             }}
-            style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#2563EB', color: 'white', fontSize: '13px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(37,99,235,0.2)' }}
+            style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#2563EB', color: 'white', fontSize: '13px', fontWeight: '800', cursor: isUploading ? 'not-allowed' : 'pointer', boxShadow: '0 2px 4px rgba(37,99,235,0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            Submit Verified Address Proof
+            {isUploading && <Loader2 size={13} className="animate-spin" />}
+            {isUploading ? 'Uploading to Storage...' : 'Submit Verified Address Proof'}
           </button>
         </div>
       </div>

@@ -1,15 +1,17 @@
 import React, { useState, useRef } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2
 } from "lucide-react";
-import { stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, getMediaFromCache, uploadMediaFile } from "../../utils/otherViewsShared";
+import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
 import { VRM_PRODUCTS } from "../../utils/vrmProductsData";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
+import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomStorageClient";
+import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
 export default function DispatchPackingModal({
   dispatchPackingModal,
@@ -94,11 +96,16 @@ export default function DispatchPackingModal({
     } catch (_) {}
   };
 
-  const handleMediaPreview = (media) => {
-    if (typeof setActiveMediaPreviewModal === 'function') {
-      setActiveMediaPreviewModal(media);
+  const handleMediaPreview = async (media) => {
+    let resolvedUrl = media.url;
+    if (!resolvedUrl && (media.storageBucket || media.storagePath)) {
+      resolvedUrl = await resolveDocumentUrlAsync(media, dispatchPackingModal.bomCode);
     }
-    setLocalActiveMediaPreview(media);
+    const finalMedia = { ...media, url: resolvedUrl || media.dataUrl, bomCode: dispatchPackingModal.bomCode };
+    if (typeof setActiveMediaPreviewModal === 'function') {
+      setActiveMediaPreviewModal(finalMedia);
+    }
+    setLocalActiveMediaPreview(finalMedia);
   };
 
   const rawItems = (dispatchPackingModal.items || []).map(it => {
@@ -774,53 +781,37 @@ export default function DispatchPackingModal({
                     multiple
                     accept="image/*"
                     style={{ display: 'none' }}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const files = e.target.files;
                       if (files && files.length > 0) {
-                        Array.from(files).forEach(f => {
-                          compressAndSaveFile(f, (docMeta) => {
-                            if (docMeta) {
-                              const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-                              saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                              const newPhoto = {
-                                id: photoId,
-                                name: docMeta.name,
-                                size: docMeta.size,
-                                dataUrl: docMeta.dataUrl,
-                                uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                        const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
+                        setUploadingCount(prev => prev + files.length);
+                        for (const f of Array.from(files)) {
+                          try {
+                            const metadata = await uploadBomDocumentFile({
+                              file: f,
+                              bomCode,
+                              category: 'dispatch/images'
+                            });
+                            const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                            const newPhoto = {
+                              id: photoId,
+                              ...metadata
+                            };
+                            setDispatchPackingModal(prev => {
+                              if (!prev) return prev;
+                              const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                              return {
+                                ...prev,
+                                dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] }
                               };
-                              setDispatchPackingModal(prev => {
-                                const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
-                                return {
-                                  ...prev,
-                                  dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] }
-                                };
-                              });
-                              // Asynchronously stream photo to backend server disk
-                              setUploadingCount(prev => prev + 1);
-                              uploadMediaFile(f).then(uRes => {
-                                if (uRes && uRes.url) {
-                                  saveMediaToCache(docMeta.name, uRes.url);
-                                  saveMediaToCache(photoId, uRes.url);
-                                  setDispatchPackingModal(prev => {
-                                    if (!prev) return prev;
-                                    const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
-                                    const updatedPhotos = (existingMedia.photos || []).map(p =>
-                                      p.id === photoId ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
-                                    );
-                                    return {
-                                      ...prev,
-                                      dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
-                                    };
-                                  });
-                                  syncBOMMediaItem('photo', photoId, uRes.url);
-                                }
-                              }).catch(() => {}).finally(() => {
-                                setUploadingCount(prev => Math.max(0, prev - 1));
-                              });
-                            }
-                          });
-                        });
+                            });
+                          } catch (err) {
+                            alert(`Photo upload failed: ${err.message}`);
+                          } finally {
+                            setUploadingCount(prev => Math.max(0, prev - 1));
+                          }
+                        }
                       }
                     }}
                   />
@@ -837,57 +828,35 @@ export default function DispatchPackingModal({
                     type="file"
                     accept="video/*"
                     style={{ display: 'none' }}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files && e.target.files[0];
                       if (file) {
-                        const vItemId = `pack_video_${Date.now()}`;
-                        let localUrl = '';
-                        try {
-                          localUrl = URL.createObjectURL(file);
-                        } catch (_) {}
-
-                        const vItem = {
-                          id: vItemId,
-                          name: file.name,
-                          size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                          dataUrl: localUrl,
-                          url: localUrl,
-                          uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-                          uploading: true
-                        };
-
-                        setDispatchPackingModal(prev => {
-                          const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
-                          return {
-                            ...prev,
-                            dispatchPackingMedia: { ...existingMedia, videos: [...(existingMedia.videos || []), vItem] }
-                          };
-                        });
-
-                        // 🎥 Stream large video directly to backend server disk so sales and accounts can view it
+                        const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
                         setUploadingCount(prev => prev + 1);
-                        uploadMediaFile(file).then(res => {
-                          if (res && res.url) {
-                            saveMediaToCache(file.name, res.url);
-                            saveMediaToCache(vItemId, res.url);
-                            setDispatchPackingModal(prev => {
-                              if (!prev) return prev;
-                              const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
-                              const updatedVideos = (existingMedia.videos || []).map(v =>
-                                v.id === vItemId ? { ...v, url: res.url, dataUrl: res.url, uploading: false } : v
-                              );
-                              return {
-                                ...prev,
-                                dispatchPackingMedia: { ...existingMedia, videos: updatedVideos }
-                              };
-                            });
-                            syncBOMMediaItem('video', vItemId, res.url);
-                          }
-                        }).catch(err => {
-                          console.warn('[DispatchPackingModal video upload error]:', err);
-                        }).finally(() => {
+                        try {
+                          const metadata = await uploadBomDocumentFile({
+                            file,
+                            bomCode,
+                            category: 'dispatch/videos'
+                          });
+                          const vItemId = `pack_video_${Date.now()}`;
+                          const vItem = {
+                            id: vItemId,
+                            ...metadata
+                          };
+                          setDispatchPackingModal(prev => {
+                            if (!prev) return prev;
+                            const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                            return {
+                              ...prev,
+                              dispatchPackingMedia: { ...existingMedia, videos: [...(existingMedia.videos || []), vItem] }
+                            };
+                          });
+                        } catch (err) {
+                          alert(`Video upload failed: ${err.message}`);
+                        } finally {
                           setUploadingCount(prev => Math.max(0, prev - 1));
-                        });
+                        }
                       }
                     }}
                   />
@@ -940,21 +909,35 @@ export default function DispatchPackingModal({
                     ctx.font = '14px sans-serif';
                     ctx.fillText(`Customer: ${dispatchPackingModal.customerName}`, 60, 150);
                     ctx.fillText(`Verified Packed by Dispatch Desk • ${new Date().toLocaleTimeString()}`, 60, 190);
-                    const sampleUrl = canvas.toDataURL('image/jpeg');
-                    const samplePhoto = {
-                      id: `pack_photo_${Date.now()}`,
-                      name: `Packed_Box_Verified_${Date.now().toString().slice(-4)}.jpg`,
-                      size: '1.2 MB',
-                      dataUrl: sampleUrl,
-                      uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                    };
-                    setDispatchPackingModal(prev => {
-                      const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                      return {
-                        ...prev,
-                        dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), samplePhoto] }
-                      };
-                    });
+                    canvas.toBlob(async (blob) => {
+                      if (!blob) return;
+                      const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
+                      const sampleFile = new File([blob], `Packed_Box_Verified_${Date.now().toString().slice(-4)}.jpg`, { type: 'image/jpeg' });
+                      setUploadingCount(prev => prev + 1);
+                      try {
+                        const metadata = await uploadBomDocumentFile({
+                          file: sampleFile,
+                          bomCode,
+                          category: 'dispatch/images'
+                        });
+                        const samplePhoto = {
+                          id: `pack_photo_${Date.now()}`,
+                          ...metadata
+                        };
+                        setDispatchPackingModal(prev => {
+                          if (!prev) return prev;
+                          const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                          return {
+                            ...prev,
+                            dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), samplePhoto] }
+                          };
+                        });
+                      } catch (err) {
+                        alert(`Sample photo upload failed: ${err.message}`);
+                      } finally {
+                        setUploadingCount(prev => Math.max(0, prev - 1));
+                      }
+                    }, 'image/jpeg', 0.9);
                   }}
                   style={{
                     border: '1px dashed #CBD5E1', backgroundColor: '#FFFFFF',

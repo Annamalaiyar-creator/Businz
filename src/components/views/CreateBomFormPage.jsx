@@ -7,6 +7,7 @@ import {
 import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
 } from "../../utils/otherViewsShared";
+import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { saveCloudStoreImmediate } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { getFullProductsCatalogWithStock } from "../../utils/productCatalogService";
@@ -728,12 +729,18 @@ export default function CreateBomFormPage(props) {
                             e.preventDefault();
                             const file = e.dataTransfer.files && e.dataTransfer.files[0];
                             if (file) {
-                              compressAndSaveFile(file, (docMeta) => {
-                                if (docMeta) {
-                                  if (docMeta.name && docMeta.dataUrl) saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                                  setNewBomDeliveryProofDoc(docMeta);
-                                }
-                              });
+                              try {
+                                validateClientFile(file);
+                                setNewBomDeliveryProofDoc({
+                                  name: file.name,
+                                  size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                  mimeType: file.type || 'application/pdf',
+                                  _rawFile: file,
+                                  previewUrl: URL.createObjectURL(file)
+                                });
+                              } catch (err) {
+                                alert(err.message);
+                              }
                             }
                           }}
                           style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '16px 20px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
@@ -753,18 +760,24 @@ export default function CreateBomFormPage(props) {
                                 onChange={(e) => {
                                   const file = e.target.files && e.target.files[0];
                                   if (file) {
-                                    compressAndSaveFile(file, (docMeta) => {
-                                      if (docMeta) {
-                                        if (docMeta.name && docMeta.dataUrl) saveMediaToCache(docMeta.name, docMeta.dataUrl);
-                                        setNewBomDeliveryProofDoc(docMeta);
-                                      }
-                                    });
+                                    try {
+                                      validateClientFile(file);
+                                      setNewBomDeliveryProofDoc({
+                                        name: file.name,
+                                        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                        mimeType: file.type || 'application/pdf',
+                                        _rawFile: file,
+                                        previewUrl: URL.createObjectURL(file)
+                                      });
+                                    } catch (err) {
+                                      alert(err.message);
+                                    }
                                   }
                                 }}
                               />
                             </label>
                           </div>
-                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 5MB)</span>
+                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 50MB)</span>
                         </div>
                       )}
                     </div>
@@ -1494,9 +1507,9 @@ export default function CreateBomFormPage(props) {
                         </button>
                       </div>
                     </div>
-                    {newBomPaymentProofDoc.dataUrl && (
+                    {(newBomPaymentProofDoc.previewUrl || newBomPaymentProofDoc.dataUrl) && (
                       <div style={{ borderTop: '1px solid #BBF7D0', paddingTop: '10px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', padding: '10px' }}>
-                        <img src={newBomPaymentProofDoc.dataUrl} alt="Payment Proof Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }} />
+                        <img src={newBomPaymentProofDoc.previewUrl || newBomPaymentProofDoc.dataUrl} alt="Payment Proof Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }} />
                       </div>
                     )}
                   </div>
@@ -1507,12 +1520,18 @@ export default function CreateBomFormPage(props) {
                       e.preventDefault();
                       const file = e.dataTransfer.files && e.dataTransfer.files[0];
                       if (file) {
-                        compressAndSaveFile(file, (res) => {
-                          if (res) {
-                            if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                            setNewBomPaymentProofDoc(res);
-                          }
-                        });
+                        try {
+                          validateClientFile(file);
+                          setNewBomPaymentProofDoc({
+                            name: file.name,
+                            size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                            mimeType: file.type || 'application/pdf',
+                            _rawFile: file,
+                            previewUrl: URL.createObjectURL(file)
+                          });
+                        } catch (err) {
+                          alert(err.message);
+                        }
                       }
                     }}
                     style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '24px 16px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}
@@ -1538,12 +1557,18 @@ export default function CreateBomFormPage(props) {
                           onChange={(e) => {
                             const file = e.target.files && e.target.files[0];
                             if (file) {
-                              compressAndSaveFile(file, (res) => {
-                                if (res) {
-                                  if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                  setNewBomPaymentProofDoc(res);
-                                }
-                              });
+                              try {
+                                validateClientFile(file);
+                                setNewBomPaymentProofDoc({
+                                  name: file.name,
+                                  size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                  mimeType: file.type || 'application/pdf',
+                                  _rawFile: file,
+                                  previewUrl: URL.createObjectURL(file)
+                                });
+                              } catch (err) {
+                                alert(err.message);
+                              }
                             }
                           }}
                         />
@@ -1551,7 +1576,7 @@ export default function CreateBomFormPage(props) {
                     </div>
 
                     <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                      Supported formats: PDF, JPG, PNG (Max 5MB)
+                      Supported formats: PDF, JPG, PNG (Max 50MB)
                     </span>
                   </div>
                 )}
@@ -1866,6 +1891,41 @@ export default function CreateBomFormPage(props) {
                     sanitizedNewBom.bomCode = finalAssignedCode;
                     sanitizedNewBom.code = finalAssignedCode;
                     sanitizedNewBom.id = finalAssignedCode;
+
+                    // Upload any attached files to private Supabase Storage under the final BOM code
+                    if (newBomDeliveryProofDoc && newBomDeliveryProofDoc._rawFile && !sameAsBilling) {
+                      try {
+                        const meta = await uploadBomDocumentFile({
+                          file: newBomDeliveryProofDoc._rawFile,
+                          bomCode: finalAssignedCode,
+                          category: 'delivery-proof'
+                        });
+                        sanitizedNewBom.deliveryAddressProofDoc = meta;
+                      } catch (upErr) {
+                        console.error('Failed to upload delivery proof doc:', upErr);
+                        alert('Failed to upload delivery address proof to secure storage: ' + upErr.message);
+                        return;
+                      }
+                    }
+
+                    if (newBomPaymentProofDoc && newBomPaymentProofDoc._rawFile) {
+                      try {
+                        const meta = await uploadBomDocumentFile({
+                          file: newBomPaymentProofDoc._rawFile,
+                          bomCode: finalAssignedCode,
+                          category: 'payment-proof'
+                        });
+                        sanitizedNewBom.paymentProofDoc = meta;
+                        if (sanitizedNewBom.payments) {
+                          sanitizedNewBom.payments.proofDocObj = meta;
+                          sanitizedNewBom.payments.proofDoc = meta.originalName || newBomPaymentProofDoc.name;
+                        }
+                      } catch (upErr) {
+                        console.error('Failed to upload payment proof doc:', upErr);
+                        alert('Failed to upload payment proof to secure storage: ' + upErr.message);
+                        return;
+                      }
+                    }
 
                     let sResOk = false;
                     const postPayload = JSON.stringify({ bom: sanitizedNewBom, isNew: !isDraft });

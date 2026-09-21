@@ -237,7 +237,18 @@ export default function ProductionViewsEngine(props) {
     };
 
     syncFromCloud();
-    const pollInterval = setInterval(syncFromCloud, 4000);
+    // Gentle 90s safety fallback check only when active and tab is visible (replaces aggressive 4s polling)
+    const fallbackInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncFromCloud();
+      }
+    }, 90000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncFromCloud();
+      }
+    };
 
     const handleBomUpdated = (e) => {
       if (e?.detail?.bom) {
@@ -248,17 +259,22 @@ export default function ProductionViewsEngine(props) {
           const list = [newBom, ...filtered];
           return list.map(stripDataUrlsFromRecord);
         });
+      } else {
+        syncFromCloud();
       }
-      syncFromCloud();
     };
 
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
     window.addEventListener('controlroom_storage_update', syncFromCloud);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
-      clearInterval(pollInterval);
+      clearInterval(fallbackInterval);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
       window.removeEventListener('controlroom_storage_update', syncFromCloud);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, [activeTab]);
 
