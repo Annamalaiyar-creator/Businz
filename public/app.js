@@ -40,16 +40,20 @@ function saveStore(filename, data) {
   }
 }
 
-// ☁️ Supabase Cloud Synchronization for Zero-Data-Loss on Live Server
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://zjkabqcgymxysqgfbbge.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpqa2FicWNneW14eXNxZ2ZiYmdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyOTQzNzYsImV4cCI6MjEwMDg3MDM3Nn0.z821_dGCjnS_LZnj6l5mERGtu8wZvkMRDiGURXxFXmY';
+// ☁️ Supabase Cloud Synchronization (Strictly Environment Configured)
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 let supabase = null;
-try {
-  const { createClient } = require('@supabase/supabase-js');
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-} catch (e) {
-  console.warn('[Plesk Gateway] @supabase/supabase-js not found, falling back to direct HTTPS REST API:', e.message);
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.warn('[Plesk Gateway Warning] SUPABASE_URL or SUPABASE_KEY is missing in server environment.');
+} else {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch (e) {
+    console.warn('[Plesk Gateway] @supabase/supabase-js not found, falling back to direct HTTPS REST API:', e.message);
+  }
 }
 
 let appBomSequenceCounter = null;

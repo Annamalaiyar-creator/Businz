@@ -26,10 +26,34 @@ import {
   validateBomCode
 } from './bomDocumentService.js';
 
+// Prioritize local development env if present, then fallback to .env
+dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ognmvcpzlebrvdynunwh.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbm12Y3B6bGVicnZkeW51bndoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0MjA3ODYsImV4cCI6MjEwMTk5Njc4Nn0.x3NIpkDHzNa9dMQ9pnz4qGiy0ZBeAX98Hzbj54AHSfo';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const APP_ENV = process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development');
+
+const PROD_REF = 'ognmvcpzlebrvdynunwh';
+const DEV_REF = 'ddzkcbgwwpluzbhnrywp';
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('[BUSINZ Server Error] Supabase environment configuration is missing.');
+  throw new Error('Supabase environment configuration is missing.');
+}
+
+// Guard against cross-environment configuration mismatch
+if ((APP_ENV === 'development' || APP_ENV === 'staging') && SUPABASE_URL.includes(PROD_REF)) {
+  console.error('[BUSINZ Server Security Guard] Mismatch: Non-production environment attempted connection to Production Supabase.');
+  throw new Error('Security Guard: Non-production environment cannot connect to Production Supabase.');
+}
+
+if (APP_ENV === 'production' && SUPABASE_URL.includes(DEV_REF)) {
+  console.error('[BUSINZ Server Security Guard] Mismatch: Production environment attempted connection to Dev Supabase.');
+  throw new Error('Security Guard: Production environment cannot connect to Dev Supabase.');
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
