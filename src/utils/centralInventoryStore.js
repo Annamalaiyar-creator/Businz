@@ -1,4 +1,4 @@
-import { VRM_PRODUCTS, resolveProductCode, normalizeProductName } from './vrmProductsData.js';
+import { VRM_PRODUCTS, resolveProductCode, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from './vrmProductsData.js';
 import { fetchCloudStore, saveCloudStore } from './supabaseDataSync.js';
 
 // Initial Seed Item Master derived strictly from official VRM catalog (All items initialized with 5000 units stock)
@@ -346,7 +346,7 @@ class CentralInventoryStore {
       // Calculate Stock IN & Stock OUT from append-only ledger
       const txs = this.transactions.filter(t => t.itemCode === item.code);
       const stockIn = txs.filter(t => t.direction === 'IN').reduce((acc, t) => acc + (parseFloat(t.qty) || 0), 0);
-      const totalIn = stockIn > 0 ? stockIn : baseOpening;
+      const totalIn = Math.max(baseOpening, baseOpening + stockIn, Number(item.physicalStock || 0));
 
       // Actual physical stock out (excluding pure BOM reservation holds that are tracked in active reservations)
       const stockOut = txs.filter(t => t.direction === 'OUT' && t.type !== 'PRODUCTION_ISSUE' && t.type !== 'BOM_RESERVATION').reduce((acc, t) => acc + (parseFloat(t.qty) || 0), 0);
@@ -615,7 +615,8 @@ class CentralInventoryStore {
       const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
       if (qty <= 0) return;
       const resCode = resolveProductCode(pItem);
-      const pCode = String(pItem.code || resCode || '').toUpperCase().trim();
+      const rawCode = String(resCode || pItem.code || '').toUpperCase().trim();
+      const pCode = CANONICAL_PRODUCT_ALIASES[rawCode] || rawCode;
       const pName = String(pItem.name || pItem.description || '').trim();
       const normPName = normalizeProductName(pName);
 
@@ -1118,6 +1119,21 @@ class CentralInventoryStore {
     const item = this.items.find(i => i.code === itemCode);
     if (!item) return;
 
+    const qty = Math.abs(parseFloat(adjQty)) || 0;
+    const curPhys = Number(item.physicalStock !== undefined ? item.physicalStock : (item.stock || 0));
+    const curOpen = Number(item.openingStock !== undefined ? item.openingStock : curPhys);
+    const newPhys = direction === 'Add' ? curPhys + qty : Math.max(0, curPhys - qty);
+    const newOpen = direction === 'Add' ? curOpen + qty : Math.max(0, curOpen - qty);
+    const curRes = Number(item.reserved || item.blockedForBom || 0);
+    const newStock = Math.max(0, newPhys - curRes);
+
+    item.openingStock = newOpen;
+    item.physicalStock = newPhys;
+    item.stock = newStock;
+    item.available = newStock;
+    item.availableStock = newStock;
+    item.status = newStock === 0 ? 'Out of Stock' : (newStock <= (item.minLevel || 50) ? 'Low Stock' : 'In Stock');
+
     const tx = {
       id: `TX-ADJ-${Date.now()}`,
       type: TX_TYPES.STOCK_ADJUSTMENT,
@@ -1125,7 +1141,7 @@ class CentralInventoryStore {
       dateTime: new Date().toISOString(),
       itemCode: itemCode,
       itemName: item.name,
-      qty: Math.abs(parseFloat(adjQty)) || 0,
+      qty: qty,
       unit: item.uom,
       direction: direction === 'Add' ? 'IN' : 'OUT',
       warehouse: item.location || 'Main Store',
@@ -1136,6 +1152,7 @@ class CentralInventoryStore {
     };
 
     this.transactions.push(tx);
+    this.saveItems();
     this.saveTransactions();
     this.notifyChange();
   }

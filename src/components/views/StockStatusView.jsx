@@ -16,7 +16,7 @@ import { getSafeZohoVendors, getSafeZohoItems } from '../../services/zohoSafeSyn
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
-import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from '../../utils/vrmProductsData';
+import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from '../../utils/vrmProductsData';
 
 
 export default function StockStatusView(props) {
@@ -32,6 +32,7 @@ export default function StockStatusView(props) {
 
   // Common states
   const [searchQuery, setSearchQuery] = useState('');
+  const [stockRefreshTrigger, setStockRefreshTrigger] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [showCreateGRN, setShowCreateGRN] = useState(false);
   const [grnItems, setGrnItems] = useState([]);
@@ -190,6 +191,7 @@ export default function StockStatusView(props) {
           }
         }
       } catch (e) { }
+      setStockRefreshTrigger(t => t + 1);
     };
 
     // Run sync immediately on mount
@@ -801,6 +803,12 @@ export default function StockStatusView(props) {
 
   const handleAddStockSubmit = () => {
     let updatedRegistry = [...stockRegistry];
+    let currentRaw = [];
+    try {
+      const rawStr = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawStr) currentRaw = JSON.parse(rawStr) || [];
+    } catch (_) {}
+
     addStockItems.forEach(item => {
       const existIdx = updatedRegistry.findIndex(r => r.code === item.sku);
       if (existIdx > -1) {
@@ -825,8 +833,104 @@ export default function StockStatusView(props) {
           status: 'In Stock'
         });
       }
+
+      // Also update authoritative raw_materials_store
+      const qtyNum = Number(item.qty || 0);
+      if (qtyNum > 0) {
+        const targetCode = String(item.sku || '').toUpperCase().trim();
+        const canonicalCode = CANONICAL_PRODUCT_ALIASES[targetCode] || targetCode;
+        let rawMatched = false;
+        currentRaw = currentRaw.map(m => {
+          const mCode = String(m.code || '').toUpperCase().trim();
+          const mCanonical = CANONICAL_PRODUCT_ALIASES[mCode] || mCode;
+          if (mCanonical === canonicalCode || (m.name && m.name.toLowerCase() === String(item.name || '').toLowerCase())) {
+            rawMatched = true;
+            const currentPhys = Number(m.physicalStock !== undefined ? m.physicalStock : (m.stock || 0));
+            const currentOpen = Number(m.openingStock !== undefined ? m.openingStock : currentPhys);
+            const newOpen = currentOpen + qtyNum;
+            const newPhys = currentPhys + qtyNum;
+            const currentRes = Number(m.reserved || 0);
+            const newStock = Math.max(0, newPhys - currentRes);
+            return {
+              ...m,
+              openingStock: newOpen,
+              physicalStock: newPhys,
+              stock: newStock,
+              availableStock: newStock,
+              available: newStock,
+              status: newStock === 0 ? 'Out of Stock' : (newStock <= (m.minLevel || 50) ? 'Low Stock' : 'In Stock'),
+              lastUpdated: 'Stock Added'
+            };
+          }
+          return m;
+        });
+
+        if (!rawMatched) {
+          currentRaw.unshift({
+            code: canonicalCode || `ITEM-${Date.now()}`,
+            name: item.name,
+            category: item.category || 'Finished Goods',
+            unit: 'Nos',
+            openingStock: qtyNum,
+            physicalStock: qtyNum,
+            stock: qtyNum,
+            availableStock: qtyNum,
+            available: qtyNum,
+            reserved: 0,
+            blockedForBom: 0,
+            minLevel: 50,
+            status: 'In Stock',
+            store: stockEntry.warehouse || 'Main Warehouse',
+            lastUpdated: 'Stock Added'
+          });
+        }
+      }
     });
+
     setStockRegistry(updatedRegistry);
+    try {
+      localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updatedRegistry));
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentRaw));
+    } catch (_) {}
+
+    try {
+      fetch('/api/raw-materials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentRaw)
+      }).catch(() => {});
+      fetch('/api/store/raw_materials_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentRaw)
+      }).catch(() => {});
+      fetch('/api/store/item_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentRaw)
+      }).catch(() => {});
+      fetch('/api/store/stock_registry_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedRegistry)
+      }).catch(() => {});
+    } catch (_) {}
+
+    try {
+      saveCloudStore('raw_materials_store', currentRaw);
+      saveCloudStore('item_store', currentRaw);
+      saveCloudStore('stock_registry_store', updatedRegistry);
+    } catch (_) {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', {
+        detail: { rawMaterials: currentRaw, storeData: currentRaw }
+      }));
+      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('central_inventory_updated'));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
+
     setShowAddStockForm(false);
   };
 
@@ -2267,10 +2371,10 @@ export default function StockStatusView(props) {
                 Number(matchedMat?.reserved || it.reserved || 0)
               );
               let availableQty = Math.max(0, physicalBase - activeBlocked);
-              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock)) {
-                availableQty = Math.min(availableQty, Math.max(0, Number(matchedMat.stock)));
-              } else if (it.stock !== undefined && !isNaN(it.stock)) {
-                availableQty = Math.min(availableQty, Math.max(0, Number(it.stock)));
+              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
+                availableQty = Math.max(availableQty, Number(matchedMat.stock));
+              } else if (it.stock !== undefined && !isNaN(it.stock) && Number(it.stock) > 0) {
+                availableQty = Math.max(availableQty, Number(it.stock));
               }
               const minLvl = Number(it.reorderLevel || it.minLevel || 50);
 
@@ -2516,10 +2620,10 @@ export default function StockStatusView(props) {
                 Number(matchedMat?.reserved || it.reserved || 0)
               );
               let availableQty = Math.max(0, physicalBase - activeBlocked);
-              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock)) {
-                availableQty = Math.min(availableQty, Math.max(0, Number(matchedMat.stock)));
-              } else if (it.stock !== undefined && !isNaN(it.stock)) {
-                availableQty = Math.min(availableQty, Math.max(0, Number(it.stock)));
+              if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
+                availableQty = Math.max(availableQty, Number(matchedMat.stock));
+              } else if (it.stock !== undefined && !isNaN(it.stock) && Number(it.stock) > 0) {
+                availableQty = Math.max(availableQty, Number(it.stock));
               }
 
               const rateVal = Number(it.rate || it.price || 250);

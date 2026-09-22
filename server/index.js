@@ -7497,6 +7497,44 @@ app.post('/api/raw-materials', async (req, res) => {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
       fs.writeFileSync(rawMatsPath, JSON.stringify(updatedMats, null, 2), 'utf8');
       supabaseMemoryStore.raw_materials_store = updatedMats;
+
+      // Also sync matching items in item_store
+      try {
+        const itemPath = getStoreFilePath('item_store.json');
+        let currentItems = [];
+        if (fs.existsSync(itemPath)) {
+          currentItems = JSON.parse(fs.readFileSync(itemPath, 'utf8'));
+        }
+        if (Array.isArray(currentItems) && currentItems.length > 0) {
+          const rawMap = new Map();
+          updatedMats.forEach(rm => {
+            const k = String(rm.code || rm.sku || rm.itemId || rm.name || '').toUpperCase().trim();
+            if (k) rawMap.set(k, rm);
+          });
+          currentItems = currentItems.map(it => {
+            const k = String(it.code || it.sku || it.itemId || it.name || '').toUpperCase().trim();
+            const rm = rawMap.get(k);
+            if (rm) {
+              return {
+                ...it,
+                stock: rm.stock !== undefined ? rm.stock : it.stock,
+                availableStock: rm.availableStock !== undefined ? rm.availableStock : it.availableStock,
+                physicalStock: rm.physicalStock !== undefined ? rm.physicalStock : it.physicalStock,
+                openingStock: rm.openingStock !== undefined ? rm.openingStock : it.openingStock,
+                reserved: rm.reserved !== undefined ? rm.reserved : it.reserved
+              };
+            }
+            return it;
+          });
+          fs.writeFileSync(itemPath, JSON.stringify(currentItems, null, 2), 'utf8');
+          supabaseMemoryStore.item_store = currentItems;
+          pushStoreToSupabase('item_store', currentItems).catch(() => {});
+          broadcastRealtimeEvent('item_store_updated', { items: currentItems });
+        }
+      } catch (err) {
+        console.error('[item_store sync error]:', err?.message);
+      }
+
       pushStoreToSupabase('raw_materials_store', updatedMats).catch(() => {});
       broadcastRealtimeEvent('inventory_updated', { rawMaterials: updatedMats });
       return res.json({ success: true, count: updatedMats.length });
