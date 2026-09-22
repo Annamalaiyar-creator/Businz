@@ -25,8 +25,7 @@ import LoginScreen from './components/LoginScreen';
 import DeveloperPortalView from './components/DeveloperPortalView';
 import NotificationToast from './components/NotificationToast';
 import WorkflowNotificationBanner from './components/WorkflowNotificationBanner';
-import useDeviceDetect from './hooks/useDeviceDetect';
-import MobileLayout from './components/mobile/MobileLayout';
+
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
 import { useEffect, Component } from 'react';
 import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
@@ -152,7 +151,7 @@ function App() {
   // Default sidebar collapsed to TRUE (closed/inside by default on loading)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [toastAlert, setToastAlert] = useState(null);
-  const { isMobile, toggleViewMode } = useDeviceDetect();
+
 
   const showCustomAlert = (msg, title, type = 'info') => {
     setToastAlert({ message: msg, title, type });
@@ -403,29 +402,7 @@ function App() {
     return <LoginScreen onLoginSuccess={(role) => handleRoleSwitch(role)} />;
   }
 
-  // Dedicated Mobile UI for touch devices, smartphones, or manual toggle
-  if (isMobile) {
-    return (
-      <div className="mobile-root-container" style={{ width: '100%', minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
-        <MobileLayout 
-          userRole={userRole} 
-          onSwitchRole={handleRoleSwitch} 
-          onSignOut={handleSignOut} 
-          onToggleDesktopView={() => toggleViewMode('desktop')} 
-        />
-        {toastAlert && (
-          <NotificationToast 
-            alert={toastAlert} 
-            onClose={() => setToastAlert(null)} 
-          />
-        )}
-        <WorkflowNotificationBanner 
-          userRole={userRole} 
-          onNavigate={handleTabChange} 
-        />
-      </div>
-    );
-  }
+
 
   // Developer / Technical Admin Portal Dedicated Fullscreen Console
   const isDevRole = userRole === 'Technical Administrator' || userRole === 'Developer' || (userRole || '').startsWith('TA') || activeTab === 'Developer Console' || activeTab === 'Developer Portal';
@@ -535,7 +512,6 @@ function App() {
           onOpenLoginModal={handleSignOut}
           onSelectTab={handleTabChange}
           onToggleSidebar={toggleSidebar}
-          onToggleMobileView={() => toggleViewMode('mobile')}
         />
 
         {/* Scrollable Center Content Pane */}
