@@ -9,8 +9,13 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://ognmvcpzlebrvdynunwh.supabase.co';
+const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+
+if (!url || !key) {
+  console.error('Missing Supabase configuration.');
+  process.exit(1);
+}
 
 const supabase = createClient(url, key);
 
