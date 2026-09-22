@@ -1,7 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 
 const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {});
-const SUPABASE_URL = env.VITE_SUPABASE_URL || 'https://ognmvcpzlebrvdynunwh.supabase.co';
-const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbm12Y3B6bGVicnZkeW51bndoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0MjA3ODYsImV4cCI6MjEwMTk5Njc4Nn0.x3NIpkDHzNa9dMQ9pnz4qGiy0ZBeAX98Hzbj54AHSfo';
+const SUPABASE_URL = env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY;
+const APP_ENV = env.VITE_APP_ENV || env.MODE || 'development';
+
+const PROD_REF = 'ognmvcpzlebrvdynunwh';
+const DEV_REF = 'ddzkcbgwwpluzbhnrywp';
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('[BUSINZ Config Error] Supabase environment configuration is missing.');
+  throw new Error('Supabase environment configuration is missing.');
+}
+
+// Guard against cross-environment configuration mismatch
+if ((APP_ENV === 'development' || APP_ENV === 'staging') && SUPABASE_URL.includes(PROD_REF)) {
+  console.error('[BUSINZ Security Guard] Configuration mismatch: Non-production environment is targeting Production Supabase.');
+  throw new Error('Security Guard: Non-production environment cannot connect to Production Supabase.');
+}
+
+if (APP_ENV === 'production' && SUPABASE_URL.includes(DEV_REF)) {
+  console.error('[BUSINZ Security Guard] Configuration mismatch: Production environment is targeting Dev Supabase.');
+  throw new Error('Security Guard: Production environment cannot connect to Dev Supabase.');
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
