@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Plus, Check, Trash2, Eye, Search, X, CheckCircle, ArrowLeft,
   Calendar, Edit3, Filter, RotateCcw, UploadCloud, ChevronDown,
-  Package, Info, Upload, Receipt, Image, Pause, Save
+  Package, Info, Upload, Receipt, Image, Pause, Save, RefreshCw
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
@@ -155,46 +155,37 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     }
   };
 
+  const [isInventoryLoading, setIsInventoryLoading] = useState(true);
+
   const [materials, setMaterials] = useState(() => {
-    // One-time client migration to ensure all stock counts are initialized to 0
     try {
-      const stockZeroKey = 'controlroom_stock_zero_reset_v5';
-      if (localStorage.getItem(stockZeroKey) !== 'true') {
-        localStorage.setItem(stockZeroKey, 'true');
-        ['controlroom_raw_materials_store', 'controlroom_central_items_v2'].forEach(key => {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            try {
-              const list = JSON.parse(raw);
-              if (Array.isArray(list)) {
-                const zeroed = list.map(item => ({
-                  ...item,
-                  stock: 0,
-                  availableStock: 0,
-                  physicalStock: 0,
-                  openingStock: 0,
-                  reserved: 0,
-                  blockedForBom: 0,
-                  goodsReceived: 0,
-                  status: 'Out of Stock'
-                }));
-                localStorage.setItem(key, JSON.stringify(zeroed));
-              }
-            } catch (_) {}
-          }
-        });
-        localStorage.setItem('controlroom_central_grns_v2', '[]');
-        localStorage.setItem('goods_receipt_notes', '[]');
+      const saved = localStorage.getItem('controlroom_raw_materials_store');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(item => {
+            const rawSt = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 5000);
+            const stockVal = Math.max(0, rawSt);
+            return {
+              ...item,
+              stock: stockVal,
+              physicalStock: Math.max(5000, Number(item.physicalStock || 5000)),
+              availableStock: stockVal,
+              openingStock: Math.max(5000, Number(item.openingStock || 5000)),
+              status: stockVal > 0 ? 'In Stock' : 'Out of Stock'
+            };
+          });
+        }
       }
     } catch (_) {}
 
-    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 15, status: 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 0, lengthMm: '300', minLevel: 50, status: 'Out of Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 5000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
     matMap.set('MR-300MM', defaultMiniRail);
 
-    // 1. Seed all official VRM standardized catalog products (285 items)
+    // 1. Seed all official VRM standardized catalog products with 5000 stock
     (VRM_PRODUCTS || []).forEach(p => {
       const code = p.code || resolveProductCode(p) || p.name;
       const key = String(code).toUpperCase().trim();
@@ -204,15 +195,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         unit: p.uom || 'Nos',
-        stock: 0,
+        stock: 5000,
+        openingStock: 5000,
+        physicalStock: 5000,
+        availableStock: 5000,
         minLevel: 50,
         reorderLevel: 100,
-        status: 'Out of Stock',
+        status: 'In Stock',
         store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
         hsn: '7604',
-        lastUpdated: 'Live Store',
+        lastUpdated: 'Stock Set to 5,000',
         reserved: 0,
-        openingStock: 0,
         goodsReceived: 0,
         issuedProd: 0,
         matReturn: 0,
@@ -224,13 +217,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const rawKey = String(m.code).toUpperCase().trim();
       const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
       const existing = matMap.get(key) || {};
-      const sVal = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 0);
+      const sVal = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 5000);
       matMap.set(key, {
         ...existing,
         ...m,
         code: key,
         stock: sVal,
-        openingStock: m.openingStock !== undefined ? Number(m.openingStock) : (existing.openingStock || 0),
+        openingStock: 5000,
+        physicalStock: 5000,
+        availableStock: sVal,
         status: sVal > 0 ? 'In Stock' : 'Out of Stock'
       });
     });
@@ -382,11 +377,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const deletedCodes = getDeletedMaterialCodes();
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
-      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 15, status: 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 0, lengthMm: '300', minLevel: 50, status: 'Out of Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 5000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       matMap.set('MR-300MM', defaultMiniRail);
-      // 1. Seed all official VRM standardized catalog products (285 items)
+      // 1. Seed all official VRM standardized catalog products (285 items) with 5000 stock
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
         const key = String(code).toUpperCase().trim();
@@ -396,15 +391,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           unit: p.uom || 'Nos',
-          stock: 0,
+          stock: 5000,
+          openingStock: 5000,
+          physicalStock: 5000,
+          availableStock: 5000,
           minLevel: 50,
           reorderLevel: 100,
-          status: 'Out of Stock',
+          status: 'In Stock',
           store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
           hsn: '7604',
-          lastUpdated: 'Live Store',
+          lastUpdated: 'Stock Set to 5,000',
           reserved: 0,
-          openingStock: 0,
           goodsReceived: 0,
           issuedProd: 0,
           matReturn: 0,
@@ -416,13 +413,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const rawKey = String(m.code).toUpperCase().trim();
         const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
         const existing = matMap.get(key) || {};
-        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 0);
+        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 5000);
         matMap.set(key, {
           ...existing,
           ...m,
           code: key,
           stock: mStock,
-          openingStock: m.openingStock !== undefined ? Number(m.openingStock) : (existing.openingStock || 0),
+          openingStock: 5000,
+          physicalStock: 5000,
+          availableStock: mStock,
           status: mStock > 0 ? 'In Stock' : 'Out of Stock'
         });
       });
@@ -669,30 +668,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
 
         const grnQty = Number(m.goodsReceived || 0);
-        let base = Math.max(0, parseFloat(
-          m.openingStock !== undefined 
-            ? m.openingStock 
-            : (grnQty > 0 ? 0 : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0)))
-        ) || 0);
-        if (m.physicalStock !== undefined && Number(m.physicalStock) > base) {
-          base = Number(m.physicalStock);
-        }
-        if (m.stock !== undefined && Number(m.stock) > base && grnQty === 0) {
-          base = Number(m.stock);
-        }
+        let base = Math.max(5000, parseFloat(m.openingStock) || 5000, parseFloat(m.physicalStock) || 5000, parseFloat(m.stock) || 5000);
 
-        if (base === 0 && grnQty === 0 && (!m.physicalStock || Number(m.physicalStock) === 0) && (!m.stock || Number(m.stock) === 0)) {
-          m.openingStock = 0;
-          m.physicalStock = 0;
-          m.stock = 0;
-          m.availableStock = 0;
-          m.reserved = 0;
-          m.blockedForBom = 0;
-          m.status = 'Out of Stock';
-          return;
-        }
-
-        // Authoritative physical warehouse stock is initial opening baseline + all received GRNs
+        // Authoritative physical warehouse stock is initial opening baseline (5000) + all received GRNs
         const totalPhysical = base + grnQty;
 
         // Reconcile available free stock and reserved allocations
@@ -765,105 +743,73 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     syncEngineInventory();
 
-    // Fetch live GRNs from server API on mount and update store
-    fetch('/api/grns')
-      .then(res => res.json())
-      .then(grns => {
+    // Single Coordinated Authoritative Server & Cloud Database Inventory Sync
+    const loadAuthoritativeInventory = async () => {
+      setIsInventoryLoading(true);
+      try {
+        const [grns, bData, rawMats] = await Promise.all([
+          fetch('/api/grns').then(res => res.json()).catch(() => []),
+          fetchCloudStore('BOM_STORE', []).catch(() => []),
+          fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => [])
+        ]);
+
         if (Array.isArray(grns) && grns.length > 0) {
           try {
             localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
             localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
           } catch (_) {}
-          debouncedSync();
         }
-      })
-      .catch(() => {});
+        if (Array.isArray(bData) && bData.length > 0) {
+          try {
+            localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
+          } catch (_) {}
+        }
+        if (Array.isArray(rawMats) && rawMats.length > 0) {
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
+          } catch (_) {}
+        }
 
-    // Authoritative Server & Cloud Database Inventory Sync
-    const fetchDatabaseInventory = async () => {
-      if (isFetchingDb) return;
-      isFetchingDb = true;
-      try {
-        // 1. Authoritative sync of BOMs directly from Supabase Cloud
-        try {
-          let bData = await fetchCloudStore('BOM_STORE', []);
-          if (!Array.isArray(bData) || bData.length === 0) {
-            const bRes = await fetch('/api/boms');
-            if (bRes.ok) {
-              const json = await bRes.json();
-              bData = json?.data || json;
-            }
-          }
-          if (Array.isArray(bData) && bData.length > 0) {
-            try {
-              localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
-            } catch (_) {}
-          }
-        } catch (_) {}
-
-        // 2. Authoritative sync of RAW_MATERIALS_STORE directly from Supabase Cloud
-        try {
-          let rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []);
-          if (!Array.isArray(rawMats) || rawMats.length === 0) {
-            const rRes = await fetch('/api/raw-materials');
-            if (rRes.ok) rawMats = await rRes.json();
-          }
-          if (Array.isArray(rawMats) && rawMats.length > 0) {
-            try {
-              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
-            } catch (_) {}
-          }
-        } catch (_) {}
-
-        debouncedSync();
+        syncEngineInventory();
+      } catch (err) {
+        console.error('Inventory initial load notice:', err);
       } finally {
-        isFetchingDb = false;
+        setIsInventoryLoading(false);
       }
     };
 
-    const debouncedFetchDatabase = () => {
-      if (debounceDbTimer) clearTimeout(debounceDbTimer);
-      debounceDbTimer = setTimeout(() => {
-        fetchDatabaseInventory();
-      }, 250);
+    loadAuthoritativeInventory();
+
+    const debouncedBackgroundSync = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        syncEngineInventory();
+      }, 400);
     };
 
-    fetchDatabaseInventory();
     const pollDbInterval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
-        fetchDatabaseInventory();
+        debouncedBackgroundSync();
       }
-    }, 30000);
+    }, 60000);
 
-    const unsubCloudBoms = subscribeToCloudStore('BOM_STORE', () => {
-      debouncedFetchDatabase();
-    });
-    const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', () => {
-      debouncedFetchDatabase();
-    });
+    const unsubCloudBoms = subscribeToCloudStore('BOM_STORE', debouncedBackgroundSync);
+    const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', debouncedBackgroundSync);
+    const unsubscribe = prodModuleEngine.subscribe(debouncedBackgroundSync);
 
-    const unsubscribe = prodModuleEngine.subscribe(() => {
-      debouncedSync();
-    });
-    window.addEventListener('controlroom_raw_materials_update', debouncedSync);
-    window.addEventListener('controlroom_bom_store_updated', debouncedFetchDatabase);
-    window.addEventListener('controlroom_grn_completed', debouncedSync);
-    window.addEventListener('controlroom_storage_update', debouncedSync);
-    window.addEventListener('central_inventory_updated', debouncedSync);
-    window.addEventListener('storage', debouncedSync);
+    window.addEventListener('controlroom_raw_materials_update', debouncedBackgroundSync);
+    window.addEventListener('controlroom_grn_completed', debouncedBackgroundSync);
+    window.addEventListener('central_inventory_updated', debouncedBackgroundSync);
+
     return () => {
       clearInterval(pollDbInterval);
       if (debounceTimer) clearTimeout(debounceTimer);
-      if (debounceDbTimer) clearTimeout(debounceDbTimer);
       if (unsubCloudBoms && typeof unsubCloudBoms.unsubscribe === 'function') unsubCloudBoms.unsubscribe();
       if (unsubCloudRaw && typeof unsubCloudRaw.unsubscribe === 'function') unsubCloudRaw.unsubscribe();
       unsubscribe();
-      window.removeEventListener('controlroom_raw_materials_update', debouncedSync);
-      window.removeEventListener('controlroom_bom_store_updated', debouncedFetchDatabase);
-      window.removeEventListener('controlroom_grn_completed', debouncedSync);
-      window.removeEventListener('controlroom_storage_update', debouncedSync);
-      window.removeEventListener('central_inventory_updated', debouncedSync);
-      window.removeEventListener('storage', debouncedSync);
+      window.removeEventListener('controlroom_raw_materials_update', debouncedBackgroundSync);
+      window.removeEventListener('controlroom_grn_completed', debouncedBackgroundSync);
+      window.removeEventListener('central_inventory_updated', debouncedBackgroundSync);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsList, initialMaterials]);
@@ -3340,21 +3286,31 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               </tr>
             </thead>
             <tbody>
-              {itemsLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={`skel-rm-${i}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                    <td style={{ padding: '14px' }}><div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '90px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '180px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '80px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '60px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px 16px', width: '135px', textAlign: 'center', boxSizing: 'border-box' }}><div style={{ width: '85px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+              {(itemsLoading || isInventoryLoading) ? (
+                <>
+                  <tr>
+                    <td colSpan={10} style={{ padding: '24px 16px', textAlign: 'center', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', color: '#0E7490', fontSize: '13px', fontWeight: '600' }}>
+                        <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Synchronizing Authoritative Warehouse Inventory & 312 Standardized Products...</span>
+                      </div>
+                    </td>
                   </tr>
-                ))
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={`skel-rm-${i}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '14px' }}><div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '90px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '220px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '100px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '70px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '70px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px 16px', width: '135px', textAlign: 'center', boxSizing: 'border-box' }}><div style={{ width: '85px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                    </tr>
+                  ))}
+                </>
               ) : currentMaterialsPage.map((m, idx) => {
                 const isSelected = selectedRows.includes(m.code);
                 const isOut = m.status === 'Out of Stock';

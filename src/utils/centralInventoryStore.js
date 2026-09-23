@@ -13,8 +13,13 @@ export const INITIAL_CENTRAL_ITEMS = VRM_PRODUCTS.map((p, idx) => ({
   maxLevel: 10000,
   location: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
   unitRate: p.price || (1200 + (idx * 50) % 2500),
-  openingStock: 0,
-  stock: 0
+  openingStock: 5000,
+  physicalStock: 5000,
+  stock: 5000,
+  available: 5000,
+  availableStock: 5000,
+  onHand: 5000,
+  reserved: 0
 }));
 
 // Transaction Types
@@ -76,13 +81,10 @@ class CentralInventoryStore {
               if (isSent && !st.includes('cancel') && !st.includes('restored')) {
                 (b.items || []).forEach(it => {
                   const c = String(it.code || '').toUpperCase().trim();
-                  const n = String(it.name || '').toLowerCase().trim();
                   const q = parseFloat(it.qty || it.bomQty || 0) || 0;
-                    const isMr300Only = (c === 'MR-300MM') || ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
-                    if (c && !isMr300Only) bomAllocMap.set(c, (bomAllocMap.get(c) || 0) + q);
-                    if (isMr300Only) {
-                      bomAllocMap.set('MR-300MM', (bomAllocMap.get('MR-300MM') || 0) + q);
-                    }
+                  if (c && q > 0) {
+                    bomAllocMap.set(c, (bomAllocMap.get(c) || 0) + q);
+                  }
                 });
               }
             });
@@ -90,97 +92,26 @@ class CentralInventoryStore {
         }
       } catch (_) {}
 
-      let foundMr300 = false;
       const sanitized = list.map(item => {
-        const code = String(item.code || '').toUpperCase();
-        const name = String(item.name || '').toLowerCase();
-        const isMr300 = code === 'MR-300MM' || (name.includes('mini rail') && (name.includes('300 mm') || name.includes('300mm') || name.includes('- 300')));
-        const isAlu2414 = code === 'ALU-LEN-2414MM' || code === 'RM-ALU-2414';
-        if (isMr300) {
-          foundMr300 = true;
-          const baseOpening = 2000;
-          const alloc = bomAllocMap.get('MR-300MM') || 0;
-          const curRes = Math.max(Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0)), alloc);
-          const effectiveStock = Math.max(0, baseOpening - curRes);
-          return {
-            ...item,
-            code: 'MR-300MM',
-            name: 'Mini Rail - 300 mm',
-            cat: 'Aluminium Profiles',
-            type: 'Finished Product',
-            uom: 'NOS',
-            minLevel: 50,
-            reorderLevel: 100,
-            openingStock: baseOpening,
-            physicalStock: baseOpening,
-            stock: effectiveStock,
-            available: effectiveStock,
-            availableStock: effectiveStock,
-            onHand: baseOpening,
-            reserved: curRes
-          };
-        }
-        if (isAlu2414) {
-          const baseOpening = 250;
-          const curRes = Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0));
-          const existingStock = item.stock !== undefined && item.stock !== null && Number(item.stock) < 5000 ? Number(item.stock) : (baseOpening - curRes);
-          const effectiveStock = Math.max(0, Math.min(baseOpening, existingStock));
-          return {
-            ...item,
-            code: 'ALU-LEN-2414MM',
-            name: 'Aluminium Length (2414 mm)',
-            cat: 'Raw Material',
-            type: 'Raw Material',
-            uom: 'Length',
-            minLevel: 20,
-            reorderLevel: 50,
-            openingStock: baseOpening,
-            physicalStock: baseOpening,
-            stock: effectiveStock,
-            available: effectiveStock,
-            availableStock: effectiveStock,
-            onHand: baseOpening,
-            reserved: curRes || (baseOpening - effectiveStock)
-          };
-        }
-        const st = Number(item.stock || 0);
-        const curRes = Number(item.reserved || item.blockedForBom || 0);
-        const baseOpening = Math.max(0, Number(item.openingStock !== undefined ? item.openingStock : (st >= 5000 ? 0 : st)));
-        const finalSt = st >= 5000 ? 0 : st;
+        const upperCode = String(item.code || '').toUpperCase().trim();
+        const alloc = bomAllocMap.get(upperCode) || 0;
+        const rawStock = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 5000);
+        const baseOpening = Math.max(5000, Number(item.openingStock || 5000), rawStock);
+        const curRes = Math.max(Number(item.reserved || item.blockedForBom || 0), alloc);
+        const effectiveStock = Math.max(0, baseOpening - curRes);
+
         return {
           ...item,
           openingStock: baseOpening,
-          stock: finalSt,
-          available: (Number(item.available || 0) >= 5000 ? 0 : Number(item.available || 0)),
-          onHand: (Number(item.onHand || 0) >= 5000 ? 0 : Number(item.onHand || 0)),
-          physicalStock: (Number(item.physicalStock || 0) >= 5000 ? 0 : Number(item.physicalStock || 0)),
+          physicalStock: baseOpening,
+          stock: effectiveStock,
+          available: effectiveStock,
+          availableStock: effectiveStock,
+          onHand: baseOpening,
           reserved: curRes
         };
       });
 
-      if (!foundMr300) {
-        const baseOpening = 2000;
-        const alloc = bomAllocMap.get('MR-300MM') || 0;
-        const effectiveStock = Math.max(0, baseOpening - alloc);
-        sanitized.unshift({
-          code: 'MR-300MM',
-          name: 'Mini Rail - 300 mm',
-          cat: 'Aluminium Profiles',
-          type: 'Finished Product',
-          uom: 'NOS',
-          minLevel: 50,
-          reorderLevel: 100,
-          maxLevel: 10000,
-          location: 'Finished Goods Bay - Aluminium',
-          unitRate: 140,
-          openingStock: baseOpening,
-          stock: effectiveStock,
-          available: effectiveStock,
-          onHand: baseOpening,
-          physicalStock: baseOpening,
-          reserved: alloc
-        });
-      }
       return sanitized;
     };
 
