@@ -36,7 +36,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const APP_ENV = process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development');
 
-const PROD_REF = 'ognmvcpzlebrvdynunwh';
+const PROD_REF = 'qhxaqrclvdfkswdavvjd';
 const DEV_REF = 'ddzkcbgwwpluzbhnrywp';
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -239,6 +239,81 @@ const loadDatabaseOpportunities = async () => {
 const loadLocalOpportunities = () => {
   if (supabaseMemoryStore.crm_opportunities && Array.isArray(supabaseMemoryStore.crm_opportunities) && supabaseMemoryStore.crm_opportunities.length > 0) {
     return supabaseMemoryStore.crm_opportunities;
+  }
+  return [];
+};
+
+// Canonical Supabase & Disk Leads Database Layer
+const loadDatabaseLeads = async () => {
+  if (supabaseMemoryStore.crm_leads && Array.isArray(supabaseMemoryStore.crm_leads) && supabaseMemoryStore.crm_leads.length > 0) {
+    return supabaseMemoryStore.crm_leads;
+  }
+  try {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const mapped = data.map(l => {
+        let extra = {};
+        if (typeof l.notes === 'string' && l.notes.startsWith('{')) {
+          try {
+            extra = JSON.parse(l.notes);
+          } catch (_) {}
+        }
+        return {
+          id: l.id,
+          leadNumber: l.lead_number || extra.leadNumber || l.id,
+          companyName: l.company_name || extra.companyName || '',
+          contactPerson: l.contact_person || extra.contactPerson || '',
+          designation: l.designation || extra.designation || '',
+          phone: l.phone || extra.phone || '',
+          whatsapp: l.whatsapp || extra.whatsapp || l.phone || '',
+          email: l.email || extra.email || '',
+          location: l.location || extra.location || '',
+          source: l.source || extra.source || 'Direct',
+          status: l.status || extra.status || 'New Lead',
+          priority: l.priority || extra.priority || 'MEDIUM',
+          assignedSalesperson: l.assigned_salesperson || extra.assignedSalesperson || 'Sales Rep',
+          assignedEmail: l.assigned_email || extra.assignedEmail || '',
+          estimatedKw: Number(l.estimated_kw !== undefined && l.estimated_kw !== null ? l.estimated_kw : (extra.estimatedKw || 50)),
+          category: l.category || extra.category || 'Aluminium Mounting Structures',
+          estimatedValue: Number(l.estimated_value !== undefined && l.estimated_value !== null ? l.estimated_value : (extra.estimatedValue || 0)),
+          notes: l.notes && !l.notes.startsWith('{') ? l.notes : (extra.notes || ''),
+          timeline: Array.isArray(extra.timeline) ? extra.timeline : (l.timeline || []),
+          createdAt: l.created_at || extra.createdAt || new Date().toISOString(),
+          updatedAt: l.updated_at || extra.updatedAt || new Date().toISOString(),
+          ...extra
+        };
+      });
+      supabaseMemoryStore.crm_leads = mapped;
+      supabaseMemoryStore.leads = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('[loadDatabaseLeads] Supabase fetch notice:', err?.message || err);
+  }
+
+  // Fallback to disk JSON (server/crm_leads.json)
+  try {
+    const diskPath = path.resolve(__dirname, 'crm_leads.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskData) && diskData.length > 0) {
+        supabaseMemoryStore.crm_leads = diskData;
+        supabaseMemoryStore.leads = diskData;
+        return diskData;
+      }
+    }
+  } catch (_) {}
+
+  return supabaseMemoryStore.crm_leads || [];
+};
+
+const loadLocalLeads = () => {
+  if (supabaseMemoryStore.crm_leads && Array.isArray(supabaseMemoryStore.crm_leads) && supabaseMemoryStore.crm_leads.length > 0) {
+    return supabaseMemoryStore.crm_leads;
   }
   return [];
 };
@@ -656,6 +731,9 @@ const getDatabaseStore = async (key) => {
   if (cleanKey === 'crm_opportunities' || cleanKey === 'opportunities') {
     return await loadDatabaseOpportunities();
   }
+  if (cleanKey === 'crm_leads' || cleanKey === 'leads') {
+    return await loadDatabaseLeads();
+  }
   if (cleanKey === 'bom_store' || cleanKey === 'boms') {
     return await loadDatabaseBoms();
   }
@@ -1006,6 +1084,95 @@ const saveLocalOpportunities = async (opportunities) => {
   }
 };
 
+const saveLocalLeads = async (leadsData) => {
+  if (!leadsData) return;
+  const list = Array.isArray(leadsData) ? leadsData : [leadsData];
+  supabaseMemoryStore.crm_leads = list;
+  supabaseMemoryStore.leads = list;
+
+  // 1. Persist immediately to disk file for zero data loss
+  try {
+    const diskPath = getStoreFilePath('crm_leads.json');
+    fs.writeFileSync(diskPath, JSON.stringify(list, null, 2), 'utf8');
+  } catch (diskErr) {
+    console.warn('[saveLocalLeads disk write error]:', diskErr?.message);
+  }
+
+  // 2. Broadcast via SSE to all connected clients
+  try {
+    broadcastRealtimeEvent('store_updated', { key: 'crm_leads', storeData: list });
+    broadcastRealtimeEvent('crm_updated', { type: 'leads_updated', leads: list });
+  } catch (_) {}
+
+  // 3. Upsert to Supabase leads table / leaves store
+  try {
+    const rows = list.map(item => {
+      const id = item.id || `LEAD-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      const leadNumber = item.leadNumber || id;
+      const companyName = item.companyName || '';
+      const contactPerson = item.contactPerson || '';
+      const phone = item.phone || '';
+      const email = item.email || '';
+      const location = item.location || '';
+      const source = item.source || 'Direct';
+      const status = item.status || 'New Lead';
+      const priority = item.priority || 'MEDIUM';
+      const assignedSalesperson = item.assignedSalesperson || 'Sales Rep';
+      const estimatedKw = Number(item.estimatedKw || 0);
+      const category = item.category || 'Aluminium Mounting Structures';
+      const estimatedValue = Number(item.estimatedValue || 0);
+      const createdAt = item.createdAt || new Date().toISOString();
+      const updatedAt = new Date().toISOString();
+
+      const extraMetadata = { ...item, _userNotes: item.notes || '' };
+
+      return {
+        id,
+        lead_number: leadNumber,
+        company_name: companyName,
+        contact_person: contactPerson,
+        phone,
+        email,
+        location,
+        source,
+        status,
+        priority,
+        assigned_salesperson: assignedSalesperson,
+        estimated_kw: estimatedKw,
+        category,
+        estimated_value: estimatedValue,
+        notes: JSON.stringify(extraMetadata),
+        created_at: createdAt,
+        updated_at: updatedAt
+      };
+    });
+
+    const { error } = await supabase.from('leads').upsert(rows, { onConflict: 'id' });
+    if (error) {
+      await supabase.from('leaves').upsert({
+        employee: 'CRM_LEADS',
+        reason: JSON.stringify(list),
+        status: 'active',
+        dates: new Date().toISOString(),
+        duration: String(list.length),
+        type: 'Store'
+      }, { onConflict: 'employee' });
+    }
+  } catch (sbErr) {
+    try {
+      await supabase.from('leaves').upsert({
+        employee: 'CRM_LEADS',
+        reason: JSON.stringify(list),
+        status: 'active',
+        dates: new Date().toISOString(),
+        duration: String(list.length),
+        type: 'Store'
+      }, { onConflict: 'employee' });
+    } catch (_) {}
+  }
+  return list;
+};
+
 const saveDatabaseStore = async (key, storeData) => {
   if (storeData === undefined || storeData === null) return storeData;
   const cleanKey = String(key || '').toLowerCase();
@@ -1015,6 +1182,10 @@ const saveDatabaseStore = async (key, storeData) => {
   }
   if (cleanKey === 'crm_opportunities' || cleanKey === 'opportunities') {
     await saveLocalOpportunities(storeData);
+    return storeData;
+  }
+  if (cleanKey === 'crm_leads' || cleanKey === 'leads') {
+    await saveLocalLeads(storeData);
     return storeData;
   }
   if (cleanKey === 'bom_store' || cleanKey === 'boms') {
@@ -1056,7 +1227,7 @@ const saveDatabaseStore = async (key, storeData) => {
 
   const employeeKey = key.toUpperCase();
   // STRICT: Do not write migrated stores into legacy public.leaves
-  if (['BOM_STORE', 'CUSTOMER_STORE', 'CRM_CUSTOMERS', 'CRM_OPPORTUNITIES', 'OPPORTUNITIES'].includes(employeeKey)) {
+  if (['BOM_STORE', 'CUSTOMER_STORE', 'CRM_CUSTOMERS', 'CRM_OPPORTUNITIES', 'OPPORTUNITIES', 'CRM_LEADS', 'LEADS'].includes(employeeKey)) {
     return storeData;
   }
 
@@ -1955,6 +2126,26 @@ app.delete('/api/store/:key/:id', async (req, res) => {
       broadcastRealtimeEvent('crm_updated', { type: 'opportunities_updated', opportunities: updated });
 
       return res.json({ success: true, message: `Opportunity ${id} deleted successfully`, data: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+  if (key === 'crm_leads' || key === 'leads') {
+    try {
+      // 1. Delete from Supabase public.leads if exists
+      const { error } = await supabase.from('leads').delete().eq('id', id);
+      if (error) {
+        console.warn('[DELETE lead Supabase notice]:', error.message);
+      }
+      // 2. Update memory store & disk
+      let current = supabaseMemoryStore.crm_leads || [];
+      if (!Array.isArray(current) || current.length === 0) {
+        current = await loadDatabaseLeads();
+      }
+      const updated = current.filter(item => (item.id || item.leadNumber) !== id);
+      await saveLocalLeads(updated);
+
+      return res.json({ success: true, message: `Lead ${id} deleted successfully`, data: updated });
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -8444,6 +8635,27 @@ app.post('/api/crm/ai/analyze-enquiry', (req, res) => {
     intent = 'Technical Specifications Request';
   }
 
+  // Extract location if present
+  let location = '';
+  const locMatch = clean.match(/(?:at|in|near|for|location|site)\s*([a-zA-Z\s,]+?)(?:\.|\n|$|with|for|regarding)/i);
+  if (locMatch && locMatch[1]) {
+    location = locMatch[1].trim();
+  }
+
+  // Extract phone if present
+  let phone = '';
+  const phoneMatch = message.match(/(?:\+?91[\-\s]?)?[6-9]\d{9}/);
+  if (phoneMatch) {
+    phone = phoneMatch[0];
+  }
+
+  // Extract company name if present
+  let companyName = '';
+  const compMatch = message.match(/(?:from|m\/s|company|firm|epc|client)\s*([A-Za-z0-9\s\.\-&]+?)(?:\.|\n|,|$|regarding|pvt|ltd)/i);
+  if (compMatch && compMatch[1]) {
+    companyName = compMatch[1].trim();
+  }
+
   const summary = `Customer is asking for pricing for approximately ${estimatedKw ? `${estimatedKw} kW` : (estimatedPanels ? `${estimatedPanels} panels` : 'solar structures')} (${category}).`;
 
   res.json({
@@ -8454,10 +8666,198 @@ app.post('/api/crm/ai/analyze-enquiry', (req, res) => {
       estimatedPanels,
       category,
       intent,
+      companyName,
+      location,
+      phone,
       summary,
       confidenceScore: estimatedKw || estimatedPanels ? 95 : 80
     }
   });
+});
+
+// Automated Inbound Lead Simulator Endpoint (WhatsApp/Web Form Simulation)
+app.post('/api/crm/leads/simulate-inbound', async (req, res) => {
+  try {
+    const {
+      companyName = 'Surya Kiran Solar EPC',
+      contactPerson = 'Ramesh Kumar',
+      phone = '+91 98401 55678',
+      message = 'Need urgent quotation for 150 kW Aluminium Rooftop solar mounting structure for project in Hosur.',
+      source = 'WhatsApp Inbound'
+    } = req.body;
+
+    const clean = message.toLowerCase();
+    const kwMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:kw|k\.w|kilowatt|megawatt|mw)/i);
+    let estimatedKw = kwMatch ? parseFloat(kwMatch[1]) : 150;
+
+    let category = 'Aluminium Mounting Structures';
+    if (clean.includes('tin') || clean.includes('sheet') || clean.includes('shed')) {
+      category = 'Tin Shed Clamping Systems';
+    } else if (clean.includes('ground') || clean.includes('hdg')) {
+      category = 'HDG Ground Mounting Structures';
+    }
+
+    const isAutoQualified = estimatedKw >= 10;
+    const leadId = `LEAD-2026-${Date.now().toString().slice(-4)}`;
+    const nextNumber = `LEAD-${Math.floor(100 + Math.random() * 899)}`;
+
+    const simulatedLead = {
+      id: leadId,
+      leadNumber: nextNumber,
+      companyName,
+      contactPerson,
+      phone,
+      whatsapp: phone,
+      email: `${contactPerson.toLowerCase().replace(/\s+/g, '.')}@${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+      location: 'Hosur, Tamil Nadu',
+      source,
+      requirement: `${estimatedKw} kW ${category}`,
+      estimatedKw,
+      category,
+      estimatedValue: estimatedKw * 2800,
+      assignedSalesperson: 'Mohith JV',
+      status: isAutoQualified ? 'Qualified' : 'New Lead',
+      priority: estimatedKw >= 100 ? 'HIGH' : 'MEDIUM',
+      notes: message,
+      isAutoGenerated: true,
+      createdAt: new Date().toISOString(),
+      timeline: [
+        {
+          id: `TL-${Date.now()}-1`,
+          type: 'auto_ingested',
+          title: 'Auto-Captured Inbound Inquiry',
+          description: `Captured via ${source} with AI auto-parsing: ${estimatedKw} kW ${category}`,
+          timestamp: new Date().toISOString()
+        },
+        ...(isAutoQualified ? [{
+          id: `TL-${Date.now()}-2`,
+          type: 'auto_qualified',
+          title: '⚡ Auto-Qualified by AI Engine',
+          description: `Capacity (${estimatedKw} kW) exceeds qualification threshold (>=10 kW). Estimated Deal: ₹ ${(estimatedKw * 2800).toLocaleString('en-IN')}`,
+          timestamp: new Date().toISOString()
+        }] : [])
+      ]
+    };
+
+    // Persist directly to Leads Database
+    try {
+      const existing = await loadDatabaseLeads();
+      const updated = [simulatedLead, ...existing.filter(l => l.id !== simulatedLead.id)];
+      await saveLocalLeads(updated);
+    } catch (_) {}
+
+    // Broadcast realtime event so web clients can catch and update without reloading
+    broadcastRealtimeEvent('crm_lead_created', { lead: simulatedLead });
+
+    res.json({
+      success: true,
+      message: 'Automated Inbound Lead Captured and Pre-Qualified in Database!',
+      lead: simulatedLead
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
+// 🚀 CANONICAL LEADS DATABASE REST API
+// ==========================================
+app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
+  try {
+    const leads = await loadDatabaseLeads();
+    res.json({ success: true, count: leads.length, data: leads });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
+  try {
+    const newLead = (req.body && req.body.lead) ? req.body.lead : req.body;
+    if (!newLead || Object.keys(newLead).length === 0) return res.status(400).json({ success: false, error: 'No lead data provided' });
+
+    let current = await loadDatabaseLeads();
+    const leadId = newLead.id || `LEAD-2026-${Date.now().toString().slice(-4)}`;
+    const nextNum = newLead.leadNumber || `LEAD-${String(current.length + 1).padStart(3, '0')}`;
+
+    const leadRecord = {
+      ...newLead,
+      id: leadId,
+      leadNumber: nextNum,
+      createdAt: newLead.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const updated = [leadRecord, ...current.filter(l => l.id !== leadId)];
+    await saveLocalLeads(updated);
+
+    broadcastRealtimeEvent('crm_lead_created', { lead: leadRecord });
+
+    res.json({ success: true, message: 'Lead added to database', lead: leadRecord, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    let current = await loadDatabaseLeads();
+    const idx = current.findIndex(l => l.id === id || l.leadNumber === id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Lead not found' });
+    }
+    const updatedLead = {
+      ...current[idx],
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+    current[idx] = updatedLead;
+    await saveLocalLeads(current);
+
+    broadcastRealtimeEvent('crm_lead_updated', { lead: updatedLead });
+
+    res.json({ success: true, message: 'Lead updated in database', lead: updatedLead, data: current });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    let current = await loadDatabaseLeads();
+    const updated = current.filter(l => l.id !== id && l.leadNumber !== id);
+    await saveLocalLeads(updated);
+
+    res.json({ success: true, message: 'Lead deleted from database', data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/crm/leads/batch', '/api/leads/batch'], async (req, res) => {
+  try {
+    const { leadIds = [], updates = {}, action = 'update' } = req.body;
+    let current = await loadDatabaseLeads();
+
+    if (action === 'delete') {
+      current = current.filter(l => !leadIds.includes(l.id) && !leadIds.includes(l.leadNumber));
+    } else {
+      current = current.map(l => {
+        if (leadIds.includes(l.id) || leadIds.includes(l.leadNumber)) {
+          return { ...l, ...updates, updatedAt: new Date().toISOString() };
+        }
+        return l;
+      });
+    }
+
+    await saveLocalLeads(current);
+    res.json({ success: true, count: current.length, data: current });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 🛡️ ENTERPRISE DISASTER RECOVERY & BACKUP API

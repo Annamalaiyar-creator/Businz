@@ -374,6 +374,136 @@ export async function deleteCloudOpportunityRow(oppId) {
 }
 
 /**
+ * Convert canonical public.leads database row to consumer-ready shape
+ */
+export function toConsumerLead(l) {
+  if (!l || typeof l !== 'object') return l;
+
+  let extra = {};
+  if (l.notes && typeof l.notes === 'string' && l.notes.startsWith('{') && l.notes.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(l.notes);
+      if (parsed && typeof parsed === 'object') extra = parsed;
+    } catch (_) {}
+  }
+
+  return {
+    ...extra,
+    id: l.id,
+    leadNumber: l.lead_number || extra.leadNumber || l.id,
+    companyName: l.company_name || extra.companyName || '',
+    contactPerson: l.contact_person || extra.contactPerson || '',
+    designation: l.designation || extra.designation || '',
+    phone: l.phone || extra.phone || '',
+    whatsapp: l.whatsapp || extra.whatsapp || l.phone || '',
+    email: l.email || extra.email || '',
+    location: l.location || extra.location || '',
+    source: l.source || extra.source || 'Direct',
+    status: l.status || extra.status || 'New Lead',
+    priority: l.priority || extra.priority || 'MEDIUM',
+    assignedSalesperson: l.assigned_salesperson || extra.assignedSalesperson || 'Sales Rep',
+    assignedEmail: l.assigned_email || extra.assignedEmail || '',
+    estimatedKw: Number(l.estimated_kw !== undefined && l.estimated_kw !== null ? l.estimated_kw : (extra.estimatedKw || 50)),
+    category: l.category || extra.category || 'Aluminium Mounting Structures',
+    estimatedValue: Number(l.estimated_value !== undefined && l.estimated_value !== null ? l.estimated_value : (extra.estimatedValue || 0)),
+    notes: l.notes && !l.notes.startsWith('{') ? l.notes : (extra.notes || ''),
+    timeline: Array.isArray(extra.timeline) ? extra.timeline : (l.timeline || []),
+    createdAt: l.created_at || extra.createdAt || new Date().toISOString(),
+    updatedAt: l.updated_at || extra.updatedAt || new Date().toISOString(),
+    ...extra
+  };
+}
+
+/**
+ * Convert lead object to canonical database row
+ */
+export function toDatabaseLeadRow(lead) {
+  if (!lead || typeof lead !== 'object') return null;
+  const id = lead.id || `LEAD-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+  const extra = { ...lead };
+  delete extra.id;
+  delete extra.leadNumber;
+  delete extra.companyName;
+  delete extra.contactPerson;
+  delete extra.designation;
+  delete extra.phone;
+  delete extra.whatsapp;
+  delete extra.email;
+  delete extra.location;
+  delete extra.source;
+  delete extra.status;
+  delete extra.priority;
+  delete extra.assignedSalesperson;
+  delete extra.assignedEmail;
+  delete extra.estimatedKw;
+  delete extra.category;
+  delete extra.estimatedValue;
+
+  let notesVal = lead.notes || '';
+  if (Object.keys(extra).length > 0) {
+    extra._userNotes = lead.notes || '';
+    notesVal = JSON.stringify(extra);
+  }
+
+  return {
+    id,
+    lead_number: lead.leadNumber || id,
+    company_name: lead.companyName || '',
+    contact_person: lead.contactPerson || '',
+    designation: lead.designation || '',
+    phone: lead.phone || '',
+    whatsapp: lead.whatsapp || lead.phone || '',
+    email: lead.email || '',
+    location: lead.location || '',
+    source: lead.source || 'Direct',
+    status: lead.status || 'New Lead',
+    priority: lead.priority || 'MEDIUM',
+    assigned_salesperson: lead.assignedSalesperson || 'Sales Rep',
+    assigned_email: lead.assignedEmail || '',
+    estimated_kw: Number(lead.estimatedKw || 0),
+    category: lead.category || 'Aluminium Mounting Structures',
+    estimated_value: Number(lead.estimatedValue || 0),
+    notes: notesVal,
+    created_at: lead.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Single-row atomic delete for a Lead
+ */
+export async function deleteCloudLeadRow(leadId) {
+  if (!leadId) return false;
+  try {
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', leadId);
+
+    if (error) {
+      console.warn('[SupabaseSync] Single lead delete error:', error.message);
+    }
+
+    window.dispatchEvent(new CustomEvent('controlroom_leads_update', {
+      detail: { id: leadId, action: 'delete' }
+    }));
+    window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+      detail: { storeKey: 'crm_leads', action: 'delete', id: leadId }
+    }));
+
+    try {
+      fetch(`/api/crm/leads/${encodeURIComponent(leadId)}`, { method: 'DELETE' }).catch(() => {});
+      fetch(`/api/store/crm_leads/${encodeURIComponent(leadId)}`, { method: 'DELETE' }).catch(() => {});
+    } catch (_) {}
+
+    return true;
+  } catch (err) {
+    console.warn('[SupabaseSync] Single lead delete error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
  * Convert canonical public.bom_orders database row to consumer-ready shape
  * Preserves all legacy field aliases (c2-c8, extraData, etc.) so no existing views break
  */
@@ -807,6 +937,25 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     }
   }
 
+  // CANONICAL LEADS READ PATH: Query public.leads directly
+  if (storeKey === 'crm_leads' || storeKey === 'leads') {
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Leads cloud fetch timeout')), 3000));
+      const fetchPromise = supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data: dbLeads, error: leadErr } = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (!leadErr && Array.isArray(dbLeads) && dbLeads.length > 0) {
+        return dbLeads.map(l => toConsumerLead(l));
+      }
+    } catch (err) {
+      console.warn('[SupabaseSync] Direct leads fetch fallback notice:', err?.message || err);
+    }
+  }
+
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
     const controller = new AbortController();
@@ -822,6 +971,9 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
           }
           if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
             return json.data.map(o => toConsumerOpportunity(o));
+          }
+          if (storeKey === 'crm_leads' || storeKey === 'leads') {
+            return json.data.map(l => toConsumerLead(l));
           }
           if (storeKey === 'bom_store' || storeKey === 'BOM_STORE') {
             return json.data.map(b => toConsumerBom(b));
@@ -1049,6 +1201,45 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     } catch (_) {}
 
     return; // STOP! NEVER touch leaves table for opportunities!
+  }
+
+  // CANONICAL LEADS WRITE PATH: Direct normalized upsert to public.leads table (Zero leaves table egress)
+  if (storeKey === 'crm_leads' || storeKey === 'leads') {
+    try {
+      if (Array.isArray(storeData)) {
+        const rows = storeData.map(l => toDatabaseLeadRow(l)).filter(Boolean);
+        if (rows.length > 0) {
+          for (let i = 0; i < rows.length; i += 20) {
+            const batch = rows.slice(i, i + 20);
+            await supabase.from('leads').upsert(batch, { onConflict: 'id' });
+          }
+        }
+      } else if (storeData && typeof storeData === 'object') {
+        const row = toDatabaseLeadRow(storeData);
+        if (row) {
+          await supabase.from('leads').upsert(row, { onConflict: 'id' });
+        }
+      }
+
+      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+        detail: { storeKey: 'crm_leads', data: storeData }
+      }));
+      window.dispatchEvent(new CustomEvent('controlroom_leads_update', {
+        detail: { leads: storeData, action: 'upsert' }
+      }));
+    } catch (err) {
+      console.warn('[SupabaseSync] Error persisting to public.leads:', err?.message || err);
+    }
+
+    try {
+      fetch(`/api/store/${storeKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storeData)
+      }).catch(() => {});
+    } catch (_) {}
+
+    return; // STOP! NEVER touch leaves table for leads!
   }
 
   // CANONICAL BOM WRITE PATH: Direct normalized upsert to public.bom_orders table (Zero leaves table egress)

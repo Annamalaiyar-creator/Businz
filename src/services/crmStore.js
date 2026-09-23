@@ -662,14 +662,28 @@ export const INITIAL_CRM_ACTIVITIES = [
  * Universal safe store loader and syncer
  */
 export function getCrmStore(key, initialData = []) {
+  try {
+    const raw = localStorage.getItem(`businz_crm_${key}`) || 
+                localStorage.getItem(`controlroom_crm_${key}`) || 
+                localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
   return initialData;
 }
 
 export function saveCrmStore(key, data) {
   try {
-    saveCloudStore(`crm_${key}`, data);
+    try {
+      localStorage.setItem(`businz_crm_${key}`, JSON.stringify(data));
+    } catch (e) {}
+    const cloudKey = (key === 'leads' || key === 'crm_leads') ? 'crm_leads' : (key.startsWith('crm_') ? key : `crm_${key}`);
+    saveCloudStore(cloudKey, data);
     // Dispatch local custom event for cross-component re-rendering
     window.dispatchEvent(new CustomEvent('controlroom_crm_update', { detail: { key, count: Array.isArray(data) ? data.length : 1 } }));
+    window.dispatchEvent(new CustomEvent('businz_crm_update', { detail: { key, count: Array.isArray(data) ? data.length : 1 } }));
   } catch (e) {
     console.error(`Error saving CRM ${key}:`, e);
   }

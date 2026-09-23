@@ -16,7 +16,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const APP_ENV = process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development');
 
-const PROD_REF = 'ognmvcpzlebrvdynunwh';
+const PROD_REF = 'qhxaqrclvdfkswdavvjd';
 const DEV_REF = 'ddzkcbgwwpluzbhnrywp';
 
 if (!SUPABASE_URL) {

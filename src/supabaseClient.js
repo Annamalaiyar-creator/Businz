@@ -5,7 +5,7 @@ const SUPABASE_URL = env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY;
 const APP_ENV = env.VITE_APP_ENV || env.MODE || 'development';
 
-const PROD_REF = 'ognmvcpzlebrvdynunwh';
+const PROD_REF = 'qhxaqrclvdfkswdavvjd';
 const DEV_REF = 'ddzkcbgwwpluzbhnrywp';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
