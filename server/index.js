@@ -2800,30 +2800,53 @@ app.get('/api/workorders', async (req, res) => {
   res.json({ success: true, count: localOrders.length, workOrders: localOrders });
 });
 
-// Endpoint to CREATE / ISSUE a Production Work Order
+// Endpoint to CREATE / ISSUE / UPDATE a Production Work Order
 app.post('/api/workorders', async (req, res) => {
   try {
     const woId = req.body.workOrderNo || req.body.id || `WO-${Date.now().toString().slice(-4)}`;
-    const newOrder = {
-      id: woId,
-      workOrderNo: woId,
-      productName: req.body.productName || 'Solar Mounting Rail',
-      plannedQty: parseInt(req.body.plannedQty) || 500,
-      completedQty: parseInt(req.body.completedQty) || 0,
-      delayDays: 0,
-      delayReason: req.body.delayReason || 'Normal Production',
-      status: req.body.status || 'In Progress',
-      statusColor: '#EA580C',
-      rawMaterial: req.body.rawMaterial || 'Raw Alu Coil',
-      customer: req.body.customer || 'Solar Client',
-      targetDate: req.body.targetDate || new Date().toISOString().split('T')[0]
-    };
-
     const currentOrders = loadLocalWorkOrders();
-    const updated = [newOrder, ...currentOrders];
-    saveLocalWorkOrders(updated);
+    const existingIndex = currentOrders.findIndex(o => (o.workOrderNo && o.workOrderNo === woId) || (o.id && o.id === woId));
 
-    res.json({ success: true, message: 'Production Work Order Created and Saved!', workOrder: newOrder });
+    let savedOrder;
+    let updated;
+
+    if (existingIndex !== -1) {
+      // Update existing work order
+      savedOrder = {
+        ...currentOrders[existingIndex],
+        ...req.body,
+        id: woId,
+        workOrderNo: woId,
+        plannedQty: req.body.plannedQty !== undefined ? (parseInt(req.body.plannedQty) || 0) : currentOrders[existingIndex].plannedQty,
+        completedQty: req.body.completedQty !== undefined ? (parseInt(req.body.completedQty) || 0) : (currentOrders[existingIndex].completedQty || 0),
+      };
+      updated = [...currentOrders];
+      updated[existingIndex] = savedOrder;
+    } else {
+      // Create new work order
+      savedOrder = {
+        id: woId,
+        workOrderNo: woId,
+        productName: req.body.productName || 'Solar Mounting Rail',
+        plannedQty: parseInt(req.body.plannedQty) || 500,
+        completedQty: parseInt(req.body.completedQty) || 0,
+        delayDays: 0,
+        delayReason: req.body.delayReason || 'Normal Production',
+        status: req.body.status || 'In Progress',
+        statusColor: '#EA580C',
+        rawMaterial: req.body.rawMaterial || 'Raw Alu Coil',
+        customer: req.body.customer || 'Solar Client',
+        targetDate: req.body.targetDate || new Date().toISOString().split('T')[0],
+        currentStage: req.body.currentStage || req.body.stage || 'Raw Material Prep',
+        stage: req.body.stage || req.body.currentStage || 'Raw Material Prep',
+        bomCode: req.body.bomCode || '',
+        ...req.body
+      };
+      updated = [savedOrder, ...currentOrders];
+    }
+
+    saveLocalWorkOrders(updated);
+    res.json({ success: true, message: 'Production Work Order Saved!', workOrder: savedOrder });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -7497,6 +7520,44 @@ app.post('/api/raw-materials', async (req, res) => {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
       fs.writeFileSync(rawMatsPath, JSON.stringify(updatedMats, null, 2), 'utf8');
       supabaseMemoryStore.raw_materials_store = updatedMats;
+
+      // Also sync matching items in item_store
+      try {
+        const itemPath = getStoreFilePath('item_store.json');
+        let currentItems = [];
+        if (fs.existsSync(itemPath)) {
+          currentItems = JSON.parse(fs.readFileSync(itemPath, 'utf8'));
+        }
+        if (Array.isArray(currentItems) && currentItems.length > 0) {
+          const rawMap = new Map();
+          updatedMats.forEach(rm => {
+            const k = String(rm.code || rm.sku || rm.itemId || rm.name || '').toUpperCase().trim();
+            if (k) rawMap.set(k, rm);
+          });
+          currentItems = currentItems.map(it => {
+            const k = String(it.code || it.sku || it.itemId || it.name || '').toUpperCase().trim();
+            const rm = rawMap.get(k);
+            if (rm) {
+              return {
+                ...it,
+                stock: rm.stock !== undefined ? rm.stock : it.stock,
+                availableStock: rm.availableStock !== undefined ? rm.availableStock : it.availableStock,
+                physicalStock: rm.physicalStock !== undefined ? rm.physicalStock : it.physicalStock,
+                openingStock: rm.openingStock !== undefined ? rm.openingStock : it.openingStock,
+                reserved: rm.reserved !== undefined ? rm.reserved : it.reserved
+              };
+            }
+            return it;
+          });
+          fs.writeFileSync(itemPath, JSON.stringify(currentItems, null, 2), 'utf8');
+          supabaseMemoryStore.item_store = currentItems;
+          pushStoreToSupabase('item_store', currentItems).catch(() => {});
+          broadcastRealtimeEvent('item_store_updated', { items: currentItems });
+        }
+      } catch (err) {
+        console.error('[item_store sync error]:', err?.message);
+      }
+
       pushStoreToSupabase('raw_materials_store', updatedMats).catch(() => {});
       broadcastRealtimeEvent('inventory_updated', { rawMaterials: updatedMats });
       return res.json({ success: true, count: updatedMats.length });

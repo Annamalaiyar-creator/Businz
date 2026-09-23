@@ -25,8 +25,7 @@ import LoginScreen from './components/LoginScreen';
 import DeveloperPortalView from './components/DeveloperPortalView';
 import NotificationToast from './components/NotificationToast';
 import WorkflowNotificationBanner from './components/WorkflowNotificationBanner';
-import useDeviceDetect from './hooks/useDeviceDetect';
-import MobileLayout from './components/mobile/MobileLayout';
+
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
 import { useEffect, Component } from 'react';
 import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
@@ -34,6 +33,7 @@ import { getSafeZohoPOs, getSafeZohoItems } from './services/zohoSafeSync';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
 import { fetchCloudStore } from './utils/supabaseDataSync';
+import { CANONICAL_PRODUCT_ALIASES } from './utils/vrmProductsData';
 
 class AppErrorBoundary extends Component {
   constructor(props) {
@@ -151,7 +151,7 @@ function App() {
   // Default sidebar collapsed to TRUE (closed/inside by default on loading)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [toastAlert, setToastAlert] = useState(null);
-  const { isMobile, toggleViewMode } = useDeviceDetect();
+
 
   const showCustomAlert = (msg, title, type = 'info') => {
     setToastAlert({ message: msg, title, type });
@@ -315,12 +315,17 @@ function App() {
           if (Array.isArray(rawData) && rawData.length > 0) {
             const rawMap = new Map();
             rawData.forEach(rm => {
-              const k = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
-              rawMap.set(k, rm);
+              const rawK = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
+              const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
+              rawMap.set(rawK, rm);
+              rawMap.set(canonK, rm);
+              if (rm.name) rawMap.set(String(rm.name).toUpperCase().trim(), rm);
             });
             mergedItems = mergedItems.map(it => {
-              const k = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
-              const rm = rawMap.get(k);
+              const rawK = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
+              const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
+              const nameK = it.name ? String(it.name).toUpperCase().trim() : '';
+              const rm = rawMap.get(rawK) || rawMap.get(canonK) || (nameK && rawMap.get(nameK));
               if (rm) {
                 return {
                   ...it,
@@ -349,19 +354,27 @@ function App() {
 
     // Listen to real-time inventory updates so all logged-in employees see stock updates with 0s latency
     const handleRawUpdate = (e) => {
-      const updated = e?.detail?.rawMaterials || e?.detail?.storeData;
+      const updated = e?.detail?.rawMaterials || e?.detail?.items || e?.detail?.storeData;
       if (Array.isArray(updated) && updated.length > 0) {
         setItemsList(prev => {
           if (!Array.isArray(prev)) return prev;
           const rawMap = new Map();
           updated.forEach(rm => {
-            const k = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
-            rawMap.set(k, rm);
+            const rawK = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
+            const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
+            rawMap.set(rawK, rm);
+            rawMap.set(canonK, rm);
+            if (rm.name) rawMap.set(String(rm.name).toUpperCase().trim(), rm);
           });
-          return prev.map(it => {
-            const k = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
-            const rm = rawMap.get(k);
+          const matchedKeys = new Set();
+          const nextItems = prev.map(it => {
+            const rawK = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
+            const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
+            const nameK = it.name ? String(it.name).toUpperCase().trim() : '';
+            const rm = rawMap.get(rawK) || rawMap.get(canonK) || (nameK && rawMap.get(nameK));
             if (rm) {
+              matchedKeys.add(rawK);
+              matchedKeys.add(canonK);
               return {
                 ...it,
                 stock: rm.stock !== undefined ? rm.stock : it.stock,
@@ -372,13 +385,16 @@ function App() {
             }
             return it;
           });
+          return nextItems;
         });
       }
     };
 
     window.addEventListener('controlroom_raw_materials_update', handleRawUpdate);
+    window.addEventListener('controlroom_items_update', handleRawUpdate);
     return () => {
       window.removeEventListener('controlroom_raw_materials_update', handleRawUpdate);
+      window.removeEventListener('controlroom_items_update', handleRawUpdate);
     };
   }, []);
 
@@ -386,29 +402,7 @@ function App() {
     return <LoginScreen onLoginSuccess={(role) => handleRoleSwitch(role)} />;
   }
 
-  // Dedicated Mobile UI for touch devices, smartphones, or manual toggle
-  if (isMobile) {
-    return (
-      <div className="mobile-root-container" style={{ width: '100%', minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
-        <MobileLayout 
-          userRole={userRole} 
-          onSwitchRole={handleRoleSwitch} 
-          onSignOut={handleSignOut} 
-          onToggleDesktopView={() => toggleViewMode('desktop')} 
-        />
-        {toastAlert && (
-          <NotificationToast 
-            alert={toastAlert} 
-            onClose={() => setToastAlert(null)} 
-          />
-        )}
-        <WorkflowNotificationBanner 
-          userRole={userRole} 
-          onNavigate={handleTabChange} 
-        />
-      </div>
-    );
-  }
+
 
   // Developer / Technical Admin Portal Dedicated Fullscreen Console
   const isDevRole = userRole === 'Technical Administrator' || userRole === 'Developer' || (userRole || '').startsWith('TA') || activeTab === 'Developer Console' || activeTab === 'Developer Portal';
@@ -518,7 +512,6 @@ function App() {
           onOpenLoginModal={handleSignOut}
           onSelectTab={handleTabChange}
           onToggleSidebar={toggleSidebar}
-          onToggleMobileView={() => toggleViewMode('mobile')}
         />
 
         {/* Scrollable Center Content Pane */}
