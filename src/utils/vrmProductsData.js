@@ -3592,4 +3592,10 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
   return CANONICAL_PRODUCT_ALIASES[direct] || direct || '';
 };
 
+export default {
+  VRM_PRODUCTS,
+  wordFingerprint,
+  resolveProductCode
+};
+
 

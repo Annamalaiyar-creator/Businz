@@ -10,7 +10,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { createClient } from '@supabase/supabase-js';
-import { VRM_PRODUCTS, wordFingerprint, resolveProductCode } from '../src/utils/vrmProductsData.js';
+import * as vrmDataModule from '../src/utils/vrmProductsData.js';
+const VRM_PRODUCTS = vrmDataModule.VRM_PRODUCTS || vrmDataModule.default?.VRM_PRODUCTS || [];
+const wordFingerprint = vrmDataModule.wordFingerprint || vrmDataModule.default?.wordFingerprint || ((w) => String(w || '').toLowerCase().trim());
+const resolveProductCode = vrmDataModule.resolveProductCode || vrmDataModule.default?.resolveProductCode || ((c) => c);
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
