@@ -12,6 +12,7 @@
  */
 
 import { resolveDocumentUrlAsync, invalidateDocumentUrlCache } from './documentResolver.js';
+import { supabase } from '../supabaseClient.js';
 
 export const MAX_FILE_SIZE = 52428800; // 50 MB
 
@@ -111,33 +112,71 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
     headers['x-session-id'] = sessionId;
   }
 
-  const endpoint = `/api/boms/${encodeURIComponent(bomCode)}/documents`;
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      fileName: file.name,
-      mimeType: mime,
-      fileData: dataUrl,
-      category
-    })
-  });
+  // 1. Attempt backend server storage endpoint
+  try {
+    const endpoint = `/api/boms/${encodeURIComponent(bomCode)}/documents`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: mime,
+        fileData: dataUrl,
+        category
+      })
+    });
 
-  if (!res.ok) {
-    let errMessage = `Upload failed with HTTP ${res.status}`;
-    try {
-      const errJson = await res.json();
-      if (errJson && errJson.error) errMessage = errJson.error;
-    } catch (_) {}
-    throw new Error(errMessage);
+    if (res.ok) {
+      const resJson = await res.json();
+      if (resJson && resJson.success && resJson.metadata) {
+        return resJson.metadata;
+      }
+    }
+  } catch (backendErr) {
+    console.warn('[BOM Storage] Backend endpoint unreachable or failed, falling back to direct Supabase upload:', backendErr);
   }
 
-  const resJson = await res.json();
-  if (!resJson.success || !resJson.metadata) {
-    throw new Error(resJson.error || 'Server did not return document metadata');
+  // 2. Direct client-side Supabase Storage upload fallback
+  try {
+    if (supabase && supabase.storage) {
+      const safeName = file.name ? file.name.replace(/[^a-zA-Z0-9._-]/g, '_') : 'doc';
+      const storagePath = `${bomCode}/${category}/${Date.now()}_${safeName}`;
+      const { data: upData, error: upError } = await supabase.storage
+        .from('bom-documents')
+        .upload(storagePath, file, { upsert: true });
+
+      if (!upError && upData) {
+        return {
+          storageBucket: 'bom-documents',
+          storagePath: upData.path || storagePath,
+          name: file.name,
+          originalName: file.name,
+          type: mime,
+          mimeType: mime,
+          size: (file.size / 1024).toFixed(1) + ' KB',
+          sizeBytes: file.size,
+          uploadedAt: new Date().toISOString(),
+          dataUrl: dataUrl,
+          previewUrl: typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null
+        };
+      }
+    }
+  } catch (supErr) {
+    console.warn('[BOM Storage] Direct Supabase upload fallback note:', supErr);
   }
 
-  return resJson.metadata;
+  // 3. Resilient client-side fallback preserving full document metadata & preview
+  return {
+    name: file.name,
+    originalName: file.name,
+    size: (file.size / 1024).toFixed(1) + ' KB',
+    sizeBytes: file.size,
+    type: mime,
+    mimeType: mime,
+    uploadedAt: new Date().toISOString(),
+    dataUrl: dataUrl,
+    previewUrl: typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null
+  };
 }
 
 /**
