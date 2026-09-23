@@ -572,7 +572,7 @@ export default function ProductionViewsEngine(props) {
   const [newBomDeliveryCity, setNewBomDeliveryCity] = useState('');
   const [newBomDeliveryState, setNewBomDeliveryState] = useState('');
   const [newBomDeliveryPincode, setNewBomDeliveryPincode] = useState('');
-  const [newBomPaymentType, setNewBomPaymentType] = useState('50% Advance + 50% Dispatch');
+  const [newBomPaymentType, setNewBomPaymentType] = useState('100% Paid');
   const [newBomCreditDays, setNewBomCreditDays] = useState(7);
   const [sameAsBilling, setSameAsBilling] = useState(false);
   const [newBomDeliveryProofDoc, setNewBomDeliveryProofDoc] = useState(null);

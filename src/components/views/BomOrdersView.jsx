@@ -1433,23 +1433,29 @@ export default function BomOrdersView(props) {
     if (typeof rawDoc === 'string') {
       if (rawDoc.startsWith('blob:')) {
         resolvedData = null;
-      } else if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
+      } else if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
         resolvedData = rawDoc;
       } else {
         const cached = getMediaFromCache(rawDoc);
-        resolvedData = (cached && !cached.startsWith('blob:')) ? cached : null;
+        resolvedData = cached || null;
       }
     } else if (rawDoc && typeof rawDoc === 'object') {
-      const u = (rawDoc.url && !rawDoc.url.startsWith('blob:')) ? rawDoc.url : null;
-      const d = (rawDoc.dataUrl && !rawDoc.dataUrl.startsWith('blob:')) ? rawDoc.dataUrl : null;
-      const f = (rawDoc.fileData && !rawDoc.fileData.startsWith('blob:')) ? rawDoc.fileData : null;
-      const p = (rawDoc.proofDocData && !rawDoc.proofDocData.startsWith('blob:')) ? rawDoc.proofDocData : null;
+      const u = rawDoc.url || null;
+      const d = rawDoc.dataUrl || null;
+      const prevUrl = rawDoc.previewUrl || null;
+      const f = rawDoc.fileData || null;
+      const p = rawDoc.proofDocData || null;
       const c1 = rawDoc.name ? getMediaFromCache(rawDoc.name) : null;
       const c2 = rawDoc.id ? getMediaFromCache(rawDoc.id) : null;
-      const cacheVal = (c1 && !c1.startsWith('blob:')) ? c1 : ((c2 && !c2.startsWith('blob:')) ? c2 : null);
+      const cacheVal = c1 || c2 || null;
 
-      resolvedData = u || d || f || p || cacheVal;
-      if (!resolvedData && rawDoc instanceof Blob) {
+      resolvedData = prevUrl || u || d || f || p || cacheVal;
+      if (!resolvedData && rawDoc._rawFile && (rawDoc._rawFile instanceof Blob || rawDoc._rawFile instanceof File)) {
+        try {
+          resolvedData = URL.createObjectURL(rawDoc._rawFile);
+        } catch (e) { }
+      }
+      if (!resolvedData && (rawDoc instanceof Blob || rawDoc instanceof File)) {
         try {
           resolvedData = URL.createObjectURL(rawDoc);
         } catch (e) { }
@@ -1466,15 +1472,19 @@ export default function BomOrdersView(props) {
             setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: url, dataUrl: url, _fetchingStorage: false } } : null);
           } else {
             if (typeof rawDoc === 'object') rawDoc._fetchingStorageDone = true;
+            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingStorage: false, _fetchingStorageDone: true } } : null);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (typeof rawDoc === 'object') rawDoc._fetchingStorageDone = true;
+          setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingStorage: false, _fetchingStorageDone: true } } : null);
+        });
     }
 
     // Auto-fetch from server if not found in local memory/IndexedDB
     if (!resolvedData && docName && typeof window !== 'undefined') {
       const isMediaFile = /\.(mp4|webm|mov|mkv|avi|jpg|jpeg|png|webp|gif|pdf)($|\?)/i.test(docName);
-      if (isMediaFile && !rawDoc?._fetchingServer) {
+      if (isMediaFile && !rawDoc?._fetchingServer && !rawDoc?._fetchingServerDone) {
         if (typeof rawDoc === 'object' && rawDoc) rawDoc._fetchingServer = true;
         fetch(`/api/media/find/${encodeURIComponent(docName)}`)
           .then(r => r.json())
@@ -1483,10 +1493,12 @@ export default function BomOrdersView(props) {
               saveMediaToCache(docName, data.url);
               setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, url: data.url, dataUrl: data.url, _fetchingServer: false } } : null);
             } else {
-              if (typeof rawDoc === 'object' && rawDoc) rawDoc._fetchingServerDone = true;
+              setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingServer: false, _fetchingServerDone: true } } : null);
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            setPreviewDocModal(prev => prev ? { ...prev, doc: { ...prev.doc, _fetchingServer: false, _fetchingServerDone: true } } : null);
+          });
       }
     }
 
@@ -4434,10 +4446,15 @@ export default function BomOrdersView(props) {
                             });
                             sanitizedNewBom.deliveryAddressProofDoc = meta;
                           } catch (upErr) {
-                            console.error('Failed to upload delivery proof doc:', upErr);
-                            alert('Failed to upload delivery address proof to storage: ' + upErr.message);
-                            setBomSubmitStage('');
-                            return;
+                            console.warn('Storage upload fallback, preserving document metadata:', upErr);
+                            sanitizedNewBom.deliveryAddressProofDoc = {
+                              name: newBomDeliveryProofDoc.name || 'Delivery_Address_Proof',
+                              size: newBomDeliveryProofDoc.size || 'Attached',
+                              mimeType: newBomDeliveryProofDoc.mimeType || 'image/jpeg',
+                              uploadedAt: new Date().toISOString(),
+                              dataUrl: newBomDeliveryProofDoc.dataUrl || null,
+                              previewUrl: newBomDeliveryProofDoc.previewUrl || null
+                            };
                           }
                         }
 
@@ -4454,10 +4471,19 @@ export default function BomOrdersView(props) {
                               sanitizedNewBom.payments.proofDoc = meta.originalName || newBomPaymentProofDoc.name;
                             }
                           } catch (upErr) {
-                            console.error('Failed to upload payment proof doc:', upErr);
-                            alert('Failed to upload payment proof to storage: ' + upErr.message);
-                            setBomSubmitStage('');
-                            return;
+                            console.warn('Storage upload fallback, preserving payment proof metadata:', upErr);
+                            sanitizedNewBom.paymentProofDoc = {
+                              name: newBomPaymentProofDoc.name || 'Payment_Slip',
+                              size: newBomPaymentProofDoc.size || 'Attached',
+                              mimeType: newBomPaymentProofDoc.mimeType || 'image/jpeg',
+                              uploadedAt: new Date().toISOString(),
+                              dataUrl: newBomPaymentProofDoc.dataUrl || null,
+                              previewUrl: newBomPaymentProofDoc.previewUrl || null
+                            };
+                            if (sanitizedNewBom.payments) {
+                              sanitizedNewBom.payments.proofDocObj = sanitizedNewBom.paymentProofDoc;
+                              sanitizedNewBom.payments.proofDoc = newBomPaymentProofDoc.name || 'Payment_Slip';
+                            }
                           }
                         }
 

@@ -16,14 +16,19 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
       resolvedData = getMediaFromCache(rawDoc);
     }
   } else if (rawDoc && typeof rawDoc === 'object') {
-    resolvedData = rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
+    resolvedData = rawDoc.previewUrl || rawDoc.url || rawDoc.dataUrl || rawDoc.fileData || rawDoc.proofDocData || (rawDoc.name ? getMediaFromCache(rawDoc.name) : null);
+    if (!resolvedData && rawDoc._rawFile && (rawDoc._rawFile instanceof Blob || rawDoc._rawFile instanceof File)) {
+      try {
+        resolvedData = URL.createObjectURL(rawDoc._rawFile);
+      } catch (e) { }
+    }
     if (!resolvedData && rawDoc.id) {
       resolvedData = getMediaFromCache(rawDoc.id);
     }
     if (!resolvedData && docName) {
       resolvedData = getMediaFromCache(docName);
     }
-    if (!resolvedData && rawDoc instanceof Blob) {
+    if (!resolvedData && (rawDoc instanceof Blob || rawDoc instanceof File)) {
       try {
         resolvedData = URL.createObjectURL(rawDoc);
       } catch (e) { }

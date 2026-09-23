@@ -397,11 +397,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const cleanNo = String(targetPi.piNo || targetPi.id || '').trim();
     setSyncingPiNo(cleanNo);
     try {
+      const sanitizedPi = stripDataUrlsFromRecord(targetPi);
+      delete sanitizedPi.paymentProofDoc;
+      delete sanitizedPi.deliveryProofDoc;
+      delete sanitizedPi.deliveryAddressProofDoc;
+
       const res = await fetch('/api/zoho/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...targetPi, piNo: cleanNo })
+        body: JSON.stringify({ ...sanitizedPi, piNo: cleanNo })
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          res.status === 404
+            ? `Backend API server unreachable (HTTP 404). Please ensure the Node.js backend application is running in Plesk / hosting control panel.`
+            : `Server returned HTTP ${res.status} (${res.statusText || 'Non-JSON response'}).`
+        );
+      }
+
       const data = await res.json();
       const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
       const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
@@ -447,10 +462,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         alert(`✓ Proforma Invoice ${finalEstNo} successfully synced with Zoho Books (Quotes # ${finalEstNo})!`);
       } else {
         const errMsg = data?.zohoError || data?.notice || data?.error || data?.message || (!res.ok ? `HTTP ${res.status} error` : 'Zoho Books synchronization could not be confirmed. Please verify your connection.');
-        alert(`Notice: Zoho Books response: ${errMsg}`);
+        alert(`Notice: Zoho Books response:\n\n${errMsg}`);
       }
     } catch (err) {
-      alert(`Error syncing with Zoho Books: ${err.message}`);
+      alert(`Notice syncing with Zoho Books:\n\n${err.message}`);
     } finally {
       setSyncingPiNo(null);
     }
@@ -1256,7 +1271,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setTransporterName('');
     setVehicleNo('');
     setTransportScope('VRM Structures');
-    setPaymentTerms('50% Advance + 50% Dispatch');
+    setPaymentTerms('100% Paid');
     setCreditDays('');
     setRemarks('');
     setPiItems([]); // Fresh empty default with 0 prefilled items
