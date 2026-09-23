@@ -508,9 +508,31 @@ export default function ProductionTableView({
                     <Eye size={14} style={{ color: '#DC2626' }} /> View Info (Cancelled)
                   </>
                 ) : activeTab === 'Dispatch Orders' ? (
-                  <>
-                    <Package size={14} style={{ color: '#0E7490' }} /> Pack BOM
-                  </>
+                  (() => {
+                    const targetCode = selectedRows[0];
+                    const targetRow = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode);
+                    const isAwaitingLr = targetRow && (targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Dispatched - Awaiting LR Copy');
+                    const isAwaitingLoading = targetRow && (targetRow.status === 'AWAITING VEHICLE LOADING' || targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed);
+                    if (isAwaitingLr) {
+                      return (
+                        <>
+                          <FileText size={14} style={{ color: '#D97706' }} /> Upload LR Copy
+                        </>
+                      );
+                    }
+                    if (isAwaitingLoading) {
+                      return (
+                        <>
+                          <Truck size={14} style={{ color: '#0E7490' }} /> Load Vehicle
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <Package size={14} style={{ color: '#0E7490' }} /> Pack BOM
+                      </>
+                    );
+                  })()
                 ) : activeTab === 'Invoice Management' ? (
                   <>
                     <FileText size={14} style={{ color: '#0E7490' }} /> View / Confirm Invoice

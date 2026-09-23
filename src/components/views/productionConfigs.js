@@ -298,11 +298,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
               tabs: [
                 { id: 'All', label: 'All Orders', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true)).length, bg: '#F1F5F9', fg: '#334155' },
-                { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true) && !['Closed', 'CLOSED', 'Packed & Ready for Dispatch', 'Partially Packed', 'Awaiting Vehicle Loading & Dispatch', 'Completed', 'Fully Dispatched & Delivered', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#FFEDD5', fg: '#C2410C' },
-                { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => (b.status === 'Partially Packed' || (b.dispatchPacking && b.dispatchPacking.some(p => p.packed) && !b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
-                { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Awaiting Vehicle Loading & Dispatch', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#DCFCE7', fg: '#166534' },
-                { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.invoiceConfirmed) && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#DBEAFE', fg: '#1E40AF' },
-                { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered') && !b.cancelled).length, bg: '#F1F5F9', fg: '#475569' },
+                { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true) && !['Closed', 'CLOSED', 'Packed & Ready for Dispatch', 'Partially Packed', 'Awaiting Vehicle Loading & Dispatch', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#FFEDD5', fg: '#C2410C' },
+                { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => (b.status === 'Partially Packed' || (b.dispatchPacking && b.dispatchPacking.some(p => p.packed) && !b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Awaiting Vehicle Loading & Dispatch', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#DCFCE7', fg: '#166534' },
+                { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.invoiceConfirmed) && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#DBEAFE', fg: '#1E40AF' },
+                { id: 'AwaitingLrCopy', label: 'Awaiting LR Copy', count: (bomStore || []).filter(b => b && b.status === 'Dispatched - Awaiting LR Copy' && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || (b.fullyCompleted && b.status !== 'Dispatched - Awaiting LR Copy') || b.status === 'Fully Dispatched & Delivered') && !b.cancelled).length, bg: '#F1F5F9', fg: '#475569' },
                 { id: 'Cancelled', label: 'Cancelled', count: (bomStore || []).filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
               ],
               headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
@@ -322,7 +323,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 const totalItemsCount = (b.dispatchPacking || b.items || []).length;
                 const isFullyPacked = totalItemsCount > 0 && packedCount === totalItemsCount;
                 const isPartiallyPacked = packedCount > 0 && packedCount < totalItemsCount;
-                const isClosed = b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered';
+                const isAwaitingLr = b.status === 'Dispatched - Awaiting LR Copy';
+                const isClosed = (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || (b.fullyCompleted && !isAwaitingLr) || b.status === 'Fully Dispatched & Delivered') && !isAwaitingLr;
                 const isCancelled = Boolean(b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored');
 
                 let statusLabel = 'PENDING DISPATCH PACKING';
@@ -337,6 +339,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   stFg = '#DC2626';
                   stBorder = '1px solid #FECACA';
                   tabGroup = 'Cancelled';
+                } else if (isAwaitingLr) {
+                  statusLabel = 'AWAITING LR COPY';
+                  stBg = '#FFFBEB';
+                  stFg = '#B45309';
+                  stBorder = '1px solid #FCD34D';
+                  tabGroup = 'AwaitingLrCopy';
                 } else if (isClosed) {
                   statusLabel = 'COMPLETED & DISPATCHED';
                   stBg = '#DCFCE7';

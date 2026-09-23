@@ -1281,7 +1281,7 @@ export default function ProductionViewsEngine(props) {
                 } else if (activeTab === 'Dispatch Orders') {
                   if (isCancelledRow) {
                     setDispatchPackingModal({ ...targetRow, isViewOnly: true, isReadOnly: true });
-                  } else if (targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed || targetRow.stockDeducted) {
+                  } else if (targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed || targetRow.stockDeducted || targetRow.status === 'Dispatched - Awaiting LR Copy' || targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Awaiting LR Copy') {
                     setVehicleLoadingModal(targetRow);
                   } else {
                     setDispatchPackingModal(targetRow);
@@ -1329,7 +1329,11 @@ export default function ProductionViewsEngine(props) {
               setInvoiceModalActiveTab('Invoice Items');
             } else if (activeTab === 'Dispatch Orders') {
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
-              setDispatchPackingModal(isRecCancelled ? { ...rec, isViewOnly: true, isReadOnly: true } : rec);
+              if (rec.status === 'Dispatched - Awaiting LR Copy' || rec.status === 'AWAITING LR COPY' || rec.status === 'Awaiting Vehicle Loading & Dispatch' || rec.invoiceConfirmed) {
+                setVehicleLoadingModal(rec);
+              } else {
+                setDispatchPackingModal(isRecCancelled ? { ...rec, isViewOnly: true, isReadOnly: true } : rec);
+              }
             } else if (activeTab === 'Accounts Verification') {
               setAccountsVerificationModal(rec);
               setIsAccountsViewOnly(true);

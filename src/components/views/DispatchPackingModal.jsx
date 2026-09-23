@@ -156,13 +156,13 @@ export default function DispatchPackingModal({
     }
     const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
     const nextStatus = allItemsPacked
-      ? (isWhileDispatch ? 'Packed & Awaiting Dispatch Payment' : 'Packed & Ready for Dispatch')
+      ? 'Packed & Awaiting Accounts Verification'
       : 'Partially Packed';
     const needsSalesPaymentNotification = allItemsPacked && isWhileDispatch;
 
     const accountsVerificationData = (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
       ? dispatchPackingModal.accountsVerification
-      : (allItemsPacked ? { paymentStatus: isWhileDispatch ? 'Awaiting Sales Payment Slip' : null, hardCopyReceived: false, softCopyReceived: false, verified: false } : (dispatchPackingModal.accountsVerification || {}));
+      : (allItemsPacked ? { paymentStatus: isWhileDispatch ? 'Awaiting Sales Payment Slip' : null, hardCopyReceived: false, softCopyReceived: false, verified: false, readyForAccounts: true, packedAt: new Date().toISOString() } : (dispatchPackingModal.accountsVerification || {}));
 
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
     const cleanMedia = rawMedia ? {
@@ -757,12 +757,17 @@ export default function DispatchPackingModal({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Camera size={18} style={{ color: '#0E7490' }} />
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
-                Packed Items Media Verification (Photos & Videos)
-              </h4>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                  Packed Items & Small Accessories Proof Media (Photos & Videos)
+                </h4>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  Capture or upload clear photos of packed boxes and small accessories (clamps, fasteners, nuts, bolts, brackets) before sending to Accounts.
+                </p>
+              </div>
             </div>
             <span style={{ fontSize: '11px', color: '#64748B' }}>
-              Stored securely in Businz Media Cache & Cloud Sync
+              Stored securely in Businz Cloud & Media Storage
             </span>
           </div>
 
@@ -1105,7 +1110,7 @@ export default function DispatchPackingModal({
                 }}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Save & Confirm Packing (Send to Accounts)' : 'Save Packing Progress')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Confirm Packing & Send to Accounts Verification' : 'Save Packing Progress')}
               </button>
             )}
           </div>

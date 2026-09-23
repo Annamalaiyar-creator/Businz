@@ -14,7 +14,23 @@
     "estimatedKw": 100,
     "category": "Aluminium Mounting Structures",
     "notes": "Inbound WhatsApp conversation automatically converted to CRM lead.",
-    "createdAt": "2026-09-09T05:27:10.831Z"
+    "createdAt": "2026-09-09T05:27:10.831Z",
+    "timeline": [
+      {
+        "id": "TL-1790160628847",
+        "type": "status_change",
+        "title": "Status: Contacted",
+        "description": "Stage manually updated to \"Contacted\"",
+        "timestamp": "2026-09-23T10:50:28.847Z"
+      },
+      {
+        "id": "TL-1790160626729",
+        "type": "status_change",
+        "title": "Status: New Lead",
+        "description": "Stage manually updated to \"New Lead\"",
+        "timestamp": "2026-09-23T10:50:26.729Z"
+      }
+    ]
   },
   {
     "id": "LEAD-2026-7895",

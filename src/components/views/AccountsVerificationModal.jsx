@@ -936,7 +936,7 @@ export default function AccountsVerificationModal({
               }}
             >
               <CheckCircle style={{ width: '15px', height: '15px' }} />
-              Complete Verification & Generate Invoice
+              Approve Payment & Send to Invoice Team
             </button>
           </div>
         </div>

@@ -722,7 +722,7 @@ export default function InvoiceDetailModal({
                 boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
               }}
             >
-              <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} /> Confirm Invoice
+              <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} /> Confirm Invoice & Send to Dispatch Loading
             </button>
           )}
         </div>
