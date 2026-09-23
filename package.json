@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
-    "build": "vite build",
+    "build": "vite build && cp -r dist/assets/* assets/",
     "lint": "oxlint",
     "preview": "vite preview",
     "backup": "node scripts/backup.js"
