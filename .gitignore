@@ -44,3 +44,4 @@ backup_recovered/
 # Deployment & Mobile builds
 .vercel/
 android/
+businz_mobile/
