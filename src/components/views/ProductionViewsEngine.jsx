@@ -1281,7 +1281,7 @@ export default function ProductionViewsEngine(props) {
                 } else if (activeTab === 'Dispatch Orders') {
                   if (isCancelledRow) {
                     setDispatchPackingModal({ ...targetRow, isViewOnly: true, isReadOnly: true });
-                  } else if (targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed || targetRow.stockDeducted || targetRow.status === 'Dispatched - Awaiting LR Copy' || targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Awaiting LR Copy') {
+                  } else if (targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed || targetRow.status === 'Dispatched - Awaiting LR Copy' || targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Awaiting LR Copy') {
                     setVehicleLoadingModal(targetRow);
                   } else {
                     setDispatchPackingModal(targetRow);
