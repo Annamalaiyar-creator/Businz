@@ -1404,6 +1404,9 @@ export default function ProductionViewsEngine(props) {
           vehicleLoadingModal={vehicleLoadingModal}
           onClose={() => setVehicleLoadingModal(null)}
           setBomStore={setBomStore}
+          setCompletedBomSummaryModal={setCompletedBomSummaryModal}
+          setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+          setInvoiceList={setInvoiceList}
         />
       )}
 

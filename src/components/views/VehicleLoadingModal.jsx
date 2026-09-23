@@ -59,7 +59,9 @@ export default function VehicleLoadingModal({
   vehicleLoadingModal,
   onClose,
   setBomStore,
-  setActiveMediaPreviewModal = () => {}
+  setActiveMediaPreviewModal = () => {},
+  setCompletedBomSummaryModal = () => {},
+  setInvoiceList = () => {}
 }) {
   const [vehicleLoadingData, setVehicleLoadingData] = useState({
     vehicleNo: "",
@@ -69,6 +71,7 @@ export default function VehicleLoadingModal({
     lrNo: "LR-881204",
     sealNo: "SL-884920"
   });
+  const [loadingMediaMode, setLoadingMediaMode] = useState('photo'); // 'photo' | 'video' | 'camera'
   const [loadingPhotos, setLoadingPhotos] = useState([]);
   const [loadingVideos, setLoadingVideos] = useState([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
