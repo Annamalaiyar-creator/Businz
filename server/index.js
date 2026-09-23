@@ -2800,30 +2800,53 @@ app.get('/api/workorders', async (req, res) => {
   res.json({ success: true, count: localOrders.length, workOrders: localOrders });
 });
 
-// Endpoint to CREATE / ISSUE a Production Work Order
+// Endpoint to CREATE / ISSUE / UPDATE a Production Work Order
 app.post('/api/workorders', async (req, res) => {
   try {
     const woId = req.body.workOrderNo || req.body.id || `WO-${Date.now().toString().slice(-4)}`;
-    const newOrder = {
-      id: woId,
-      workOrderNo: woId,
-      productName: req.body.productName || 'Solar Mounting Rail',
-      plannedQty: parseInt(req.body.plannedQty) || 500,
-      completedQty: parseInt(req.body.completedQty) || 0,
-      delayDays: 0,
-      delayReason: req.body.delayReason || 'Normal Production',
-      status: req.body.status || 'In Progress',
-      statusColor: '#EA580C',
-      rawMaterial: req.body.rawMaterial || 'Raw Alu Coil',
-      customer: req.body.customer || 'Solar Client',
-      targetDate: req.body.targetDate || new Date().toISOString().split('T')[0]
-    };
-
     const currentOrders = loadLocalWorkOrders();
-    const updated = [newOrder, ...currentOrders];
-    saveLocalWorkOrders(updated);
+    const existingIndex = currentOrders.findIndex(o => (o.workOrderNo && o.workOrderNo === woId) || (o.id && o.id === woId));
 
-    res.json({ success: true, message: 'Production Work Order Created and Saved!', workOrder: newOrder });
+    let savedOrder;
+    let updated;
+
+    if (existingIndex !== -1) {
+      // Update existing work order
+      savedOrder = {
+        ...currentOrders[existingIndex],
+        ...req.body,
+        id: woId,
+        workOrderNo: woId,
+        plannedQty: req.body.plannedQty !== undefined ? (parseInt(req.body.plannedQty) || 0) : currentOrders[existingIndex].plannedQty,
+        completedQty: req.body.completedQty !== undefined ? (parseInt(req.body.completedQty) || 0) : (currentOrders[existingIndex].completedQty || 0),
+      };
+      updated = [...currentOrders];
+      updated[existingIndex] = savedOrder;
+    } else {
+      // Create new work order
+      savedOrder = {
+        id: woId,
+        workOrderNo: woId,
+        productName: req.body.productName || 'Solar Mounting Rail',
+        plannedQty: parseInt(req.body.plannedQty) || 500,
+        completedQty: parseInt(req.body.completedQty) || 0,
+        delayDays: 0,
+        delayReason: req.body.delayReason || 'Normal Production',
+        status: req.body.status || 'In Progress',
+        statusColor: '#EA580C',
+        rawMaterial: req.body.rawMaterial || 'Raw Alu Coil',
+        customer: req.body.customer || 'Solar Client',
+        targetDate: req.body.targetDate || new Date().toISOString().split('T')[0],
+        currentStage: req.body.currentStage || req.body.stage || 'Raw Material Prep',
+        stage: req.body.stage || req.body.currentStage || 'Raw Material Prep',
+        bomCode: req.body.bomCode || '',
+        ...req.body
+      };
+      updated = [savedOrder, ...currentOrders];
+    }
+
+    saveLocalWorkOrders(updated);
+    res.json({ success: true, message: 'Production Work Order Saved!', workOrder: savedOrder });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

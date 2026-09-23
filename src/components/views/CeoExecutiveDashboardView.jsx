@@ -47,6 +47,17 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
   useEffect(() => {
     loadData();
+    const handleSync = () => loadData();
+    window.addEventListener('controlroom_storage_update', handleSync);
+    window.addEventListener('controlroom_bom_store_updated', handleSync);
+    window.addEventListener('controlroom_po_updated', handleSync);
+    window.addEventListener('controlroom_pi_updated', handleSync);
+    return () => {
+      window.removeEventListener('controlroom_storage_update', handleSync);
+      window.removeEventListener('controlroom_bom_store_updated', handleSync);
+      window.removeEventListener('controlroom_po_updated', handleSync);
+      window.removeEventListener('controlroom_pi_updated', handleSync);
+    };
   }, []);
 
   const handleRefresh = async () => {
