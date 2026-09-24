@@ -745,15 +745,34 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     // Single Coordinated Authoritative Server & Cloud Database Inventory Sync
     const loadAuthoritativeInventory = async () => {
-      if (!materials || materials.length === 0) {
+      const hasLocalStock = (materials && materials.length > 0) || (() => {
+        try {
+          const s = localStorage.getItem('controlroom_raw_materials_store');
+          return s && JSON.parse(s).length > 0;
+        } catch (_) { return false; }
+      })();
+
+      if (!hasLocalStock) {
         setIsInventoryLoading(true);
       }
       try {
-        const [grns, bData, rawMats] = await Promise.all([
-          fetch('/api/grns').then(res => res.json()).catch(() => []),
-          fetch('/api/boms').then(res => res.json()).catch(() => fetchCloudStore('BOM_STORE', []).catch(() => [])),
-          fetch('/api/store/RAW_MATERIALS_STORE').then(res => res.json()).then(j => j?.data || []).catch(() => fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []))
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        const fetchWithTimeout = (url) => 
+          fetch(url, { signal: controller.signal })
+            .then(res => res.json())
+            .catch(() => null);
+
+        const [grns, bDataRes, rawMatsRes] = await Promise.all([
+          fetchWithTimeout('/api/grns').catch(() => []),
+          fetchWithTimeout('/api/boms').catch(() => null),
+          fetchWithTimeout('/api/store/RAW_MATERIALS_STORE').catch(() => null)
         ]);
+        clearTimeout(timeoutId);
+
+        const bData = Array.isArray(bDataRes?.data) ? bDataRes.data : (Array.isArray(bDataRes) ? bDataRes : []);
+        const rawMats = Array.isArray(rawMatsRes?.data) ? rawMatsRes.data : (Array.isArray(rawMatsRes) ? rawMatsRes : []);
 
         if (Array.isArray(grns) && grns.length > 0) {
           try {
@@ -3328,7 +3347,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               </tr>
             </thead>
             <tbody>
-              {(itemsLoading || isInventoryLoading) ? (
+              {((itemsLoading || isInventoryLoading) && (!materials || materials.length === 0)) ? (
                 <>
                   <tr>
                     <td colSpan={10} style={{ padding: '24px 16px', textAlign: 'center', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1' }}>

@@ -650,12 +650,20 @@ const toDatabaseBomRowServer = (item) => {
 };
 
 const loadDatabaseBoms = async () => {
+  // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
+  if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+    return supabaseMemoryStore.bom_store;
+  }
+
   try {
-    const { data, error } = await supabase
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 1500));
+    const fetchPromise = supabase
       .from('bom_orders')
       .select('*')
       .neq('customer_name', 'Customer')
       .order('created_at', { ascending: false });
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
@@ -733,13 +741,38 @@ const getDatabaseStore = async (key) => {
   if (cleanKey === 'bom_store' || cleanKey === 'boms') {
     return await loadDatabaseBoms();
   }
+
+  // 1. Fast sub-millisecond return from authoritative memory cache if populated
+  if (supabaseMemoryStore[cleanKey] && (Array.isArray(supabaseMemoryStore[cleanKey]) ? supabaseMemoryStore[cleanKey].length > 0 : Object.keys(supabaseMemoryStore[cleanKey]).length > 0)) {
+    return supabaseMemoryStore[cleanKey];
+  }
+  if (supabaseMemoryStore[key] && (Array.isArray(supabaseMemoryStore[key]) ? supabaseMemoryStore[key].length > 0 : Object.keys(supabaseMemoryStore[key]).length > 0)) {
+    return supabaseMemoryStore[key];
+  }
+
+  // 2. Fast return from disk store file if available
+  const initialDiskPath = getStoreFilePath(cleanKey + '.json');
+  if (fs.existsSync(initialDiskPath)) {
+    try {
+      const diskData = JSON.parse(fs.readFileSync(initialDiskPath, 'utf8'));
+      if (diskData && (Array.isArray(diskData) ? diskData.length > 0 : Object.keys(diskData).length > 0)) {
+        supabaseMemoryStore[cleanKey] = diskData;
+        supabaseMemoryStore[key] = diskData;
+        return diskData;
+      }
+    } catch (_) {}
+  }
+
   const employeeKey = key.toUpperCase();
   try {
-    const { data: records, error } = await supabase
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase store fetch timeout')), 1500));
+    const fetchPromise = supabase
       .from('leaves')
       .select('id, reason, dates, duration')
       .eq('employee', employeeKey)
       .order('id', { ascending: false });
+
+    const { data: records, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && records && records.length > 0) {
       const primaryRecord = records[0];
