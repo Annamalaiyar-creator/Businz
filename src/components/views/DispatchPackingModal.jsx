@@ -169,29 +169,47 @@ export default function DispatchPackingModal({
   const progressPercent = totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0;
   const isPartial = packedItemsCount > 0 && !allItemsPacked;
 
-  const savePackingData = () => {
+  const savePackingData = (isPartialSave = false) => {
     if (uploadingCount > 0) {
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
       return;
     }
-    // User requested: "Confirm Packing and send to accounts verification this is the big button so make it as simple Packing confirmed if i click that it self it will move the BOM to the Accounts Verification."
-    const confirmedItems = (itemsToPack && itemsToPack.length > 0)
-      ? itemsToPack.map(it => ({ ...it, packed: true, qty: it.qty || it.bomQty || 1 }))
-      : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
+
+    let confirmedItems;
+    let nextStatus;
+    let isFullyConfirmed = false;
+
+    if (isPartialSave) {
+      // User explicitly saving partial packing progress without sending to Accounts yet
+      confirmedItems = itemsToPack;
+      nextStatus = 'Partially Packed';
+      isFullyConfirmed = false;
+    } else {
+      // User confirmed packing: auto-confirms all items and moves to Accounts Verification
+      confirmedItems = (itemsToPack && itemsToPack.length > 0)
+        ? itemsToPack.map(it => ({ ...it, packed: true, qty: it.qty || it.bomQty || 1 }))
+        : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
+      nextStatus = 'Packed & Awaiting Accounts Verification';
+      isFullyConfirmed = true;
+    }
 
     const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
-    const nextStatus = 'Packed & Awaiting Accounts Verification';
-    const needsSalesPaymentNotification = isWhileDispatch;
+    const needsSalesPaymentNotification = isFullyConfirmed && isWhileDispatch;
 
-    const accountsVerificationData = (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
-      ? dispatchPackingModal.accountsVerification
+    const accountsVerificationData = isFullyConfirmed
+      ? ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
+          ? dispatchPackingModal.accountsVerification
+          : {
+              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
+              hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
+              softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
+              verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
+              readyForAccounts: true,
+              packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
+            })
       : {
-          paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
-          hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
-          softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
-          verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
-          readyForAccounts: true,
-          packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
+          ...(dispatchPackingModal.accountsVerification || {}),
+          readyForAccounts: false
         };
 
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
@@ -305,9 +323,9 @@ export default function DispatchPackingModal({
 
     addLiveNotification({
       id: `notif-pack-${targetBomCode}-${Date.now()}`,
-      title: allItemsPacked ? 'BOM Packing Verified' : 'BOM Packing Updated',
-      message: `BOM Order ${targetBomCode} for ${resolvedCustomer} is ${allItemsPacked ? '100% Packed & Ready' : 'Partially Packed'}. Status: ${nextStatus}`,
-      type: allItemsPacked ? 'success' : 'info',
+      title: isFullyConfirmed ? 'BOM Packing Verified' : 'BOM Packing Updated',
+      message: `BOM Order ${targetBomCode} for ${resolvedCustomer} is ${isFullyConfirmed ? '100% Packed & Ready' : 'Partially Packed'}. Status: ${nextStatus}`,
+      type: isFullyConfirmed ? 'success' : 'info',
       category: 'Dispatch',
       time: 'Just now',
       targetTab: 'BOM Orders',
@@ -321,7 +339,7 @@ export default function DispatchPackingModal({
       }
     });
 
-    if (allItemsPacked) {
+    if (isFullyConfirmed) {
       // Trigger Real-time Workflow Notifications with Porter order alert sound & voice for Sales & Accounts
       notifyBomPackedAndSentToAccounts({
         bomCode: targetBomCode,
@@ -996,9 +1014,30 @@ export default function DispatchPackingModal({
             >
               Close
             </button>
+            {!isPackedAndReady && !isCancelled && isPartial && (
+              <button
+                type="button"
+                onClick={() => savePackingData(true)}
+                disabled={uploadingCount > 0}
+                style={{
+                  border: '1px solid #CBD5E1',
+                  background: '#F8FAFC',
+                  color: '#1E293B', height: '40px', padding: '0 18px',
+                  borderRadius: '10px', fontSize: '13px', fontWeight: '700',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Save style={{ width: '15px', height: '15px', color: '#2563EB' }} />
+                Save Partial Progress
+              </button>
+            )}
             {!isPackedAndReady && !isCancelled && (
               <button
-                onClick={savePackingData}
+                type="button"
+                onClick={() => savePackingData(false)}
                 disabled={uploadingCount > 0}
                 style={{
                   border: 'none',
