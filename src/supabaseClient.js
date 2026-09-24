@@ -12,4 +12,50 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error('Supabase environment configuration is missing.');
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const rawSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Bulletproof client-level firewall interceptor on bom_orders to block all mock/dummy Customer records
+const rawFrom = rawSupabase.from.bind(rawSupabase);
+rawSupabase.from = (table) => {
+  const query = rawFrom(table);
+  if (table === 'bom_orders') {
+    const rawUpsert = query.upsert.bind(query);
+    query.upsert = (values, options) => {
+      if (Array.isArray(values)) {
+        const clean = values.filter(v => v && !((v.customer_name === 'Customer' || v.customerName === 'Customer') && !v.source_pi_no && !v.sourcePiNo));
+        if (clean.length === 0) return Promise.resolve({ data: [], error: null });
+        return rawUpsert(clean, options);
+      } else if (values && typeof values === 'object') {
+        if ((values.customer_name === 'Customer' || values.customerName === 'Customer') && !values.source_pi_no && !values.sourcePiNo) {
+          return Promise.resolve({ data: null, error: null });
+        }
+        return rawUpsert(values, options);
+      }
+      return rawUpsert(values, options);
+    };
+
+    const rawInsert = query.insert.bind(query);
+    query.insert = (values, options) => {
+      if (Array.isArray(values)) {
+        const clean = values.filter(v => v && !((v.customer_name === 'Customer' || v.customerName === 'Customer') && !v.source_pi_no && !v.sourcePiNo));
+        if (clean.length === 0) return Promise.resolve({ data: [], error: null });
+        return rawInsert(clean, options);
+      } else if (values && typeof values === 'object') {
+        if ((values.customer_name === 'Customer' || values.customerName === 'Customer') && !values.source_pi_no && !values.sourcePiNo) {
+          return Promise.resolve({ data: null, error: null });
+        }
+        return rawInsert(values, options);
+      }
+      return rawInsert(values, options);
+    };
+
+    const rawSelect = query.select.bind(query);
+    query.select = (...args) => {
+      const selectBuilder = rawSelect(...args);
+      return selectBuilder.neq('customer_name', 'Customer');
+    };
+  }
+  return query;
+};
+
+export const supabase = rawSupabase;
