@@ -309,7 +309,7 @@ export default function ProductionTableView({
                         <td style={{ padding: '12px 14px', textAlign: 'left' }}>
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
                             <StatusBadge status={row.status} size="sm" />
-                            {row.packingProgressText && (
+                            {activeTab === 'Dispatch Orders' && row.packingProgressText && (
                               <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', paddingLeft: '2px', whiteSpace: 'nowrap' }}>
                                 {row.packingProgressText}
                               </span>

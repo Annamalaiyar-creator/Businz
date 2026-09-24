@@ -278,6 +278,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     c4: paymentDateFormatted,
                     c5: totalAmtFormatted,
                     c6: payStatus,
+                    packingProgressText: null,
                     status: statusText,
                     stBg: stBg,
                     stFg: stFg,
