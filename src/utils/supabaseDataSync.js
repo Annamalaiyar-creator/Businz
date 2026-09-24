@@ -1349,60 +1349,77 @@ export function saveCloudStore(storeKey, storeData) {
 }
 
 /**
- * Automatically detects and resolves any duplicate BOM code collisions.
- * Preserves both orders by renumbering the conflicting order to the next available sequence code.
+ * Deduplicates BOM list by unique bomCode and unique sourcePiNo (Strict 1-to-1 PI Rule).
+ * Merges duplicate entries in place without fabricating clone BOM codes.
  */
 export function resolveBomCollisions(bomList, sequenceMax = 658) {
   if (!Array.isArray(bomList)) return { list: [], maxSeq: sequenceMax };
   let maxSeq = Math.max(sequenceMax, 658);
-  
-  bomList.forEach(b => {
-    const m = String(b?.bomCode || b?.code || b?.id || '').match(/^BOM-(\d+)/i);
-    if (m) {
-      const val = parseInt(m[1], 10);
-      if (Number.isFinite(val) && val > maxSeq) maxSeq = val;
-    }
-  });
+
+  const getWorkflowRank = (b) => {
+    if (!b) return 0;
+    const s = String(b.status || '').toLowerCase();
+    if (s.includes('invoice confirmed') || s.includes('closed') || s.includes('completed')) return 60;
+    if (s.includes('passed to invoice') || s.includes('accounts verified')) return 50;
+    if (s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 40;
+    if (s.includes('packed') || s.includes('awaiting accounts')) return 30;
+    if (s.includes('partially packed')) return 20;
+    if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production')) return 10;
+    return 1;
+  };
 
   const seenCodes = new Map();
+  const seenPiNos = new Map();
   const resolvedList = [];
 
   for (const b of bomList) {
     if (!b) continue;
     const code = String(b.bomCode || b.code || b.id || '').trim();
-    if (!code || code === 'BOM-PENDING') {
-      maxSeq += 1;
-      const newCode = `BOM-${String(maxSeq).padStart(3, '0')}`;
-      resolvedList.push({ ...b, id: newCode, bomCode: newCode, code: newCode });
+    if (!code || code === 'BOM-PENDING' || code === 'BOM-AUTO') {
       continue;
     }
 
-    if (!seenCodes.has(code)) {
-      seenCodes.set(code, b);
-      resolvedList.push(b);
-    } else {
-      const existing = seenCodes.get(code);
-      const bCust = (b.companyName || b.customerName || '').trim().toLowerCase();
-      const exCust = (existing.companyName || existing.customerName || '').trim().toLowerCase();
-      const bSales = (b.salesPerson || '').trim().toLowerCase();
-      const exSales = (existing.salesPerson || '').trim().toLowerCase();
-      const bDate = b.salesConfirmedAt || b.createdAt || b.date;
-      const exDate = existing.salesConfirmedAt || existing.createdAt || existing.date;
+    const piNo = String(b.sourcePiNo || b.source_pi_no || b.piNo || '').trim().toLowerCase();
 
-      const isExactSame = (bCust && exCust && bCust === exCust && bSales === exSales) || (bDate && exDate && bDate === exDate);
-      if (isExactSame) {
-        const idx = resolvedList.findIndex(r => (r.bomCode || r.code || r.id) === code);
-        if (idx !== -1) {
-          resolvedList[idx] = { ...resolvedList[idx], ...b };
-        }
+    // 1. If code was already seen, merge in place (preferring higher workflow progression)
+    if (seenCodes.has(code)) {
+      const idx = seenCodes.get(code);
+      const existing = resolvedList[idx];
+      const existingRank = getWorkflowRank(existing);
+      const newRank = getWorkflowRank(b);
+      resolvedList[idx] = newRank >= existingRank ? { ...existing, ...b } : { ...b, ...existing };
+      continue;
+    }
+
+    // 2. Strict 1-to-1 PI to BOM Rule: If this source PI is already represented, merge/keep the authoritative one
+    if (piNo && piNo !== 'null' && piNo !== 'undefined' && seenPiNos.has(piNo)) {
+      const idx = seenPiNos.get(piNo);
+      const existing = resolvedList[idx];
+      const existingRank = getWorkflowRank(existing);
+      const newRank = getWorkflowRank(b);
+
+      if (newRank > existingRank) {
+        seenCodes.delete(String(existing.bomCode || existing.code || existing.id || '').trim());
+        resolvedList[idx] = { ...existing, ...b };
+        seenCodes.set(code, idx);
       } else {
-        maxSeq += 1;
-        const newCode = `BOM-${String(maxSeq).padStart(3, '0')}`;
-        console.warn(`[Collision Guard] Distinct order for '${b.companyName || b.customerName}' renumbered from ${code} to ${newCode}`);
-        const renumbered = { ...b, id: newCode, bomCode: newCode, code: newCode };
-        resolvedList.push(renumbered);
-        seenCodes.set(newCode, renumbered);
+        resolvedList[idx] = { ...b, ...existing };
       }
+      continue;
+    }
+
+    // New unique BOM
+    const newIdx = resolvedList.length;
+    resolvedList.push(b);
+    seenCodes.set(code, newIdx);
+    if (piNo && piNo !== 'null' && piNo !== 'undefined') {
+      seenPiNos.set(piNo, newIdx);
+    }
+
+    const m = code.match(/^BOM-(\d+)/i);
+    if (m) {
+      const val = parseInt(m[1], 10);
+      if (Number.isFinite(val) && val > maxSeq) maxSeq = val;
     }
   }
 

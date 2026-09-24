@@ -4683,10 +4683,20 @@ app.post('/api/boms', async (req, res) => {
         let finalCode = incomingCode;
         let shouldAssignNewCode = false;
 
-        const shouldUpdate = Boolean(isUpdate || req.body.isUpdate || req.body.isEdit || bom.isUpdate || (alreadyExists && !isNew));
+        const incomingPi = String(bom.sourcePiNo || bom.source_pi_no || bom.piNo || '').trim().toLowerCase();
+        let existingPiBom = null;
+        if (incomingPi && incomingPi !== 'null' && incomingPi !== 'undefined') {
+          existingPiBom = Array.from(map.values()).find(item => {
+            const p = String(item.sourcePiNo || item.source_pi_no || item.piNo || '').trim().toLowerCase();
+            return p === incomingPi;
+          });
+        }
 
-        // If client sent a valid code (e.g. BOM-663 or custom ID) that doesn't collide with a different existing order, honor it directly!
-        if (hasValidCode && (!alreadyExists || shouldUpdate)) {
+        // Strict 1-to-1 PI Rule: If BOM for this PI exists, always update that record instead of assigning a new code!
+        if (existingPiBom) {
+          finalCode = existingPiBom.bomCode || existingPiBom.code || existingPiBom.id;
+          shouldAssignNewCode = false;
+        } else if (hasValidCode && (!alreadyExists || shouldUpdate)) {
           finalCode = incomingCode;
           const numMatch = incomingCode.match(/^BOM-(\d+)$/i);
           if (numMatch) {
