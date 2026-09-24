@@ -840,6 +840,7 @@ export default function ProductionViewsEngine(props) {
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
                 setPreviewDocModal={setPreviewDocModal}
+                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
               />
             );
           }
@@ -1278,7 +1279,7 @@ export default function ProductionViewsEngine(props) {
                 } else if (activeTab === 'Invoice Management') {
                   setViewingInvoiceModal(targetRow);
                   setInvoiceModalActiveTab('Invoice Items');
-                  setIsEditingInvoice(!isCancelledRow);
+                  setIsEditingInvoice(false);
                   setInvoiceEditForm({
                     invNo: targetRow.invNo || targetRow.code || '',
                     customerName: targetRow.customerName || targetRow.vendor || 'Customer',
