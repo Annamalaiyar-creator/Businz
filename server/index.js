@@ -4141,6 +4141,75 @@ app.get('/api/zoho/next-po-number', async (req, res) => {
   res.json({ nextPoNo });
 });
 
+// Returns next sequential Tax Invoice number matching Zoho Books sequence (INV-0000XX)
+app.get('/api/zoho/next-invoice-number', async (req, res) => {
+  let maxNum = 11;
+
+  if (zohoSession.connected) {
+    try {
+      const accessToken = await getZohoAccessToken();
+      const data = await fetchZohoInvoices(accessToken);
+      if (data && data.invoices && Array.isArray(data.invoices)) {
+        data.invoices.forEach(i => {
+          const str = String(i.invoice_number || '');
+          const match = str.match(/^INV-(\d+)/i);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (val > maxNum && val < 2000) {
+              maxNum = val;
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching next Invoice number from Zoho:', err);
+    }
+  }
+
+  // Also scan local invoice_store.json
+  try {
+    const invStorePath = getStoreFilePath('invoice_store.json');
+    if (fs.existsSync(invStorePath)) {
+      const localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+      if (Array.isArray(localInvs)) {
+        localInvs.forEach(i => {
+          const str = String(i.invNo || i.invoiceNo || i.code || '');
+          const match = str.match(/^INV-(\d+)/i);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (val > maxNum && val < 2000) {
+              maxNum = val;
+            }
+          }
+        });
+      }
+    }
+  } catch (_) {}
+
+  // Also scan bom_store.json for any BOM that already has an assigned invoiceNo
+  try {
+    const bomStorePath = getStoreFilePath('bom_store.json');
+    if (fs.existsSync(bomStorePath)) {
+      const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
+      if (Array.isArray(localBoms)) {
+        localBoms.forEach(b => {
+          const str = String(b.invoiceNo || '');
+          const match = str.match(/^INV-(\d+)/i);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (val > maxNum && val < 2000) {
+              maxNum = val;
+            }
+          }
+        });
+      }
+    }
+  } catch (_) {}
+
+  const nextInvNo = 'INV-' + String(maxNum + 1).padStart(6, '0');
+  res.json({ nextInvNo, nextNum: maxNum + 1 });
+});
+
 let serverBomSequenceCounter = null;
 let serverBomReservationLock = Promise.resolve();
 
@@ -5570,8 +5639,15 @@ app.post('/api/zoho/invoices', async (req, res) => {
       description: `Preset Structure Package: ${presetName}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
     }];
 
+    const assignedInvNo = (req.body.invNo && req.body.invNo !== 'Pending Confirmation')
+      ? req.body.invNo
+      : (req.body.invoiceNo && req.body.invoiceNo !== 'Pending Confirmation')
+        ? req.body.invoiceNo
+        : undefined;
+
     const payload = {
       customer_id: customerId,
+      ...(assignedInvNo ? { invoice_number: assignedInvNo } : {}),
       date: invDateStr,
       due_date: invDateStr,
       reference_number: req.body.poNo || req.body.bomCode || undefined,
@@ -5609,7 +5685,8 @@ app.post('/api/zoho/invoices', async (req, res) => {
       ...req.body,
       id: (zohoRes?.invoice && zohoRes.invoice.invoice_id) || req.body.invNo || `INV-${Date.now()}`,
       zohoId: (zohoRes?.invoice && zohoRes.invoice.invoice_id) || undefined,
-      invNo: (zohoRes?.invoice && zohoRes.invoice.invoice_number) || req.body.invNo || `INV-${Date.now()}`,
+      invNo: (zohoRes?.invoice && zohoRes.invoice.invoice_number) || assignedInvNo || req.body.invNo || `INV-${Date.now()}`,
+      invoiceNo: (zohoRes?.invoice && zohoRes.invoice.invoice_number) || assignedInvNo || req.body.invNo || `INV-${Date.now()}`,
       status: 'Invoice Confirmed',
       pay: 'Completed & Locked',
       syncedToZoho: !!(zohoRes && (zohoRes.code === 0 || zohoRes.invoice))

@@ -1,5 +1,20 @@
 [
   {
+    "invNo": "INV-000010",
+    "bomCode": "BOM-VERIFY-001",
+    "customerName": "Paramount Industrial Supplies",
+    "vendor": "Paramount Industrial Supplies",
+    "date": "2026-09-24",
+    "invAmt": 14160,
+    "presetName": "Pre-Engineered Structure Kit Package",
+    "notes": "Live test invoice after switching to Free Plan",
+    "id": "4080449000000576001",
+    "zohoId": "4080449000000576001",
+    "status": "Invoice Confirmed",
+    "pay": "Completed & Locked",
+    "syncedToZoho": true
+  },
+  {
     "presetName": "4kW Rooftop Mounting Structure Kit",
     "invAmt": 35000,
     "vendor": "VRM Structures India Private Limited",

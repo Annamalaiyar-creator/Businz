@@ -36,8 +36,8 @@ export default function InvoiceDetailModal({
   const [showTallyModal, setShowTallyModal] = useState(false);
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
-    ? (invoiceEditForm.invNo || inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'))
-    : (inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'));
+    ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'))
+    : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'));
   const bomRefText = inv.poNo || inv.c3 || 'BOM-00007';
   const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.c2 || 'ABC Industries') : (inv.vendor || inv.c2 || 'ABC Industries');
   const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
@@ -643,6 +643,7 @@ export default function InvoiceDetailModal({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       invNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
+                      invoiceNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
                       poNo: bomRefText,
                       bomCode: bomRefText,
                       vendor: customerText,
