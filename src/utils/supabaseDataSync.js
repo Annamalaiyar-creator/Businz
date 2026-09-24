@@ -509,6 +509,10 @@ export async function deleteCloudLeadRow(leadId) {
  */
 export function toConsumerBom(row) {
   if (!row || typeof row !== 'object') return row;
+  const custName = (row.customer_name || row.customerName || row.vendor || '').trim();
+  if (custName === 'Customer' && !row.source_pi_no && !row.sourcePiNo) {
+    return null;
+  }
 
   let extraData = {};
   if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
@@ -621,6 +625,10 @@ export function toConsumerBom(row) {
  */
 export function toDatabaseBomRow(item) {
   if (!item || typeof item !== 'object') return null;
+  const cust = (item.customerName || item.customer_name || item.vendor || '').trim();
+  if (cust === 'Customer' && !item.sourcePiNo && !item.source_pi_no) {
+    return null;
+  }
 
   const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
   const bomCode = item.bomCode || item.code || id;
@@ -930,7 +938,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
       const { data: dbBoms, error: bomErr } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (!bomErr && Array.isArray(dbBoms) && dbBoms.length > 0) {
-        return dbBoms.map(b => toConsumerBom(b));
+        return dbBoms.map(b => toConsumerBom(b)).filter(Boolean);
       }
     } catch (err) {
       console.warn('[SupabaseSync] Direct BOM fetch fallback notice:', err?.message || err);
@@ -976,7 +984,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
             return json.data.map(l => toConsumerLead(l));
           }
           if (storeKey === 'bom_store' || storeKey === 'BOM_STORE') {
-            return json.data.map(b => toConsumerBom(b));
+            return json.data.map(b => toConsumerBom(b)).filter(Boolean);
           }
           return json.data;
         } else if (json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
@@ -1246,7 +1254,10 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
   if (storeKey === 'bom_store' || storeKey === 'BOM_STORE') {
     try {
       if (Array.isArray(storeData)) {
-        const rows = storeData.map(b => toDatabaseBomRow(b)).filter(Boolean);
+        const rows = storeData
+          .filter(b => b && !((b.customerName === 'Customer' || b.customer_name === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo && !b.source_pi_no))
+          .map(b => toDatabaseBomRow(b))
+          .filter(Boolean);
         if (rows.length > 0) {
           for (let i = 0; i < rows.length; i += 20) {
             const batch = rows.slice(i, i + 20);
@@ -1374,6 +1385,10 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
 
   for (const b of bomList) {
     if (!b) continue;
+    const cust = (b.customerName || b.customer_name || b.vendor || '').trim();
+    if (cust === 'Customer' && !b.sourcePiNo && !b.source_pi_no) {
+      continue;
+    }
     const code = String(b.bomCode || b.code || b.id || '').trim();
     if (!code || code === 'BOM-PENDING' || code === 'BOM-AUTO') {
       continue;

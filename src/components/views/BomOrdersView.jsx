@@ -71,6 +71,9 @@ export default function BomOrdersView(props) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const { list: resolvedList } = resolveBomCollisions(parsed, 658);
+          if (resolvedList.length !== parsed.length) {
+            localStorage.setItem('controlroom_bom_store', JSON.stringify(resolvedList.map(stripDataUrlsFromRecord)));
+          }
           return resolvedList.map(stripDataUrlsFromRecord);
         }
       }

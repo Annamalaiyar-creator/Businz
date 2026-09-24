@@ -313,7 +313,9 @@ const loadLocalLeads = () => {
 // 📦 CANONICAL BOM_ORDERS ADAPTERS & STORE (PHASE C)
 // ==========================================
 const toConsumerBomServer = (row) => {
-  if (!row || typeof row !== 'object') return row;
+  if (!row || typeof row !== 'object') return null;
+  const cName = (row.customer_name || row.customerName || row.vendor || '').trim();
+  if (cName === 'Customer' && !row.source_pi_no && !row.sourcePiNo) return null;
 
   let extraData = {};
   if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
@@ -423,6 +425,8 @@ const toConsumerBomServer = (row) => {
 
 const toDatabaseBomRowServer = (item) => {
   if (!item || typeof item !== 'object') return null;
+  const custName = (item.customerName || item.customer_name || item.vendor || '').trim();
+  if (custName === 'Customer' && !item.sourcePiNo && !item.source_pi_no) return null;
 
   const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
   const bomCode = item.bomCode || item.code || id;
@@ -650,10 +654,11 @@ const loadDatabaseBoms = async () => {
     const { data, error } = await supabase
       .from('bom_orders')
       .select('*')
+      .neq('customer_name', 'Customer')
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(r => toConsumerBomServer(r));
+      const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
       supabaseMemoryStore.bom_store = mapped;
       return mapped;
     }
@@ -4600,6 +4605,12 @@ app.post('/api/boms', async (req, res) => {
         let { bom, isNew, isUpdate } = req.body;
         if (!bom) {
           res.status(400).json({ success: false, message: 'Valid bom record required' });
+          return resolveOuter();
+        }
+
+        const cName = (bom.customerName || bom.customer_name || bom.vendor || '').trim();
+        if (cName === 'Customer' && !bom.sourcePiNo && !bom.source_pi_no) {
+          res.status(400).json({ success: false, message: 'Invalid dummy order rejected' });
           return resolveOuter();
         }
 

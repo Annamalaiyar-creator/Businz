@@ -123,7 +123,13 @@ export default function ProductionViewsEngine(props) {
   const [bomStore, setBomStore] = useState(() => {
     try {
       const local = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
-      if (Array.isArray(local) && local.length > 0) return local;
+      if (Array.isArray(local) && local.length > 0) {
+        const cleaned = local.filter(b => b && !((b.customerName === 'Customer' || b.customer_name === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo && !b.source_pi_no));
+        if (cleaned.length !== local.length) {
+          localStorage.setItem('controlroom_bom_store', JSON.stringify(cleaned));
+        }
+        return cleaned;
+      }
     } catch (_) {}
     return [];
   });
