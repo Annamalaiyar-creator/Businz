@@ -155,7 +155,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     }
   };
 
-  const [isInventoryLoading, setIsInventoryLoading] = useState(true);
+  const [isInventoryLoading, setIsInventoryLoading] = useState(false);
 
   const [materials, setMaterials] = useState(() => {
     try {
@@ -745,12 +745,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     // Single Coordinated Authoritative Server & Cloud Database Inventory Sync
     const loadAuthoritativeInventory = async () => {
-      setIsInventoryLoading(true);
+      if (!materials || materials.length === 0) {
+        setIsInventoryLoading(true);
+      }
       try {
         const [grns, bData, rawMats] = await Promise.all([
           fetch('/api/grns').then(res => res.json()).catch(() => []),
-          fetchCloudStore('BOM_STORE', []).catch(() => []),
-          fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => [])
+          fetch('/api/boms').then(res => res.json()).catch(() => fetchCloudStore('BOM_STORE', []).catch(() => [])),
+          fetch('/api/store/RAW_MATERIALS_STORE').then(res => res.json()).then(j => j?.data || []).catch(() => fetchCloudStore('RAW_MATERIALS_STORE', []).catch(() => []))
         ]);
 
         if (Array.isArray(grns) && grns.length > 0) {
@@ -850,7 +852,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const sNorm = normalizeProductName(selectedMat.name || '');
     const sFp = wordFingerprint(selectedMat.name || '');
 
-    const logs = [];
+    const transactionEvents = [];
 
     // 1. Authoritative Sales BOM Allocations & Dispatch Deductions
     try {
@@ -907,21 +909,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               if (qty > 0) {
                 const rawDate = b.salesConfirmedAt || b.createdAt || b.date;
                 let formattedDate = 'Recent Order';
+                let orderTime = 0;
                 try {
                   if (rawDate) {
                     const d = new Date(rawDate);
-                    formattedDate = !isNaN(d.getTime())
-                      ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
-                      : String(rawDate);
+                    if (!isNaN(d.getTime())) {
+                      orderTime = d.getTime();
+                      formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                    } else {
+                      formattedDate = String(rawDate);
+                    }
                   }
                 } catch (_) {}
 
-                const baseStock = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
-                const afterStock = Math.max(0, baseStock - qty);
+                const seqNum = parseInt(String(b.bomCode || b.code || b.id || '').replace(/\D/g, ''), 10) || 0;
 
-                logs.push({
+                transactionEvents.push({
                   id: `BOM-LOG-${b.bomCode || b.code || b.id}-${itCode}`,
                   timestamp: formattedDate,
+                  orderTime,
+                  seqNum,
                   type: isSentToDispatch ? 'BOM_DISPATCH' : 'BOM_RESERVATION',
                   typeName: isSentToDispatch ? 'BOM Dispatch Deduction' : 'BOM Order Allocation',
                   typeColor: isSentToDispatch ? '#DC2626' : '#D97706',
@@ -932,8 +939,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   itemName: selectedMat.name,
                   qty: -qty,
                   unit: it.uom || selectedMat.unit || 'NOS',
-                  previousStock: baseStock,
-                  newStock: isSentToDispatch ? afterStock : baseStock,
                   user: displaySalesPerson,
                   salesPerson: cleanSalesPerson || 'Sales Executive',
                   salesPersonCode: salesCode,
@@ -972,18 +977,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               if (recQty > 0) {
                 const rawDate = g.createdAt || g.grnDate || g.date;
                 let formattedDate = 'Recent Receipt';
+                let orderTime = 0;
                 try {
                   if (rawDate) {
                     const d = new Date(rawDate);
-                    formattedDate = !isNaN(d.getTime())
-                      ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
-                      : String(rawDate);
+                    if (!isNaN(d.getTime())) {
+                      orderTime = d.getTime();
+                      formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                    } else {
+                      formattedDate = String(rawDate);
+                    }
                   }
                 } catch (_) {}
 
-                logs.push({
+                const seqNum = parseInt(String(g.grnNo || g.id || '').replace(/\D/g, ''), 10) || 0;
+
+                transactionEvents.push({
                   id: `GRN-LOG-${g.grnNo || g.id}-${gCode || 'item'}`,
                   timestamp: formattedDate,
+                  orderTime,
+                  seqNum,
                   type: 'GOODS_RECEIPT',
                   typeName: 'Goods Receipt Note (GRN)',
                   typeColor: '#0E7490',
@@ -994,8 +1007,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   itemName: selectedMat.name,
                   qty: +recQty,
                   unit: git.unit || git.uom || selectedMat.unit || 'NOS',
-                  previousStock: Math.max(0, (selectedMat.stock || 0) - recQty),
-                  newStock: selectedMat.stock,
                   user: g.inspectedBy || g.verifiedBy || g.receivedBy || 'Store In-Charge',
                   role: 'Warehouse Receiving',
                   reason: `Inwarded ${(Number(recQty) || 0).toLocaleString()} ${git.unit || git.uom || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendor || g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
@@ -1016,9 +1027,19 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const eCode = String(entry.itemCode || '').toUpperCase().trim();
         const eName = String(entry.itemName || '').toLowerCase().trim();
         if (eCode === sCode.toUpperCase() || eName === sName) {
-          logs.push({
+          const rawDate = entry.dateTime || entry.timestamp;
+          let orderTime = 0;
+          if (rawDate) {
+            const d = new Date(rawDate);
+            if (!isNaN(d.getTime())) orderTime = d.getTime();
+          }
+          const seqNum = parseInt(String(entry.refNo || entry.id || '').replace(/\D/g, ''), 10) || 0;
+
+          transactionEvents.push({
             id: entry.id || `TX-${Date.now()}`,
             timestamp: entry.dateTime || entry.timestamp || 'Production Log',
+            orderTime,
+            seqNum,
             type: entry.type || 'PRODUCTION_LOG',
             typeName: entry.type === 'PRODUCTION_RECEIPT' ? 'Production Output Inward' : (entry.type === 'PRODUCTION_CONSUMPTION' ? 'Raw Material Consumption' : (entry.type === 'OPENING_STOCK' ? 'Opening Stock Balance' : 'Inventory Transaction')),
             typeColor: entry.type === 'PRODUCTION_RECEIPT' ? '#16A34A' : (entry.type === 'OPENING_STOCK' ? '#2563EB' : '#4F46E5'),
@@ -1029,8 +1050,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             itemName: selectedMat.name,
             qty: entry.direction === 'IN' ? +(entry.qty || 0) : -(entry.qty || 0),
             unit: entry.unit || selectedMat.unit || 'NOS',
-            previousStock: entry.previousStock !== undefined ? entry.previousStock : (entry.type === 'OPENING_STOCK' ? 0 : undefined),
-            newStock: entry.newStock !== undefined ? entry.newStock : (entry.type === 'OPENING_STOCK' ? (entry.qty || 0) : undefined),
             user: entry.user || 'Production Head',
             role: entry.department || 'Production & Quality',
             reason: entry.remarks || `Production operation entry for ${selectedMat.name}.`,
@@ -1041,9 +1060,32 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       });
     } catch (_) {}
 
-    // 4. Initial Physical Stock Baseline Setup
-    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : 0) || 0);
-    logs.push({
+    // Sort transactions chronologically (oldest first)
+    transactionEvents.sort((a, b) => {
+      if (a.orderTime !== b.orderTime) {
+        return (a.orderTime || 0) - (b.orderTime || 0);
+      }
+      return (a.seqNum || 0) - (b.seqNum || 0);
+    });
+
+    // Baseline opening stock
+    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock !== undefined ? selectedMat.physicalStock : 5000)) || 0);
+    let runningBalance = initialBase;
+
+    // Calculate sequential cumulative balance from baseline
+    transactionEvents.forEach(tx => {
+      const prev = runningBalance;
+      const delta = parseFloat(tx.qty) || 0;
+      runningBalance = Math.max(0, runningBalance + delta);
+      tx.previousStock = prev;
+      tx.newStock = runningBalance;
+    });
+
+    // Reverse transactions so the newest event is at the top of the audit table
+    const finalLogs = [...transactionEvents].reverse();
+
+    // Append Initial Opening Stock Baseline at the very bottom
+    finalLogs.push({
       id: `INIT-${selectedMat.code}`,
       timestamp: 'Initial Setup Baseline',
       type: 'OPENING_STOCK',
@@ -1065,7 +1107,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       location: selectedMat.store || 'Finished Goods Bay'
     });
 
-    return logs;
+    return finalLogs;
   }, [selectedMat]);
 
   const filteredMaterials = useMemo(() => {
