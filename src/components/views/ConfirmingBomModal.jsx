@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache } from "../../utils/otherViewsShared";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 
 export default function ConfirmingBomModal({
   confirmingBomModal,
@@ -168,7 +168,7 @@ export default function ConfirmingBomModal({
                   const updated = (prev || []).map(b => b.bomCode === confirmingBomModal.bomCode ? { ...b, ...updatedBomRecord } : b);
                   try {
                     localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-                    saveCloudStore('bom_store', updated);
+                    saveCloudBomRow({ ...confirmingBomModal, ...updatedBomRecord });
                   } catch (_) {}
                   return updated;
                 });

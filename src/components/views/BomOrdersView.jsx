@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow } from '../../utils/supabaseDataSync';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
@@ -195,13 +195,31 @@ export default function BomOrdersView(props) {
     // Initial fetch
     syncFromCloud(true);
 
-    // Real-time live subscription directly from Supabase Database
+    // Real-time live subscription directly from Supabase Database (receives single record payloads)
     const realtimeSub = subscribeToCloudStore('bom_store', (updatedBoms) => {
       if (Array.isArray(updatedBoms)) {
         const { list: resolvedList } = resolveBomCollisions(updatedBoms, 658);
         const cleaned = resolvedList.map(stripDataUrlsFromRecord);
         setBomStore(cleaned);
         safeSaveBomStoreToLocal(cleaned);
+        setTableLoading(false);
+      } else if (updatedBoms && typeof updatedBoms === 'object') {
+        if (updatedBoms._deleted && updatedBoms.id) {
+          setBomStore(prev => {
+            const remaining = (prev || []).filter(b => b && b.id !== updatedBoms.id && b.bomCode !== updatedBoms.id);
+            safeSaveBomStoreToLocal(remaining);
+            return remaining;
+          });
+        } else {
+          const single = stripDataUrlsFromRecord(updatedBoms);
+          setBomStore(prev => {
+            const k = single.bomCode || single.code || single.id;
+            const filtered = (prev || []).filter(b => b && (b.bomCode !== k && b.code !== k && b.id !== k));
+            const list = [single, ...filtered];
+            safeSaveBomStoreToLocal(list);
+            return list;
+          });
+        }
         setTableLoading(false);
       }
     });
@@ -865,7 +883,6 @@ export default function BomOrdersView(props) {
         cancelledAt: new Date().toISOString()
       } : b);
       const sanitized = updated.map(stripDataUrlsFromRecord);
-      saveCloudStore('bom_store', sanitized);
       return sanitized;
     });
 
@@ -4639,13 +4656,7 @@ export default function BomOrdersView(props) {
                         const { list: updatedList } = resolveBomCollisions(combined, 658);
                         setBomStore(updatedList);
 
-                        // Direct cloud persistence guarantee - non-blocking background sync
-                        saveCloudStore('bom_store', updatedList);
-                        saveCloudStoreImmediate('bom_store', updatedList).catch(sErr => {
-                          console.warn('Notice in background saveCloudStoreImmediate:', sErr);
-                        });
-
-                        // Safe browser localStorage backup per Rule 5
+                        // Safe browser localStorage backup per Rule 5 (local UI convenience only)
                         safeSaveBomStoreToLocal(updatedList);
 
                         // If converted from a Proforma Invoice, update the PI stores so PI knows its BOM number
@@ -5121,7 +5132,6 @@ export default function BomOrdersView(props) {
                     ...updatedBomData
                   } : b);
                   setBomStore(updatedList);
-                  saveCloudStore('bom_store', updatedList);
                   safeSaveBomStoreToLocal(updatedList);
 
                   // Push to server immediately so Dispatch sees it in real time
@@ -6867,10 +6877,14 @@ export default function BomOrdersView(props) {
             <button
               onClick={() => {
                 if (window.confirm(`Are you sure you want to delete ${selectedRows.length} selected BOM item(s)?`)) {
-                  const updatedList = (bomStore || []).filter(b => !selectedRows.includes(b.bomCode || b.code));
+                  const toDelete = [...selectedRows];
+                  const updatedList = (bomStore || []).filter(b => !toDelete.includes(b.bomCode || b.code));
                   setBomStore(updatedList);
-                  saveCloudStoreImmediate('bom_store', updatedList);
                   safeSaveBomStoreToLocal(updatedList);
+                  toDelete.forEach(code => {
+                    fetch(`/api/boms/${encodeURIComponent(code)}`, { method: 'DELETE' }).catch(() => {});
+                    deleteCloudBomRow(code).catch(() => {});
+                  });
                   setSelectedRows([]);
                 }
               }}
@@ -7660,7 +7674,6 @@ export default function BomOrdersView(props) {
                         }
                       } : b);
                       setBomStore(updatedList);
-                      saveCloudStore('bom_store', updatedList);
                       safeSaveBomStoreToLocal(updatedList);
 
                       const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);

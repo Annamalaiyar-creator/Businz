@@ -2029,11 +2029,6 @@ export default function CreateBomFormPage(props) {
                       const combined = [sanitizedNewBom, ...filtered];
                       const { list: updatedList } = resolveBomCollisions(combined, 658);
 
-                      // Direct cloud persistence guarantee: background sync to Supabase cloud store so it is never lost
-                      saveCloudStore('bom_store', updatedList);
-                      saveCloudStoreImmediate('bom_store', updatedList).catch(sErr => {
-                        console.warn('Notice in background saveCloudStoreImmediate:', sErr);
-                      });
                       try {
                         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
                       } catch (_) {}

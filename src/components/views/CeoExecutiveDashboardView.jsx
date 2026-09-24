@@ -30,7 +30,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       const [pos, pis, boms, invs] = await Promise.all([
         fetchWithTimeout('/api/zoho/purchaseorders', { timeout: 15000 }).then(r => r.json()).catch(() => fetchCloudStore('po_store', [])),
         fetchCloudStore('proforma_invoices', []).catch(() => []),
-        fetchCloudStore('bom_orders', []).catch(() => []),
+        fetchWithTimeout('/api/boms', { timeout: 3000 }).then(r => r.json()).then(j => Array.isArray(j?.data) ? j.data : []).catch(() => fetchCloudStore('bom_orders', [])),
         fetchCloudStore('invoice_store', []).catch(() => [])
       ]);
 
@@ -48,13 +48,23 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   useEffect(() => {
     loadData();
     const handleSync = () => loadData();
+    const handleBomUpdated = (e) => {
+      if (e?.detail?.bom) {
+        const item = e.detail.bom;
+        setBomList(prev => {
+          const k = item.bomCode || item.code || item.id;
+          const filtered = (prev || []).filter(b => b && (b.bomCode !== k && b.code !== k && b.id !== k));
+          return [item, ...filtered];
+        });
+      }
+    };
     window.addEventListener('controlroom_storage_update', handleSync);
-    window.addEventListener('controlroom_bom_store_updated', handleSync);
+    window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
     window.addEventListener('controlroom_po_updated', handleSync);
     window.addEventListener('controlroom_pi_updated', handleSync);
     return () => {
       window.removeEventListener('controlroom_storage_update', handleSync);
-      window.removeEventListener('controlroom_bom_store_updated', handleSync);
+      window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
       window.removeEventListener('controlroom_po_updated', handleSync);
       window.removeEventListener('controlroom_pi_updated', handleSync);
     };
