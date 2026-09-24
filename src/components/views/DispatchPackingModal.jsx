@@ -185,11 +185,11 @@ export default function DispatchPackingModal({
       nextStatus = 'Partially Packed';
       isFullyConfirmed = false;
     } else {
-      // User confirmed packing: auto-confirms all items and moves to Accounts Verification
+      // User confirmed packing: preserves user check/uncheck state and moves to Accounts Verification
       confirmedItems = (itemsToPack && itemsToPack.length > 0)
-        ? itemsToPack.map(it => ({ ...it, packed: true, qty: it.qty || it.bomQty || 1 }))
+        ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: Boolean(it.packed) }))
         : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
-      nextStatus = 'Packed & Awaiting Accounts Verification';
+      nextStatus = isPartial ? 'Partially Packed - Sent to Accounts' : 'Packed & Awaiting Accounts Verification';
       isFullyConfirmed = true;
     }
 

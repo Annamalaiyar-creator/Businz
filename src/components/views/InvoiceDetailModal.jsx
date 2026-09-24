@@ -623,21 +623,45 @@ export default function InvoiceDetailModal({
                 });
 
                 // 6. Update matching BOM status to 'Awaiting Vehicle Loading & Dispatch'
-                const targetCode = inv.poNo || inv.code || bomRefText;
-                setBomStore(prev => prev.map(b => (
-                  b.bomCode === targetCode ||
-                  b.salesOrderNo === targetCode ||
-                  b.code === targetCode ||
-                  (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
-                ) ? {
-                  ...b,
-                  status: 'Awaiting Vehicle Loading & Dispatch',
-                  invoiceConfirmed: true,
-                  invoiceNo: invNoText,
-                  stockDeducted: true,
-                  stockDeductionDate: new Date().toISOString(),
-                  packedItemsDeducted: packedItemsToDeduct
-                } : b));
+                const targetBomCode = matchingBom?.bomCode || matchingBom?.code || inv.bomCode || inv.poNo || inv.code || bomRefText;
+                setBomStore(prev => {
+                  const updatedBoms = (prev || []).map(b => (
+                    b.bomCode === targetBomCode ||
+                    b.code === targetBomCode ||
+                    b.salesOrderNo === targetBomCode ||
+                    (matchingBom && (b.bomCode === matchingBom.bomCode || b.code === matchingBom.code || b.id === matchingBom.id)) ||
+                    (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', ''))) ||
+                    (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode))
+                  ) ? {
+                    ...b,
+                    status: 'Awaiting Vehicle Loading & Dispatch',
+                    invoiceConfirmed: true,
+                    invoiceNo: invNoText,
+                    stockDeducted: true,
+                    stockDeductionDate: new Date().toISOString(),
+                    packedItemsDeducted: packedItemsToDeduct,
+                    unpackedItemsRemaining: unpackedItems
+                  } : b);
+
+                  try {
+                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedBoms.map(stripDataUrlsFromRecord)));
+                    saveCloudStore('bom_store', updatedBoms);
+                    const matchedUpdated = updatedBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode || (matchingBom && b.bomCode === matchingBom.bomCode));
+                    if (matchedUpdated) {
+                      fetch('/api/boms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(matchedUpdated), isUpdate: true })
+                      }).catch(() => {});
+                      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: matchedUpdated } }));
+                    }
+                    window.dispatchEvent(new Event('storage'));
+                  } catch (persistErr) {
+                    console.error('Error persisting BOM store upon invoice confirm:', persistErr);
+                  }
+
+                  return updatedBoms;
+                });
 
                 // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) with ONLY Preset Name and Preset Price
                 const presetName = matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Kit';

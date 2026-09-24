@@ -512,7 +512,13 @@ export default function ProductionTableView({
                     const targetCode = selectedRows[0];
                     const targetRow = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode);
                     const isAwaitingLr = targetRow && (targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Dispatched - Awaiting LR Copy');
-                    const isAwaitingLoading = targetRow && (targetRow.status === 'AWAITING VEHICLE LOADING' || targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed);
+                    const isAwaitingLoading = targetRow && (
+                      targetRow.status === 'AWAITING VEHICLE LOADING' || 
+                      targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || 
+                      targetRow.status === 'Invoice Confirmed' ||
+                      Boolean(targetRow.invoiceConfirmed) ||
+                      Boolean(targetRow.invoiceNo && targetRow.status !== 'Closed' && targetRow.status !== 'Dispatched - Awaiting LR Copy')
+                    );
                     if (isAwaitingLr) {
                       return (
                         <>

@@ -1292,9 +1292,19 @@ export default function ProductionViewsEngine(props) {
                       : [{ code: 'PRD-001', name: 'Standard Component', qty: 1, bomQty: 1, invQty: 1, rate: 1000, tax: 18, amt: 1180, selected: true }]
                   });
                 } else if (activeTab === 'Dispatch Orders') {
+                  const isAwaitingLoad = Boolean(
+                    targetRow.status === 'Awaiting Vehicle Loading & Dispatch' ||
+                    targetRow.status === 'AWAITING VEHICLE LOADING' ||
+                    targetRow.status === 'Invoice Confirmed' ||
+                    targetRow.invoiceConfirmed ||
+                    targetRow.status === 'Dispatched - Awaiting LR Copy' ||
+                    targetRow.status === 'AWAITING LR COPY' ||
+                    targetRow.status === 'Awaiting LR Copy' ||
+                    (targetRow.invoiceNo && targetRow.status !== 'Closed')
+                  );
                   if (isCancelledRow) {
                     setDispatchPackingModal({ ...targetRow, isViewOnly: true, isReadOnly: true });
-                  } else if (targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed || targetRow.status === 'Dispatched - Awaiting LR Copy' || targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Awaiting LR Copy') {
+                  } else if (isAwaitingLoad) {
                     setVehicleLoadingModal(targetRow);
                   } else {
                     setDispatchPackingModal(targetRow);
@@ -1342,7 +1352,16 @@ export default function ProductionViewsEngine(props) {
               setInvoiceModalActiveTab('Invoice Items');
             } else if (activeTab === 'Dispatch Orders') {
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
-              if (rec.status === 'Dispatched - Awaiting LR Copy' || rec.status === 'AWAITING LR COPY' || rec.status === 'Awaiting Vehicle Loading & Dispatch' || rec.invoiceConfirmed) {
+              const isRecAwaitingLoad = Boolean(
+                rec.status === 'Dispatched - Awaiting LR Copy' ||
+                rec.status === 'AWAITING LR COPY' ||
+                rec.status === 'Awaiting Vehicle Loading & Dispatch' ||
+                rec.status === 'AWAITING VEHICLE LOADING' ||
+                rec.status === 'Invoice Confirmed' ||
+                rec.invoiceConfirmed ||
+                (rec.invoiceNo && rec.status !== 'Closed')
+              );
+              if (isRecAwaitingLoad) {
                 setVehicleLoadingModal(rec);
               } else {
                 setDispatchPackingModal(isRecCancelled ? { ...rec, isViewOnly: true, isReadOnly: true } : rec);
