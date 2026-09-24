@@ -84,6 +84,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
   const [topToast, setTopToast] = useState(null);
   const toastTimeoutRef = useRef(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const showTopToast = (message, type = 'success', duration = 5000) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -673,6 +675,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const clearFilters = () => {
     setSearchQuery('');
     setStatusFilter('All');
+    setStartDate('');
+    setEndDate('');
     setPiTab('All');
     setCurrentPage(1);
   };
@@ -2039,7 +2043,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             || (piTab === 'Issued' && currentStatus === 'Issued')
             || (piTab === 'Converted to BOM' && currentStatus === 'Converted to BOM')
             || currentStatus === piTab;
-          return matchesSearch && matchesStatus && matchesTab;
+
+          // Date Range Matching
+          let matchesDateRange = true;
+          const rawDateStr = String(pi.piDate || pi.date || pi.created_time || pi.createdAt || '').trim();
+          let piIsoDate = '';
+          if (/^\d{4}-\d{2}-\d{2}/.test(rawDateStr)) {
+            piIsoDate = rawDateStr.slice(0, 10);
+          } else if (rawDateStr) {
+            const d = new Date(rawDateStr);
+            if (!isNaN(d.getTime())) {
+              piIsoDate = d.toISOString().slice(0, 10);
+            }
+          }
+
+          if (startDate && piIsoDate && piIsoDate < startDate) {
+            matchesDateRange = false;
+          }
+          if (endDate && piIsoDate && piIsoDate > endDate) {
+            matchesDateRange = false;
+          }
+
+          return matchesSearch && matchesStatus && matchesTab && matchesDateRange;
         });
 
         const indexOfLastRow = currentPage * rowsPerPage;
@@ -2120,9 +2145,34 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', cursor: 'pointer', backgroundColor: 'white', fontSize: '13px', color: '#475569' }}>
-                  <span>Date Range</span>
-                  <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
+                {/* Live Functional Date Range Picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 10px', height: '38px', backgroundColor: 'white' }}>
+                  <Calendar style={{ width: '14px', height: '14px', color: '#0E7490', flexShrink: 0 }} />
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
+                    title="From Date"
+                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', background: 'transparent', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}>to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
+                    title="To Date"
+                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', background: 'transparent', cursor: 'pointer' }}
+                  />
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
+                      title="Clear Date Range"
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b', padding: '2px', display: 'flex', alignItems: 'center' }}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
 
                 <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
@@ -2132,11 +2182,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </option>
                   ))}
                 </select>
-
-                <button style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 16px', height: '38px', cursor: 'pointer', backgroundColor: 'white', fontSize: '13px', fontWeight: '600', color: '#475569' }}>
-                  <Filter style={{ width: '14px', height: '14px', marginRight: '4px' }} />
-                  <span>Filters</span>
-                </button>
 
                 <button
                   onClick={clearFilters}
@@ -2210,11 +2255,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   </button>
                 ))}
               </div>
-
-              <button style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 14px', backgroundColor: 'white', fontSize: '13px', fontWeight: 'bold', color: '#475569', cursor: 'pointer', marginBottom: '8px', flexShrink: 0 }}>
-                <Download style={{ width: '14px', height: '14px' }} />
-                Export
-              </button>
             </div>
 
             {/* 3. MAIN DATA TABLE MATCHING EXACT REFERENCE DESIGN */}
