@@ -2162,55 +2162,163 @@ export default function BomOrdersView(props) {
             }}
           />
 
-          {/* Central Animated Glowing Icon / Dual Spinners */}
-          <div style={{ position: 'relative', width: '84px', height: '84px', marginBottom: '20px' }}>
-            <div
-              style={{
+          {/* 3D Isometric Animation Styles */}
+          <style>{`
+            @keyframes isoFloatBottom {
+              0%, 100% { transform: translateY(0px) translateZ(0px); }
+              50% { transform: translateY(-4px) translateZ(4px); }
+            }
+            @keyframes isoFloatMiddle {
+              0%, 100% { transform: translateY(0px) translateZ(24px); }
+              50% { transform: translateY(-7px) translateZ(32px); }
+            }
+            @keyframes isoFloatTop {
+              0%, 100% { transform: translateY(0px) translateZ(48px); }
+              50% { transform: translateY(-11px) translateZ(60px); }
+            }
+            @keyframes isoPulseRing {
+              0% { transform: scale(0.65); opacity: 0.85; }
+              100% { transform: scale(1.6); opacity: 0; }
+            }
+            @keyframes isoScanBeam {
+              0% { transform: translateX(-100%) rotate(45deg); opacity: 0; }
+              30% { opacity: 0.55; }
+              70% { opacity: 0.55; }
+              100% { transform: translateX(200%) rotate(45deg); opacity: 0; }
+            }
+          `}</style>
+
+          {/* Smallcase-Inspired 3D Isometric Progress Indicator */}
+          <div style={{
+            perspective: '750px',
+            perspectiveOrigin: '50% 35%',
+            width: '160px',
+            height: '135px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            marginBottom: '10px'
+          }}>
+            {/* Ground Shadow */}
+            <div style={{
+              position: 'absolute',
+              bottom: '12px',
+              width: '110px',
+              height: '52px',
+              borderRadius: '50%',
+              background: 'radial-gradient(ellipse at center, rgba(14, 116, 144, 0.35) 0%, rgba(6, 182, 212, 0.08) 55%, transparent 75%)',
+              filter: 'blur(7px)',
+              transform: 'rotateX(58deg)',
+              animation: 'pulseGlow 2.5s ease-in-out infinite'
+            }} />
+
+            {/* 3D Isometric Stack Container */}
+            <div style={{
+              position: 'relative',
+              width: '90px',
+              height: '90px',
+              transformStyle: 'preserve-3d',
+              transform: 'rotateX(58deg) rotateZ(-38deg)'
+            }}>
+              {/* Base Layer Plate */}
+              <div style={{
                 position: 'absolute',
-                inset: '-6px',
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(14, 116, 144, 0.25) 0%, rgba(14, 116, 144, 0) 70%)',
-                animation: 'pulseGlow 2s ease-in-out infinite'
-              }}
-            />
-            <div
-              style={{
+                width: '90px',
+                height: '90px',
+                borderRadius: '18px',
+                background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.25) 0%, rgba(6, 182, 212, 0.1) 100%)',
+                border: '1.5px solid rgba(14, 116, 144, 0.45)',
+                boxShadow: '0 8px 24px rgba(14, 116, 144, 0.25), inset 0 0 14px rgba(6, 182, 212, 0.15)',
+                backdropFilter: 'blur(4px)',
+                transformStyle: 'preserve-3d',
+                animation: 'isoFloatBottom 3s ease-in-out infinite'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  inset: '7px',
+                  borderRadius: '12px',
+                  border: '1px dashed rgba(14, 116, 144, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    border: '1.5px solid rgba(6, 182, 212, 0.6)',
+                    animation: 'isoPulseRing 2s ease-out infinite'
+                  }} />
+                </div>
+              </div>
+
+              {/* Middle Floating Plate */}
+              <div style={{
                 position: 'absolute',
-                inset: 0,
-                borderRadius: '50%',
-                border: '4px solid #E2E8F0',
-                borderTopColor: '#0E7490',
-                borderRightColor: '#06B6D4',
-                animation: 'spin 1s linear infinite'
-              }}
-            />
-            <div
-              style={{
+                top: '9px',
+                left: '9px',
+                width: '72px',
+                height: '72px',
+                borderRadius: '15px',
+                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.38) 0%, rgba(59, 130, 246, 0.18) 100%)',
+                border: '1.5px solid rgba(6, 182, 212, 0.65)',
+                boxShadow: '0 10px 24px rgba(6, 182, 212, 0.28), inset 0 0 12px rgba(255, 255, 255, 0.25)',
+                transformStyle: 'preserve-3d',
+                animation: 'isoFloatMiddle 3s ease-in-out infinite',
+                animationDelay: '0.2s',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent)',
+                  animation: 'isoScanBeam 2.4s ease-in-out infinite'
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '7px',
+                    border: '1.5px solid rgba(255,255,255,0.65)',
+                    transform: 'rotate(45deg)'
+                  }} />
+                </div>
+              </div>
+
+              {/* Top Apex Plate with Glowing Symbol */}
+              <div style={{
                 position: 'absolute',
-                inset: '8px',
-                borderRadius: '50%',
-                border: '3px dashed #CBD5E1',
-                borderBottomColor: '#0E7490',
-                animation: 'spin 2.5s linear infinite reverse'
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                inset: '16px',
-                borderRadius: '50%',
-                backgroundColor: '#ECFEFF',
+                top: '18px',
+                left: '18px',
+                width: '54px',
+                height: '54px',
+                borderRadius: '13px',
+                background: bomSubmitStage === 'completed'
+                  ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
+                  : 'linear-gradient(135deg, #0E7490 0%, #06B6D4 100%)',
+                border: '2px solid #FFFFFF',
+                boxShadow: '0 14px 30px rgba(14, 116, 144, 0.45), 0 0 18px rgba(6, 182, 212, 0.65)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#0E7490'
-              }}
-            >
-              {bomSubmitStage === 'completed' ? (
-                <CheckCircle size={28} style={{ color: '#10B981' }} />
-              ) : (
-                <Layers size={26} style={{ animation: 'bounceSubtle 1.5s ease-in-out infinite' }} />
-              )}
+                color: '#FFFFFF',
+                transformStyle: 'preserve-3d',
+                animation: 'isoFloatTop 3s ease-in-out infinite',
+                animationDelay: '0.4s'
+              }}>
+                {bomSubmitStage === 'completed' ? (
+                  <CheckCircle size={26} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))' }} />
+                ) : (
+                  <Layers size={22} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))' }} />
+                )}
+              </div>
             </div>
           </div>
 
@@ -4889,59 +4997,6 @@ export default function BomOrdersView(props) {
               </button>
             )}
 
-            {isAlreadyForwarded && confirmingBomModal.isEditMode && (
-              <button
-                onClick={() => {
-                  const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
-                  const dStr = confirmingBomModal.sameAsBilling ? bStr : formatAddr(dObj, confirmingBomModal.deliveryAddress);
-                  const finalDObj = confirmingBomModal.sameAsBilling ? { ...bObj } : { ...dObj };
-
-                  const updatedBomData = {
-                    ...confirmingBomModal,
-                    paymentType: confirmingBomModal.paymentType,
-                    billingAddress: bStr,
-                    billingAddressObj: bObj,
-                    deliveryAddress: dStr,
-                    deliveryAddressObj: finalDObj,
-                  };
-                  delete updatedBomData.isEditMode;
-
-                  const updatedList = (bomStore || []).map(b => (b.bomCode || b.code) === (confirmingBomModal.bomCode || confirmingBomModal.code) ? {
-                    ...b,
-                    ...updatedBomData
-                  } : b);
-                  setBomStore(updatedList);
-                  saveCloudStoreImmediate('bom_store', updatedList);
-                  safeSaveBomStoreToLocal(updatedList);
-                  try {
-                    fetch('/api/boms', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomData), isUpdate: true })
-                    }).catch(err => console.error('Error updating BOM:', err));
-                  } catch (_) {}
-                  setConfirmingBomModal(null);
-                  alert(`✅ BOM (${confirmingBomModal.bomCode || confirmingBomModal.code}) details updated successfully!`);
-                }}
-                style={{
-                  border: 'none',
-                  backgroundColor: '#0E7490',
-                  color: 'white',
-                  height: '40px',
-                  padding: '0 20px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 4px rgba(14,116,144,0.3)'
-                }}
-              >
-                <Save style={{ width: '15px', height: '15px' }} /> Update BOM Details
-              </button>
-            )}
 
             {isAlreadyForwarded && ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
               <button
@@ -5829,104 +5884,114 @@ export default function BomOrdersView(props) {
                 </tr>
               </thead>
               <tbody>
-                {/* PRESET KIT PACKAGE ROWS */}
-                {modalPresetGroups.map((grp, gIdx) => {
-                  const gSets = parseInt(grp.setCount) || 1;
-                  const gPrice = parseFloat(grp.kitPrice) || 0;
-                  const gTotal = gSets * gPrice;
-                  return (
-                    <tr
-                      key={`preset-kit-row-${gIdx}`}
-                      style={{
-                        backgroundColor: '#F0FDFA',
-                        borderBottom: '2px solid #A5F3FC',
-                        borderLeft: '4px solid #0E7490'
-                      }}
-                    >
-                      {!isAlreadyForwarded && (
-                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490' }}>📦</span>
-                        </td>
-                      )}
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>
-                        KIT {gIdx + 1}
-                      </td>
-                      <td style={{ padding: '12px 10px', fontWeight: '800', color: '#0F172A' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ backgroundColor: '#0E7490', color: 'white', fontSize: '10px', fontWeight: '800', padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            PRESET KIT
-                          </span>
-                          <span style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
-                            {grp.presetName || 'Pre-Engineered MMS Kit Package'}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 10px', color: '#0E7490', fontSize: '12px', fontWeight: '600' }}>
-                        Pre-Engineered MMS Structure ({gSets} Set{gSets > 1 ? 's' : ''} bundled with hardware below)
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                        SET
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                        {gSets}
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                        ₹ {gPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '900', color: '#0E7490', fontSize: '14px' }}>
-                        ₹ {gTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      {!isAlreadyForwarded && (
-                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                          <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', backgroundColor: '#CCFBF1', padding: '3px 8px', borderRadius: '4px' }}>
-                            KIT
-                          </span>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
+                {/* Build mapping for Preset Kit grouping to show consolidated amount in the middle of items (like PI) */}
+                {(() => {
+                  const presetGroupMap = {};
+                  (confirmingBomModal.items || []).forEach((item, idx) => {
+                    const itemRate = parseFloat(item.rate) || 0;
+                    const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                    if (isPartBundle) {
+                      const gid = item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit';
+                      if (!presetGroupMap[gid]) {
+                        const matchedGrp = modalPresetGroups.find(g => (g.presetGroupId || 'default_kit') === gid) || modalPresetGroups[0] || {};
+                        const sets = parseInt(matchedGrp.setCount) || 1;
+                        const price = parseFloat(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
+                        presetGroupMap[gid] = {
+                          firstIdx: idx,
+                          count: 0,
+                          presetName: matchedGrp.presetName || confirmingBomModal.presetName || 'Preset MMS Kit',
+                          setCount: sets,
+                          kitPrice: price,
+                          totalAmount: price * sets
+                        };
+                      }
+                      presetGroupMap[gid].count += 1;
+                    }
+                  });
 
-                {/* PHYSICAL HARDWARE / CUSTOM COMPONENT ROWS */}
-                {(confirmingBomModal.items || []).map((item, idx) => {
-                  const itemQty = parseFloat(item.qty) || 0;
-                  const itemRate = parseFloat(item.rate) || 0;
-                  const itemTotal = itemQty * itemRate;
-                  const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                  return (confirmingBomModal.items || []).map((item, idx) => {
+                    const itemQty = parseFloat(item.qty) || 0;
+                    const itemRate = parseFloat(item.rate) || 0;
+                    const itemTotal = itemQty * itemRate;
+                    const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                    const gid = isPartBundle ? (item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit') : null;
+                    const pInfo = gid ? presetGroupMap[gid] : null;
+                    const isFirstInKit = pInfo && pInfo.firstIdx === idx;
 
-                  if (isAlreadyForwarded) {
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '12px 10px', fontWeight: '700', color: '#0F172A' }}>{item.name || '—'}</td>
-                        <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
-                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
-                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
-                        <td style={{ padding: '12px 10px', textAlign: 'right' }}>
+                    if (isAlreadyForwarded) {
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isPartBundle ? '#FAFEFF' : '#FFFFFF' }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                          <td style={{ padding: '12px 10px', fontWeight: '700', color: '#0F172A' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {isPartBundle && (
+                                <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: '10px', fontWeight: '800', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                  KIT COMPONENT
+                                </span>
+                              )}
+                              <span>{item.name || '—'}</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
+                          
+                          {/* Rate Column: Consolidated & Centered in Middle for Presets (Like PI) */}
                           {isPartBundle ? (
-                            <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                              Bundled in Kit
-                            </span>
+                            isFirstInKit ? (
+                              <td
+                                rowSpan={pInfo.count}
+                                style={{
+                                  padding: '12px 10px',
+                                  textAlign: 'right',
+                                  verticalAlign: 'middle',
+                                  backgroundColor: '#F0FDFA',
+                                  borderLeft: '1.5px solid #CCFBF1',
+                                  borderRight: '1px solid #CCFBF1'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                    {pInfo.setCount} Set{pInfo.setCount > 1 ? 's' : ''} Kit
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13.5px' }}>
+                                    ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </td>
+                            ) : null
                           ) : (
-                            <span style={{ color: '#334155' }}>
+                            <td style={{ padding: '12px 10px', textAlign: 'right', color: '#334155' }}>
                               ₹ {itemRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </span>
+                            </td>
                           )}
-                        </td>
-                        <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800' }}>
+
+                          {/* Total Column: Consolidated & Centered in Middle for Presets (Like PI) */}
                           {isPartBundle ? (
-                            <span style={{ color: '#0E7490', fontSize: '11px', fontWeight: '800' }}>
-                              Included
-                            </span>
+                            isFirstInKit ? (
+                              <td
+                                rowSpan={pInfo.count}
+                                style={{
+                                  padding: '12px 10px',
+                                  textAlign: 'right',
+                                  verticalAlign: 'middle',
+                                  fontWeight: '900',
+                                  color: '#0E7490',
+                                  fontSize: '14px',
+                                  backgroundColor: '#F0FDFA'
+                                }}
+                              >
+                                ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </td>
+                            ) : null
                           ) : (
-                            <span style={{ color: '#0F172A' }}>
+                            <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
                               ₹ {itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </span>
+                            </td>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  }
+                        </tr>
+                      );
+                    }
 
                   return (
                     <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: item.confirmed ? '#F0FDF4' : 'transparent' }}>
@@ -6034,63 +6099,98 @@ export default function BomOrdersView(props) {
                           />
                         )}
                       </td>
-                      <td style={{ padding: '12px 10px' }}>
-                        {isSourcePiLocked ? (
-                          <div style={{ fontSize: '13px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>
-                            {isPartBundle ? (
-                              <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                Bundled in Kit
-                              </span>
+                        {/* Rate Column for Editing / Verification */}
+                        {isSourcePiLocked && isPartBundle ? (
+                          isFirstInKit ? (
+                            <td
+                              rowSpan={pInfo.count}
+                              style={{
+                                padding: '12px 10px',
+                                textAlign: 'right',
+                                verticalAlign: 'middle',
+                                backgroundColor: '#F0FDFA',
+                                borderLeft: '1.5px solid #CCFBF1',
+                                borderRight: '1px solid #CCFBF1'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                  {pInfo.setCount} Set{pInfo.setCount > 1 ? 's' : ''} Kit
+                                </span>
+                                <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
+                                  ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </td>
+                          ) : null
+                        ) : (
+                          <td style={{ padding: '12px 10px' }}>
+                            {isSourcePiLocked ? (
+                              <div style={{ fontSize: '13px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>
+                                ₹ {parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </div>
                             ) : (
-                              `₹ ${parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.rate}
+                                placeholder={isPartBundle ? '0 (Bundled)' : '0'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, rate: val } : it);
+                                  setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                                }}
+                                style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '12px', textAlign: 'right', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
+                              />
                             )}
-                          </div>
-                        ) : (
-                          <input
-                            type="number"
-                            min="0"
-                            value={item.rate}
-                            placeholder={isPartBundle ? '0 (Bundled)' : '0'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const updatedItems = (confirmingBomModal.items || []).map((it, i) => i === idx ? { ...it, rate: val } : it);
-                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                            }}
-                            style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '12px', textAlign: 'right', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                          />
+                          </td>
                         )}
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
-                        {itemTotal > 0 ? (
-                          `₹ ${itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                        ) : isPartBundle ? (
-                          <span style={{ color: '#0E7490', fontSize: '11px', fontWeight: '800', backgroundColor: '#ECFEFF', padding: '3px 6px', borderRadius: '4px' }}>
-                            Included
-                          </span>
+
+                        {/* Total Column for Editing / Verification */}
+                        {isSourcePiLocked && isPartBundle ? (
+                          isFirstInKit ? (
+                            <td
+                              rowSpan={pInfo.count}
+                              style={{
+                                padding: '12px 10px',
+                                textAlign: 'right',
+                                verticalAlign: 'middle',
+                                fontWeight: '900',
+                                color: '#0E7490',
+                                fontSize: '14px',
+                                backgroundColor: '#F0FDFA'
+                              }}
+                            >
+                              ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                          ) : null
                         ) : (
-                          '₹ 0.00'
+                          <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                            ₹ {itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
                         )}
-                      </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        {isSourcePiLocked ? (
-                          <span title="Locked from Source Proforma Invoice" style={{ color: '#94A3B8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Lock style={{ width: '14px', height: '14px' }} />
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              const updatedItems = (confirmingBomModal.items || []).filter((_, i) => i !== idx);
-                              setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
-                            }}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <Trash2 style={{ width: '14px', height: '14px' }} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          {isSourcePiLocked ? (
+                            <span title="Locked from Source Proforma Invoice" style={{ color: '#94A3B8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Lock style={{ width: '14px', height: '14px' }} />
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                const updatedItems = (confirmingBomModal.items || []).filter((_, i) => i !== idx);
+                                setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
+                              }}
+                              style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              <Trash2 style={{ width: '14px', height: '14px' }} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>

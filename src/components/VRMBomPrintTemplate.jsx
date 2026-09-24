@@ -44,21 +44,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   const b = bomData;
   const items = Array.isArray(b.items) && b.items.length > 0 ? b.items : [];
 
-  // Calculate totals
-  const totalTaxable = items.reduce((sum, item) => {
-    const q = parseFloat(item.qty) || 0;
-    const r = parseFloat(item.rate) || 0;
-    return sum + (q * r);
-  }, 0);
 
-  const totalGst = items.reduce((sum, item) => {
-    const q = parseFloat(item.qty) || 0;
-    const r = parseFloat(item.rate) || 0;
-    const gstRate = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
-    return sum + (q * r * (gstRate / 100));
-  }, 0);
-
-  const grandTotal = totalTaxable + totalGst;
 
   // Format addresses cleanly
   const bObj = b.billingAddressObj || {};
@@ -291,35 +277,27 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           </tbody>
         </table>
 
-        {/* 4. ITEMIZED PRODUCTS & MATERIALS TABLE */}
+        {/* 4. ITEMIZED PRODUCTS & MATERIALS TABLE (PURE SPECIFICATION - NO AMOUNTS) */}
         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #CBD5E1', marginBottom: '16px', fontSize: '11.5px' }}>
           <thead>
             <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
               <th style={{ padding: '10px 8px', width: '36px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>#</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>Product / Material Description</th>
-              <th style={{ padding: '10px 10px', width: '85px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>Category</th>
-              <th style={{ padding: '10px 10px', width: '55px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>Qty</th>
-              <th style={{ padding: '10px 10px', width: '55px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>UOM</th>
-              <th style={{ padding: '10px 12px', width: '90px', textAlign: 'right', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>Price (₹)</th>
-              <th style={{ padding: '10px 10px', width: '55px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>GST</th>
-              <th style={{ padding: '10px 12px', width: '105px', textAlign: 'right', fontSize: '11px' }}>Total (₹)</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>Product / Material Name</th>
+              <th style={{ padding: '10px 10px', width: '160px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>Specification / Description</th>
+              <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '11px' }}>UOM</th>
+              <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', fontSize: '11px' }}>Quantity</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
                   No itemized materials in this BOM record.
                 </td>
               </tr>
             ) : (
               items.map((item, idx) => {
                 const qty = parseFloat(item.qty) || 0;
-                const rate = parseFloat(item.rate) || 0;
-                const taxable = qty * rate;
-                const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
-                const gstAmt = taxable * (gstPct / 100);
-                const totalAmt = taxable + gstAmt;
 
                 return (
                   <tr
@@ -342,23 +320,14 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '10px 10px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
-                      {item.category || '—'}
+                    <td style={{ padding: '10px 10px', textAlign: 'left', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
+                      {item.category || item.specs || '—'}
                     </td>
-                    <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A', borderRight: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '10px 10px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
+                      {item.uom || item.unit || 'NOS'}
+                    </td>
+                    <td style={{ padding: '10px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
                       {qty}
-                    </td>
-                    <td style={{ padding: '10px 10px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
-                      {item.uom || 'NOS'}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#0F172A', borderRight: '1px solid #E2E8F0' }}>
-                      {rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td style={{ padding: '10px 10px', textAlign: 'center', color: '#64748B', borderRight: '1px solid #E2E8F0' }}>
-                      {gstPct}%
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                      {totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
@@ -367,81 +336,59 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           </tbody>
         </table>
 
-        {/* 5. SUMMARY & TOTALS */}
+        {/* 5. SUMMARY & ORDER DISPATCH METRICS (NO FINANCIAL PRICING) */}
         <table className="print-avoid-break" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
           <tbody>
             <tr>
-              <td style={{ width: '54%', verticalAlign: 'top', paddingRight: '16px' }}>
+              <td style={{ width: '50%', verticalAlign: 'top', paddingRight: '16px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #CBD5E1', borderRadius: '6px', overflow: 'hidden', marginBottom: '10px' }}>
                   <tbody>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <td style={{ padding: '6px 12px', fontSize: '10.5px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase' }}>
-                        Payment Terms & Credit
+                        Dispatch & Delivery Terms
                       </td>
                     </tr>
                     <tr>
                       <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>
-                        {b.paymentType || '100% Paid'}
+                        {b.transportScope || 'Standard Delivery'}
                         {b.creditDays ? ` (${b.creditDays} Days Credit)` : ''}
                       </td>
                     </tr>
                   </tbody>
                 </table>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #CBD5E1', borderRadius: '6px', overflow: 'hidden' }}>
-                  <tbody>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '6px 12px', fontSize: '10.5px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase' }}>
-                        Amount in Words
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '10px 12px', fontSize: '11.5px', fontWeight: '700', color: '#0E7490', fontStyle: 'italic', lineHeight: '1.4' }}>
-                        {numberToWordsINR(grandTotal)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
                 {b.remarks && (
-                  <div style={{ marginTop: '10px', fontSize: '11px', color: '#475569', lineHeight: '1.4' }}>
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: '#475569', lineHeight: '1.4' }}>
                     <strong>Remarks / Dispatch Notes:</strong> {b.remarks}
                   </div>
                 )}
               </td>
-              <td style={{ width: '46%', verticalAlign: 'top' }}>
+              <td style={{ width: '50%', verticalAlign: 'top' }}>
                 <table style={{ width: '100%', fontSize: '11.5px', borderCollapse: 'collapse', border: '1px solid #CBD5E1', borderRadius: '6px', overflow: 'hidden' }}>
                   <tbody>
-                    <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '8px 12px', color: '#64748B' }}>Taxable Subtotal</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                        ₹{totalTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
+                      <td style={{ padding: '8px 12px', color: '#0E7490', fontWeight: '800', textTransform: 'uppercase', fontSize: '10.5px' }} colSpan={2}>
+                        Production & Dispatch Scope
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '8px 12px', color: '#64748B' }}>CGST (9%)</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', color: '#475569' }}>
-                        ₹{(totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td style={{ padding: '8px 12px', color: '#64748B' }}>Total Line Items</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                        {items.length} Item{items.length !== 1 ? 's' : ''}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '8px 12px', color: '#64748B' }}>SGST (9%)</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', color: '#475569' }}>
-                        ₹{(totalGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #CBD5E1', backgroundColor: '#F8FAFC' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: '700', color: '#0E7490' }}>Total Applicable GST (18%)</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                        ₹{totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td style={{ padding: '8px 12px', color: '#64748B' }}>Total Quantity Count</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>
+                        {items.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0)} Units
                       </td>
                     </tr>
                     <tr style={{ backgroundColor: '#ECFEFF' }}>
-                      <td style={{ padding: '12px 12px', fontSize: '13px', fontWeight: '900', color: '#0E7490' }}>
-                        Grand Total (Incl. GST)
+                      <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
+                        Material Status
                       </td>
-                      <td style={{ padding: '12px 12px', textAlign: 'right', fontSize: '14px', fontWeight: '900', color: '#0E7490' }}>
-                        ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '800', color: '#059669' }}>
+                        Verified for Dispatch
                       </td>
                     </tr>
                   </tbody>

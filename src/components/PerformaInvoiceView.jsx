@@ -1934,19 +1934,131 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             gap: '16px',
             border: '1px solid #E2E8F0'
           }}>
+            {/* Smallcase-Inspired 3D Isometric Progress Indicator */}
             <div style={{
-              width: '68px',
-              height: '68px',
-              borderRadius: '50%',
-              backgroundColor: '#ECFEFF',
-              border: '2px solid #A5F3FC',
+              perspective: '750px',
+              perspectiveOrigin: '50% 35%',
+              width: '150px',
+              height: '125px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative'
             }}>
-              <div className="businz-spin-ring" style={{ width: '60px', height: '60px', position: 'absolute' }} />
-              <Layers size={30} style={{ color: '#0E7490' }} />
+              {/* Ground Shadow */}
+              <div style={{
+                position: 'absolute',
+                bottom: '10px',
+                width: '100px',
+                height: '48px',
+                borderRadius: '50%',
+                background: 'radial-gradient(ellipse at center, rgba(14, 116, 144, 0.35) 0%, rgba(6, 182, 212, 0.08) 55%, transparent 75%)',
+                filter: 'blur(7px)',
+                transform: 'rotateX(58deg)',
+                animation: 'pulseGlow 2.5s ease-in-out infinite'
+              }} />
+
+              {/* 3D Isometric Stack Container */}
+              <div style={{
+                position: 'relative',
+                width: '84px',
+                height: '84px',
+                transformStyle: 'preserve-3d',
+                transform: 'rotateX(58deg) rotateZ(-38deg)'
+              }}>
+                {/* Base Layer Plate */}
+                <div style={{
+                  position: 'absolute',
+                  width: '84px',
+                  height: '84px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.25) 0%, rgba(6, 182, 212, 0.1) 100%)',
+                  border: '1.5px solid rgba(14, 116, 144, 0.45)',
+                  boxShadow: '0 8px 24px rgba(14, 116, 144, 0.25), inset 0 0 14px rgba(6, 182, 212, 0.15)',
+                  backdropFilter: 'blur(4px)',
+                  transformStyle: 'preserve-3d',
+                  animation: 'isoFloatBottom 3s ease-in-out infinite'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    inset: '6px',
+                    borderRadius: '10px',
+                    border: '1px dashed rgba(14, 116, 144, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      border: '1.5px solid rgba(6, 182, 212, 0.6)',
+                      animation: 'isoPulseRing 2s ease-out infinite'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Middle Floating Plate */}
+                <div style={{
+                  position: 'absolute',
+                  top: '8px',
+                  left: '8px',
+                  width: '68px',
+                  height: '68px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.38) 0%, rgba(59, 130, 246, 0.18) 100%)',
+                  border: '1.5px solid rgba(6, 182, 212, 0.65)',
+                  boxShadow: '0 10px 24px rgba(6, 182, 212, 0.28), inset 0 0 12px rgba(255, 255, 255, 0.25)',
+                  transformStyle: 'preserve-3d',
+                  animation: 'isoFloatMiddle 3s ease-in-out infinite',
+                  animationDelay: '0.2s',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent)',
+                    animation: 'isoScanBeam 2.4s ease-in-out infinite'
+                  }} />
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '6px',
+                      border: '1.5px solid rgba(255,255,255,0.65)',
+                      transform: 'rotate(45deg)'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Top Apex Plate with Glowing Symbol */}
+                <div style={{
+                  position: 'absolute',
+                  top: '16px',
+                  left: '16px',
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #0E7490 0%, #06B6D4 100%)',
+                  border: '2px solid #FFFFFF',
+                  boxShadow: '0 14px 30px rgba(14, 116, 144, 0.45), 0 0 18px rgba(6, 182, 212, 0.65)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  transformStyle: 'preserve-3d',
+                  animation: 'isoFloatTop 3s ease-in-out infinite',
+                  animationDelay: '0.4s'
+                }}>
+                  <Layers size={22} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))' }} />
+                </div>
+              </div>
             </div>
 
             <div>
