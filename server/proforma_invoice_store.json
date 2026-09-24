@@ -475,7 +475,9 @@
     "zohoEstimateId": "4080449000000437002",
     "zohoSyncError": null,
     "zohoModule": "Quotes",
-    "paymentType": "100% Paid"
+    "paymentType": "100% Paid",
+    "convertedBomCode": "BOM-699",
+    "convertedBomNo": "BOM-699"
   },
   {
     "id": "4080449000000403001",
@@ -2019,8 +2021,8 @@
     "createdBy": "MOHITH J V",
     "createdById": "SE-VRM004",
     "convertedToBom": false,
-    "convertedBomNo": null,
-    "convertedBomCode": null,
+    "convertedBomNo": "BOM-687",
+    "convertedBomCode": "BOM-687",
     "convertedAt": "2026-09-12T07:40:46.083Z",
     "zohoSynced": true,
     "zohoSyncError": null,
@@ -2340,8 +2342,8 @@
     "createdBy": "Mohit JV",
     "createdById": "SE-VRM001",
     "convertedToBom": false,
-    "convertedBomNo": null,
-    "convertedBomCode": null,
+    "convertedBomNo": "BOM-686",
+    "convertedBomCode": "BOM-686",
     "paymentType": "Partial Paid"
   },
   {

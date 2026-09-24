@@ -935,6 +935,23 @@ export default function BomOrdersView(props) {
     const processConversion = (pendingPi) => {
       if (!pendingPi) return;
 
+      // 0. Strict 1-to-1 Safeguard: Check if this PI already has an existing active BOM in bomStore!
+      const targetPiNo = String(pendingPi.sourcePiNo || pendingPi.piNo || '').trim();
+      if (targetPiNo) {
+        const existingBom = (bomStore || []).find(b => {
+          if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
+          const sPi = String(b.sourcePiNo || b.piNo || '').trim().toLowerCase();
+          return sPi === targetPiNo.toLowerCase();
+        });
+        if (existingBom) {
+          const eCode = existingBom.bomCode || existingBom.code || existingBom.id;
+          alert(`ℹ️ Proforma Invoice (${targetPiNo}) is already converted to BOM (${eCode}). Opening existing BOM order.`, 'BOM Already Exists', 'info');
+          setShowBOMForm(false);
+          setConfirmingBomModal(existingBom);
+          return;
+        }
+      }
+
       // 1. Calculate synchronous fallback BOM code immediately from local store
       const existingNums = (bomStore || []).map(b => {
         const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
@@ -4607,7 +4624,14 @@ export default function BomOrdersView(props) {
                         // Stage: Saving to cloud & local storage
                         setBomSubmitStage('saving');
                         const current = Array.isArray(bomStore) ? bomStore : [];
-                        const filtered = current.filter(item => item && (item.bomCode !== finalAssignedCode && item.code !== finalAssignedCode && item.id !== finalAssignedCode));
+                        const filtered = current.filter(item => {
+                          if (!item) return false;
+                          if (item.bomCode === finalAssignedCode || item.code === finalAssignedCode || item.id === finalAssignedCode) return false;
+                          if (sanitizedNewBom.sourcePiNo && String(item.sourcePiNo || item.piNo || '').trim().toLowerCase() === String(sanitizedNewBom.sourcePiNo).trim().toLowerCase()) {
+                            return false;
+                          }
+                          return true;
+                        });
                         const combined = [sanitizedNewBom, ...filtered];
                         const { list: updatedList } = resolveBomCollisions(combined, 658);
                         setBomStore(updatedList);

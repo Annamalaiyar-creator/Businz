@@ -2018,7 +2018,14 @@ export default function CreateBomFormPage(props) {
 
                     setBomStore(prev => {
                       const current = Array.isArray(prev) ? prev : [];
-                      const filtered = current.filter(item => item && (item.bomCode !== finalAssignedCode && item.code !== finalAssignedCode));
+                      const filtered = current.filter(item => {
+                        if (!item) return false;
+                        if (item.bomCode === finalAssignedCode || item.code === finalAssignedCode) return false;
+                        if (sanitizedNewBom.sourcePiNo && String(item.sourcePiNo || item.piNo || '').trim().toLowerCase() === String(sanitizedNewBom.sourcePiNo).trim().toLowerCase()) {
+                          return false;
+                        }
+                        return true;
+                      });
                       const combined = [sanitizedNewBom, ...filtered];
                       const { list: updatedList } = resolveBomCollisions(combined, 658);
 

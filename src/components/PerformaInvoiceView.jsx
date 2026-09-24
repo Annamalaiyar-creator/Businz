@@ -173,7 +173,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     }
   }, [targetPiNo, piList]);
 
-  // Two-way helper to find all BOMs generated from this PI
+  // Two-way helper to find all BOMs generated from this PI (Strict 1-to-1 mapping)
   const getConvertedBomsForPi = (pi) => {
     if (!pi) return [];
     // Only associate BOMs if this PI was explicitly converted or has an assigned BOM code
@@ -188,7 +188,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const piNum = (pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
     const explicitCode = (pi.convertedBomNo || pi.convertedBomCode || '').trim().toLowerCase();
 
-    return (bomList || []).filter(b => {
+    const matches = (bomList || []).filter(b => {
       if (!b) return false;
       // Do NOT link to cancelled or restored BOMs
       if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
@@ -202,6 +202,25 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
       return false;
     });
+
+    if (matches.length <= 1) return matches;
+
+    // Strict 1-to-1 deduplication safeguard:
+    // If multiple exist historically, prefer explicit convertedBomCode, otherwise sort by latest BOM number
+    if (explicitCode) {
+      const explicitMatch = matches.find(b => {
+        const bCode = (b.bomCode || b.code || b.id || '').trim().toLowerCase();
+        return bCode === explicitCode;
+      });
+      if (explicitMatch) return [explicitMatch];
+    }
+
+    const sorted = [...matches].sort((a, b) => {
+      const na = parseInt(String(a.bomCode || a.code || '').replace(/\D/g, '') || '0', 10);
+      const nb = parseInt(String(b.bomCode || b.code || '').replace(/\D/g, '') || '0', 10);
+      return nb - na;
+    });
+    return [sorted[0]];
   };
 
   const handleRevertPiToIssued = (pi) => {
@@ -525,6 +544,34 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   const handleConvertToBom = (pi) => {
     if (!pi || isConvertingToBom) return;
+
+    // Strict 1-to-1 Safeguard: If this PI is already converted or linked to an active BOM, navigate directly to it!
+    const existingBoms = getConvertedBomsForPi(pi);
+    let targetExistingBom = existingBoms && existingBoms.length > 0 ? existingBoms[0] : null;
+    if (!targetExistingBom) {
+      const pNo = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
+      targetExistingBom = (bomList || []).find(b => {
+        if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
+        const sPi = String(b.sourcePiNo || b.piNo || '').trim().toLowerCase();
+        if (pNo && sPi === pNo) return true;
+        if (pi.convertedBomNo && (b.bomCode === pi.convertedBomNo || b.id === pi.convertedBomNo)) return true;
+        if (pi.convertedBomCode && (b.bomCode === pi.convertedBomCode || b.id === pi.convertedBomCode)) return true;
+        return false;
+      });
+    }
+
+    if (targetExistingBom) {
+      const targetBomCode = targetExistingBom.bomCode || targetExistingBom.code || targetExistingBom.id;
+      showTopToast(`ℹ️ Proforma Invoice ${pi.piNo || ''} is already converted to ${targetBomCode}. Opening existing BOM...`, 'info', 4000);
+      window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+        detail: { tab: 'Sales BOM', targetBom: targetBomCode } 
+      }));
+      if (typeof onNavigateTab === 'function') {
+        onNavigateTab('Sales BOM');
+      }
+      return;
+    }
+
     setIsConvertingToBom(true);
     setConvertingPiTarget(pi);
 
