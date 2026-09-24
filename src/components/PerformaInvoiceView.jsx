@@ -1562,7 +1562,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         sgst: totals.sgst,
         grandTotal: totals.grand,
         amount: '₹' + Math.round(totals.grand).toLocaleString('en-IN'),
-        pdfName: pdfFile ? pdfFile.name : (signedPiDoc ? signedPiDoc.name : 'pi_document.pdf'),
+        pdfName: pdfFile ? pdfFile.name : (signedPiDoc ? signedPiDoc.name : null),
         signedPiDoc: signedPiDoc || null,
         piDate: piDate || new Date().toISOString().split('T')[0],
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -2629,9 +2629,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               </div>
             </div>
 
-            {/* Floating Selection Toolbar (exact reference design) */}
             {/* Floating Selection Toolbar (Single line, direct action buttons, no 3-dot menu) */}
-            {selectedPIs.length > 0 && (
+            {selectedPIs.length > 0 && !selectedPi && !printModalPi && !validationAlert && (
               <div style={{
                 position: 'fixed',
                 bottom: '24px',
@@ -2666,6 +2665,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       return;
                     }
                     const target = piList.find(p => p.piNo === selectedPIs[0]);
+                    setSelectedPIs([]);
                     if (target) setSelectedPi(target);
                   }}
                   style={{
@@ -2704,6 +2704,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     return (
                       <button
                         onClick={() => {
+                          setSelectedPIs([]);
                           window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
                             detail: { tab: 'Sales BOM', targetBom: firstBomCode } 
                           }));
@@ -2736,7 +2737,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                   return (
                     <button
-                      onClick={() => handleConvertToBom(target)}
+                      onClick={() => {
+                        setSelectedPIs([]);
+                        handleConvertToBom(target);
+                      }}
                       style={{
                         backgroundColor: '#4F46E5',
                         border: 'none',
@@ -2776,6 +2780,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           showTopToast('You cannot edit multiple items at once. Please select 1 item.', 'error', 4000);
                         } else if (selectedPIs.length === 1) {
                           const idx = piList.findIndex(p => p.piNo === targetPiNo);
+                          setSelectedPIs([]);
                           handleStartEdit(targetPi || { piNo: targetPiNo }, idx >= 0 ? idx : 0);
                         }
                       }}
@@ -2810,6 +2815,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     const target = (selectedPIs && selectedPIs.length > 0)
                       ? (piList.find(p => p.piNo === selectedPIs[0]) || { piNo: selectedPIs[0], vendor: 'Customer Reference' })
                       : null;
+                    setSelectedPIs([]);
                     if (target) {
                       setPrintModalPi(target);
                     } else {
@@ -2880,7 +2886,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   return (
                     <button
                       disabled={Boolean(syncingPiNo)}
-                      onClick={() => syncPiToZoho(targetPi)}
+                      onClick={() => {
+                        setSelectedPIs([]);
+                        syncPiToZoho(targetPi);
+                      }}
                       style={{
                         backgroundColor: '#F0FDFA',
                         border: '1px solid #A5F3FC',
@@ -2906,36 +2915,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </button>
                   );
                 })()}
-
-                {/* Delete */}
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete ${selectedPIs.length} selected PI(s)?`)) {
-                      setSelectedPIs([]);
-                    }
-                  }}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    color: '#1E293B',
-                    borderRadius: '10px',
-                    padding: '6px 14px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                >
-                  <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
-                </button>
 
                 {/* Deselect All */}
                 <button
@@ -4892,7 +4871,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 {/* 4b. Attached Document / Signed PI Doc (if present) */}
-                {(selectedPi.signedPiDoc || selectedPi.pdfName || selectedPi.pdfFile) && (
+                {Boolean(selectedPi.signedPiDoc?.dataUrl || (selectedPi.pdfName && selectedPi.pdfName !== 'pi_document.pdf' && selectedPi.signedPiDoc)) && (
                   <div style={{ backgroundColor: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '14px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -4900,7 +4879,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </div>
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                          {selectedPi.signedPiDoc?.name || selectedPi.pdfName || 'Signed Proforma Invoice Document'}
+                          {selectedPi.signedPiDoc?.name || selectedPi.pdfName}
                         </div>
                         <div style={{ fontSize: '11px', color: '#64748B' }}>
                           {selectedPi.signedPiDoc?.size ? `${Math.round(selectedPi.signedPiDoc.size / 1024)} KB • ` : ''}
