@@ -822,16 +822,6 @@ export default function InvoiceDetailModal({
             <strong style={{ color: '#0F172A' }}>₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
           </div>
 
-          {/* Dynamic GST State Badge */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 8px', backgroundColor: isInvIntra ? '#F0FDFA' : '#EEF2FF', borderRadius: '6px', border: `1px solid ${isInvIntra ? '#99F6E4' : '#C7D2FE'}` }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: isInvIntra ? '#0F766E' : '#4338CA' }}>
-              {isInvIntra ? 'Intra-State GST (Tamil Nadu)' : 'Inter-State GST (Outside TN)'}
-            </span>
-            <span style={{ fontSize: '10.5px', color: isInvIntra ? '#0D9488' : '#6366F1', fontWeight: '700' }}>
-              {isInvIntra ? 'CGST + SGST' : 'IGST'}
-            </span>
-          </div>
-
           {isInvIntra ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>

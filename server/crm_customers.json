@@ -56,6 +56,34 @@
     "createdAt": "2026-09-09T15:24:05+0530"
   },
   {
+    "id": "CUST-7007",
+    "customerCode": "CUST-7007",
+    "companyName": "Apex Infra Ltd",
+    "customerName": "Apex Infra Ltd",
+    "customerType": "EPC Contractor",
+    "industry": "Solar Energy / Utility Scale",
+    "gstNumber": "",
+    "panNumber": "",
+    "address": "",
+    "city": "",
+    "state": "",
+    "pincode": "",
+    "creditLimit": 2500000,
+    "creditDays": 30,
+    "paymentTerms": "Due on Receipt",
+    "assignedSalesperson": "Mohith JV",
+    "source": "Zoho Books",
+    "zohoContactId": "4080449000000577007",
+    "primaryContact": {
+      "name": "—",
+      "designation": "Procurement Head",
+      "phone": "",
+      "whatsapp": "",
+      "email": ""
+    },
+    "createdAt": "2026-09-24T10:47:57+0530"
+  },
+  {
     "id": "CUST-1008",
     "customerCode": "CUST-1008",
     "companyName": "Apex Solar Technologies",

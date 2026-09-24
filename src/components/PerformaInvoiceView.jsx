@@ -4159,16 +4159,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <span>₹{totals.sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
-                  {/* Dynamic Tax State Badge */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0', padding: '4px 8px', backgroundColor: totals.isIntra ? '#F0FDFA' : '#EEF2FF', borderRadius: '6px', border: `1px solid ${totals.isIntra ? '#99F6E4' : '#C7D2FE'}` }}>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: totals.isIntra ? '#0F766E' : '#4338CA' }}>
-                      {totals.isIntra ? 'Intra-State (Tamil Nadu)' : 'Inter-State (Outside TN)'}
-                    </span>
-                    <span style={{ fontSize: '10.5px', color: totals.isIntra ? '#0D9488' : '#6366F1', fontWeight: '700' }}>
-                      {totals.isIntra ? 'CGST + SGST' : 'IGST'}
-                    </span>
-                  </div>
-
                   {/* Dynamic GST Tiers Breakdown */}
                   {totals.isIntra ? (
                     (totals.gstTiers || []).map(tier => (
@@ -4942,16 +4932,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         <strong style={{ color: '#0F172A' }}>₹ {Number(selectedPi.kitSubtotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                       </div>
                     )}
-                    {/* Dynamic Tax State Badge in Detail Modal */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0', padding: '3px 8px', backgroundColor: isModalIntra ? '#F0FDFA' : '#EEF2FF', borderRadius: '6px', border: `1px solid ${isModalIntra ? '#99F6E4' : '#C7D2FE'}` }}>
-                      <span style={{ fontSize: '11px', fontWeight: '700', color: isModalIntra ? '#0F766E' : '#4338CA' }}>
-                        {isModalIntra ? 'Intra-State GST (Tamil Nadu)' : 'Inter-State GST (Outside TN)'}
-                      </span>
-                      <span style={{ fontSize: '10.5px', color: isModalIntra ? '#0D9488' : '#6366F1', fontWeight: '700' }}>
-                        {isModalIntra ? 'CGST + SGST' : 'IGST'}
-                      </span>
-                    </div>
-
                     {modalGstTiers.length > 0 ? (
                       isModalIntra ? (
                         modalGstTiers.map(tier => (
