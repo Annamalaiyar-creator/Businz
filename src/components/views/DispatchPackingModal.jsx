@@ -24,12 +24,32 @@ export default function DispatchPackingModal({
   setActiveMediaPreviewModal
 }) {
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
+  const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
   const [dispatchCameraError, setDispatchCameraError] = useState('');
   const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
   const [uploadingCount, setUploadingCount] = useState(0);
   const dispatchCameraStreamRef = useRef(null);
   const dispatchCameraVideoRef = useRef(null);
   const dispatchCameraCanvasRef = useRef(null);
+
+  const handleOpenLiveCamera = async () => {
+    setShowDispatchCameraModal(true);
+    setDispatchCameraError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      dispatchCameraStreamRef.current = stream;
+      setTimeout(() => {
+        if (dispatchCameraVideoRef.current) {
+          dispatchCameraVideoRef.current.srcObject = stream;
+          dispatchCameraVideoRef.current.play().catch(() => {});
+        }
+      }, 100);
+    } catch (err) {
+      setDispatchCameraError('Unable to access camera. Please allow camera permissions or upload images instead.');
+    }
+  };
 
   const targetCode = dispatchPackingModal?.bomCode || dispatchPackingModal?.code || dispatchPackingModal?.id;
 
@@ -505,8 +525,8 @@ export default function DispatchPackingModal({
         </div>
       )}
 
-      {/* ─── 4 STATS CARDS ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+      {/* ─── 3 STATS CARDS (Order Value hidden for Dispatch role) ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
         {/* Progress Card */}
         <div style={{
           backgroundColor: '#FFFFFF', borderRadius: '14px',
@@ -560,18 +580,6 @@ export default function DispatchPackingModal({
           <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Delivery Address</div>
           <div style={{ fontSize: '12px', color: '#1E293B', fontWeight: '600', lineHeight: '1.5' }}>
             {dispatchPackingModal.deliveryAddress || 'Plot 14, Phase II, Nagappa Estate, Puzhal, Chennai – 600066.'}
-          </div>
-        </div>
-
-        {/* Value Card */}
-        <div style={{
-          backgroundColor: '#FFFFFF', borderRadius: '14px',
-          border: '1px solid #E2E8F0', padding: '18px 20px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
-        }}>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Order Value</div>
-          <div style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A' }}>
-            ₹ {parseFloat(dispatchPackingModal.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </div>
         </div>
       </div>
@@ -745,7 +753,7 @@ export default function DispatchPackingModal({
           </table>
         </div>
 
-        {/* ─── PACKED ITEMS PHOTOS & VIDEOS VERIFICATION SECTION ─── */}
+        {/* ─── PACKED ITEMS PHOTOS VERIFICATION SECTION ─── */}
         <div style={{
           padding: '20px 24px',
           borderTop: '1px solid #E2E8F0',
@@ -759,7 +767,7 @@ export default function DispatchPackingModal({
               <Camera size={18} style={{ color: '#0E7490' }} />
               <div>
                 <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
-                  Packed Items & Small Accessories Proof Media (Photos & Videos)
+                  Packed Items & Small Accessories Proof Photos
                 </h4>
                 <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
                   Capture or upload clear photos of packed boxes and small accessories (clamps, fasteners, nuts, bolts, brackets) before sending to Accounts.
@@ -773,192 +781,115 @@ export default function DispatchPackingModal({
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
             {!isPackedAndReady && (
-              <>
-                <label style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  backgroundColor: '#0E7490', color: '#FFFFFF',
-                  padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800',
-                  cursor: 'pointer', boxShadow: '0 2px 4px rgba(14,116,144,0.2)'
-                }}>
-                  <UploadCloud size={14} /> Upload Packing Photo(s)
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={async (e) => {
-                      const files = e.target.files;
-                      if (files && files.length > 0) {
-                        const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
-                        setUploadingCount(prev => prev + files.length);
-                        for (const f of Array.from(files)) {
-                          try {
-                            const metadata = await uploadBomDocumentFile({
-                              file: f,
-                              bomCode,
-                              category: 'dispatch/images'
-                            });
-                            const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-                            const newPhoto = {
-                              id: photoId,
-                              ...metadata
-                            };
-                            setDispatchPackingModal(prev => {
-                              if (!prev) return prev;
-                              const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                              return {
-                                ...prev,
-                                dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] }
-                              };
-                            });
-                          } catch (err) {
-                            alert(`Photo upload failed: ${err.message}`);
-                          } finally {
-                            setUploadingCount(prev => Math.max(0, prev - 1));
-                          }
-                        }
-                      }
-                    }}
-                  />
-                </label>
-
-                <label style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  backgroundColor: '#FFFFFF', color: '#0E7490', border: '1px solid #0E7490',
-                  padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800',
-                  cursor: 'pointer'
-                }}>
-                  <Video size={14} /> Upload Packing Video
-                  <input
-                    type="file"
-                    accept="video/*"
-                    style={{ display: 'none' }}
-                    onChange={async (e) => {
-                      const file = e.target.files && e.target.files[0];
-                      if (file) {
-                        const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
-                        setUploadingCount(prev => prev + 1);
-                        try {
-                          const metadata = await uploadBomDocumentFile({
-                            file,
-                            bomCode,
-                            category: 'dispatch/videos'
-                          });
-                          const vItemId = `pack_video_${Date.now()}`;
-                          const vItem = {
-                            id: vItemId,
-                            ...metadata
-                          };
-                          setDispatchPackingModal(prev => {
-                            if (!prev) return prev;
-                            const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                            return {
-                              ...prev,
-                              dispatchPackingMedia: { ...existingMedia, videos: [...(existingMedia.videos || []), vItem] }
-                            };
-                          });
-                        } catch (err) {
-                          alert(`Video upload failed: ${err.message}`);
-                        } finally {
-                          setUploadingCount(prev => Math.max(0, prev - 1));
-                        }
-                      }
-                    }}
-                  />
-                </label>
-
+              <div style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   type="button"
-                  onClick={async () => {
-                    setShowDispatchCameraModal(true);
-                    setDispatchCameraError('');
-                    try {
-                      const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-                      });
-                      dispatchCameraStreamRef.current = stream;
-                      setTimeout(() => {
-                        if (dispatchCameraVideoRef.current) {
-                          dispatchCameraVideoRef.current.srcObject = stream;
-                          dispatchCameraVideoRef.current.play().catch(() => {});
-                        }
-                      }, 100);
-                    } catch (err) {
-                      setDispatchCameraError('Unable to access camera. Please allow camera permissions or upload images instead.');
-                    }
-                  }}
+                  onClick={() => setShowAddPhotoMenu(prev => !prev)}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    display: 'inline-flex', alignItems: 'center', gap: '8px',
                     backgroundColor: '#0E7490', color: '#FFFFFF', border: 'none',
-                    padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800',
-                    cursor: 'pointer', boxShadow: '0 2px 6px rgba(14,116,144,0.3)'
+                    padding: '8px 18px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '800',
+                    cursor: 'pointer', boxShadow: '0 2px 6px rgba(14,116,144,0.3)',
+                    transition: 'all 0.15s ease'
                   }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0891B2'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#0E7490'}
                 >
-                  <Camera size={14} /> Live Camera
+                  <Camera size={15} /> Add Packing Photo ▾
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 640;
-                    canvas.height = 400;
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#0F172A';
-                    ctx.fillRect(0, 0, 640, 400);
-                    ctx.fillStyle = '#0E7490';
-                    ctx.fillRect(40, 60, 560, 280);
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = 'bold 20px sans-serif';
-                    ctx.fillText(`PACKED CARTON: ${dispatchPackingModal.bomCode}`, 60, 110);
-                    ctx.font = '14px sans-serif';
-                    ctx.fillText(`Customer: ${dispatchPackingModal.customerName}`, 60, 150);
-                    ctx.fillText(`Verified Packed by Dispatch Desk • ${new Date().toLocaleTimeString()}`, 60, 190);
-                    canvas.toBlob(async (blob) => {
-                      if (!blob) return;
-                      const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
-                      const sampleFile = new File([blob], `Packed_Box_Verified_${Date.now().toString().slice(-4)}.jpg`, { type: 'image/jpeg' });
-                      setUploadingCount(prev => prev + 1);
-                      try {
-                        const metadata = await uploadBomDocumentFile({
-                          file: sampleFile,
-                          bomCode,
-                          category: 'dispatch/images'
-                        });
-                        const samplePhoto = {
-                          id: `pack_photo_${Date.now()}`,
-                          ...metadata
-                        };
-                        setDispatchPackingModal(prev => {
-                          if (!prev) return prev;
-                          const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                          return {
-                            ...prev,
-                            dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), samplePhoto] }
-                          };
-                        });
-                      } catch (err) {
-                        alert(`Sample photo upload failed: ${err.message}`);
-                      } finally {
-                        setUploadingCount(prev => Math.max(0, prev - 1));
-                      }
-                    }, 'image/jpeg', 0.9);
-                  }}
-                  style={{
-                    border: '1px dashed #CBD5E1', backgroundColor: '#FFFFFF',
-                    color: '#475569', height: '36px', padding: '0 14px',
-                    borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: '6px'
-                  }}
-                >
-                  + Add Sample Packing Photo
-                </button>
-              </>
+                {showAddPhotoMenu && (
+                  <>
+                    <div 
+                      style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
+                      onClick={() => setShowAddPhotoMenu(false)} 
+                    />
+                    <div style={{
+                      position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                      backgroundColor: '#FFFFFF', borderRadius: '10px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.15)', border: '1px solid #CBD5E1',
+                      padding: '6px', minWidth: '220px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '4px'
+                    }}>
+                      <label 
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700',
+                          color: '#0F172A', transition: 'background 0.15s ease'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <UploadCloud size={16} style={{ color: '#0E7490' }} />
+                        <span>Upload from Device</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            setShowAddPhotoMenu(false);
+                            const files = e.target.files;
+                            if (files && files.length > 0) {
+                              const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
+                              setUploadingCount(prev => prev + files.length);
+                              for (const f of Array.from(files)) {
+                                try {
+                                  const metadata = await uploadBomDocumentFile({
+                                    file: f,
+                                    bomCode,
+                                    category: 'dispatch/images'
+                                  });
+                                  const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                                  const newPhoto = {
+                                    id: photoId,
+                                    ...metadata
+                                  };
+                                  setDispatchPackingModal(prev => {
+                                    if (!prev) return prev;
+                                    const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                                    return {
+                                      ...prev,
+                                      dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] }
+                                    };
+                                  });
+                                } catch (err) {
+                                  alert(`Photo upload failed: ${err.message}`);
+                                } finally {
+                                  setUploadingCount(prev => Math.max(0, prev - 1));
+                                }
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddPhotoMenu(false);
+                          handleOpenLiveCamera();
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700',
+                          color: '#0F172A', background: 'none', border: 'none', width: '100%', textAlign: 'left',
+                          transition: 'background 0.15s ease'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <Camera size={16} style={{ color: '#0E7490' }} />
+                        <span>Open Live Camera</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
           {/* Media Gallery Thumbnails */}
-          {((dispatchPackingModal.dispatchPackingMedia?.photos || []).length > 0 || (dispatchPackingModal.dispatchPackingMedia?.videos || []).length > 0) ? (
+          {(dispatchPackingModal.dispatchPackingMedia?.photos || []).length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginTop: '6px' }}>
               {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => {
                 const photoSrc = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
@@ -998,50 +929,10 @@ export default function DispatchPackingModal({
                   </div>
                 );
               })}
-
-              {(dispatchPackingModal.dispatchPackingMedia?.videos || []).map((vd, vdIdx) => {
-                const videoSrc = (vd.url && !vd.url.startsWith('blob:')) ? vd.url : (vd.dataUrl || getMediaFromCache(vd.name) || getMediaFromCache(vd.id) || (vd.name ? `/api/uploads/${vd.name}` : ''));
-                return (
-                  <div key={vd.id || vdIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div
-                      onClick={() => !vd.uploading && handleMediaPreview({ type: 'video', url: videoSrc, name: vd.name })}
-                      style={{ height: '90px', backgroundColor: '#0F172A', cursor: vd.uploading ? 'wait' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', gap: '4px' }}
-                    >
-                      <Video size={24} style={{ color: vd.uploading ? '#F59E0B' : '#38BDF8' }} />
-                      <span style={{ fontSize: '10px', color: vd.uploading ? '#FDE68A' : '#FFFFFF' }}>{vd.uploading ? 'Uploading to server...' : 'Play Video'}</span>
-                    </div>
-                  <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
-                      {vd.name}
-                    </span>
-                    {!isPackedAndReady && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDispatchPackingModal(prev => {
-                            const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                            return {
-                              ...prev,
-                              dispatchPackingMedia: {
-                                ...existingMedia,
-                                videos: existingMedia.videos.filter((_, i) => i !== vdIdx)
-                              }
-                            };
-                          });
-                        }}
-                        style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                );
-              })}
             </div>
           ) : (
             <div style={{ fontSize: '11px', color: '#64748B', fontStyle: 'italic' }}>
-              No packing media uploaded yet. Please attach packed item photos / videos before forwarding to Accounts.
+              No packing photos uploaded yet. Please attach packed item photos before forwarding to Accounts.
             </div>
           )}
         </div>
@@ -1110,7 +1001,7 @@ export default function DispatchPackingModal({
                 }}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Confirm Packing & Send to Accounts Verification' : 'Save Packing Progress')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Packing Confirmed' : 'Save Packing Progress')}
               </button>
             )}
           </div>
