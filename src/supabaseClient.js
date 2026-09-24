@@ -22,6 +22,10 @@ rawSupabase.from = (table) => {
     const rawUpsert = query.upsert.bind(query);
     query.upsert = (values, options) => {
       if (Array.isArray(values)) {
+        if (values.length > 5) {
+          console.warn(`[Supabase Firewall] Blocked mass array upsert of ${values.length} rows to public.bom_orders to prevent excessive PostgREST egress.`);
+          return Promise.resolve({ data: [], error: null });
+        }
         const clean = values.filter(v => v && !((v.customer_name === 'Customer' || v.customerName === 'Customer') && !v.source_pi_no && !v.sourcePiNo));
         if (clean.length === 0) return Promise.resolve({ data: [], error: null });
         return rawUpsert(clean, options);
@@ -37,6 +41,10 @@ rawSupabase.from = (table) => {
     const rawInsert = query.insert.bind(query);
     query.insert = (values, options) => {
       if (Array.isArray(values)) {
+        if (values.length > 5) {
+          console.warn(`[Supabase Firewall] Blocked mass array insert of ${values.length} rows to public.bom_orders to prevent excessive PostgREST egress.`);
+          return Promise.resolve({ data: [], error: null });
+        }
         const clean = values.filter(v => v && !((v.customer_name === 'Customer' || v.customerName === 'Customer') && !v.source_pi_no && !v.sourcePiNo));
         if (clean.length === 0) return Promise.resolve({ data: [], error: null });
         return rawInsert(clean, options);

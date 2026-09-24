@@ -3,7 +3,7 @@ import {
   Trash2, X, CheckCircle, Phone, UploadCloud, Truck, Package,
   Upload, Camera, Image, Video, Film, Loader2, FileText
 } from "lucide-react";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -335,7 +335,8 @@ const handleFinalizeVehicleLoading = () => {
       completedAt: willCloseBom ? new Date().toISOString() : null
     } : b);
     try {
-      saveCloudStore('bom_store', updated);
+      const updatedBom = updated.find(b => b.bomCode === bCode || b.code === bCode);
+      if (updatedBom) saveCloudBomRow(updatedBom);
     } catch (e) { }
     return updated;
   });

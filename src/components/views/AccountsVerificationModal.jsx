@@ -4,7 +4,7 @@ import {
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image
 } from "lucide-react";
 import { getMediaFromCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import StatusBadge from "../StatusBadge";
 import { VRMBomPrintSheet } from "../VRMBomPrintTemplate";
@@ -149,7 +149,7 @@ export default function AccountsVerificationModal({
       const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
       const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === verifiedBOM.id) ? updatedBomData : b);
       localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
-      saveCloudStore('bom_store', updatedLocal);
+      saveCloudBomRow(updatedBomData);
     } catch (_) {}
 
     // Push to server so Accounts & Billing sees it across devices

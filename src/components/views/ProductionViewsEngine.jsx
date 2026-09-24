@@ -105,14 +105,13 @@ export default function ProductionViewsEngine(props) {
 
   const [customerList, setCustomerList] = useState([]);
 
-  // Sync customerList with Supabase cloud database
+  // Local customerList state (authoritative source is Supabase public.customers)
   const isInitialCustMount = useRef(true);
   useEffect(() => {
     if (isInitialCustMount.current) {
       isInitialCustMount.current = false;
       return;
     }
-    saveCloudStore('customer_store', customerList);
   }, [customerList]);
 
   const [customerActionMenuIdx, setCustomerActionMenuIdx] = useState(null);
@@ -173,13 +172,13 @@ export default function ProductionViewsEngine(props) {
 
   const hasInitialSyncedRef = useRef(false);
 
-  // Sync bomStore changes directly to Supabase cloud database
+  // Keep local convenience cache updated without cloud egress
   useEffect(() => {
     if (bomStore && Array.isArray(bomStore) && bomStore.length > 0) {
-      const sanitized = bomStore.map(stripDataUrlsFromRecord);
-      if (hasInitialSyncedRef.current) {
-        saveCloudStore('bom_store', sanitized);
-      }
+      try {
+        const sanitized = bomStore.map(stripDataUrlsFromRecord);
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
+      } catch (_) {}
     }
   }, [bomStore]);
 
@@ -205,9 +204,8 @@ export default function ProductionViewsEngine(props) {
           if (data.length === 0) {
             setBomStore(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
           } else {
-            setBomStore(prev => {
-              const combined = [...(Array.isArray(data) ? data : []), ...(Array.isArray(prev) ? prev : [])];
-              const { list: resolvedList } = resolveBomCollisions(combined, 658);
+            setBomStore(() => {
+              const { list: resolvedList } = resolveBomCollisions(data, 658);
               const parseBomSeq = (code) => {
                 const m = String(code || '').match(/BOM-(\d+)/i);
                 return m ? parseInt(m[1], 10) : 0;
@@ -269,8 +267,6 @@ export default function ProductionViewsEngine(props) {
           const list = [newBom, ...filtered];
           return list.map(stripDataUrlsFromRecord);
         });
-      } else {
-        syncFromCloud();
       }
     };
 
@@ -453,7 +449,6 @@ export default function ProductionViewsEngine(props) {
       try {
         localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
       } catch (_) {}
-      saveCloudStore('bom_store', sanitized);
       return sanitized;
     });
 
@@ -752,10 +747,9 @@ export default function ProductionViewsEngine(props) {
     }
   });
 
-  // Sync invoiceList with Supabase cloud database & localStorage
+  // Keep local convenience cache updated without cloud egress
   useEffect(() => {
     if (invoiceList && invoiceList.length > 0) {
-      saveCloudStore('invoice_store', invoiceList);
       try {
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(invoiceList.map(stripDataUrlsFromRecord)));
       } catch (_) {}

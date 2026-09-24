@@ -4793,31 +4793,41 @@ app.post('/api/boms', async (req, res) => {
         cachedBomsResult = mergedList;
         lastBomFetchTimestamp = Date.now();
 
-        // Upsert to public.bom_orders (Zero leaves table interaction)
-        try {
-          const mergedBom = map.get(finalCode) || bom;
-          const dbRow = toDatabaseBomRowServer(mergedBom);
-          if (dbRow) {
-            const { error: upsertErr } = await supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
-            if (upsertErr) console.error('Error upserting BOM to public.bom_orders:', upsertErr.message);
-          }
-        } catch (e) {
-          console.error('Error preparing BOM row for Supabase:', e);
-        }
-
-        try {
-          await supabase.from('leaves').update({
-            reason: JSON.stringify({ lastNumber: serverBomSequenceCounter, updatedAt: new Date().toISOString() }),
-            duration: String(serverBomSequenceCounter),
-            dates: new Date().toISOString()
-          }).eq('employee', 'BOM_SEQUENCE');
-        } catch (_) {}
-        
-        // RESPOND TO CLIENT WITH CONFIRMED BOM IMMEDIATELY
+        // RESPOND TO CLIENT WITH CONFIRMED BOM IMMEDIATELY (Sub-second response)
         res.json({ success: true, bom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
         resolveOuter();
+
+        // Asynchronous single-row upsert to public.bom_orders with safety timeout
+        (async () => {
+          try {
+            const mergedBom = map.get(finalCode) || bom;
+            const dbRow = toDatabaseBomRowServer(mergedBom);
+            if (dbRow) {
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase single BOM upsert timeout')), 2500));
+              const upsertPromise = supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
+              const { error: upsertErr } = await Promise.race([upsertPromise, timeoutPromise]);
+              if (upsertErr) console.warn('[POST /api/boms] Single row upsert notice:', upsertErr.message);
+            }
+          } catch (e) {
+            console.warn('[POST /api/boms] Background Supabase upsert notice:', e?.message || e);
+          }
+
+          try {
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 1500));
+            const seqPromise = supabase.from('leaves').update({
+              reason: JSON.stringify({ lastNumber: serverBomSequenceCounter, updatedAt: new Date().toISOString() }),
+              duration: String(serverBomSequenceCounter),
+              dates: new Date().toISOString()
+            }).eq('employee', 'BOM_SEQUENCE');
+            await Promise.race([seqPromise, timeoutPromise]);
+          } catch (_) {}
+        })();
+        return;
       } catch (err) {
         console.error('Error saving BOM:', err);
+        res.status(500).json({ success: false, message: err.message });
+        resolveOuter();
+      }
         res.status(500).json({ success: false, message: err.message });
         resolveOuter();
       }

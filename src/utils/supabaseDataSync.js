@@ -926,14 +926,31 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     }
   }
 
-  // CANONICAL BOM READ PATH: Query public.bom_orders directly (Zero leaves table egress)
+  // CANONICAL BOM READ PATH: Query via local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'bom_store' || storeKey === 'BOM_STORE') {
+    // 1. Try local server memory cache first (Zero Supabase PostgREST egress)
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOM orders cloud fetch timeout')), 4000));
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch('/api/boms', { signal: controller.signal }).catch(() => null);
+      clearTimeout(tId);
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          return json.data;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Direct Supabase query fallback: SELECT ONLY REQUIRED SUMMARY COLUMNS (Lazy load heavy attachments/items)
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOM orders cloud fetch timeout')), 3000));
+      const BOM_SUMMARY_COLUMNS = 'id, bom_code, code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, grand_total, stock_blocked, invoice_confirmed, created_at, updated_at';
       const fetchPromise = supabase
         .from('bom_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(BOM_SUMMARY_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(200);
 
       const { data: dbBoms, error: bomErr } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -1254,34 +1271,29 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
   if (storeKey === 'bom_store' || storeKey === 'BOM_STORE') {
     try {
       if (Array.isArray(storeData)) {
-        const rows = storeData
-          .filter(b => b && !((b.customerName === 'Customer' || b.customer_name === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo && !b.source_pi_no))
-          .map(b => toDatabaseBomRow(b))
-          .filter(Boolean);
-        if (rows.length > 0) {
-          for (let i = 0; i < rows.length; i += 20) {
-            const batch = rows.slice(i, i + 20);
-            await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
-          }
+        console.warn(`[SupabaseSync] Whole-array BOM sync to public.bom_orders blocked (${storeData.length} records) to prevent excessive PostgREST egress.`);
+        // Broadcast locally to current window only, NEVER send whole array to Supabase
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+            detail: { storeKey: 'bom_store', data: storeData }
+          }));
         }
       } else if (storeData && typeof storeData === 'object') {
         const row = toDatabaseBomRow(storeData);
         if (row) {
           await supabase.from('bom_orders').upsert(row, { onConflict: 'id' });
         }
-      }
-
-      // Broadcast update locally to all listening React components in current window
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('controlroom_store_update', {
-          detail: { storeKey: 'bom_store', data: storeData }
-        }));
-        window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', {
-          detail: { storeData }
-        }));
-        window.dispatchEvent(new CustomEvent('controlroom_bom_updated', {
-          detail: { storeData }
-        }));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+            detail: { storeKey: 'bom_store', data: storeData }
+          }));
+          window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', {
+            detail: { bom: storeData }
+          }));
+          window.dispatchEvent(new CustomEvent('controlroom_bom_updated', {
+            detail: { bom: storeData }
+          }));
+        }
       }
     } catch (err) {
       console.warn('[SupabaseSync] Error persisting to public.bom_orders:', err?.message || err);
@@ -1637,8 +1649,15 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
             const list = await fetchCloudStore('crm_opportunities', []);
             onUpdateCallback(list);
           } else if (isBomStore) {
-            const list = await fetchCloudStore('bom_store', []);
-            onUpdateCallback(list);
+            // NEVER download the entire table on a Realtime row event!
+            if (payload && payload.new) {
+              const singleBom = toConsumerBom(payload.new);
+              if (singleBom) {
+                onUpdateCallback(singleBom);
+              }
+            } else if (payload && payload.eventType === 'DELETE' && payload.old) {
+              onUpdateCallback({ id: payload.old.id, _deleted: true });
+            }
           } else if (payload && payload.new && payload.new.reason) {
             try {
               const parsed = JSON.parse(payload.new.reason);

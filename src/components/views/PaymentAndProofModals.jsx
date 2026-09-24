@@ -4,7 +4,7 @@ import {
   CreditCard, AlertCircle, Loader2
 } from "lucide-react";
 import { saveMediaToCache, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { uploadBomDocumentFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
@@ -297,7 +297,8 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                                   balanceAmountPaid: settledVal
                                 }
                               } : b);
-                              saveCloudStore('bom_store', updated);
+                              const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
+                              if (targetBom) saveCloudBomRow(targetBom);
                               return updated;
                             });
                             onClose();
@@ -360,7 +361,8 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                           net30Uploaded: paymentStageType === 'Credit Payment' || paymentStageType === 'Net 30 Days'
                         }
                       } : b);
-                      saveCloudStore('bom_store', updated);
+                      const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
+                      if (targetBom) saveCloudBomRow(targetBom);
                       return updated;
                     });
                     onClose();

@@ -4,7 +4,7 @@ import {
   UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2
 } from "lucide-react";
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
 import { VRM_PRODUCTS } from "../../utils/vrmProductsData";
@@ -272,7 +272,7 @@ export default function DispatchPackingModal({
     });
 
     // 3. Persist to cloud store and localStorage
-    saveCloudStore('bom_store', (bomStore || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b));
+    saveCloudBomRow(updatedPackedBom);
     try {
       const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
       const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b);

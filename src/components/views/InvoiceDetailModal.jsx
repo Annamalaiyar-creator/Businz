@@ -7,7 +7,7 @@ import {
 import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
 import TallySyncModal from "./TallySyncModal";
@@ -199,7 +199,10 @@ export default function InvoiceDetailModal({
         invoiceNo: invoiceEditForm.invNo || b.invoiceNo
       } : b);
       try {
-        saveCloudStore("bom_store", updatedBoms);
+        const updatedBom = updatedBoms.find(b => (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode)) || (matchingBom && b.bomCode === matchingBom.bomCode));
+        if (updatedBom) {
+          saveCloudBomRow(updatedBom);
+        }
       } catch (e) { }
       return updatedBoms;
     });
@@ -646,9 +649,9 @@ export default function InvoiceDetailModal({
 
                   try {
                     localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedBoms.map(stripDataUrlsFromRecord)));
-                    saveCloudStore('bom_store', updatedBoms);
                     const matchedUpdated = updatedBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode || (matchingBom && b.bomCode === matchingBom.bomCode));
                     if (matchedUpdated) {
+                      saveCloudBomRow(matchedUpdated);
                       fetch('/api/boms', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
