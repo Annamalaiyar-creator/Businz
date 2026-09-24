@@ -7,6 +7,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
           const isInvoiceEligibleBom = (b) => {
             if (!b) return false;
             if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+            // Ignore mock/dummy test records with customer_name === 'Customer' and no real source PI
+            if ((b.customerName === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo) return false;
             const s = String(b.status || '').toLowerCase().trim();
             const acc = b.accountsVerification || {};
             const isAccVerified = Boolean(
@@ -16,17 +18,10 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               s.includes('passed to invoice') ||
               s.includes('ready for payment') ||
               b.invoiceConfirmed === true ||
+              s.includes('invoice confirmed') ||
               Boolean(b.invoiceNo)
             );
-            const isPacked = Boolean(
-              s.includes('packed') ||
-              s.includes('ready for dispatch') ||
-              s.includes('sent to accounts') ||
-              s.includes('awaiting vehicle loading') ||
-              s.includes('dispatch') ||
-              (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 && b.dispatchPacking.some(p => Boolean(p.packed)))
-            );
-            return isAccVerified || isPacked;
+            return isAccVerified;
           };
 
           const verifiedBomInvoices = (bomStore || [])
@@ -110,6 +105,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               return isInvoiceEligibleBom(matchingBom);
             }
             // Standalone or pre-existing invoices stay visible
+            if ((inv.customerName === 'Customer' || inv.vendor === 'Customer') && !inv.sourcePiNo) return false;
             return true;
           }).map(inv => {
             const matchingBom = (bomStore || []).find(b =>
