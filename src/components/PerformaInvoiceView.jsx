@@ -82,6 +82,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [printModalPi, setPrintModalPi] = useState(null); // For official Print & PDF template
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
+  const [topToast, setTopToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
+
+  const showTopToast = (message, type = 'success', duration = 5000) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setTopToast({ message, type });
+    toastTimeoutRef.current = setTimeout(() => {
+      setTopToast(null);
+    }, duration);
+  };
 
   const [bomList, setBomList] = useState(() => {
     try {
@@ -499,13 +509,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             return prev;
           });
         }
-        alert(`✓ Proforma Invoice ${finalEstNo} successfully synced with Zoho Books (Quotes # ${finalEstNo})!`);
+        showTopToast(`✓ Proforma Invoice ${finalEstNo} successfully synced with Zoho Books (Quotes # ${finalEstNo})!`, 'success');
       } else {
         const errMsg = data?.zohoError || data?.notice || data?.error || data?.message || (!res.ok ? `HTTP ${res.status} error` : 'Zoho Books synchronization could not be confirmed. Please verify your connection.');
-        alert(`Notice: Zoho Books response:\n\n${errMsg}`);
+        showTopToast(`Notice from Zoho Books: ${errMsg}`, 'error', 6000);
       }
     } catch (err) {
-      alert(`Notice syncing with Zoho Books:\n\n${err.message}`);
+      showTopToast(`Notice syncing with Zoho Books: ${err.message}`, 'error', 6000);
     } finally {
       setSyncingPiNo(null);
     }
@@ -1628,15 +1638,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       resetForm();
       setViewMode('list');
 
-      // Non-blocking completion notice
-      setTimeout(() => {
-        alert(isDraft
-          ? `📝 Proforma Invoice (${cleanPiNo}) saved as Draft.`
-          : `✅ Proforma Invoice (${cleanPiNo}) successfully created!`);
-      }, 50);
+      // In-app top message notification (Self-dismissing, NO browser alert modal or OK button)
+      const safeCustomer = (vendorName || customerName || 'Customer').trim();
+      showTopToast(
+        isDraft
+          ? `📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`
+          : `✅ You have completed the PI (${cleanPiNo}) for ${safeCustomer}!`,
+        'success',
+        6000
+      );
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
-      alert('Error creating Proforma Invoice: ' + (err?.message || 'Please check your connection and try again.'));
+      showTopToast('Error creating Proforma Invoice: ' + (err?.message || 'Please check your connection and try again.'), 'error', 6000);
     } finally {
       setIsSubmittingPI(false);
       setPiConfirmModal(null);
@@ -1835,6 +1848,57 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+
+      {/* ==================== IN-APP TOP NOTIFICATION (SELF-DISMISSING, NO BROWSER ALERT) ==================== */}
+      {topToast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '12px 24px',
+          borderRadius: '50px',
+          backgroundColor: topToast.type === 'error' ? '#DC2626' : '#0E7490',
+          color: '#FFFFFF',
+          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.2) inset',
+          fontSize: '13.5px',
+          fontWeight: '700',
+          letterSpacing: '-0.2px',
+          maxWidth: '90vw',
+          pointerEvents: 'auto',
+          transition: 'all 0.25s ease'
+        }}>
+          {topToast.type === 'error' ? (
+            <AlertCircle size={18} style={{ color: '#FEE2E2', flexShrink: 0 }} />
+          ) : (
+            <CheckCircle size={18} style={{ color: '#A7F3D0', flexShrink: 0 }} />
+          )}
+          <span>{topToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setTopToast(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255, 255, 255, 0.75)',
+              cursor: 'pointer',
+              marginLeft: '6px',
+              padding: '0 4px',
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: '15px',
+              lineHeight: 1
+            }}
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ==================== CONVERTING PI TO BOM ANIMATED MODAL ==================== */}
       {isConvertingToBom && (
@@ -2598,7 +2662,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <button
                   onClick={() => {
                     if (selectedPIs.length > 1) {
-                      alert("You can't open details for multiple files at once. Please select a single item to view details.");
+                      showTopToast("You can't open details for multiple files at once. Please select a single item to view details.", 'error', 4000);
                       return;
                     }
                     const target = piList.find(p => p.piNo === selectedPIs[0]);
@@ -2709,7 +2773,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <button
                       onClick={() => {
                         if (selectedPIs.length > 1) {
-                          alert('You cannot edit multiple items at once. Please select 1 item.');
+                          showTopToast('You cannot edit multiple items at once. Please select 1 item.', 'error', 4000);
                         } else if (selectedPIs.length === 1) {
                           const idx = piList.findIndex(p => p.piNo === targetPiNo);
                           handleStartEdit(targetPi || { piNo: targetPiNo }, idx >= 0 ? idx : 0);
