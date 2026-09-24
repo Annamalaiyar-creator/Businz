@@ -6237,6 +6237,142 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
   });
 });
 
+// Cancel / Decline Proforma Invoice (Estimate / Quote) in Zoho Books and local stores
+app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], async (req, res) => {
+  const { piNo, zohoEstimateId, reason = 'Cancelled by user in BUSINZ' } = req.body;
+  const cleanPiNo = String(piNo || '').trim();
+
+  if (!cleanPiNo && !zohoEstimateId) {
+    return res.status(400).json({ success: false, error: 'piNo or zohoEstimateId is required to cancel a Proforma Invoice' });
+  }
+
+  let zohoDeclined = false;
+  let zohoError = null;
+
+  // 1. Sync cancellation to Zoho Books
+  if (zohoSession.connected) {
+    try {
+      const accessToken = await getZohoAccessToken();
+      const callZohoEstimateApi = (method, apiPath, body = null) => {
+        return new Promise((resolve) => {
+          const sep = apiPath.includes('?') ? '&' : '?';
+          const fullPath = `${apiPath}${sep}organization_id=${zohoSession.orgId}`;
+          const postData = body ? JSON.stringify(body) : null;
+          const options = {
+            hostname: 'www.zohoapis.in',
+            port: 443,
+            path: fullPath,
+            method,
+            headers: {
+              'Authorization': `Zoho-oauthtoken ${accessToken}`,
+              'Content-Type': 'application/json',
+              ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
+            }
+          };
+          const reqEst = https.request(options, (resp) => {
+            let data = '';
+            resp.on('data', chunk => { data += chunk; });
+            resp.on('end', () => {
+              try { resolve(JSON.parse(data)); } catch (_) { resolve(null); }
+            });
+          });
+          reqEst.on('error', () => resolve(null));
+          if (postData) reqEst.write(postData);
+          reqEst.end();
+        });
+      };
+
+      let estIdToDecline = zohoEstimateId;
+
+      // If we don't have zohoEstimateId, search by estimate_number
+      if (!estIdToDecline && cleanPiNo) {
+        const estNum = encodeURIComponent(cleanPiNo);
+        let findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?estimate_number=${estNum}`, null);
+        if (!findRes || !Array.isArray(findRes.estimates) || findRes.estimates.length === 0) {
+          findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?search_text=${estNum}`, null);
+        }
+        const found = (findRes && Array.isArray(findRes.estimates))
+          ? (findRes.estimates.find(e => String(e.estimate_number || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) || findRes.estimates[0])
+          : null;
+        if (found && found.estimate_id) {
+          estIdToDecline = found.estimate_id;
+        }
+      }
+
+      if (estIdToDecline) {
+        // First try to mark as declined directly
+        let declineRes = await callZohoEstimateApi('POST', `/books/v3/estimates/${estIdToDecline}/status/declined`, { reason });
+
+        // If estimate is currently in draft, Zoho requires it to be 'sent' before it can be declined
+        if (declineRes && declineRes.code !== 0 && String(declineRes.message || '').toLowerCase().includes('draft')) {
+          await callZohoEstimateApi('POST', `/books/v3/estimates/${estIdToDecline}/status/sent`, null);
+          declineRes = await callZohoEstimateApi('POST', `/books/v3/estimates/${estIdToDecline}/status/declined`, { reason });
+        }
+
+        if (declineRes && (declineRes.code === 0 || String(declineRes.message || '').toLowerCase().includes('declined'))) {
+          zohoDeclined = true;
+          console.log(`[ZOHO ESTIMATE DECLINED] Quote ${cleanPiNo} (${estIdToDecline}) marked as Declined in Zoho Books.`);
+        } else {
+          zohoError = declineRes?.message || 'Could not decline estimate in Zoho Books';
+        }
+      } else {
+        zohoError = `Estimate ${cleanPiNo} not found in Zoho Books to decline`;
+      }
+    } catch (err) {
+      zohoError = err.message;
+      console.warn('[ZOHO ESTIMATE CANCEL ERROR]', err);
+    }
+  }
+
+  // 2. Persist cancellation in local stores (proforma_invoice_store and sales_pi_store)
+  const cancelledTimestamp = new Date().toISOString();
+  try {
+    const pProforma = getStoreFilePath('proforma_invoice_store.json');
+    if (fs.existsSync(pProforma)) {
+      let localProforma = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
+      if (Array.isArray(localProforma)) {
+        localProforma = localProforma.map(p => {
+          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase() || (zohoEstimateId && p.zohoEstimateId === zohoEstimateId)) {
+            return { ...p, status: 'Cancelled', statusType: 'cancelled', cancelledAt: cancelledTimestamp, cancelReason: reason };
+          }
+          return p;
+        });
+        fs.writeFileSync(pProforma, JSON.stringify(localProforma, null, 2), 'utf8');
+        pushStoreToSupabase('proforma_invoice_store', localProforma);
+      }
+    }
+
+    const pSales = getStoreFilePath('sales_pi_store.json');
+    if (fs.existsSync(pSales)) {
+      let localSales = JSON.parse(fs.readFileSync(pSales, 'utf8'));
+      if (Array.isArray(localSales)) {
+        localSales = localSales.map(p => {
+          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase() || (zohoEstimateId && p.zohoEstimateId === zohoEstimateId)) {
+            return { ...p, status: 'Cancelled', statusType: 'cancelled', cancelledAt: cancelledTimestamp, cancelReason: reason };
+          }
+          return p;
+        });
+        fs.writeFileSync(pSales, JSON.stringify(localSales, null, 2), 'utf8');
+        pushStoreToSupabase('sales_pi_store', localSales);
+      }
+    }
+  } catch (e) {
+    console.error('[CANCEL STORE PERSIST ERROR]', e);
+  }
+
+  // Invalidate estimates cache
+  zohoEstimatesCache.timestamp = 0;
+
+  res.json({
+    success: true,
+    message: zohoDeclined
+      ? `Proforma Invoice ${cleanPiNo} cancelled in BUSINZ and marked as Declined in Zoho Books!`
+      : `Proforma Invoice ${cleanPiNo} marked as Cancelled in BUSINZ.${zohoError ? ` (Zoho: ${zohoError})` : ''}`,
+    zohoDeclined,
+    zohoError
+  });
+});
+
 // Delivery Challans endpoints
 app.get('/api/zoho/deliverychallans', async (req, res) => {
   let localDCs = [];

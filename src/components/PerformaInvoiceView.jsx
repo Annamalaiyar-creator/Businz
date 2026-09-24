@@ -220,6 +220,45 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     }
   };
 
+  const [cancellingPiNo, setCancellingPiNo] = useState(null);
+
+  const handleCancelPi = async (piToCancel) => {
+    if (!piToCancel || !piToCancel.piNo) return;
+    const cleanPiNo = String(piToCancel.piNo).trim();
+    if (!window.confirm(`Are you sure you want to mark Proforma Invoice ${cleanPiNo} as Cancelled? This will also update its status to Declined in Zoho Books.`)) {
+      return;
+    }
+
+    setCancellingPiNo(cleanPiNo);
+    const updated = piList.map(p => (p.piNo === cleanPiNo || p.id === cleanPiNo) ? { ...p, status: 'Cancelled', statusType: 'cancelled' } : p);
+    updatePiList(updated);
+
+    try {
+      const resp = await fetch('/api/zoho/estimates/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          piNo: cleanPiNo,
+          zohoEstimateId: piToCancel.zohoEstimateId,
+          reason: 'Cancelled by user in BUSINZ'
+        })
+      });
+      const data = await resp.json();
+      if (data && data.success) {
+        notifyPiCreated({
+          title: `PI ${cleanPiNo} Cancelled`,
+          message: data.message || `Proforma Invoice ${cleanPiNo} marked as Cancelled & Declined in Zoho Books.`,
+          type: 'warning'
+        });
+      }
+    } catch (err) {
+      console.warn('[PI CANCEL ERROR]', err);
+    } finally {
+      setCancellingPiNo(null);
+      setSelectedPi(null);
+    }
+  };
+
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
@@ -5001,13 +5040,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   {selectedPi.status !== 'Cancelled' && !isConverted && (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm(`Are you sure you want to mark Proforma Invoice ${selectedPi.piNo} as Cancelled?`)) {
-                          const updated = piList.map(p => p.piNo === selectedPi.piNo ? { ...p, status: 'Cancelled', statusType: 'cancelled' } : p);
-                          updatePiList(updated);
-                          setSelectedPi(null);
-                        }
-                      }}
+                      disabled={cancellingPiNo === selectedPi.piNo}
+                      onClick={() => handleCancelPi(selectedPi)}
                       style={{
                         padding: '10px 16px',
                         borderRadius: '10px',
@@ -5016,10 +5050,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         color: '#DC2626',
                         fontSize: '13px',
                         fontWeight: '700',
-                        cursor: 'pointer'
+                        cursor: cancellingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
+                        opacity: cancellingPiNo === selectedPi.piNo ? 0.7 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
                       }}
                     >
-                      Cancel PI
+                      {cancellingPiNo === selectedPi.piNo ? 'Cancelling in Zoho...' : 'Cancel PI'}
                     </button>
                   )}
 
