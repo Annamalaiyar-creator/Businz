@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
+import { isTamilNaduIntra } from '../utils/gstHelper';
 import {
   Printer,
   Download,
@@ -795,6 +796,12 @@ export function VRMProformaInvoicePrintSheet({
   const gstTiers = rawGstTiers.length > 0
     ? rawGstTiers
     : (totalGst > 0 ? [{ rate: 18, taxable: subTotal, gstAmt: totalGst }] : []);
+
+  const piGst = pi.gstNo || pi.gstin || pi.gst || pi.customerGst || '';
+  const piState = (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress?.state : pi.deliveryState) ||
+    (typeof pi.billingAddress === 'object' ? pi.billingAddress?.state : pi.billingState) ||
+    pi.state || '';
+  const isIntra = isTamilNaduIntra(piGst, piState);
 
   // Terms array from text lines
   const termsLines = (cfg.termsText || '')
@@ -1963,14 +1970,39 @@ export function VRMProformaInvoicePrintSheet({
                   </td>
                 </tr>
 
-                {gstTiers.map((tier) => (
-                  <tr key={tier.rate} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                    <td style={{ padding: '6px 14px', color: '#475569', fontWeight: '600' }}>IGST ({tier.rate}%):</td>
-                    <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                      ₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
+                {isIntra ? (
+                  gstTiers.map((tier) => (
+                    <React.Fragment key={tier.rate}>
+                      <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                        <td style={{ padding: '5px 14px', color: '#475569', fontWeight: '600' }}>
+                          CGST ({(tier.rate / 2)}%){gstTiers.length > 1 ? ` (on ${tier.rate}% items)` : ''}:
+                        </td>
+                        <td style={{ padding: '5px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                          ₹{(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                        <td style={{ padding: '5px 14px', color: '#475569', fontWeight: '600' }}>
+                          SGST ({(tier.rate / 2)}%){gstTiers.length > 1 ? ` (on ${tier.rate}% items)` : ''}:
+                        </td>
+                        <td style={{ padding: '5px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                          ₹{(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  ))
+                ) : (
+                  gstTiers.map((tier) => (
+                    <tr key={tier.rate} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <td style={{ padding: '6px 14px', color: '#475569', fontWeight: '600' }}>
+                        IGST ({tier.rate}%){gstTiers.length > 1 ? ` (on ${tier.rate}% items)` : ''}:
+                      </td>
+                      <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                        ₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))
+                )}
 
                 <tr style={{ borderBottom: `1.5px solid ${accent}`, backgroundColor: `${accent}15` }}>
                   <td style={{ padding: '8px 14px', color: accent, fontWeight: '800', fontSize: '13px' }}>Grand Total:</td>

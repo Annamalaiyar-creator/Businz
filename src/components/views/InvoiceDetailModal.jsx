@@ -11,6 +11,7 @@ import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
 import TallySyncModal from "./TallySyncModal";
+import { isTamilNaduIntra } from "../../utils/gstHelper";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -123,6 +124,9 @@ export default function InvoiceDetailModal({
 
   const subtotal = isEditingInvoice ? computedSubtotal : (totalAmtRaw / 1.18);
   const taxGst = isEditingInvoice ? computedTaxGst : (totalAmtRaw - subtotal);
+  const invGst = inv.gstNo || inv.gstin || inv.gst || matchingBom?.gstNo || '';
+  const invState = inv.deliveryState || inv.billingState || inv.state || matchingBom?.deliveryState || matchingBom?.billingState || '';
+  const isInvIntra = isTamilNaduIntra(invGst, invState);
 
   const advanceAmt = isFullAdvance ? totalAmtRaw : (is50Percent ? totalAmtRaw * 0.5 : totalAmtRaw);
   const balanceAmt = isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0);
@@ -818,10 +822,33 @@ export default function InvoiceDetailModal({
             <strong style={{ color: '#0F172A' }}>₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-            <span>Tax (18% GST)</span>
-            <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+          {/* Dynamic GST State Badge */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 8px', backgroundColor: isInvIntra ? '#F0FDFA' : '#EEF2FF', borderRadius: '6px', border: `1px solid ${isInvIntra ? '#99F6E4' : '#C7D2FE'}` }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: isInvIntra ? '#0F766E' : '#4338CA' }}>
+              {isInvIntra ? 'Intra-State GST (Tamil Nadu)' : 'Inter-State GST (Outside TN)'}
+            </span>
+            <span style={{ fontSize: '10.5px', color: isInvIntra ? '#0D9488' : '#6366F1', fontWeight: '700' }}>
+              {isInvIntra ? 'CGST + SGST' : 'IGST'}
+            </span>
           </div>
+
+          {isInvIntra ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                <span>CGST (9%)</span>
+                <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                <span>SGST (9%)</span>
+                <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+              <span>IGST (18%)</span>
+              <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
             <span>Shipping Charges</span>

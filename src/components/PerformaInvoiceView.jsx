@@ -11,6 +11,7 @@ import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsDa
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
+import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 
 const defaultSalesPIs = [];
 
@@ -1055,11 +1056,24 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     });
 
+    const targetState = sameAsBilling ? billingState : (deliveryState || billingState);
+    const isIntra = isTamilNaduIntra(gstNo, targetState, billingState);
+
     const gstTiers = Object.values(gstTiersMap)
       .filter(t => t.gstAmt > 0 || t.taxable > 0)
       .sort((a, b) => a.rate - b.rate);
 
-    const gst = gstTiers.reduce((sum, t) => sum + t.gstAmt, 0);
+    const formattedTiers = (gstTiers.length > 0 ? gstTiers : [{ rate: 18, taxable: sub, gstAmt: sub * 0.18 }]).map(t => ({
+      ...t,
+      cgstRate: t.rate / 2,
+      cgstAmt: t.gstAmt / 2,
+      sgstRate: t.rate / 2,
+      sgstAmt: t.gstAmt / 2,
+      igstRate: t.rate,
+      igstAmt: t.gstAmt
+    }));
+
+    const gst = formattedTiers.reduce((sum, t) => sum + t.gstAmt, 0);
     const grand = sub + gst;
     const cgst = gst / 2;
     const sgst = gst / 2;
@@ -1071,7 +1085,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       grand: isNaN(grand) ? 0 : grand,
       cgst: isNaN(cgst) ? 0 : cgst,
       sgst: isNaN(sgst) ? 0 : sgst,
-      gstTiers: gstTiers.length > 0 ? gstTiers : [{ rate: 18, taxable: sub, gstAmt: gst }]
+      isIntra,
+      taxType: isIntra ? 'INTRA' : 'INTER',
+      gstTiers: formattedTiers
     };
   };
 
@@ -4104,12 +4120,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <span>₹{totals.sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
-                  {(totals.gstTiers || []).map(tier => (
-                    <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#475569' }}>
-                      <span>IGST ({tier.rate}%):</span>
-                      <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  ))}
+                  {/* Dynamic Tax State Badge */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0', padding: '4px 8px', backgroundColor: totals.isIntra ? '#F0FDFA' : '#EEF2FF', borderRadius: '6px', border: `1px solid ${totals.isIntra ? '#99F6E4' : '#C7D2FE'}` }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: totals.isIntra ? '#0F766E' : '#4338CA' }}>
+                      {totals.isIntra ? 'Intra-State (Tamil Nadu)' : 'Inter-State (Outside TN)'}
+                    </span>
+                    <span style={{ fontSize: '10.5px', color: totals.isIntra ? '#0D9488' : '#6366F1', fontWeight: '700' }}>
+                      {totals.isIntra ? 'CGST + SGST' : 'IGST'}
+                    </span>
+                  </div>
+
+                  {/* Dynamic GST Tiers Breakdown */}
+                  {totals.isIntra ? (
+                    (totals.gstTiers || []).map(tier => (
+                      <React.Fragment key={tier.rate}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                          <span>CGST ({tier.cgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.cgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                          <span>SGST ({tier.sgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.sgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    (totals.gstTiers || []).map(tier => (
+                      <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                        <span>IGST ({tier.rate}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                        <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    ))
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '7px 12px', borderRadius: '8px' }}>
                     <span>Total GST Amount:</span>
@@ -4283,6 +4325,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             modalGstTiersMap[rate].gstAmt += amt;
           });
         }
+
+        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
+        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
+        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
 
         const modalGstTiers = Object.values(modalGstTiersMap)
           .filter(t => t.gstAmt > 0 || t.taxable > 0)
@@ -4857,13 +4903,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         <strong style={{ color: '#0F172A' }}>₹ {Number(selectedPi.kitSubtotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                       </div>
                     )}
+                    {/* Dynamic Tax State Badge in Detail Modal */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0', padding: '3px 8px', backgroundColor: isModalIntra ? '#F0FDFA' : '#EEF2FF', borderRadius: '6px', border: `1px solid ${isModalIntra ? '#99F6E4' : '#C7D2FE'}` }}>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: isModalIntra ? '#0F766E' : '#4338CA' }}>
+                        {isModalIntra ? 'Intra-State GST (Tamil Nadu)' : 'Inter-State GST (Outside TN)'}
+                      </span>
+                      <span style={{ fontSize: '10.5px', color: isModalIntra ? '#0D9488' : '#6366F1', fontWeight: '700' }}>
+                        {isModalIntra ? 'CGST + SGST' : 'IGST'}
+                      </span>
+                    </div>
+
                     {modalGstTiers.length > 0 ? (
-                      modalGstTiers.map(tier => (
-                        <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                          <span>IGST ({tier.rate}%):</span>
-                          <strong style={{ color: '#0F172A' }}>₹ {tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                        </div>
-                      ))
+                      isModalIntra ? (
+                        modalGstTiers.map(tier => (
+                          <React.Fragment key={tier.rate}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
+                              <span>CGST ({(tier.rate / 2)}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
+                              <strong style={{ color: '#0F172A' }}>₹ {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
+                              <span>SGST ({(tier.rate / 2)}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
+                              <strong style={{ color: '#0F172A' }}>₹ {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                            </div>
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        modalGstTiers.map(tier => (
+                          <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
+                            <span>IGST ({tier.rate}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
+                            <strong style={{ color: '#0F172A' }}>₹ {tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                          </div>
+                        ))
+                      )
                     ) : (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
                         <span>Applicable GST (Taxes):</span>
