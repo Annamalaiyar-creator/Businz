@@ -2947,31 +2947,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setPiConfirmModal('cancel')}
-                  style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={triggerDraftConfirm}
-                  style={{ border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.18)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)', transition: 'all 0.15s ease' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.28)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
-                >
-                  Save as Draft
-                </button>
-                <button
-                  type="button"
-                  onClick={triggerSaveConfirm}
-                  style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)' }}
-                >
-                  {viewMode === 'edit' ? 'Update & Release PI' : 'Save & Release PI'}
-                </button>
-              </div>
+
             </div>
 
             {/* SECTION 1: PI DETAILS & DATES */}
@@ -4010,7 +3986,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           </div>
 
           {/* SIDE-BY-SIDE SECTIONS: 4 (VRM OFFICIAL COMMERCIAL BANK DETAILS - LEFT) & 5 (FINANCIAL BREAKDOWN - RIGHT) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '24px', alignItems: 'start' }}>
             
             {/* SECTION 4: VRM OFFICIAL COMMERCIAL BANK DETAILS (LEFT) */}
             <div style={{
@@ -4021,94 +3997,80 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
               gap: '16px'
             }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
-                      4
-                    </div>
-                    <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      VRM OFFICIAL COMMERCIAL BANK DETAILS
-                    </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                  4
+                </div>
+                <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  VRM OFFICIAL COMMERCIAL BANK DETAILS
+                </h3>
+              </div>
+
+              {/* Structured Bank Detail Cards */}
+              <div style={{ backgroundColor: '#F0FDFA', borderRadius: '12px', border: '1px solid #99F6E4', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Beneficiary Name Banner */}
+                <div style={{ paddingBottom: '10px', borderBottom: '1px solid #CCFBF1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Beneficiary Account Name</div>
+                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>VRM Structures India Private Limited</div>
                   </div>
-                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #A5F3FC', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <Landmark size={13} color="#0E7490" /> Verified Settlement Account
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '6px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <ShieldCheck size={13} /> Verified
                   </span>
                 </div>
 
-                {/* Structured Bank Detail Cards */}
-                <div style={{ backgroundColor: '#F0FDFA', borderRadius: '12px', border: '1px solid #99F6E4', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {/* Beneficiary Name Banner */}
-                  <div style={{ paddingBottom: '10px', borderBottom: '1px solid #CCFBF1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Beneficiary Account Name</div>
-                      <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>VRM Structures India Private Limited</div>
-                    </div>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '6px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <ShieldCheck size={13} /> Verified
-                    </span>
+                {/* Bank Name & Account Type Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Bank Name</div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>HDFC Bank</div>
                   </div>
-
-                  {/* Bank Name & Account Type Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Bank Name</div>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>HDFC Bank</div>
-                    </div>
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Account Type</div>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>Current Account</div>
-                    </div>
-                  </div>
-
-                  {/* Account Number & IFSC with Copy Buttons */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>Current Account Number</div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
-                        title="Copy Account Number"
-                        style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                      >
-                        {copiedBankField === 'Account Number' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                      </button>
-                    </div>
-
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>RTGS / NEFT / IFSC</div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>HDFC0007315</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyBankDetail('HDFC0007315', 'IFSC Code')}
-                        title="Copy IFSC Code"
-                        style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                      >
-                        {copiedBankField === 'IFSC Code' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Branch Location */}
-                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span><strong>Branch:</strong> Vinayagapuram Branch</span>
-                    <span style={{ color: '#0E7490', fontSize: '10px', fontWeight: '700' }}>Settlement: INR (₹)</span>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Account Type</div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>Current Account</div>
                   </div>
                 </div>
-              </div>
 
-              {/* Settlement Notice */}
-              <div style={{ fontSize: '11.5px', color: '#0E7490', padding: '10px 14px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={15} style={{ color: '#0E7490', flexShrink: 0 }} />
-                <span>Please transfer advance & milestone payments to this account. Quote PI Number in remittance remarks for instant reconciliation.</span>
+                {/* Account Number & IFSC with Copy Buttons */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>Current Account Number</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                      title="Copy Account Number"
+                      style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    >
+                      {copiedBankField === 'Account Number' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>RTGS / NEFT / IFSC</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>HDFC0007315</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyBankDetail('HDFC0007315', 'IFSC Code')}
+                      title="Copy IFSC Code"
+                      style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    >
+                      {copiedBankField === 'IFSC Code' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branch Location */}
+                <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span><strong>Branch:</strong> Vinayagapuram Branch</span>
+                  <span style={{ color: '#0E7490', fontSize: '10px', fontWeight: '700' }}>Settlement: INR (₹)</span>
+                </div>
               </div>
             </div>
 
