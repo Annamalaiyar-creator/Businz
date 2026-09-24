@@ -3039,7 +3039,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Sales Engineer / Creator
+                    Sales Executive
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -3673,37 +3673,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <option value="PAIR" />
                               </datalist>
                             </td>
-                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                {(() => {
-                                  const avail = getItemStock(item.name, item.code);
-                                  if (avail === null) {
-                                    return (
-                                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', letterSpacing: '0.2px' }}>
-                                        Stock: —
-                                      </span>
-                                    );
-                                  }
-                                  const isOut = avail <= 0;
-                                  return (
-                                    <span
-                                      title={`Available Stock: ${avail.toLocaleString()}`}
-                                      style={{
-                                        fontSize: '10.5px',
-                                        fontWeight: '800',
-                                        padding: '1px 7px',
-                                        borderRadius: '10px',
-                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
-                                        color: isOut ? '#DC2626' : '#059669',
-                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
-                                        whiteSpace: 'nowrap',
-                                        lineHeight: '1.3'
-                                      }}
-                                    >
-                                      Stock: {avail.toLocaleString()}
-                                    </span>
-                                  );
-                                })()}
+                            <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
+                              <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <input
                                   type="number"
                                   value={item.qty}
@@ -3712,8 +3683,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     const val = e.target.value;
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                                   }}
-                                  style={{ width: '100%', height: '34px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
+                                  title={(() => {
+                                    const avail = getItemStock(item.name, item.code);
+                                    return avail !== null ? `Available Stock: ${avail.toLocaleString()}` : '';
+                                  })()}
+                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
                                 />
+                                {(() => {
+                                  const avail = getItemStock(item.name, item.code);
+                                  if (avail === null || avail === undefined) return null;
+                                  const isOut = avail <= 0;
+                                  return (
+                                    <span
+                                      title={`Available Stock: ${avail.toLocaleString()}`}
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: '-15px',
+                                        fontSize: '9.5px',
+                                        fontWeight: '800',
+                                        padding: '1px 5px',
+                                        borderRadius: '6px',
+                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
+                                        color: isOut ? '#DC2626' : '#059669',
+                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
+                                        whiteSpace: 'nowrap',
+                                        lineHeight: '1.2',
+                                        pointerEvents: 'none'
+                                      }}
+                                    >
+                                      Stock: {avail.toLocaleString()}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px' }}>
