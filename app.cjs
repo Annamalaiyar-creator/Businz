@@ -105,5 +105,23 @@ if (!process.env.APP_ENV) process.env.APP_ENV = 'production';
 // 5. Dynamically import the ES Module server
 import('./server/index.js').catch((err) => {
   console.error('[IISNode Startup Error]:', err);
-  process.exit(1);
+  try {
+    const http = require('http');
+    const port = process.env.PORT || 5000;
+    const server = http.createServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'SERVER_BOOT_ERROR',
+        message: 'BUSINZ backend failed to initialize on startup.',
+        error: err?.message,
+        stack: err?.stack
+      }, null, 2));
+    });
+    server.listen(port, () => {
+      console.log(`[IISNode Fallback] Active on ${port} to report boot exception.`);
+    });
+  } catch (_) {
+    process.exit(1);
+  }
 });
+

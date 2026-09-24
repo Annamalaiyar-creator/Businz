@@ -51,6 +51,18 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // In-memory active cache for Supabase Database stores
 let supabaseMemoryStore = {};
 
+// Local Store file path & helpers
+function getStoreFilePath(filename) {
+  const p1 = path.join(__dirname, filename);
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.resolve(process.cwd(), 'server', filename);
+  if (fs.existsSync(p2)) return p2;
+  const p3 = path.resolve(process.cwd(), filename);
+  if (fs.existsSync(p3)) return p3;
+  return p1;
+}
+
+
 const getPoStageRank = (p) => {
   if (!p) return 0;
   const s = String(p.status || '').toLowerCase().trim();
@@ -1767,17 +1779,7 @@ app.post('/api/zoho/sync', async (req, res) => {
   }
 });
 
-// Local Store file path & helpers
-const getStoreFilePath = (filename) => {
-  const p1 = path.join(__dirname, filename);
-  if (fs.existsSync(p1)) return p1;
-  const p2 = path.resolve(process.cwd(), 'server', filename);
-  if (fs.existsSync(p2)) return p2;
-  const p3 = path.resolve(process.cwd(), filename);
-  if (fs.existsSync(p3)) return p3;
-  return p1;
-};
-
+// Local Store file helpers
 const loadLocalPOs = () => {
   let memPOs = [];
   if (supabaseMemoryStore.po_store && Array.isArray(supabaseMemoryStore.po_store) && supabaseMemoryStore.po_store.length > 0) {
@@ -4825,9 +4827,6 @@ app.post('/api/boms', async (req, res) => {
         return;
       } catch (err) {
         console.error('Error saving BOM:', err);
-        res.status(500).json({ success: false, message: err.message });
-        resolveOuter();
-      }
         res.status(500).json({ success: false, message: err.message });
         resolveOuter();
       }
