@@ -120,9 +120,13 @@ export default function ProductionViewsEngine(props) {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerToDelete, setCustomerToDelete] = useState(null);
   const [previewAddressProofModal, setPreviewAddressProofModal] = useState(null);
-  const [bomActionMenuPos, setBomActionMenuPos] = useState({ top: 0, left: 0 });
-
-  const [bomStore, setBomStore] = useState([]);
+  const [bomStore, setBomStore] = useState(() => {
+    try {
+      const local = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+      if (Array.isArray(local) && local.length > 0) return local;
+    } catch (_) {}
+    return [];
+  });
 
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
@@ -193,7 +197,7 @@ export default function ProductionViewsEngine(props) {
 
         if (data && Array.isArray(data)) {
           if (data.length === 0) {
-            setBomStore([]);
+            setBomStore(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
           } else {
             setBomStore(prev => {
               const combined = [...(Array.isArray(data) ? data : []), ...(Array.isArray(prev) ? prev : [])];
@@ -266,6 +270,7 @@ export default function ProductionViewsEngine(props) {
 
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
     window.addEventListener('controlroom_storage_update', syncFromCloud);
+    window.addEventListener('storage', syncFromCloud);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
@@ -273,6 +278,7 @@ export default function ProductionViewsEngine(props) {
       clearInterval(fallbackInterval);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
       window.removeEventListener('controlroom_storage_update', syncFromCloud);
+      window.removeEventListener('storage', syncFromCloud);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };

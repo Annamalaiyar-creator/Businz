@@ -174,15 +174,25 @@ export default function DispatchPackingModal({
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
       return;
     }
+    // User requested: "Confirm Packing and send to accounts verification this is the big button so make it as simple Packing confirmed if i click that it self it will move the BOM to the Accounts Verification."
+    const confirmedItems = (itemsToPack && itemsToPack.length > 0)
+      ? itemsToPack.map(it => ({ ...it, packed: true, qty: it.qty || it.bomQty || 1 }))
+      : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
+
     const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
-    const nextStatus = allItemsPacked
-      ? 'Packed & Awaiting Accounts Verification'
-      : 'Partially Packed';
-    const needsSalesPaymentNotification = allItemsPacked && isWhileDispatch;
+    const nextStatus = 'Packed & Awaiting Accounts Verification';
+    const needsSalesPaymentNotification = isWhileDispatch;
 
     const accountsVerificationData = (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
       ? dispatchPackingModal.accountsVerification
-      : (allItemsPacked ? { paymentStatus: isWhileDispatch ? 'Awaiting Sales Payment Slip' : null, hardCopyReceived: false, softCopyReceived: false, verified: false, readyForAccounts: true, packedAt: new Date().toISOString() } : (dispatchPackingModal.accountsVerification || {}));
+      : {
+          paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
+          hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
+          softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
+          verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
+          readyForAccounts: true,
+          packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
+        };
 
     const rawMedia = dispatchPackingModal.dispatchPackingMedia;
     const cleanMedia = rawMedia ? {
@@ -213,7 +223,7 @@ export default function DispatchPackingModal({
 
     const updatedPackedBom = {
       ...dispatchPackingModal,
-      dispatchPacking: itemsToPack,
+      dispatchPacking: confirmedItems,
       dispatchPackingMedia: cleanMedia,
       status: nextStatus,
       pendingSalesDispatchPayment: needsSalesPaymentNotification,
@@ -992,16 +1002,16 @@ export default function DispatchPackingModal({
                 disabled={uploadingCount > 0}
                 style={{
                   border: 'none',
-                  background: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? 'linear-gradient(135deg, #059669, #10B981)' : 'linear-gradient(135deg, #1E40AF, #2563EB)'),
+                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
                   color: '#FFFFFF', height: '40px', padding: '0 24px',
                   borderRadius: '10px', fontSize: '13px', fontWeight: '800',
                   cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: allItemsPacked ? '0 4px 12px rgba(16,185,129,0.35)' : '0 4px 12px rgba(37,99,235,0.3)',
+                  boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
                   display: 'flex', alignItems: 'center', gap: '8px'
                 }}
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Packing Confirmed' : 'Save Packing Progress')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : 'Packing Confirmed'}
               </button>
             )}
           </div>
