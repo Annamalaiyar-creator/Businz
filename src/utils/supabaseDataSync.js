@@ -374,6 +374,192 @@ export async function deleteCloudOpportunityRow(oppId) {
 }
 
 /**
+ * Convert canonical public.invoices database row to consumer-ready shape
+ */
+export function toConsumerInvoice(row) {
+  if (!row || typeof row !== 'object') return null;
+  let meta = {};
+  if (row.preset_name) {
+    if (typeof row.preset_name === 'string' && row.preset_name.startsWith('{')) {
+      try { meta = JSON.parse(row.preset_name); } catch (_) {}
+    } else {
+      meta.presetName = row.preset_name;
+    }
+  }
+
+  const invNo = row.inv_no || row.id;
+  const invAmt = Number(row.inv_amt || 0);
+
+  return {
+    id: row.id,
+    invNo: invNo,
+    invoiceNo: invNo,
+    invoiceNumber: invNo,
+    code: invNo,
+    poNo: row.bom_code || '',
+    bomCode: row.bom_code || '',
+    vendor: row.vendor || meta.customerName || 'Customer',
+    customerName: meta.customerName || row.vendor || 'Customer',
+    customerId: meta.customerId || '',
+    date: meta.date || row.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+    dueDate: meta.dueDate || '',
+    invAmt: meta.amount || `₹${invAmt.toLocaleString('en-IN')}`,
+    amount: meta.amount || `₹${invAmt.toLocaleString('en-IN')}`,
+    total: meta.total || invAmt,
+    rawTotal: meta.rawTotal || invAmt,
+    balance: meta.balance !== undefined ? meta.balance : invAmt,
+    status: row.status || 'Draft',
+    pay: row.pay || row.status || 'Pending',
+    syncedToZoho: Boolean(row.synced_to_zoho),
+    items: meta.items || [],
+    deliveryAddress: meta.deliveryAddress || '',
+    billingAddress: meta.billingAddress || '',
+    paymentType: meta.paymentType || '',
+    stockDeducted: Boolean(meta.stockDeducted),
+    stockDeductionDate: meta.stockDeductionDate || null,
+    vehicleLoading: meta.vehicleLoading || null,
+    lrCopyDoc: meta.lrCopyDoc || null,
+    deliveryAddressProofDoc: meta.deliveryAddressProofDoc || null,
+    presetName: meta.presetName || '',
+    zohoId: row.zoho_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+/**
+ * Convert invoice object from any component to canonical public.invoices database row
+ */
+export function toDatabaseInvoiceRow(item) {
+  if (!item || typeof item !== 'object') return null;
+  const id = String(item.id || item.invNo || item.invoiceNumber || item.code || `INV-${Date.now()}`);
+  const invNo = item.invNo || item.invoiceNumber || item.code || id;
+  const vendor = item.vendor || item.customerName || item.customer_name || 'Customer';
+  const bomCode = item.bomCode || item.poNo || item.bom_code || '';
+  const zohoId = item.zohoId || item.zoho_id || null;
+  const status = item.status || 'Draft';
+  const pay = item.pay || status || 'Pending';
+  const synced = Boolean(item.syncedToZoho || item.synced_to_zoho);
+  const invAmt = Number(item.invAmt !== undefined ? String(item.invAmt).replace(/[^0-9.]/g, '') : (item.total || item.grandTotal || item.amount || 0)) || 0;
+
+  const extraMetadata = {
+    customerName: item.customerName || vendor,
+    date: item.date || item.createdAt || new Date().toISOString().split('T')[0],
+    dueDate: item.dueDate || item.due_date || '',
+    customerId: item.customerId || item.customer_id || '',
+    items: Array.isArray(item.items) ? item.items : [],
+    total: item.total || invAmt,
+    balance: item.balance !== undefined ? item.balance : invAmt,
+    amount: item.amount || `₹${invAmt.toLocaleString('en-IN')}`,
+    rawTotal: item.rawTotal || invAmt,
+    deliveryAddress: item.deliveryAddress || item.delivery_address || '',
+    billingAddress: item.billingAddress || item.billing_address || '',
+    paymentType: item.paymentType || item.payment_type || '',
+    stockDeducted: Boolean(item.stockDeducted),
+    stockDeductionDate: item.stockDeductionDate || null,
+    vehicleLoading: item.vehicleLoading || null,
+    lrCopyDoc: item.lrCopyDoc || null,
+    deliveryAddressProofDoc: item.deliveryAddressProofDoc || null,
+    presetName: typeof item.preset_name === 'string' && !item.preset_name.startsWith('{') ? item.preset_name : (item.presetName || '')
+  };
+
+  return {
+    id,
+    inv_no: invNo,
+    preset_name: JSON.stringify(extraMetadata),
+    inv_amt: invAmt,
+    vendor,
+    bom_code: bomCode,
+    zoho_id: zohoId,
+    status,
+    pay,
+    synced_to_zoho: synced,
+    created_at: item.createdAt || item.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Single-row atomic save/upsert for an Invoice (Zero leaves table interaction)
+ */
+export async function saveCloudInvoiceRow(invoice) {
+  if (!invoice) return null;
+  const row = toDatabaseInvoiceRow(invoice);
+  if (!row) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('invoices')
+      .upsert(row, { onConflict: 'id' })
+      .select();
+
+    if (error) {
+      console.warn('[SupabaseSync] Single invoice save error:', error.message);
+    }
+
+    const consumerInv = toConsumerInvoice(data?.[0] || row);
+
+    // Broadcast local event matching existing listeners
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
+        detail: { invoice: consumerInv, action: 'upsert' }
+      }));
+      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+        detail: { storeKey: 'invoice_store', action: 'upsert', item: consumerInv }
+      }));
+    }
+
+    // Async disk backup fallback
+    try {
+      fetch('/api/store/invoice_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(consumerInv)
+      }).catch(() => {});
+    } catch (_) {}
+
+    return consumerInv;
+  } catch (err) {
+    console.warn('[SupabaseSync] Single invoice upsert error:', err?.message || err);
+    return invoice;
+  }
+}
+
+/**
+ * Single-row atomic delete for an Invoice (Zero leaves table interaction)
+ */
+export async function deleteCloudInvoiceRow(invoiceId) {
+  if (!invoiceId) return false;
+  const cleanId = String(invoiceId).trim();
+
+  try {
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .or(`id.eq.${cleanId},inv_no.eq.${cleanId}`);
+
+    if (error) {
+      console.warn('[SupabaseSync] Single invoice delete error:', error.message);
+      return false;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
+        detail: { invoiceId: cleanId, action: 'delete' }
+      }));
+      window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+        detail: { storeKey: 'invoice_store', action: 'delete', itemId: cleanId }
+      }));
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('[SupabaseSync] Single invoice delete error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
  * Convert canonical public.leads database row to consumer-ready shape
  */
 export function toConsumerLead(l) {
@@ -962,6 +1148,58 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     }
   }
 
+  // CANONICAL INVOICE READ PATH: Query via local backend proxy first (Zero PostgREST egress)
+  if (storeKey === 'invoice_store' || storeKey === 'INVOICE_STORE') {
+    // 1. Try local server memory/zoho cache first (Zero Supabase PostgREST egress)
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch('/api/zoho/invoices', { signal: controller.signal }).catch(() => null);
+      clearTimeout(tId);
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json && Array.isArray(json) && json.length > 0) {
+          return json;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Direct Supabase query fallback: SELECT from public.invoices (with limit 200)
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Invoices cloud fetch timeout')), 3000));
+      const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+      const fetchPromise = supabase
+        .from('invoices')
+        .select(INVOICE_SUMMARY_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      const { data: dbInvoices, error: invErr } = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (!invErr && Array.isArray(dbInvoices) && dbInvoices.length > 0) {
+        return dbInvoices.map(toConsumerInvoice).filter(Boolean);
+      }
+    } catch (err) {
+      console.warn('[SupabaseSync] Invoices direct fetch notice:', err?.message || err);
+    }
+
+    // 3. Fallback to existing leaves table record if public.invoices not yet populated (Safe rollback)
+    try {
+      const { data: records, error } = await supabase
+        .from('leaves')
+        .select('reason')
+        .eq('employee', 'INVOICE_STORE')
+        .order('id', { ascending: false })
+        .limit(1);
+      if (!error && records && records.length > 0 && records[0].reason) {
+        const parsed = JSON.parse(records[0].reason);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+  }
+
   // CANONICAL LEADS READ PATH: Query public.leads directly
   if (storeKey === 'crm_leads' || storeKey === 'leads') {
     try {
@@ -1311,6 +1549,47 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     return; // STOP! NEVER touch leaves table for BOMs!
   }
 
+  // CANONICAL INVOICE WRITE PATH: Direct normalized upsert to public.invoices table (Zero leaves table egress)
+  if (storeKey === 'invoice_store' || storeKey === 'INVOICE_STORE') {
+    try {
+      if (Array.isArray(storeData)) {
+        console.warn(`[SupabaseSync] Whole-array invoice sync to public.invoices blocked (${storeData.length} records) to prevent excessive PostgREST egress.`);
+        // Broadcast locally to current window only, NEVER send whole array to Supabase
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+            detail: { storeKey: 'invoice_store', data: storeData }
+          }));
+        }
+      } else if (storeData && typeof storeData === 'object') {
+        const row = toDatabaseInvoiceRow(storeData);
+        if (row) {
+          await supabase.from('invoices').upsert(row, { onConflict: 'id' });
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+            detail: { storeKey: 'invoice_store', data: storeData }
+          }));
+          window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
+            detail: { invoice: storeData }
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('[SupabaseSync] Error persisting to public.invoices:', err?.message || err);
+    }
+
+    // Keep lightweight async fallback to local server disk json backup
+    try {
+      fetch(`/api/store/${storeKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storeData)
+      }).catch(() => {});
+    } catch (_) {}
+
+    return; // STOP! NEVER touch leaves table for Invoices!
+  }
+
   try {
     const employeeKey = storeKey.toUpperCase();
     const { data: records } = await supabase
@@ -1613,20 +1892,22 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
 
     // Supabase Realtime subscription for cross-device/cross-user sync
     const isBomStore = storeKey === 'bom_store' || storeKey === 'BOM_STORE';
+    const isInvoiceStore = storeKey === 'invoice_store' || storeKey === 'INVOICE_STORE';
     const targetTable = storeKey === 'employees_store'
       ? 'users'
       : ((storeKey === 'customer_store' || storeKey === 'crm_customers')
         ? 'customers'
         : ((storeKey === 'crm_opportunities' || storeKey === 'opportunities')
           ? 'opportunities'
-          : (isBomStore ? 'bom_orders' : 'leaves')));
+          : (isBomStore ? 'bom_orders' : (isInvoiceStore ? 'invoices' : 'leaves'))));
 
     const hasNoFilter = storeKey === 'employees_store' ||
       storeKey === 'customer_store' ||
       storeKey === 'crm_customers' ||
       storeKey === 'crm_opportunities' ||
       storeKey === 'opportunities' ||
-      isBomStore;
+      isBomStore ||
+      isInvoiceStore;
 
     const channel = supabase
       .channel(`sync_${storeKey}_${Math.random()}`)
@@ -1654,6 +1935,16 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
               const singleBom = toConsumerBom(payload.new);
               if (singleBom) {
                 onUpdateCallback(singleBom);
+              }
+            } else if (payload && payload.eventType === 'DELETE' && payload.old) {
+              onUpdateCallback({ id: payload.old.id, _deleted: true });
+            }
+          } else if (isInvoiceStore) {
+            // NEVER download the entire table on a Realtime row event!
+            if (payload && payload.new) {
+              const singleInv = toConsumerInvoice(payload.new);
+              if (singleInv) {
+                onUpdateCallback(singleInv);
               }
             } else if (payload && payload.eventType === 'DELETE' && payload.old) {
               onUpdateCallback({ id: payload.old.id, _deleted: true });

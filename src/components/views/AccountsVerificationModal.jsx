@@ -4,7 +4,7 @@ import {
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image
 } from "lucide-react";
 import { getMediaFromCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
-import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import StatusBadge from "../StatusBadge";
 import { VRMBomPrintSheet } from "../VRMBomPrintTemplate";
@@ -215,7 +215,7 @@ export default function AccountsVerificationModal({
       const filtered = (prev || []).filter(i => i.poNo !== targetCode && i.bomCode !== targetCode && (finalInvNo ? (i.invNo !== finalInvNo && i.code !== finalInvNo) : true));
       const updated = [newInvEntry, ...filtered];
       try {
-        saveCloudStore('invoice_store', updated);
+        saveCloudInvoiceRow(newInvEntry);
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
       } catch (e) { }
       return updated;

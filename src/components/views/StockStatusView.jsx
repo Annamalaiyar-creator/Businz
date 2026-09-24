@@ -1951,9 +1951,13 @@ export default function StockStatusView(props) {
     return INITIAL_INVOICES;
   });
 
-  // Sync invoiceList with Supabase cloud database
+  // Keep local convenience cache updated without cloud egress
   useEffect(() => {
-    saveCloudStore('invoice_store', invoiceList);
+    if (invoiceList && invoiceList.length > 0) {
+      try {
+        localStorage.setItem('controlroom_invoice_store', JSON.stringify(invoiceList));
+      } catch (_) {}
+    }
   }, [invoiceList]);
 
   // Initial cloud fetch for invoices

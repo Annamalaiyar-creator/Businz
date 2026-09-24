@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate } from '../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, saveCloudInvoiceRow } from '../utils/supabaseDataSync';
 
 /**
  * Universal Safe Synchronizer for Zoho Books + Supabase in Control Room.
@@ -418,7 +418,6 @@ export async function getSafeZohoInvoices() {
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
-        saveCloudStore('invoice_store', data);
         return data;
       }
     }
@@ -451,7 +450,7 @@ export async function saveSafeZohoInvoice(invoice) {
       updatedList = [invoice, ...cloudList];
     }
 
-    saveCloudStore('invoice_store', updatedList);
+    saveCloudInvoiceRow(invoice);
 
     try {
       fetch('/api/zoho/invoices', {

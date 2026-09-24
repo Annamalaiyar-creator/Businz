@@ -63,6 +63,32 @@ rawSupabase.from = (table) => {
       return selectBuilder.neq('customer_name', 'Customer');
     };
   }
+
+  if (table === 'invoices') {
+    const rawUpsert = query.upsert.bind(query);
+    query.upsert = (values, options) => {
+      if (Array.isArray(values)) {
+        if (values.length > 5) {
+          console.warn(`[Supabase Firewall] Blocked mass array upsert of ${values.length} rows to public.invoices to prevent excessive PostgREST egress.`);
+          return Promise.resolve({ data: [], error: null });
+        }
+        return rawUpsert(values, options);
+      }
+      return rawUpsert(values, options);
+    };
+
+    const rawInsert = query.insert.bind(query);
+    query.insert = (values, options) => {
+      if (Array.isArray(values)) {
+        if (values.length > 5) {
+          console.warn(`[Supabase Firewall] Blocked mass array insert of ${values.length} rows to public.invoices to prevent excessive PostgREST egress.`);
+          return Promise.resolve({ data: [], error: null });
+        }
+        return rawInsert(values, options);
+      }
+      return rawInsert(values, options);
+    };
+  }
   return query;
 };
 
