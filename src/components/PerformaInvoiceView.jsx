@@ -4171,92 +4171,77 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
               </div>
 
-              {/* Action Buttons Column / Grid */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={previewCurrentFormAsTemplate}
-                    style={{
-                      height: '42px',
-                      borderRadius: '10px',
-                      backgroundColor: '#ECFEFF',
-                      color: '#0E7490',
-                      border: '1.5px solid #A5F3FC',
-                      fontSize: '12.5px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Printer size={15} /> Preview Print / PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={triggerDraftConfirm}
-                    style={{
-                      height: '42px',
-                      borderRadius: '10px',
-                      backgroundColor: '#FFFFFF',
-                      color: '#0E7490',
-                      border: '1.5px solid #0E7490',
-                      fontSize: '12.5px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Save as Draft
-                  </button>
-                </div>
-
+              {/* Action Buttons in a Single Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setPiConfirmModal('cancel')}
+                  style={{
+                    height: '42px',
+                    borderRadius: '10px',
+                    backgroundColor: '#F8FAFC',
+                    color: '#64748B',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#334155'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
+                >
+                  Discard Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={triggerDraftConfirm}
+                  style={{
+                    height: '42px',
+                    borderRadius: '10px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#0E7490',
+                    border: '1.5px solid #0E7490',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                >
+                  Save as Draft
+                </button>
                 <button
                   type="button"
                   onClick={triggerSaveConfirm}
                   style={{
-                    width: '100%',
-                    height: '46px',
+                    height: '42px',
                     borderRadius: '10px',
                     backgroundColor: '#10B981',
                     color: 'white',
                     border: 'none',
-                    fontSize: '14px',
+                    fontSize: '12.5px',
                     fontWeight: '900',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     boxShadow: '0 4px 10px rgba(16, 185, 129, 0.35)',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.15s ease'
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
                 >
                   Confirm & Save Proforma Invoice
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPiConfirmModal('cancel')}
-                  style={{
-                    width: '100%',
-                    height: '36px',
-                    borderRadius: '10px',
-                    backgroundColor: 'transparent',
-                    color: '#64748B',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '12.5px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  Discard Changes
                 </button>
               </div>
             </div>
