@@ -7,7 +7,7 @@ import {
 import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
-import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
 import TallySyncModal from "./TallySyncModal";
@@ -176,7 +176,7 @@ export default function InvoiceDetailModal({
           : item
       );
       try {
-        saveCloudStore("invoice_store", updated);
+        saveCloudInvoiceRow(updatedInvoiceRecord);
       } catch (e) { }
       return updated;
     });
@@ -348,7 +348,8 @@ export default function InvoiceDetailModal({
                       cancelledAt: nowIso
                     } : item);
                     try {
-                      saveCloudStore("invoice_store", updatedInvoices);
+                      const cancelledInv = updatedInvoices.find(item => item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode);
+                      if (cancelledInv) saveCloudInvoiceRow(cancelledInv);
                     } catch (e) { }
                     return updatedInvoices;
                   });
@@ -621,7 +622,8 @@ export default function InvoiceDetailModal({
                     unpackedItemsRemaining: unpackedItems
                   } : item);
                   try {
-                    saveCloudStore("invoice_store", updatedInvoices);
+                    const confirmedInv = updatedInvoices.find(item => (item.invNo === invNoText || item.code === invNoText || item.id === inv.id));
+                    if (confirmedInv) saveCloudInvoiceRow(confirmedInv);
                   } catch (e) { }
                   return updatedInvoices;
                 });
@@ -1245,7 +1247,10 @@ export default function InvoiceDetailModal({
                                     status: 'Address Proof Reissued',
                                     addressProofReissuedAt: nowIso
                                   } : i);
-                                  try { saveCloudStore("invoice_store", updated); } catch (e) { }
+                                  try {
+                                    const reissuedInv = updated.find(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode));
+                                    if (reissuedInv) saveCloudInvoiceRow(reissuedInv);
+                                  } catch (e) { }
                                   return updated;
                                 });
 

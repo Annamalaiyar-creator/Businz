@@ -781,7 +781,24 @@ export default function ProductionViewsEngine(props) {
       if (data && Array.isArray(data) && data.length > 0) setInvoiceList(data);
     });
     const sub = subscribeToCloudStore('invoice_store', (latest) => {
-      if (latest && Array.isArray(latest) && latest.length > 0) setInvoiceList(latest);
+      if (latest && Array.isArray(latest)) {
+        if (latest.length > 0) setInvoiceList(latest);
+      } else if (latest && typeof latest === 'object' && !Array.isArray(latest)) {
+        if (latest._deleted && latest.id) {
+          setInvoiceList(prev => (prev || []).filter(i => i.id !== latest.id && i.invNo !== latest.id));
+        } else {
+          setInvoiceList(prev => {
+            const id = latest.id || latest.invNo;
+            const idx = (prev || []).findIndex(i => (i.id && i.id === id) || (i.invNo && i.invNo === id));
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], ...latest };
+              return copy;
+            }
+            return [latest, ...(prev || [])];
+          });
+        }
+      }
     });
 
     const handleInvoiceSync = (e) => {
