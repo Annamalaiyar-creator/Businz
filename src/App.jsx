@@ -181,7 +181,31 @@ function App() {
   useEffect(() => {
     initRealtimeSync();
     try {
-      localStorage.removeItem('controlroom_customer_list');
+      if (localStorage.getItem('controlroom_fresh_start_reset_20260924') !== 'true') {
+        const wipeKeys = [
+          'controlroom_bom_store',
+          'controlroom_sales_pi_store',
+          'controlroom_proforma_invoice_store',
+          'controlroom_procurement_pi_store',
+          'controlroom_po_store',
+          'controlroom_grn_store',
+          'controlroom_invoice_store',
+          'controlroom_payment_store',
+          'controlroom_workorder_store',
+          'controlroom_vrm_prod_workorders',
+          'controlroom_vrm_prod_ledger',
+          'controlroom_central_reservations_v2',
+          'controlroom_central_items_v2',
+          'controlroom_items_list',
+          'controlroom_raw_materials_store',
+          'controlroom_inventory_items',
+          'controlroom_customer_list'
+        ];
+        wipeKeys.forEach(k => {
+          try { localStorage.removeItem(k); } catch (_) {}
+        });
+        localStorage.setItem('controlroom_fresh_start_reset_20260924', 'true');
+      }
     } catch (_) {}
   }, []);
 

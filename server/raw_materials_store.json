@@ -11,7 +11,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - HDG",
     "location": "Finished Goods Bay - HDG",
@@ -23,18 +23,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 10304,
-    "blockedForBom": 10304,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L650",
@@ -60,18 +63,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 182,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 182,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 4818,
-    "blockedForBom": 4818,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L900",
@@ -85,7 +91,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - HDG",
     "location": "Finished Goods Bay - HDG",
@@ -97,18 +103,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 6024,
-    "blockedForBom": 6024,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L1000",
@@ -134,18 +143,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4688,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4688,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 312,
-    "blockedForBom": 312,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L1200",
@@ -171,18 +183,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4958,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4958,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 42,
-    "blockedForBom": 42,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L1300",
@@ -219,7 +234,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L1500",
@@ -256,7 +274,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L1800",
@@ -282,18 +303,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L2000",
@@ -319,18 +343,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4952,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4952,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 48,
-    "blockedForBom": 48,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L2500",
@@ -356,18 +383,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4952,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4952,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 48,
-    "blockedForBom": 48,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "L3000",
@@ -393,18 +423,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4952,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4952,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 48,
-    "blockedForBom": 48,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "R1600",
@@ -441,7 +474,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "R2950",
@@ -467,18 +503,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4982,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4982,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 18,
-    "blockedForBom": 18,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "R3350",
@@ -504,18 +543,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4982,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4982,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 18,
-    "blockedForBom": 18,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "R3900",
@@ -541,18 +583,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GR1600",
@@ -589,7 +634,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GR2950",
@@ -615,18 +663,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4958,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4958,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 42,
-    "blockedForBom": 42,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GR3350",
@@ -652,18 +703,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4958,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4958,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 42,
-    "blockedForBom": 42,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GR3900",
@@ -689,18 +743,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4688,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4688,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 312,
-    "blockedForBom": 312,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CB2400",
@@ -737,7 +794,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CB3000",
@@ -763,18 +823,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4928,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4928,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 72,
-    "blockedForBom": 72,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP2400",
@@ -800,18 +863,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4532,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4532,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 468,
-    "blockedForBom": 468,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP2485",
@@ -848,7 +914,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP2500",
@@ -885,7 +954,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP3000",
@@ -911,18 +983,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4952,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4952,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 48,
-    "blockedForBom": 48,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP3035",
@@ -948,18 +1023,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4952,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4952,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 48,
-    "blockedForBom": 48,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP3330",
@@ -996,7 +1074,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HP3600",
@@ -1022,18 +1103,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4928,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4928,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 72,
-    "blockedForBom": 72,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CP2400",
@@ -1070,7 +1154,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CP3000",
@@ -1096,18 +1183,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4592,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4592,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 408,
-    "blockedForBom": 408,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CP3200",
@@ -1144,7 +1234,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CP3600",
@@ -1181,7 +1274,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR-300MM",
@@ -1195,21 +1291,21 @@
     "price": 3200,
     "rate": 3200,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Bay #4 - FG Store",
     "location": "Finished Goods Bay - Aluminium",
     "hsn": "7604",
     "minLevel": 50,
     "reorderLevel": 100,
-    "stock": 0,
-    "lastUpdated": "Stock Set to 5,000",
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
     "parentCode": "MR100N",
     "parentName": "Finished Product",
-    "reserved": 24354,
-    "blockedForBom": 24354,
+    "reserved": 0,
+    "blockedForBom": 0,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "lengthMm": "300",
     "cutLength": "300 mm",
     "openingStock": 5000,
@@ -1222,7 +1318,10 @@
     "purchaseRate": 320,
     "purchaseDescription": "—",
     "material": "General Component",
-    "stockOnHand": 5000
+    "stockOnHand": 5000,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR100N",
@@ -1236,16 +1335,16 @@
     "price": 3200,
     "rate": 3200,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Bay #4 - FG Store",
     "location": "Finished Goods Bay - Aluminium",
     "hsn": "7604",
     "minLevel": 20,
     "reorderLevel": 100,
-    "stock": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 24354,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1254,14 +1353,17 @@
     "lengthMm": "300",
     "cutLength": "300 mm",
     "physicalStock": 5000,
-    "availableStock": 0,
-    "blockedForBom": 24354,
+    "availableStock": 5000,
+    "blockedForBom": 0,
     "id": "4080449000000366354",
     "description": "—",
     "purchaseRate": 320,
     "purchaseDescription": "—",
     "material": "General Component",
-    "stockOnHand": 5000
+    "stockOnHand": 5000,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR100O",
@@ -1275,7 +1377,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Main Store",
     "location": "Finished Goods Bay - Aluminium",
@@ -1284,9 +1386,9 @@
     "reorderLevel": 100,
     "lengthMm": "300",
     "cutLength": "300 mm",
-    "stock": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 24354,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1298,9 +1400,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 24354
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR40",
@@ -1314,7 +1419,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Main Store",
     "location": "Finished Goods Bay - Aluminium",
@@ -1323,9 +1428,9 @@
     "reorderLevel": 100,
     "lengthMm": "2414",
     "cutLength": "40 mm",
-    "stock": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 24354,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1337,9 +1442,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 24354
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR60",
@@ -1353,7 +1461,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Main Store",
     "location": "Finished Goods Bay - Aluminium",
@@ -1362,9 +1470,9 @@
     "reorderLevel": 100,
     "lengthMm": "2414",
     "cutLength": "60 mm",
-    "stock": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 24354,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1376,9 +1484,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 24354
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AR100",
@@ -1401,9 +1512,9 @@
     "reorderLevel": 100,
     "lengthMm": "2414",
     "cutLength": "100 mm",
-    "stock": 800,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 4200,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1415,9 +1526,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 800,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 4200
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AR120",
@@ -1441,7 +1555,7 @@
     "lengthMm": "2414",
     "cutLength": "120 mm",
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -1456,7 +1570,10 @@
     "physicalStock": 5000,
     "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CC4.8N",
@@ -1480,7 +1597,7 @@
     "lengthMm": "4800",
     "cutLength": "4800 mm",
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -1495,7 +1612,10 @@
     "physicalStock": 5000,
     "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CC4.8O",
@@ -1532,7 +1652,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CC3.6",
@@ -1556,7 +1679,7 @@
     "lengthMm": "3600",
     "cutLength": "3600 mm",
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -1571,7 +1694,10 @@
     "physicalStock": 5000,
     "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CC2.4",
@@ -1608,7 +1734,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CC1.2",
@@ -1645,7 +1774,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SR3.6",
@@ -1669,7 +1801,7 @@
     "lengthMm": "3600",
     "cutLength": "3600 mm",
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -1684,7 +1816,10 @@
     "physicalStock": 5000,
     "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SR2.4",
@@ -1721,7 +1856,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "UM",
@@ -1735,7 +1873,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Low Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Main Store",
     "location": "Finished Goods Bay - Aluminium",
@@ -1744,9 +1882,9 @@
     "reorderLevel": 100,
     "lengthMm": "2650",
     "cutLength": "2650 mm",
-    "stock": 50,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 4950,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1758,9 +1896,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 50,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 4950
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "UE",
@@ -1783,9 +1924,9 @@
     "reorderLevel": 100,
     "lengthMm": "2650",
     "cutLength": "35 mm",
-    "stock": 1514,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 3486,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1797,9 +1938,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 1514,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 3486
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LC",
@@ -1822,9 +1966,9 @@
     "reorderLevel": 100,
     "lengthMm": "3000",
     "cutLength": "3000 mm",
-    "stock": 1514,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 3486,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1836,9 +1980,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 1514,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 3486
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LC(N)",
@@ -1875,7 +2022,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "EC35",
@@ -1898,9 +2048,9 @@
     "reorderLevel": 100,
     "lengthMm": "2650",
     "cutLength": "35 mm",
-    "stock": 3776,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 1224,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -1912,9 +2062,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 3776,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 1224
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MC35",
@@ -1935,27 +2088,30 @@
     "hsn": "7604",
     "minLevel": 60,
     "reorderLevel": 100,
-    "stock": 2780,
-    "lastUpdated": "Stock Set to 5,000",
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
     "parentCode": "MC35",
     "parentName": "Finished Product",
     "lengthMm": "2650",
     "cutLength": "35 mm",
-    "reserved": 2220,
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "blockedForBom": 2220,
+    "blockedForBom": 0,
     "physicalStock": 5000,
-    "availableStock": 2780,
+    "availableStock": 5000,
     "id": "4080449000000366514",
     "description": "—",
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stockOnHand": 5000
+    "stockOnHand": 5000,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MC30",
@@ -1977,7 +2133,7 @@
     "minLevel": 60,
     "reorderLevel": 100,
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -1994,7 +2150,10 @@
     "stockOnHand": 5000,
     "blockedForBom": 0,
     "lengthMm": "2650",
-    "cutLength": "30 mm"
+    "cutLength": "30 mm",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "EC30",
@@ -2020,18 +2179,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 3656,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 3656,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 1344,
-    "blockedForBom": 1344,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "T10",
@@ -2055,7 +2217,7 @@
     "lengthMm": "2562",
     "cutLength": "10 mm",
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -2070,7 +2232,10 @@
     "physicalStock": 5000,
     "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "T8",
@@ -2093,9 +2258,9 @@
     "reorderLevel": 100,
     "lengthMm": "2580",
     "cutLength": "8 mm",
-    "stock": 4520,
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 480,
+    "stock": 5000,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
@@ -2107,9 +2272,12 @@
     "purchaseDescription": "",
     "material": "General Component",
     "physicalStock": 5000,
-    "availableStock": 4520,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 480
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ALB",
@@ -2133,7 +2301,7 @@
     "lengthMm": "2050",
     "cutLength": "2050 mm",
     "stock": 5000,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -2148,7 +2316,10 @@
     "physicalStock": 5000,
     "availableStock": 5000,
     "stockOnHand": 5000,
-    "blockedForBom": 0
+    "blockedForBom": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "E40",
@@ -2185,7 +2356,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "E100",
@@ -2222,7 +2396,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "E80",
@@ -2248,18 +2425,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 1304,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 1304,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 3696,
-    "blockedForBom": 3696,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "E150",
@@ -2296,7 +2476,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LB",
@@ -2322,18 +2505,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4880,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4880,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 120,
-    "blockedForBom": 120,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "BP",
@@ -2359,18 +2545,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4880,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4880,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 120,
-    "blockedForBom": 120,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PC50",
@@ -2407,7 +2596,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PC130",
@@ -2444,7 +2636,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RC40",
@@ -2470,18 +2665,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4880,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4880,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 120,
-    "blockedForBom": 120,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RC70",
@@ -2507,18 +2705,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4940,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4940,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 60,
-    "blockedForBom": 60,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "B150",
@@ -2555,7 +2756,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "B200",
@@ -2592,7 +2796,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AM8*20",
@@ -2618,18 +2825,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 860,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 860,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 4140,
-    "blockedForBom": 4140,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SWM8",
@@ -2666,7 +2876,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AM8*30",
@@ -2692,18 +2905,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4952,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4952,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 48,
-    "blockedForBom": 48,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AM8*50",
@@ -2729,18 +2945,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 3212,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 3212,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 1788,
-    "blockedForBom": 1788,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SNM8",
@@ -2766,18 +2985,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PWM8",
@@ -2814,7 +3036,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HNM8",
@@ -2851,7 +3076,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HM8*30",
@@ -2888,7 +3116,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AM6*30",
@@ -2925,7 +3156,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AM6*50",
@@ -2962,7 +3196,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HM6*80",
@@ -2999,7 +3236,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HM6*90",
@@ -3036,7 +3276,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PWM6",
@@ -3073,7 +3316,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SWM6",
@@ -3110,7 +3356,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HNM6",
@@ -3147,7 +3396,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SHM10*30",
@@ -3161,7 +3413,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - Aluminium",
     "location": "Finished Goods Bay - Aluminium",
@@ -3173,18 +3425,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 5544,
-    "blockedForBom": 5544,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SHM12*30",
@@ -3210,18 +3465,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4148,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4148,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 852,
-    "blockedForBom": 852,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PWBM8",
@@ -3258,7 +3516,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AM8*25",
@@ -3284,18 +3545,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 1580,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 1580,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 3420,
-    "blockedForBom": 3420,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ANM10*100",
@@ -3321,18 +3585,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 1592,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 1592,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 3408,
-    "blockedForBom": 3408,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ANM8*100",
@@ -3369,7 +3636,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HHM10*30",
@@ -3406,7 +3676,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HHM12*30",
@@ -3443,7 +3716,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MC6",
@@ -3480,7 +3756,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CC6",
@@ -3517,7 +3796,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "STS3",
@@ -3554,7 +3836,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "STS3/4",
@@ -3591,7 +3876,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "STS1",
@@ -3628,7 +3916,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AC(1-5)",
@@ -3649,20 +3940,21 @@
     "hsn": "7604",
     "minLevel": 50,
     "reorderLevel": 100,
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DC(1-5)",
@@ -3683,20 +3975,21 @@
     "hsn": "7604",
     "minLevel": 50,
     "reorderLevel": 100,
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "AC(5-10)",
@@ -3728,9 +4021,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DC(5-10)",
@@ -3762,9 +4056,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ER1",
@@ -3796,9 +4091,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ER2",
@@ -3830,9 +4126,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ER3",
@@ -3864,9 +4161,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LA1",
@@ -3892,18 +4190,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CER1",
@@ -3935,9 +4236,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CER2",
@@ -3969,9 +4271,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CER3",
@@ -4003,9 +4306,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ELA",
@@ -4042,7 +4346,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "EPC6",
@@ -4068,18 +4375,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4910,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4910,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 90,
-    "blockedForBom": 90,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CB10",
@@ -4105,18 +4415,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4910,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4910,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 90,
-    "blockedForBom": 90,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ES",
@@ -4153,7 +4466,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ACB4",
@@ -4179,18 +4495,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4400,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4400,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 600,
-    "blockedForBom": 600,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ACR4",
@@ -4216,18 +4535,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4400,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4400,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 600,
-    "blockedForBom": 600,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DCB4",
@@ -4241,7 +4563,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - Aluminium",
     "location": "Finished Goods Bay - Aluminium",
@@ -4253,18 +4575,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 12600,
-    "blockedForBom": 12600,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DCR4",
@@ -4290,18 +4615,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4400,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4400,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 600,
-    "blockedForBom": 600,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ECG4",
@@ -4327,18 +4655,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 2600,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 2600,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 2400,
-    "blockedForBom": 2400,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ACB6",
@@ -4375,7 +4706,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ACR6",
@@ -4412,7 +4746,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DCB6",
@@ -4449,7 +4786,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DCR6",
@@ -4486,7 +4826,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ECG6",
@@ -4523,7 +4866,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ECG16",
@@ -4549,18 +4895,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 2000,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 2000,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 3000,
-    "blockedForBom": 3000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TT1",
@@ -4592,9 +4941,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TB1",
@@ -4626,9 +4976,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TT1.5",
@@ -4660,9 +5011,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TB1.5",
@@ -4694,9 +5046,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TT2",
@@ -4728,9 +5081,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TB2",
@@ -4762,9 +5116,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TMS",
@@ -4796,9 +5151,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "available": 0,
-    "onHand": 0
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR75",
@@ -4812,7 +5168,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - Aluminium",
     "location": "Finished Goods Bay - Aluminium",
@@ -4824,18 +5180,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 24354,
-    "blockedForBom": 24354,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR100",
@@ -4849,7 +5208,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "18%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - Aluminium",
     "location": "Finished Goods Bay - Aluminium",
@@ -4861,18 +5220,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 6000,
-    "blockedForBom": 6000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR120",
@@ -4898,18 +5260,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4964,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4964,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 36,
-    "blockedForBom": 36,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DS1.5",
@@ -4946,7 +5311,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SC2.2",
@@ -4983,7 +5351,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DS3",
@@ -5020,7 +5391,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DS3.3",
@@ -5057,7 +5431,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DS3.6",
@@ -5094,7 +5471,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DS4",
@@ -5131,7 +5511,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DS5",
@@ -5168,7 +5551,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT5",
@@ -5205,7 +5591,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT6",
@@ -5242,7 +5631,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT8",
@@ -5279,7 +5671,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT10",
@@ -5316,7 +5711,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT12",
@@ -5353,7 +5751,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT15",
@@ -5390,7 +5791,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT18",
@@ -5427,7 +5831,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT20",
@@ -5464,7 +5871,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT25",
@@ -5501,7 +5911,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT33",
@@ -5538,7 +5951,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT40",
@@ -5575,7 +5991,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT50",
@@ -5612,7 +6031,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT60",
@@ -5649,7 +6071,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT80",
@@ -5686,7 +6111,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT90",
@@ -5723,7 +6151,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT100",
@@ -5760,7 +6191,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT110",
@@ -5797,7 +6231,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT125",
@@ -5834,7 +6271,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DT136",
@@ -5871,7 +6311,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHS3-24",
@@ -5908,7 +6351,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHS3-48",
@@ -5945,7 +6391,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHS3.6",
@@ -5982,7 +6431,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHS5",
@@ -6019,7 +6471,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHS6",
@@ -6056,7 +6511,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHS8",
@@ -6093,7 +6551,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT8",
@@ -6130,7 +6591,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT10",
@@ -6167,7 +6631,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT12",
@@ -6204,7 +6671,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT15",
@@ -6241,7 +6711,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT20",
@@ -6278,7 +6751,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT30",
@@ -6315,7 +6791,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT40",
@@ -6341,18 +6820,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4994,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4994,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 6,
-    "blockedForBom": 6,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT50",
@@ -6389,7 +6871,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT60",
@@ -6426,7 +6911,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT70",
@@ -6463,7 +6951,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT80",
@@ -6500,7 +6991,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT100",
@@ -6537,7 +7031,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DHT125",
@@ -6574,7 +7071,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SL2000",
@@ -6611,7 +7111,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SL2500",
@@ -6648,7 +7151,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SL3000",
@@ -6685,7 +7191,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "IL900",
@@ -6722,7 +7231,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "IL1500",
@@ -6759,7 +7271,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SPC50",
@@ -6796,7 +7311,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SPC130",
@@ -6833,7 +7351,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS2",
@@ -6870,7 +7391,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS3",
@@ -6907,7 +7431,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS3.6",
@@ -6933,18 +7460,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4976,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4976,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 24,
-    "blockedForBom": 24,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS4",
@@ -6970,18 +7500,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4994,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4994,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 6,
-    "blockedForBom": 6,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS4.6",
@@ -7018,7 +7551,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS5",
@@ -7055,7 +7591,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT5",
@@ -7092,7 +7631,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PS6",
@@ -7129,7 +7671,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT6",
@@ -7166,7 +7711,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT8",
@@ -7203,7 +7751,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT10",
@@ -7240,7 +7791,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT12",
@@ -7277,7 +7831,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT15",
@@ -7314,7 +7871,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT20",
@@ -7351,7 +7911,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT25",
@@ -7388,7 +7951,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT30",
@@ -7425,7 +7991,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT40",
@@ -7462,7 +8031,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT50",
@@ -7499,7 +8071,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT60",
@@ -7536,7 +8111,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT75",
@@ -7573,7 +8151,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT100",
@@ -7610,7 +8191,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT110",
@@ -7647,7 +8231,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PT125",
@@ -7684,7 +8271,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GS2",
@@ -7721,7 +8311,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GS3",
@@ -7758,7 +8351,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GS3.3",
@@ -7795,7 +8391,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GS4.2",
@@ -7832,7 +8431,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GS5",
@@ -7869,7 +8471,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GS6",
@@ -7906,7 +8511,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT5",
@@ -7943,7 +8551,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT6",
@@ -7980,7 +8591,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT8",
@@ -8017,7 +8631,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT10",
@@ -8054,7 +8671,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT12",
@@ -8091,7 +8711,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT15",
@@ -8128,7 +8751,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT20",
@@ -8165,7 +8791,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT25",
@@ -8202,7 +8831,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT40",
@@ -8239,7 +8871,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT50",
@@ -8276,7 +8911,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT60",
@@ -8313,7 +8951,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT70",
@@ -8350,7 +8991,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT80",
@@ -8387,7 +9031,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT100",
@@ -8424,7 +9071,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT125",
@@ -8461,7 +9111,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT250",
@@ -8498,7 +9151,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "GT350",
@@ -8535,7 +9191,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SS2.5",
@@ -8572,7 +9231,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LA810",
@@ -8609,7 +9271,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "DG",
@@ -8646,7 +9311,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ABD540",
@@ -8660,7 +9328,7 @@
     "price": 0,
     "rate": 0,
     "gstRate": "5%",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "productType": "goods",
     "store": "Finished Goods Bay - Aluminium",
     "location": "Finished Goods Bay - Aluminium",
@@ -8672,18 +9340,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 13248,
-    "blockedForBom": 13248,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ABD545",
@@ -8709,18 +9380,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 3560,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 3560,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 1440,
-    "blockedForBom": 1440,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ABD550",
@@ -8757,7 +9431,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ABD555",
@@ -8794,7 +9471,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATD605",
@@ -8831,7 +9511,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATD615",
@@ -8868,7 +9551,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATD620",
@@ -8905,7 +9591,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATD630",
@@ -8942,7 +9631,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATD635",
@@ -8979,7 +9671,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATN615",
@@ -9016,7 +9711,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ATN625",
@@ -9053,7 +9751,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WBD540",
@@ -9079,18 +9780,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 3800,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 3800,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 1200,
-    "blockedForBom": 1200,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WTD560",
@@ -9127,7 +9831,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WTD580",
@@ -9153,18 +9860,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4808,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4808,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 192,
-    "blockedForBom": 192,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WTD585",
@@ -9201,7 +9911,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WTD610",
@@ -9227,18 +9940,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4784,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4784,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 216,
-    "blockedForBom": 216,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WTN590",
@@ -9275,7 +9991,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LBN550",
@@ -9312,7 +10031,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RBD540",
@@ -9349,7 +10071,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RBD545",
@@ -9386,7 +10111,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RBD550",
@@ -9423,7 +10151,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SBD545",
@@ -9460,7 +10191,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "SBD550",
@@ -9497,7 +10231,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "STD595",
@@ -9534,7 +10271,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "VBD550",
@@ -9571,7 +10311,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "VTD600",
@@ -9608,7 +10351,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "VTN590",
@@ -9645,7 +10391,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "VTN630",
@@ -9682,7 +10431,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WW310",
@@ -9719,7 +10471,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "WW273",
@@ -9756,7 +10511,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CT",
@@ -9782,18 +10540,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RL",
@@ -9819,18 +10580,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4730,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4730,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 270,
-    "blockedForBom": 270,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "PL",
@@ -9867,7 +10631,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "CTR",
@@ -9893,18 +10660,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4970,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4970,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 30,
-    "blockedForBom": 30,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MC4",
@@ -9930,18 +10700,21 @@
     "purchaseRate": 0,
     "purchaseDescription": "",
     "material": "General Component",
-    "stock": 4868,
+    "stock": 5000,
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4868,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 132,
-    "blockedForBom": 132,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "HR",
@@ -9978,7 +10751,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ALU-LEN-2414MM",
@@ -10015,12 +10791,13 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "lengthMm": "2414",
     "parentCode": "ALU-LEN-2414MM",
     "parentName": "Finished Product",
-    "available": 250,
-    "onHand": 250
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MID-SEC",
@@ -10034,7 +10811,7 @@
     "store": "Main Store",
     "hsn": "7604",
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10046,8 +10823,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TOP-2M",
@@ -10061,7 +10839,7 @@
     "store": "Main Store",
     "hsn": "7604",
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10073,8 +10851,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "BOT-2M",
@@ -10088,7 +10867,7 @@
     "store": "Main Store",
     "hsn": "7604",
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10100,8 +10879,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "TOP-1.5M",
@@ -10115,7 +10895,7 @@
     "store": "Main Store",
     "hsn": "7604",
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10127,8 +10907,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "BOT-2.4M",
@@ -10142,7 +10923,7 @@
     "store": "Main Store",
     "hsn": "7604",
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10154,8 +10935,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-001",
@@ -10167,7 +10949,7 @@
     "status": "In Stock",
     "store": "Main Store",
     "hsn": "7606",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10179,8 +10961,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-002",
@@ -10192,7 +10975,7 @@
     "status": "In Stock",
     "store": "Main Store",
     "hsn": "7210",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10204,8 +10987,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-003",
@@ -10217,7 +11001,7 @@
     "status": "In Stock",
     "store": "Store B",
     "hsn": "7216",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10229,8 +11013,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-004",
@@ -10242,7 +11027,7 @@
     "status": "In Stock",
     "store": "Store B",
     "hsn": "7216",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10254,8 +11039,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-005",
@@ -10267,7 +11053,7 @@
     "status": "In Stock",
     "store": "Main Store",
     "hsn": "7604",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10279,8 +11065,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-006",
@@ -10292,7 +11079,7 @@
     "status": "In Stock",
     "store": "Main Store",
     "hsn": "7318",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10304,8 +11091,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-007",
@@ -10317,7 +11105,7 @@
     "status": "In Stock",
     "store": "Main Store",
     "hsn": "7318",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10329,8 +11117,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-008",
@@ -10342,7 +11131,7 @@
     "status": "In Stock",
     "store": "Store B",
     "hsn": "7318",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10354,8 +11143,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-009",
@@ -10367,7 +11157,7 @@
     "status": "In Stock",
     "store": "Main Store",
     "hsn": "3208",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
@@ -10379,8 +11169,9 @@
     "availableStock": 5000,
     "stockOnHand": 5000,
     "blockedForBom": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ALU-COIL-1.5",
@@ -10391,7 +11182,7 @@
     "minLevel": 50,
     "status": "In Stock",
     "store": "Bay #2 - Coil Storage",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "parentCode": "ALU-COIL-1.5",
     "parentName": "Finished Product",
     "category": "Raw Material",
@@ -10405,8 +11196,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR150",
@@ -10417,7 +11209,7 @@
     "minLevel": 50,
     "status": "In Stock",
     "store": "Bay #4 - FG Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "parentCode": "MR150",
     "parentName": "Finished Product",
     "category": "Finished Goods",
@@ -10431,8 +11223,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "LR3000",
@@ -10443,7 +11236,7 @@
     "minLevel": 20,
     "status": "In Stock",
     "store": "Bay #4 - FG Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "parentCode": "LR3000",
     "parentName": "Finished Product",
     "category": "Finished Goods",
@@ -10457,8 +11250,9 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000033196",
@@ -10490,10 +11284,13 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "minLevel": 50,
     "store": "Main Store",
-    "hsn": "7604"
+    "hsn": "7604",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000033187",
@@ -10525,10 +11322,13 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "minLevel": 50,
     "store": "Main Store",
-    "hsn": "7604"
+    "hsn": "7604",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000366394",
@@ -10538,7 +11338,7 @@
     "rate": 0,
     "price": 0,
     "sku": "MR125",
-    "status": "Out of Stock",
+    "status": "In Stock",
     "description": "—",
     "purchaseRate": 0,
     "purchaseDescription": "",
@@ -10547,25 +11347,28 @@
     "uom": "NOS",
     "material": "General Component",
     "category": "General",
-    "stock": 0,
+    "stock": 5000,
     "openingStock": 5000,
     "reorderLevel": 100,
     "cat": "General",
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
-    "reserved": 24354,
-    "blockedForBom": 24354,
+    "reserved": 0,
+    "blockedForBom": 0,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "minLevel": 30,
     "lengthMm": "300",
     "cutLength": "300 mm",
     "store": "Main Store",
-    "hsn": "7604"
+    "hsn": "7604",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000368170",
@@ -10597,8 +11400,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000367042",
@@ -10630,8 +11436,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000367026",
@@ -10663,8 +11472,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000367034",
@@ -10696,8 +11508,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000367018",
@@ -10729,8 +11544,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000367010",
@@ -10762,8 +11580,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "id": "4080449000000367050",
@@ -10795,8 +11616,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
-    "minLevel": 100
+    "lastUpdated": "Stock Reset to 5,000",
+    "minLevel": 100,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "RM-ALU-6000",
@@ -10833,10 +11657,11 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "grnNo": "GRN-00124",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-4622",
@@ -10849,7 +11674,7 @@
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "category": "Finished Goods",
     "openingStock": 5000,
     "physicalStock": 5000,
@@ -10860,108 +11685,113 @@
     "matReturn": 0,
     "stockAdj": 0,
     "hsn": "7604",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-4048",
     "name": "MINI RAIL 75MM NEW",
     "cat": "6063T6",
     "unit": "NOS",
-    "stock": 2588,
-    "reserved": 2412,
-    "blockedForBom": 2412,
+    "stock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "category": "6063T6",
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 2588,
+    "availableStock": 5000,
     "stockOnHand": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
     "hsn": "7604",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-8000",
     "name": "EARTHROD COPPER BONDED 17.2mm - 1 meter",
     "cat": "BOS",
     "unit": "NOS",
-    "stock": 4910,
-    "reserved": 90,
-    "blockedForBom": 90,
+    "stock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "category": "BOS",
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4910,
+    "availableStock": 5000,
     "stockOnHand": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
     "hsn": "7604",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-1042",
     "name": "EARTHROD COPPER BONDED 17.2mm - 2 METER",
     "cat": "BOS",
     "unit": "NOS",
-    "stock": 4982,
-    "reserved": 18,
-    "blockedForBom": 18,
+    "stock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "category": "BOS",
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 4982,
+    "availableStock": 5000,
     "stockOnHand": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
     "hsn": "7604",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-4662",
     "name": "Rivet",
     "cat": "6063T6",
     "unit": "NOS",
-    "stock": 0,
-    "reserved": 7512,
-    "blockedForBom": 7512,
+    "stock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
-    "status": "Out of Stock",
+    "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "category": "6063T6",
     "openingStock": 5000,
     "physicalStock": 5000,
-    "availableStock": 0,
+    "availableStock": 5000,
     "stockOnHand": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
     "hsn": "7604",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-8721",
@@ -10969,14 +11799,14 @@
     "cat": "6063T6",
     "unit": "NOS",
     "physicalStock": 5000,
-    "stock": 800,
-    "availableStock": 800,
-    "reserved": 4200,
-    "blockedForBom": 4200,
+    "stock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "category": "6063T6",
     "openingStock": 5000,
     "stockOnHand": 5000,
@@ -10985,8 +11815,9 @@
     "matReturn": 0,
     "stockAdj": 0,
     "hsn": "7604",
-    "available": 0,
-    "onHand": 0
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-5948",
@@ -10994,33 +11825,36 @@
     "cat": "6063T6",
     "unit": "NOS",
     "physicalStock": 5000,
-    "stock": 1304,
-    "availableStock": 1304,
-    "reserved": 3696,
-    "blockedForBom": 3696,
+    "stock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "openingStock": 5000,
     "stockOnHand": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "category": "6063T6"
+    "category": "6063T6",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ITEM-8035",
     "name": "EARTHROD COPPER BONDED 17.2mm - 1 meter",
     "cat": "BOS",
     "unit": "NOS",
-    "stock": 4910,
-    "availableStock": 4910,
+    "stock": 5000,
+    "availableStock": 5000,
     "physicalStock": 5000,
     "openingStock": 5000,
-    "reserved": 90,
-    "blockedForBom": 90,
+    "reserved": 0,
+    "blockedForBom": 0,
     "status": "In Stock",
     "stockOnHand": 5000,
     "minLevel": 50,
@@ -11029,20 +11863,23 @@
     "matReturn": 0,
     "stockAdj": 0,
     "category": "BOS",
-    "lastUpdated": "Stock Set to 5,000"
+    "lastUpdated": "Stock Reset to 5,000",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ITEM-9871",
     "name": "Pin Lugs and Ring Lugs - 4 sqmm",
     "cat": "BOS",
     "unit": "NOS",
-    "stock": 4850,
-    "availableStock": 4850,
+    "stock": 5000,
+    "availableStock": 5000,
     "physicalStock": 5000,
-    "reserved": 150,
-    "blockedForBom": 150,
+    "reserved": 0,
+    "blockedForBom": 0,
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "openingStock": 5000,
     "stockOnHand": 5000,
     "minLevel": 50,
@@ -11050,20 +11887,23 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "category": "BOS"
+    "category": "BOS",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ITEM-9877",
     "name": "Pin Lugs and Ring Lugs - 6 sqmm",
     "cat": "BOS",
     "unit": "NOS",
-    "stock": 4880,
-    "availableStock": 4880,
+    "stock": 5000,
+    "availableStock": 5000,
     "physicalStock": 5000,
-    "reserved": 120,
-    "blockedForBom": 120,
+    "reserved": 0,
+    "blockedForBom": 0,
     "status": "In Stock",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "openingStock": 5000,
     "stockOnHand": 5000,
     "minLevel": 50,
@@ -11071,7 +11911,10 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "category": "BOS"
+    "category": "BOS",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "FG-0603",
@@ -11079,44 +11922,50 @@
     "cat": "BOS",
     "unit": "NOS",
     "physicalStock": 5000,
-    "stock": 4910,
-    "availableStock": 4910,
-    "reserved": 90,
-    "blockedForBom": 90,
+    "stock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "blockedForBom": 0,
     "minLevel": 10,
     "status": "In Stock",
     "store": "Main Store",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "openingStock": 5000,
     "stockOnHand": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "category": "BOS"
+    "category": "BOS",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "MR300",
     "name": "Mini Rail - 300mm",
     "cat": "Finished Goods",
     "unit": "Pieces",
-    "stock": 0,
+    "stock": 5000,
     "minLevel": 20,
-    "status": "Out of Stock",
+    "status": "In Stock",
     "store": "Bay #4 - FG Store",
     "hsn": "7616",
-    "lastUpdated": "Stock Set to 5,000",
-    "reserved": 24354,
+    "lastUpdated": "Stock Reset to 5,000",
+    "reserved": 0,
     "openingStock": 5000,
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
     "physicalStock": 5000,
-    "availableStock": 0,
-    "blockedForBom": 24354,
+    "availableStock": 5000,
+    "blockedForBom": 0,
     "stockOnHand": 5000,
-    "category": "Finished Goods"
+    "category": "Finished Goods",
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   },
   {
     "code": "ALU-BAR-2650MM",
@@ -11128,7 +11977,7 @@
     "minLevel": 20,
     "status": "In Stock",
     "store": "Bay #1 - Extrusion Yard",
-    "lastUpdated": "Stock Set to 5,000",
+    "lastUpdated": "Stock Reset to 5,000",
     "openingStock": 5000,
     "physicalStock": 5000,
     "availableStock": 5000,
@@ -11138,6 +11987,9 @@
     "goodsReceived": 0,
     "issuedProd": 0,
     "matReturn": 0,
-    "stockAdj": 0
+    "stockAdj": 0,
+    "available": 5000,
+    "onHand": 5000,
+    "reservedStock": 0
   }
 ]

@@ -13,9 +13,9 @@
     "safetyStock": 15,
     "unitRate": 580,
     "bayLocation": "Bay #1 - Extrusion Yard",
-    "stock": 0,
-    "openingStock": 0,
-    "status": "Out of Stock"
+    "stock": 5000,
+    "openingStock": 5000,
+    "status": "In Stock"
   },
   {
     "code": "ALU-COIL-1.5",
@@ -31,9 +31,9 @@
     "safetyStock": 50,
     "unitRate": 260,
     "bayLocation": "Bay #2 - Coil Storage",
-    "stock": 0,
-    "openingStock": 0,
-    "status": "Out of Stock"
+    "stock": 5000,
+    "openingStock": 5000,
+    "status": "In Stock"
   },
   {
     "code": "MR100N",
@@ -48,9 +48,9 @@
     "safetyStock": 20,
     "unitRate": 150,
     "bayLocation": "Bay #4 - FG Store",
-    "stock": 0,
-    "openingStock": 0,
-    "status": "Out of Stock"
+    "stock": 5000,
+    "openingStock": 5000,
+    "status": "In Stock"
   },
   {
     "code": "MR150",
@@ -65,9 +65,9 @@
     "safetyStock": 50,
     "unitRate": 160,
     "bayLocation": "Bay #4 - FG Store",
-    "stock": 0,
-    "openingStock": 0,
-    "status": "Out of Stock"
+    "stock": 5000,
+    "openingStock": 5000,
+    "status": "In Stock"
   },
   {
     "code": "LR3000",
@@ -82,9 +82,9 @@
     "safetyStock": 20,
     "unitRate": 1100,
     "bayLocation": "Bay #4 - FG Store",
-    "stock": 0,
-    "openingStock": 0,
-    "status": "Out of Stock"
+    "stock": 5000,
+    "openingStock": 5000,
+    "status": "In Stock"
   },
   {
     "code": "ALU-BAR-2650MM",
@@ -100,8 +100,8 @@
     "safetyStock": 20,
     "unitRate": 620,
     "bayLocation": "Bay #1 - Extrusion Yard",
-    "stock": 0,
-    "openingStock": 0,
-    "status": "Out of Stock"
+    "stock": 5000,
+    "openingStock": 5000,
+    "status": "In Stock"
   }
 ]
