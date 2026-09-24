@@ -177,7 +177,7 @@ export default function OtherViews(props) {
         ].includes(activeTab) || ['Work Orders', 'Planning & Scheduling', 'Production Monitoring',
           'Quality Control', 'Machine Maintenance', 'Inventory',
           'Production Reports', 'Efficiency Reports', 'Downtime Analytics',
-          'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management'
+          'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management', 'Delivery Challans'
         ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault'].includes(activeTab) && (
           <ProductionViewsEngine {...props} />
         )}

@@ -30,7 +30,8 @@ export default function InvoiceDetailModal({
   invoiceList: passedInvoiceList,
   setInvoiceList: passedSetInvoiceList,
   setPreviewDocModal,
-  setActiveMediaPreviewModal = () => {}
+  setActiveMediaPreviewModal = () => {},
+  setPendingDcModal = () => {}
 }) {
   const invoiceList = passedInvoiceList || invoices || [];
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
@@ -1045,9 +1046,45 @@ export default function InvoiceDetailModal({
                       2. Unpacked / Pending Items ({unpackedItems.length}) — Pending Dispatch
                     </h4>
                   </div>
-                  <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <AlertCircle style={{ width: '12px', height: '12px' }} /> Hold / Create Subsequent Delivery DC
-                  </span>
+                  {unpackedItems.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof setPendingDcModal === 'function') {
+                          setPendingDcModal({
+                            ...inv,
+                            invNo: invNoText,
+                            poNo: bomRefText,
+                            bomCode: bomRefText,
+                            customerName: customerText,
+                            vendor: customerText,
+                            deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress || 'Client Delivery Site',
+                            items: unpackedItems
+                          });
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#DC2626',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(220,38,38,0.25)'
+                      }}
+                    >
+                      <Truck style={{ width: '13px', height: '13px' }} /> Create Delivery Challan (DC) for Pending Items
+                    </button>
+                  ) : (
+                    <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <AlertCircle style={{ width: '12px', height: '12px' }} /> All items dispatched
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #FEE2E2' }}>

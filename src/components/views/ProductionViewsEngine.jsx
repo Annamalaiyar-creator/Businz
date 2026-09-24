@@ -841,6 +841,7 @@ export default function ProductionViewsEngine(props) {
                 setInvoiceList={setInvoiceList}
                 setPreviewDocModal={setPreviewDocModal}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                setPendingDcModal={setPendingDcModal}
               />
             );
           }
@@ -1235,6 +1236,8 @@ export default function ProductionViewsEngine(props) {
                   setShowWorkOrderForm(true);
                 } else if (activeTab === 'Customer Management' || pageConfig.title.includes('Customer')) {
                   setShowCustomerForm(true);
+                } else if (activeTab === 'Delivery Challans' || pageConfig.title?.includes('Delivery Challan')) {
+                  setPendingDcModal({ isNew: true });
                 } else {
                   alert(`Action: ${pageConfig.actionText}`);
                 }
@@ -1243,6 +1246,8 @@ export default function ProductionViewsEngine(props) {
                 if (activeTab === 'Invoice Management') {
                   setViewingInvoiceModal(row);
                   setIsEditingInvoice(false);
+                } else if (activeTab === 'Delivery Challans') {
+                  setPendingDcModal(row);
                 } else if (activeTab === 'Dispatch Orders') {
                   setQuickPreviewRecord(row);
                 } else if (activeTab === 'BOM' || activeTab === 'BOM Orders' || activeTab === 'BOM / Routing') {
@@ -1309,6 +1314,8 @@ export default function ProductionViewsEngine(props) {
                   } else {
                     setDispatchPackingModal(targetRow);
                   }
+                } else if (activeTab === 'Delivery Challans') {
+                  setPendingDcModal(targetRow);
                 } else if (activeTab === 'Accounts Verification') {
                   setAccountsVerificationModal(targetRow);
                   setIsAccountsViewOnly(isCancelledRow ? true : false);
@@ -1422,6 +1429,8 @@ export default function ProductionViewsEngine(props) {
           onClose={() => setPendingDcModal(null)}
           bomStore={bomStore}
           setBomStore={setBomStore}
+          invoiceList={invoiceList}
+          setInvoiceList={setInvoiceList}
         />
       )}
 

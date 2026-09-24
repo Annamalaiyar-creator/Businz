@@ -543,6 +543,10 @@ export default function ProductionTableView({
                   <>
                     <FileText size={14} style={{ color: '#0E7490' }} /> View / Confirm Invoice
                   </>
+                ) : activeTab === 'Delivery Challans' ? (
+                  <>
+                    <FileText size={14} style={{ color: '#0E7490' }} /> View / Print DC
+                  </>
                 ) : (
                   <>
                     <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info

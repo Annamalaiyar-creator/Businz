@@ -97,6 +97,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         { label: 'Dashboard', icon: LayoutDashboard },
         { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
         { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
+        { label: 'Delivery Challans', icon: FileCheck },
         { label: 'Inventory', icon: Warehouse },
         { label: 'Raw Material Directory', icon: Layers }
       ]
@@ -140,6 +141,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
             { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
+            { label: 'Delivery Challans', icon: FileCheck },
             { label: 'Stock Status', icon: Layers }
           ]
         },
@@ -188,6 +190,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'PO Verification', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: ShoppingCart, badge: realAccountsAwaitingPOCount > 0 ? String(realAccountsAwaitingPOCount) : undefined },
             { label: 'Accounts Verification', icon: CheckCircle },
+            { label: 'Delivery Challans', icon: FileCheck },
             { label: 'Payments', icon: Wallet }
           ]
         },
@@ -267,6 +270,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
+            { label: 'Delivery Challans', icon: FileCheck },
             { label: 'Payments', icon: Wallet }
           ]
         },

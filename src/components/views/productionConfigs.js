@@ -398,6 +398,93 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 return rowObj;
               })
             },
+            'Delivery Challans': (() => {
+              let storedDcs = [];
+              try {
+                const rawDc = localStorage.getItem('controlroom_dc_store');
+                if (rawDc) storedDcs = JSON.parse(rawDc);
+              } catch (_) {}
+              if (!Array.isArray(storedDcs)) storedDcs = [];
+
+              if (storedDcs.length === 0) {
+                storedDcs = [
+                  {
+                    dcNo: 'DC-2026-0001',
+                    code: 'DC-2026-0001',
+                    bomCode: 'BOM-977',
+                    invNo: 'INV-000012',
+                    customerName: 'Tata Power Solar Systems Ltd',
+                    date: '24 Sept 2026',
+                    vehicleNo: 'TN-09-CB-4890',
+                    transporter: 'VRL Logistics Ltd.',
+                    lrNo: 'LR-2026-9812',
+                    mode: 'Road Transport',
+                    status: 'IN TRANSIT',
+                    totalValue: 35400.00,
+                    itemCount: 1,
+                    items: [
+                      { code: 'MR100N', name: 'Mini Rail 100 mm (HDG)', uom: 'Nos', qty: 12, rate: 250, hsn: '76109090' }
+                    ]
+                  },
+                  {
+                    dcNo: 'DC-2026-0002',
+                    code: 'DC-2026-0002',
+                    bomCode: 'BOM-976',
+                    invNo: 'INV-000011',
+                    customerName: 'Adani Solar Energy',
+                    date: '22 Sept 2026',
+                    vehicleNo: 'KA-04-E-8821',
+                    transporter: 'Gati KWE Express',
+                    lrNo: 'LR-2026-9740',
+                    mode: 'Road Transport',
+                    status: 'DELIVERED',
+                    totalValue: 18600.00,
+                    itemCount: 2,
+                    items: [
+                      { code: 'MC30', name: 'Mid Clamp 30 mm (Anodized)', uom: 'Nos', qty: 40, rate: 65, hsn: '76109090' }
+                    ]
+                  }
+                ];
+                try {
+                  localStorage.setItem('controlroom_dc_store', JSON.stringify(storedDcs));
+                } catch (_) {}
+              }
+
+              const allDcs = storedDcs;
+              return {
+                title: 'Delivery Challan Ledger (Rule 55 CGST)',
+                subtitle: 'Statutory Delivery Challans issued for partial dispatches, job work, and goods transit under Rule 55 of CGST Rules, 2017',
+                actionText: '+ Create Delivery Challan',
+                searchPlaceholder: 'Search Delivery Challans (DC No, Customer Name, Vehicle No, BOM)...',
+                tabs: [
+                  { id: 'All', label: 'All Delivery Challans', count: allDcs.length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'InTransit', label: 'In Transit', count: allDcs.filter(d => (d.status || '').toUpperCase().includes('TRANSIT') || d.status === 'Open').length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Delivered', label: 'Delivered & Closed', count: allDcs.filter(d => (d.status || '').toUpperCase().includes('DELIVER') || (d.status || '').toUpperCase().includes('CLOSED')).length, bg: '#DCFCE7', fg: '#166534' }
+                ],
+                headers: ['DC Number', 'BOM / Invoice Ref', 'Customer Name', 'Challan Date', 'Vehicle No.', 'Transporter', 'Challan Value', 'Status'],
+                rows: allDcs.map(d => {
+                  const isInTransit = (d.status || '').toUpperCase().includes('TRANSIT') || d.status === 'Open';
+                  const isDelivered = (d.status || '').toUpperCase().includes('DELIVER') || (d.status || '').toUpperCase().includes('CLOSED');
+                  const val = typeof d.totalValue === 'number' ? d.totalValue : (parseFloat(String(d.totalValue || '0').replace(/[^0-9.]/g, '')) || 0);
+
+                  return {
+                    ...d,
+                    code: d.dcNo || d.code,
+                    c2: `${d.bomCode || 'BOM'} (${d.invNo || 'INV'})`,
+                    c3: d.customerName || d.vendor || 'Customer',
+                    c4: d.date || new Date().toLocaleDateString('en-GB'),
+                    c5: d.vehicleNo || '—',
+                    c6: d.transporter || 'Direct Transport',
+                    c7: `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+                    status: d.status || (isInTransit ? 'IN TRANSIT' : 'DELIVERED'),
+                    stBg: isInTransit ? '#FEF3C7' : (isDelivered ? '#DCFCE7' : '#F1F5F9'),
+                    stFg: isInTransit ? '#B45309' : (isDelivered ? '#166534' : '#475569'),
+                    stBorder: isInTransit ? '1px solid #FDE68A' : (isDelivered ? '1px solid #86EFAC' : '1px solid #CBD5E1'),
+                    tabGroup: isInTransit ? 'InTransit' : 'Delivered'
+                  };
+                })
+              };
+            })(),
             'Production Orders': {
               title: 'Production Orders (PO)',
               subtitle: 'Generate, tracking and dispatch management of corporate Production Orders',
