@@ -3596,7 +3596,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           <button
             onClick={() => {
               if (selectedRows.length > 0) {
-                setSelectedCode(selectedRows[0]);
+                const targetCode = selectedRows[0];
+                setSelectedRows([]);
+                setSelectedCode(targetCode);
                 setShowTxModal(true);
               }
             }}
@@ -3626,6 +3628,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   } else if (selectedRows.length === 1) {
                     const targetCode = selectedRows[0];
                     const targetMat = materials.find(m => m.code === targetCode) || { code: targetCode, name: targetCode };
+                    setSelectedRows([]);
                     handleOpenStockAdj(targetMat);
                   }
                 }}
@@ -3653,7 +3656,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               <button
                 onClick={() => {
                   const items = materials.filter(m => selectedRows.includes(m.code));
-                  setItemsPendingDelete(items.length > 0 ? items : selectedRows.map(c => ({ code: c, name: c })));
+                  const pending = items.length > 0 ? items : selectedRows.map(c => ({ code: c, name: c }));
+                  setSelectedRows([]);
+                  setItemsPendingDelete(pending);
                   setShowDeleteModal(true);
                 }}
                 style={{

@@ -1079,7 +1079,7 @@ export default function CrmLeadsView({
       </div>
 
       {/* 6. FLOATING BOTTOM ACTION BAR EXACT MATCHING PI & BOM RULES */}
-      {selectedLeads.length > 0 && (
+      {selectedLeads.length > 0 && !showReassignModal && (
         <div style={{
           position: 'fixed',
           bottom: '24px',
@@ -1114,6 +1114,7 @@ export default function CrmLeadsView({
                 return;
               }
               const target = leads.find(l => l.id === selectedLeads[0]);
+              setSelectedLeads([]);
               if (target) setSelectedLead(target);
             }}
             style={{
@@ -1146,7 +1147,10 @@ export default function CrmLeadsView({
 
             return (
               <button
-                onClick={() => onConvertLead(targetLead)}
+                onClick={() => {
+                  setSelectedLeads([]);
+                  onConvertLead(targetLead);
+                }}
                 style={{
                   backgroundColor: '#4F46E5',
                   border: 'none',

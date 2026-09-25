@@ -2808,6 +2808,7 @@ export default function ItemsDirectoryView(props) {
                     <button
                       onClick={() => {
                         const firstItem = itemsList.find(i => selectedItems.includes(i.itemId));
+                        setSelectedItems([]);
                         if (firstItem) setEditingItem(firstItem);
                       }}
                       style={{

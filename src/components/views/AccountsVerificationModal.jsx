@@ -22,7 +22,8 @@ export default function AccountsVerificationModal({
   canCancelBom = false,
   handleCancelBomOrder = () => {},
   invoiceList = [],
-  setInvoiceList = () => {}
+  setInvoiceList = () => {},
+  showCustomAlert
 }) {
   const [viewingProofDocModal, setViewingProofDocModal] = useState(null);
   const [accountsBomViewMode, setAccountsBomViewMode] = useState('paper');
@@ -303,7 +304,9 @@ export default function AccountsVerificationModal({
     });
 
     setAccountsVerificationModal(null);
-    alert(`✅ Accounts Verification Approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches Zoho Books sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`);
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert(`Accounts Verification approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches Zoho Books sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`, 'Accounts Verification Completed', 'success');
+    }
   };
 
   return (

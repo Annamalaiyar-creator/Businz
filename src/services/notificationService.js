@@ -822,18 +822,19 @@ export function notifyAccountsVerificationCompleted({ bomCode, customerName, inv
   const safeCustomer = customerName || 'Customer';
   const invText = invoiceNo ? ` (${invoiceNo})` : '';
 
-  // 3a. Notification for Billing / Invoice Team
+  // 3a. Universal completion notification for all stakeholders & current user
   sendWorkflowNotification({
-    title: `🧾 BOM Verified — Ready for Invoicing`,
-    message: `BOM ${bomCode} (${safeCustomer}) has been approved by Accounts. Ready for Invoice creation${invText}.`,
+    title: `🧾 Accounts Verified & Invoice Created`,
+    message: `Accounts verification completed for BOM ${bomCode} (${safeCustomer}). Assigned ${invText || 'Invoice'} and forwarded to Billing & Invoice Management.`,
     targetTab: 'Invoice Management',
-    targetRoles: ['Billing', 'Invoice Executive', 'Accounts Executive', 'Accounts Head'],
-    type: 'info',
+    targetRoles: ['All', 'Accounts Head', 'Accounts Executive', 'Billing', 'Invoice Executive', 'Sales Executive', 'Sales Head', 'Admin', 'CEO', 'MD'],
+    type: 'success',
     soundType: 'invoice',
     metadata: {
       bomCode,
       invoiceNo,
       customerName: safeCustomer,
+      salesPerson,
       step: 'ACCOUNTS_VERIFIED_BILLING_NOTIF'
     }
   });
@@ -843,7 +844,7 @@ export function notifyAccountsVerificationCompleted({ bomCode, customerName, inv
     title: `💳 Accounts Approved BOM`,
     message: `Accounts verification passed for BOM ${bomCode} (${safeCustomer}). Forwarded to Billing for invoice generation.`,
     targetTab: 'BOM Orders',
-    targetRoles: ['Sales Executive', 'Sales Head'],
+    targetRoles: ['Sales Executive', 'Sales Head', 'All'],
     type: 'info',
     soundType: 'chime',
     metadata: {
@@ -857,7 +858,7 @@ export function notifyAccountsVerificationCompleted({ bomCode, customerName, inv
 
 /**
  * STEP 4: Invoice completed by Billing team.
- * 1. Sales person receives notification: "Invoice is completed for BOM [BOM ID] and ready to dispatch."
+ * 1. Billing & Sales person receive notification: "Invoice is completed for BOM [BOM ID] and ready to dispatch."
  * 2. Dispatch team receives notification: "Invoice cleared. Ready for vehicle loading & dispatch!"
  * Clicking redirects to 'BOM Orders' or 'Dispatch Orders'.
  */
@@ -865,12 +866,12 @@ export function notifyInvoiceCompletedReadyForDispatch({ invoiceNo, bomCode, cus
   const safeCustomer = customerName || 'Customer';
   const safeInv = invoiceNo || 'INV-2026';
 
-  // 4a. Notification for Sales Person
+  // 4a. Universal notification for Billing operator, Sales Person & Admins
   sendWorkflowNotification({
-    title: `✅ Invoice Completed & Ready to Dispatch`,
-    message: `Invoice ${safeInv} is completed for BOM ${bomCode} (${safeCustomer}) and ready to dispatch.`,
-    targetTab: 'BOM Orders',
-    targetRoles: ['Sales Executive', 'Sales Head'],
+    title: `✅ Invoice Confirmed & Ready for Dispatch`,
+    message: `Invoice ${safeInv} for BOM ${bomCode} (${safeCustomer}) confirmed and released to Dispatch for vehicle loading.`,
+    targetTab: 'Invoice Management',
+    targetRoles: ['All', 'Billing', 'Invoice Executive', 'Accounts Head', 'Accounts Executive', 'Sales Executive', 'Sales Head', 'Admin', 'CEO', 'MD'],
     type: 'success',
     soundType: 'success',
     metadata: {
@@ -887,7 +888,7 @@ export function notifyInvoiceCompletedReadyForDispatch({ invoiceNo, bomCode, cus
     title: `🚚 Order Cleared for Vehicle Loading`,
     message: `Invoice ${safeInv} cleared for BOM ${bomCode} (${safeCustomer}). Ready for vehicle loading and final dispatch!`,
     targetTab: 'Dispatch Orders',
-    targetRoles: ['Dispatch Head', 'Production Head', 'Dispatch Executive', 'Floor Supervisor'],
+    targetRoles: ['Dispatch Head', 'Production Head', 'Dispatch Executive', 'Floor Supervisor', 'All'],
     type: 'success',
     soundType: 'chime',
     metadata: {

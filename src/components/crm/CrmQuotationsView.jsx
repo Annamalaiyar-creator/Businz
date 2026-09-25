@@ -3008,6 +3008,7 @@ export default function CrmQuotationsView({
             onClick={() => {
               if (selectedRows.length === 1) {
                 const target = normalizedQuotes.find(q => q.code === selectedRows[0]);
+                setSelectedRows([]);
                 if (target) setSelectedQuote(target);
               } else {
                 alert('Viewing multiple items is not supported. Please select a single quotation.');
@@ -3037,6 +3038,7 @@ export default function CrmQuotationsView({
             onClick={() => {
               if (selectedRows.length === 1) {
                 const target = normalizedQuotes.find(q => q.code === selectedRows[0]);
+                setSelectedRows([]);
                 if (target) handleStartEditQuote(target);
               } else {
                 alert('Editing multiple quotations at once is not supported.');
@@ -3066,6 +3068,7 @@ export default function CrmQuotationsView({
             onClick={() => {
               if (selectedRows.length === 1) {
                 const target = normalizedQuotes.find(q => q.code === selectedRows[0]);
+                setSelectedRows([]);
                 if (target) handleOpenSendQuoteModal(target, 'WhatsApp');
               } else {
                 alert('Sending quote template is supported for one quotation at a time. Please select a single quotation.');
@@ -3095,6 +3098,7 @@ export default function CrmQuotationsView({
             onClick={() => {
               if (selectedRows.length === 1) {
                 const target = normalizedQuotes.find(q => q.code === selectedRows[0]);
+                setSelectedRows([]);
                 if (target) handleConvertToPI(target);
               } else {
                 alert('Converting multiple quotations to PI at once is not supported. Please select one quotation.');

@@ -482,6 +482,7 @@ export default function ProductionTableView({
                   if (selectedRows.length > 1) {
                     if (showAlert) showAlert('You cannot edit multiple items at once.');
                   } else if (selectedRows.length === 1) {
+                    setSelectedRows([]);
                     onEditRecord(targetRow, isCancelledRow);
                   }
                 }}
@@ -576,6 +577,7 @@ export default function ProductionTableView({
                 onClick={() => {
                   const targetCode = selectedRows[0];
                   const targetBom = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === targetCode);
+                  setSelectedRows([]);
                   if (targetBom) handleCancelBomOrder(targetBom);
                 }}
                 style={{
@@ -644,6 +646,7 @@ export default function ProductionTableView({
               const targetRow = codeVal
                 ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
                 : (filteredRows && filteredRows[0] ? filteredRows[0] : { code: 'CR-001', name: 'Sample Record' });
+              setSelectedRows([]);
               onQuickPreview(targetRow);
             }}
             style={{
@@ -678,6 +681,7 @@ export default function ProductionTableView({
                   ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal))
                   : ((bomStore || [])[0] || (filteredRows || [])[0]);
 
+                setSelectedRows([]);
                 if (targetRow) {
                   onUploadPayment(targetRow);
                 } else {
@@ -711,6 +715,7 @@ export default function ProductionTableView({
           {/* Export and Print */}
           <button
             onClick={() => {
+              setSelectedRows([]);
               window.print();
             }}
             style={{
@@ -739,7 +744,10 @@ export default function ProductionTableView({
           {/* Export to Tally Button */}
           {activeTab === 'Invoice Management' && (
             <button
-              onClick={() => setShowTallyModal(true)}
+              onClick={() => {
+                setSelectedRows([]);
+                setShowTallyModal(true);
+              }}
               style={{
                 backgroundColor: '#FEF3C7',
                 border: '1px solid #FDE68A',

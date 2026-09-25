@@ -726,6 +726,7 @@ export default function BackupVaultView({ userRole }) {
           <button
             onClick={() => {
               selectedRowFilenames.forEach(fn => handleDownloadBackup(fn));
+              setSelectedRowFilenames([]);
             }}
             style={{
               backgroundColor: '#1E293B',

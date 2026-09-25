@@ -6848,6 +6848,7 @@ export default function BomOrdersView(props) {
                   } else if (selectedRows.length === 1) {
                     const codeVal = selectedRows[0];
                     const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
+                    setSelectedRows([]);
                     setConfirmingBomModal({ ...targetRow, isEditMode: true });
                   }
                 }}
@@ -6925,6 +6926,7 @@ export default function BomOrdersView(props) {
                     const codeVal = selectedRows[0];
                     const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
                     const isDraftOrPending = ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'ACTIVE', 'Active', 'Pending Verification', 'Pending'].includes(targetRow.status);
+                    setSelectedRows([]);
                     setConfirmingBomModal({ ...targetRow, isEditMode: isDraftOrPending });
                   }
                 }}
@@ -6958,6 +6960,7 @@ export default function BomOrdersView(props) {
               const targetRow = codeVal
                 ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
                 : (filteredRows && filteredRows[0] ? filteredRows[0] : null);
+              setSelectedRows([]);
               setQuickPreviewRecord(targetRow);
             }}
             style={{
@@ -6987,6 +6990,7 @@ export default function BomOrdersView(props) {
                 ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal))
                 : ((bomStore || [])[0] || (filteredRows || [])[0]);
 
+              setSelectedRows([]);
               if (targetRow) {
                 setUploadPaymentModal(targetRow);
               }
@@ -7023,6 +7027,7 @@ export default function BomOrdersView(props) {
                 onClick={() => {
                   const targetCode = selectedRows[0];
                   const targetBom = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code) === targetCode);
+                  setSelectedRows([]);
                   if (targetBom) handleCancelBomOrder(targetBom);
                 }}
                 style={{
@@ -7054,6 +7059,7 @@ export default function BomOrdersView(props) {
                 ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal))
                 : ((bomStore || [])[0] || (filteredRows || [])[0]);
 
+              setSelectedRows([]);
               if (targetRow) {
                 setPrintingBomRecord(targetRow);
               } else {

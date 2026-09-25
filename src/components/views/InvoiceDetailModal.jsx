@@ -31,7 +31,8 @@ export default function InvoiceDetailModal({
   setInvoiceList: passedSetInvoiceList,
   setPreviewDocModal,
   setActiveMediaPreviewModal = () => {},
-  setPendingDcModal = () => {}
+  setPendingDcModal = () => {},
+  showCustomAlert
 }) {
   const invoiceList = passedInvoiceList || invoices || [];
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
@@ -732,16 +733,11 @@ export default function InvoiceDetailModal({
                   salesPerson: inv.salesPerson || (matchingBom && matchingBom.salesPerson)
                 });
 
+                // Return to main page cleanly and trigger workflow alerts
                 setViewingInvoiceModal(null);
-                setConfirmInvoiceSuccessModal({
-                  invNo: invNoText,
-                  bomCode: bomRefText,
-                  customer: customerText,
-                  deliveryAddress: inv.deliveryAddress || (matchingBom && matchingBom.deliveryAddress) || 'Customer Delivery Site',
-                  packedCount: packedItemsToDeduct.length,
-                  totalCount: (itemsList || []).length,
-                  deductedItems: packedItemsToDeduct
-                });
+                if (typeof showCustomAlert === 'function') {
+                  showCustomAlert(`✅ Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Stock reduced for packed items and order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
+                }
               }}
               style={{
                 backgroundColor: '#3B82F6',
