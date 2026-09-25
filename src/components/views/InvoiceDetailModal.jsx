@@ -670,9 +670,85 @@ export default function InvoiceDetailModal({
                   return updatedBoms;
                 });
 
-                // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) with ONLY Preset Name and Preset Price
-                const presetName = matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Kit';
-                const totalPresetPrice = Number(totalAmtRaw || (inv.invAmt ? String(inv.invAmt).replace(/[^0-9.]/g, '') : 0));
+                // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) - Dynamic support for Individual Products vs Preset Packages
+                const rawPresetGroups = matchingBom?.presetGroups || inv.presetGroups;
+                const presetGroupsList = Array.isArray(rawPresetGroups)
+                  ? rawPresetGroups
+                  : (rawPresetGroups && typeof rawPresetGroups === 'object' ? Object.values(rawPresetGroups) : []);
+
+                const isPresetOrder = Boolean(
+                  (presetGroupsList && presetGroupsList.length > 0) ||
+                  (matchingBom?.presetName && matchingBom.presetName !== 'Solar Mounting Structure Kit') ||
+                  (inv.presetName && inv.presetName !== 'Solar Mounting Structure Kit')
+                );
+
+                let zohoItems = [];
+                let totalAmt = 0;
+                let invoiceNotes = '';
+
+                if (isPresetOrder) {
+                  const presetName = (presetGroupsList.length > 0 && presetGroupsList[0]?.presetName) ||
+                    matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Preset Kit';
+                  const totalPresetPrice = Number(totalAmtRaw || (inv.invAmt ? String(inv.invAmt).replace(/[^0-9.]/g, '') : 0));
+                  totalAmt = totalPresetPrice;
+
+                  if (presetGroupsList.length > 0) {
+                    presetGroupsList.forEach(grp => {
+                      const setCount = parseFloat(grp.setCount) || 1;
+                      const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
+                      const gName = grp.presetName || grp.name || presetName;
+                      zohoItems.push({
+                        name: gName,
+                        rate: unitPrice,
+                        quantity: setCount,
+                        unit: 'SET',
+                        description: `Preset Structure Package: ${gName}${bomRefText ? ` (Ref BOM: ${bomRefText})` : ''}`
+                      });
+                    });
+
+                    // Append any custom individual products added alongside the preset
+                    const extraItems = (itemsList || []).filter(it => it.selected !== false && !it.isPresetItem && !it.presetGroupId);
+                    extraItems.forEach(it => {
+                      const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
+                      const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
+                      zohoItems.push({
+                        name: it.name || it.productName || 'Solar Structure Component',
+                        rate: r,
+                        quantity: q,
+                        unit: it.uom || it.unit || 'Nos',
+                        description: it.desc || it.description || ''
+                      });
+                    });
+                  } else {
+                    zohoItems.push({
+                      name: presetName,
+                      rate: totalPresetPrice,
+                      quantity: 1,
+                      unit: 'SET',
+                      description: `Preset Structure Package: ${presetName}${bomRefText ? ` (Ref BOM: ${bomRefText})` : ''}`
+                    });
+                  }
+                  invoiceNotes = `Sales Invoice confirmed for BOM ${bomRefText} (${presetName}).`;
+                } else {
+                  // Individual products (Single product or multiple individual products)
+                  const billedItems = (itemsList || []).filter(it => it.selected !== false);
+                  const itemsToInclude = billedItems.length > 0 ? billedItems : (itemsList || []);
+
+                  zohoItems = itemsToInclude.map(it => {
+                    const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
+                    const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
+                    return {
+                      name: it.name || it.productName || 'Solar Structure Component',
+                      rate: r,
+                      quantity: q,
+                      unit: it.uom || it.unit || 'Nos',
+                      description: it.desc || it.description || ''
+                    };
+                  });
+
+                  totalAmt = Number(totalAmtRaw || (inv.invAmt ? String(inv.invAmt).replace(/[^0-9.]/g, '') : 0));
+                  invoiceNotes = `Sales Invoice confirmed for BOM ${bomRefText}.`;
+                }
 
                 try {
                   fetch('/api/zoho/invoices', {
@@ -686,15 +762,12 @@ export default function InvoiceDetailModal({
                       vendor: customerText,
                       customerName: customerText,
                       date: invDateText || new Date().toISOString().split('T')[0],
-                      invAmt: totalPresetPrice,
-                      presetName: presetName,
-                      items: [{
-                        name: presetName,
-                        rate: totalPresetPrice,
-                        quantity: 1,
-                        description: `Preset Structure Package: ${presetName} (BOM Ref: ${bomRefText})`
-                      }],
-                      notes: `Sales Invoice confirmed for BOM ${bomRefText} (${presetName}).`
+                      invAmt: totalAmt,
+                      isPreset: isPresetOrder,
+                      presetName: isPresetOrder ? (matchingBom?.presetName || inv.presetName) : undefined,
+                      presetGroups: isPresetOrder ? presetGroupsList : undefined,
+                      items: zohoItems,
+                      notes: invoiceNotes
                     })
                   })
                     .then(res => res.json())
