@@ -95,19 +95,18 @@ class CentralInventoryStore {
       const sanitized = list.map(item => {
         const upperCode = String(item.code || '').toUpperCase().trim();
         const alloc = bomAllocMap.get(upperCode) || 0;
-        const rawStock = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 5000);
-        const baseOpening = Math.max(5000, Number(item.openingStock || 5000), rawStock);
+        const basePhysical = Number(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 5000)));
         const curRes = Math.max(Number(item.reserved || item.blockedForBom || 0), alloc);
-        const effectiveStock = Math.max(0, baseOpening - curRes);
+        const effectiveStock = Math.max(0, basePhysical - curRes);
 
         return {
           ...item,
-          openingStock: baseOpening,
-          physicalStock: baseOpening,
+          openingStock: item.openingStock || basePhysical,
+          physicalStock: basePhysical,
           stock: effectiveStock,
           available: effectiveStock,
           availableStock: effectiveStock,
-          onHand: baseOpening,
+          onHand: basePhysical,
           reserved: curRes
         };
       });

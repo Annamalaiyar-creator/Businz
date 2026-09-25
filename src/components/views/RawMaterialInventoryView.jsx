@@ -166,12 +166,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           return parsed.map(item => {
             const rawSt = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 5000);
             const stockVal = Math.max(0, rawSt);
+            const physVal = Number(item.physicalStock !== undefined ? item.physicalStock : (item.openingStock || 5000));
             return {
               ...item,
               stock: stockVal,
-              physicalStock: Math.max(5000, Number(item.physicalStock || 5000)),
+              physicalStock: physVal,
               availableStock: stockVal,
-              openingStock: Math.max(5000, Number(item.openingStock || 5000)),
+              openingStock: Number(item.openingStock || physVal),
               status: stockVal > 0 ? 'In Stock' : 'Out of Stock'
             };
           });
@@ -668,7 +669,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
 
         const grnQty = Number(m.goodsReceived || 0);
-        let base = Math.max(5000, parseFloat(m.openingStock) || 5000, parseFloat(m.physicalStock) || 5000, parseFloat(m.stock) || 5000);
+        let base = parseFloat(m.physicalStock !== undefined ? m.physicalStock : (m.openingStock !== undefined ? m.openingStock : (m.stock !== undefined ? m.stock : 5000))) || 0;
 
         // Authoritative physical warehouse stock is initial opening baseline (5000) + all received GRNs
         const totalPhysical = base + grnQty;
@@ -3339,10 +3340,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 <th style={{ padding: '12px 14px', minWidth: '220px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Description</th>
                 <th style={{ padding: '12px 14px', width: '130px', minWidth: '120px', fontWeight: 'bold', boxSizing: 'border-box' }}>Category</th>
                 <th style={{ padding: '12px 14px', width: '80px', minWidth: '70px', fontWeight: 'bold', boxSizing: 'border-box' }}>UOM</th>
-                <th style={{ padding: '12px 14px', width: '125px', minWidth: '115px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Available Stock</th>
-                <th style={{ padding: '12px 14px', width: '105px', minWidth: '95px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Reserved</th>
-                <th style={{ padding: '12px 14px', width: '115px', minWidth: '105px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Physical Stock</th>
-                <th style={{ padding: '12px 14px', width: '95px', minWidth: '85px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Min. Level</th>
+                <th style={{ padding: '12px 14px', width: '140px', minWidth: '125px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Available Stock</th>
+                <th style={{ padding: '12px 14px', width: '120px', minWidth: '105px', fontWeight: 'bold', textAlign: 'right', boxSizing: 'border-box' }}>Reserved Stock</th>
                 <th style={{ padding: '12px 16px', width: '135px', minWidth: '135px', fontWeight: 'bold', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
               </tr>
             </thead>
@@ -3350,7 +3349,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               {((itemsLoading || isInventoryLoading) && (!materials || materials.length === 0)) ? (
                 <>
                   <tr>
-                    <td colSpan={10} style={{ padding: '24px 16px', textAlign: 'center', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1' }}>
+                    <td colSpan={8} style={{ padding: '24px 16px', textAlign: 'center', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', color: '#0E7490', fontSize: '13px', fontWeight: '600' }}>
                         <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
                         <span>Synchronizing Authoritative Warehouse Inventory & 312 Standardized Products...</span>
@@ -3366,8 +3365,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       <td style={{ padding: '14px' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                       <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '70px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                       <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '70px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                       <td style={{ padding: '14px 16px', width: '135px', textAlign: 'center', boxSizing: 'border-box' }}><div style={{ width: '85px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
                     </tr>
                   ))}
@@ -3475,14 +3472,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       ) : (
                         <span style={{ color: '#94A3B8', fontSize: '12px' }}>0</span>
                       )}
-                    </td>
-
-                    {/* In-Store Physical Stock Baseline */}
-                    <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '600', color: '#64748B', whiteSpace: 'nowrap' }}>
-                      {(Number(m.physicalStock !== undefined ? m.physicalStock : (m.openingStock !== undefined ? m.openingStock : 0)) || 0).toLocaleString()}
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right', color: '#64748B', whiteSpace: 'nowrap' }}>
-                      {(Number(m.minLevel !== undefined ? m.minLevel : (m.reorderLevel !== undefined ? m.reorderLevel : 0)) || 0).toLocaleString()}
                     </td>
 
                     {/* Status Badge */}

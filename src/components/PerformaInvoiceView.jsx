@@ -940,8 +940,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           });
           if (rawFound) {
             const st = Number(rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.stock !== undefined ? rawFound.stock : (rawFound.physicalStock || 0)));
-            if (st > 0 && st < 5000) return st;
-            if (isMr300 && (st <= 0 || st >= 5000)) return 1800;
+            if (!isNaN(st) && st >= 0) return st;
           }
         }
       }
@@ -964,12 +963,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
     if (found) {
       const st = Number(found.availableStock !== undefined ? found.availableStock : (found.stock !== undefined ? found.stock : 0));
-      if (st > 0 && st < 5000) return st;
-      if (isMr300) return 1800;
-      return st >= 5000 ? 0 : st;
+      if (!isNaN(st) && st >= 0) return st;
     }
 
-    if (isMr300) return 1800;
     return 0;
   };
 
