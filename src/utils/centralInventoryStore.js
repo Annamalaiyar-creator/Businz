@@ -74,11 +74,21 @@ class CentralInventoryStore {
                 'confirmed',
                 'packed & ready for dispatch',
                 'partially packed',
-                'closed',
                 'dispatch packing verified - sent to accounts',
                 'awaiting vehicle loading & dispatch'
               ].some(s => st.includes(s));
-              if (isSent && !st.includes('cancel') && !st.includes('restored')) {
+              const isCompletedOrDeducted = Boolean(
+                b?.fullyCompleted ||
+                (b?.vehicleLoading && (b?.vehicleLoading.fullyCompleted || b?.vehicleLoading.loadedAt)) ||
+                st === 'completed' ||
+                st === 'closed' ||
+                st.includes('completed') ||
+                st.includes('closed') ||
+                st.includes('fully dispatched') ||
+                st.includes('delivered') ||
+                st.includes('awaiting lr copy')
+              );
+              if (isSent && !isCompletedOrDeducted && !st.includes('cancel') && !st.includes('restored')) {
                 (b.items || []).forEach(it => {
                   const c = String(it.code || '').toUpperCase().trim();
                   const q = parseFloat(it.qty || it.bomQty || 0) || 0;
@@ -96,7 +106,7 @@ class CentralInventoryStore {
         const upperCode = String(item.code || '').toUpperCase().trim();
         const alloc = bomAllocMap.get(upperCode) || 0;
         const basePhysical = Number(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 5000)));
-        const curRes = Math.max(Number(item.reserved || item.blockedForBom || 0), alloc);
+        const curRes = alloc;
         const effectiveStock = Math.max(0, basePhysical - curRes);
 
         return {
@@ -297,11 +307,21 @@ class CentralInventoryStore {
                 'confirmed',
                 'packed & ready for dispatch',
                 'partially packed',
-                'closed',
                 'dispatch packing verified - sent to accounts',
                 'awaiting vehicle loading & dispatch'
               ].some(s => st.includes(s));
-              if (isSent && !st.includes('cancel') && !st.includes('restored')) {
+              const isCompletedOrDeducted = Boolean(
+                b?.fullyCompleted ||
+                (b?.vehicleLoading && (b?.vehicleLoading.fullyCompleted || b?.vehicleLoading.loadedAt)) ||
+                st === 'completed' ||
+                st === 'closed' ||
+                st.includes('completed') ||
+                st.includes('closed') ||
+                st.includes('fully dispatched') ||
+                st.includes('delivered') ||
+                st.includes('awaiting lr copy')
+              );
+              if (isSent && !isCompletedOrDeducted && !st.includes('cancel') && !st.includes('restored')) {
                 (b.items || []).forEach(it => {
                   const c = String(it.code || '').toUpperCase().trim();
                   const n = String(it.name || '').toLowerCase().trim();
@@ -321,8 +341,7 @@ class CentralInventoryStore {
         this.reservations
           .filter(r => r.itemCode === item.code && r.status === 'Active')
           .reduce((acc, r) => acc + (parseFloat(r.reservedQty) || 0), 0),
-        bomAlloc,
-        Number(item.reserved) || 0
+        bomAlloc
       );
 
       const available = Math.max(0, onHand - activeRes);
@@ -573,24 +592,16 @@ class CentralInventoryStore {
         item.physicalStock = nextStock;
         item.available = nextStock;
         item.availableStock = nextStock;
-        item.reserved = Math.max(0, (parseFloat(item.reserved) || 0) + qty);
+        item.reserved = Math.max(0, (parseFloat(item.reserved) || 0) - qty);
       }
 
-      // Add to reservations
-      this.reservations = this.reservations.filter(r => !(r.refNo === bomCode && r.itemCode === targetCode));
-      this.reservations.push({
-        id: `RES-${bomCode}-${targetCode}-${Date.now()}`,
-        refNo: bomCode,
-        itemCode: targetCode,
-        reservedQty: qty,
-        date: timestamp.split('T')[0],
-        status: 'Active'
-      });
+      // Release reservation since stock is now physically dispatched
+      this.reservations = this.reservations.filter(r => !(r.refNo === bomCode && (!targetCode || r.itemCode === targetCode)));
 
-      // Add Reservation transaction to ledger
+      // Add Dispatch Deduction transaction to ledger
       const tx = {
-        id: `TX-BOM-RES-${bomCode}-${targetCode}-${Date.now()}`,
-        type: 'BOM_RESERVATION',
+        id: `TX-BOM-OUT-${bomCode}-${targetCode}-${Date.now()}`,
+        type: 'BOM_DISPATCH_DEDUCTION',
         refNo: bomCode,
         dateTime: timestamp,
         itemCode: targetCode,
@@ -602,7 +613,7 @@ class CentralInventoryStore {
         user,
         department: 'Production & Logistics',
         sourceDoc: `BOM Order: ${bomCode}`,
-        remarks: `Deducted/Reserved ${qty} ${targetUnit} for BOM ${bomCode}`
+        remarks: `Dispatched & Deducted ${qty} ${targetUnit} for BOM ${bomCode}`
       };
       this.transactions.push(tx);
 
@@ -620,7 +631,7 @@ class CentralInventoryStore {
         mMatch.availableStock = nextM;
         mMatch.physicalStock = nextM;
         mMatch.openingStock = baseOpen;
-        mMatch.reserved = Math.max(0, (parseFloat(mMatch.reserved) || 0) + qty);
+        mMatch.reserved = Math.max(0, (parseFloat(mMatch.reserved) || 0) - qty);
         mMatch.blockedForBom = mMatch.reserved;
         mMatch.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (mMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
         mMatch.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user}`;

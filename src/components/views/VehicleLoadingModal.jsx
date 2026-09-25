@@ -394,6 +394,11 @@ const handleFinalizeVehicleLoading = () => {
     } catch (cErr) {
       console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
     }
+  } else {
+    // Ensure active reservations for this BOM are released now that vehicle is loaded
+    try {
+      centralInventoryStore.releaseReservation(bCode);
+    } catch (_) {}
   }
 
   // Update BOM status to Fully Completed or Awaiting LR Copy & persist
