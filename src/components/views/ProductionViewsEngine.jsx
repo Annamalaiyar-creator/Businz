@@ -1309,10 +1309,14 @@ export default function ProductionViewsEngine(props) {
                   });
                 } else if (activeTab === 'Dispatch Orders') {
                   const isAwaitingLoad = Boolean(
+                    targetRow.tabGroup === 'AwaitingLoading' ||
+                    targetRow.tabGroup === 'AwaitingLrCopy' ||
                     targetRow.status === 'Awaiting Vehicle Loading & Dispatch' ||
                     targetRow.status === 'AWAITING VEHICLE LOADING' ||
                     targetRow.status === 'Invoice Confirmed' ||
                     targetRow.invoiceConfirmed ||
+                    targetRow.status === 'Accounts Verified & Passed to Invoice' ||
+                    targetRow.isAccountsDone ||
                     targetRow.status === 'Dispatched - Awaiting LR Copy' ||
                     targetRow.status === 'AWAITING LR COPY' ||
                     targetRow.status === 'Awaiting LR Copy' ||
@@ -1371,12 +1375,17 @@ export default function ProductionViewsEngine(props) {
             } else if (activeTab === 'Dispatch Orders') {
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
               const isRecAwaitingLoad = Boolean(
+                rec.tabGroup === 'AwaitingLoading' ||
+                rec.tabGroup === 'AwaitingLrCopy' ||
                 rec.status === 'Dispatched - Awaiting LR Copy' ||
                 rec.status === 'AWAITING LR COPY' ||
+                rec.status === 'Awaiting LR Copy' ||
                 rec.status === 'Awaiting Vehicle Loading & Dispatch' ||
                 rec.status === 'AWAITING VEHICLE LOADING' ||
                 rec.status === 'Invoice Confirmed' ||
                 rec.invoiceConfirmed ||
+                rec.status === 'Accounts Verified & Passed to Invoice' ||
+                rec.isAccountsDone ||
                 (rec.invoiceNo && rec.status !== 'Closed')
               );
               if (isRecAwaitingLoad) {

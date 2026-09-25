@@ -4,7 +4,7 @@ import {
   FileCheck, CheckSquare, XCircle, ChevronLeft, RotateCcw,
   Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode
 } from "lucide-react";
-import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
+import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
@@ -1428,15 +1428,22 @@ export default function InvoiceDetailModal({
                             : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || addressProofDoc?.proofDocData || null);
 
                           if (!resolvedUrl && docName) {
-                            resolvedUrl = getMediaFromCache(docName);
+                            resolvedUrl = getMediaFromCache(docName) || await getMediaFromCacheAsync(docName);
                           }
                           if (!resolvedUrl && addressProofDoc?.id) {
-                            resolvedUrl = getMediaFromCache(addressProofDoc.id);
+                            resolvedUrl = getMediaFromCache(addressProofDoc.id) || await getMediaFromCacheAsync(addressProofDoc.id);
                           }
                           if (!resolvedUrl && typeof resolveDocumentUrlAsync === 'function') {
                             try {
                               const asyncUrl = await resolveDocumentUrlAsync(addressProofDoc, bomRefText);
                               if (asyncUrl) resolvedUrl = asyncUrl;
+                            } catch (_) {}
+                          }
+                          if (!resolvedUrl && docName) {
+                            try {
+                              const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
+                              const data = await res.json();
+                              if (data?.found && data?.url) resolvedUrl = data.url;
                             } catch (_) {}
                           }
 
@@ -1450,7 +1457,8 @@ export default function InvoiceDetailModal({
 
                           setLocalDocPreviewModal({
                             title: 'Delivery Address Proof Document',
-                            doc: docObj
+                            doc: docObj,
+                            bomCode: bomRefText
                           });
                         }}
                         style={{ border: 'none', backgroundColor: '#166534', color: 'white', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(22,101,52,0.2)' }}
