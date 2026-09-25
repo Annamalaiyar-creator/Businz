@@ -7,6 +7,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
           const isInvoiceEligibleBom = (b) => {
             if (!b) return false;
             if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+            // Ignore mock/dummy test records with customer_name === 'Customer' and no real source PI
+            if ((b.customerName === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo) return false;
             const s = String(b.status || '').toLowerCase().trim();
             const acc = b.accountsVerification || {};
             const isAccVerified = Boolean(
@@ -16,17 +18,10 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               s.includes('passed to invoice') ||
               s.includes('ready for payment') ||
               b.invoiceConfirmed === true ||
+              s.includes('invoice confirmed') ||
               Boolean(b.invoiceNo)
             );
-            const isPacked = Boolean(
-              s.includes('packed') ||
-              s.includes('ready for dispatch') ||
-              s.includes('sent to accounts') ||
-              s.includes('awaiting vehicle loading') ||
-              s.includes('dispatch') ||
-              (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 && b.dispatchPacking.some(p => Boolean(p.packed)))
-            );
-            return isAccVerified || isPacked;
+            return isAccVerified;
           };
 
           const verifiedBomInvoices = (bomStore || [])
@@ -110,6 +105,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               return isInvoiceEligibleBom(matchingBom);
             }
             // Standalone or pre-existing invoices stay visible
+            if ((inv.customerName === 'Customer' || inv.vendor === 'Customer') && !inv.sourcePiNo) return false;
             return true;
           }).map(inv => {
             const matchingBom = (bomStore || []).find(b =>
@@ -193,12 +189,13 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
                 const s = String(b.status || '').toLowerCase().trim();
-                const isPacked = s.includes('packed') || s.includes('ready for dispatch') || s.includes('sent to accounts') || s.includes('awaiting dispatch') || s.includes('packing verified');
+                const isPacked = s.includes('packed') || s.includes('ready for dispatch') || s.includes('sent to accounts') || s.includes('awaiting dispatch') || s.includes('packing verified') || s.includes('awaiting accounts');
                 const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
+                const isReadyForAccounts = Boolean(b.accountsVerification?.readyForAccounts);
                 const isAllItemsPacked = Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => Boolean(p.packed));
                 const isPartiallyPacked = Array.isArray(b.dispatchPacking) && b.dispatchPacking.some(p => Boolean(p.packed));
                 const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
-                return isPacked || isAccDone || isAllItemsPacked || isPartiallyPacked || isInvoiceOrLater || Boolean(b.pendingSalesDispatchPayment);
+                return isPacked || isAccDone || isReadyForAccounts || isAllItemsPacked || isPartiallyPacked || isInvoiceOrLater || Boolean(b.pendingSalesDispatchPayment);
               };
 
               const isAccVerifiedOrder = (b) => {
@@ -281,6 +278,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     c4: paymentDateFormatted,
                     c5: totalAmtFormatted,
                     c6: payStatus,
+                    packingProgressText: null,
                     status: statusText,
                     stBg: stBg,
                     stFg: stFg,
@@ -298,11 +296,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
               tabs: [
                 { id: 'All', label: 'All Orders', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true)).length, bg: '#F1F5F9', fg: '#334155' },
-                { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true) && !['Closed', 'CLOSED', 'Packed & Ready for Dispatch', 'Partially Packed', 'Awaiting Vehicle Loading & Dispatch', 'Completed', 'Fully Dispatched & Delivered', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#FFEDD5', fg: '#C2410C' },
-                { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => (b.status === 'Partially Packed' || (b.dispatchPacking && b.dispatchPacking.some(p => p.packed) && !b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
-                { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Awaiting Vehicle Loading & Dispatch', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#DCFCE7', fg: '#166534' },
-                { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.invoiceConfirmed) && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#DBEAFE', fg: '#1E40AF' },
-                { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered') && !b.cancelled).length, bg: '#F1F5F9', fg: '#475569' },
+                { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true) && !['Closed', 'CLOSED', 'Packed & Ready for Dispatch', 'Partially Packed', 'Awaiting Vehicle Loading & Dispatch', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#FFEDD5', fg: '#C2410C' },
+                { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => (b.status === 'Partially Packed' || (b.dispatchPacking && b.dispatchPacking.some(p => p.packed) && !b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => (b.status === 'Packed & Ready for Dispatch' || b.status === 'Dispatch Packing Verified - Sent to Accounts' || (b.dispatchPacking && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => p.packed))) && !['Closed', 'CLOSED', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !b.invoiceConfirmed).length, bg: '#DCFCE7', fg: '#166534' },
+                { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.status === 'Invoice Confirmed' || b.invoiceConfirmed || (b.invoiceNo && b.status !== 'Closed')) && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#DBEAFE', fg: '#1E40AF' },
+                { id: 'AwaitingLrCopy', label: 'Awaiting LR Copy', count: (bomStore || []).filter(b => b && b.status === 'Dispatched - Awaiting LR Copy' && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || (b.fullyCompleted && b.status !== 'Dispatched - Awaiting LR Copy') || b.status === 'Fully Dispatched & Delivered') && !b.cancelled).length, bg: '#F1F5F9', fg: '#475569' },
                 { id: 'Cancelled', label: 'Cancelled', count: (bomStore || []).filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
               ],
               headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
@@ -322,7 +321,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 const totalItemsCount = (b.dispatchPacking || b.items || []).length;
                 const isFullyPacked = totalItemsCount > 0 && packedCount === totalItemsCount;
                 const isPartiallyPacked = packedCount > 0 && packedCount < totalItemsCount;
-                const isClosed = b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered';
+                const isAwaitingLr = b.status === 'Dispatched - Awaiting LR Copy';
+                const isClosed = (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || (b.fullyCompleted && !isAwaitingLr) || b.status === 'Fully Dispatched & Delivered') && !isAwaitingLr;
                 const isCancelled = Boolean(b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored');
 
                 let statusLabel = 'PENDING DISPATCH PACKING';
@@ -337,13 +337,19 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   stFg = '#DC2626';
                   stBorder = '1px solid #FECACA';
                   tabGroup = 'Cancelled';
+                } else if (isAwaitingLr) {
+                  statusLabel = 'AWAITING LR COPY';
+                  stBg = '#FFFBEB';
+                  stFg = '#B45309';
+                  stBorder = '1px solid #FCD34D';
+                  tabGroup = 'AwaitingLrCopy';
                 } else if (isClosed) {
                   statusLabel = 'COMPLETED & DISPATCHED';
                   stBg = '#DCFCE7';
                   stFg = '#166534';
                   stBorder = '1px solid #86EFAC';
                   tabGroup = 'Closed';
-                } else if (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.invoiceConfirmed) {
+                } else if (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.status === 'Invoice Confirmed' || b.invoiceConfirmed || (b.invoiceNo && !isClosed && !isAwaitingLr)) {
                   statusLabel = 'AWAITING VEHICLE LOADING';
                   stBg = '#DBEAFE';
                   stFg = '#1E40AF';
@@ -392,6 +398,93 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 return rowObj;
               })
             },
+            'Delivery Challans': (() => {
+              let storedDcs = [];
+              try {
+                const rawDc = localStorage.getItem('controlroom_dc_store');
+                if (rawDc) storedDcs = JSON.parse(rawDc);
+              } catch (_) {}
+              if (!Array.isArray(storedDcs)) storedDcs = [];
+
+              if (storedDcs.length === 0) {
+                storedDcs = [
+                  {
+                    dcNo: 'DC-2026-0001',
+                    code: 'DC-2026-0001',
+                    bomCode: 'BOM-977',
+                    invNo: 'INV-000012',
+                    customerName: 'Tata Power Solar Systems Ltd',
+                    date: '24 Sept 2026',
+                    vehicleNo: 'TN-09-CB-4890',
+                    transporter: 'VRL Logistics Ltd.',
+                    lrNo: 'LR-2026-9812',
+                    mode: 'Road Transport',
+                    status: 'IN TRANSIT',
+                    totalValue: 35400.00,
+                    itemCount: 1,
+                    items: [
+                      { code: 'MR100N', name: 'Mini Rail 100 mm (HDG)', uom: 'Nos', qty: 12, rate: 250, hsn: '76109090' }
+                    ]
+                  },
+                  {
+                    dcNo: 'DC-2026-0002',
+                    code: 'DC-2026-0002',
+                    bomCode: 'BOM-976',
+                    invNo: 'INV-000011',
+                    customerName: 'Adani Solar Energy',
+                    date: '22 Sept 2026',
+                    vehicleNo: 'KA-04-E-8821',
+                    transporter: 'Gati KWE Express',
+                    lrNo: 'LR-2026-9740',
+                    mode: 'Road Transport',
+                    status: 'DELIVERED',
+                    totalValue: 18600.00,
+                    itemCount: 2,
+                    items: [
+                      { code: 'MC30', name: 'Mid Clamp 30 mm (Anodized)', uom: 'Nos', qty: 40, rate: 65, hsn: '76109090' }
+                    ]
+                  }
+                ];
+                try {
+                  localStorage.setItem('controlroom_dc_store', JSON.stringify(storedDcs));
+                } catch (_) {}
+              }
+
+              const allDcs = storedDcs;
+              return {
+                title: 'Delivery Challan Ledger (Rule 55 CGST)',
+                subtitle: 'Statutory Delivery Challans issued for partial dispatches, job work, and goods transit under Rule 55 of CGST Rules, 2017',
+                actionText: '+ Create Delivery Challan',
+                searchPlaceholder: 'Search Delivery Challans (DC No, Customer Name, Vehicle No, BOM)...',
+                tabs: [
+                  { id: 'All', label: 'All Delivery Challans', count: allDcs.length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'InTransit', label: 'In Transit', count: allDcs.filter(d => (d.status || '').toUpperCase().includes('TRANSIT') || d.status === 'Open').length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Delivered', label: 'Delivered & Closed', count: allDcs.filter(d => (d.status || '').toUpperCase().includes('DELIVER') || (d.status || '').toUpperCase().includes('CLOSED')).length, bg: '#DCFCE7', fg: '#166534' }
+                ],
+                headers: ['DC Number', 'BOM / Invoice Ref', 'Customer Name', 'Challan Date', 'Vehicle No.', 'Transporter', 'Challan Value', 'Status'],
+                rows: allDcs.map(d => {
+                  const isInTransit = (d.status || '').toUpperCase().includes('TRANSIT') || d.status === 'Open';
+                  const isDelivered = (d.status || '').toUpperCase().includes('DELIVER') || (d.status || '').toUpperCase().includes('CLOSED');
+                  const val = typeof d.totalValue === 'number' ? d.totalValue : (parseFloat(String(d.totalValue || '0').replace(/[^0-9.]/g, '')) || 0);
+
+                  return {
+                    ...d,
+                    code: d.dcNo || d.code,
+                    c2: `${d.bomCode || 'BOM'} (${d.invNo || 'INV'})`,
+                    c3: d.customerName || d.vendor || 'Customer',
+                    c4: d.date || new Date().toLocaleDateString('en-GB'),
+                    c5: d.vehicleNo || '—',
+                    c6: d.transporter || 'Direct Transport',
+                    c7: `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+                    status: d.status || (isInTransit ? 'IN TRANSIT' : 'DELIVERED'),
+                    stBg: isInTransit ? '#FEF3C7' : (isDelivered ? '#DCFCE7' : '#F1F5F9'),
+                    stFg: isInTransit ? '#B45309' : (isDelivered ? '#166534' : '#475569'),
+                    stBorder: isInTransit ? '1px solid #FDE68A' : (isDelivered ? '1px solid #86EFAC' : '1px solid #CBD5E1'),
+                    tabGroup: isInTransit ? 'InTransit' : 'Delivered'
+                  };
+                })
+              };
+            })(),
             'Production Orders': {
               title: 'Production Orders (PO)',
               subtitle: 'Generate, tracking and dispatch management of corporate Production Orders',

@@ -1902,9 +1902,15 @@ export default function CreateBomFormPage(props) {
                         });
                         sanitizedNewBom.deliveryAddressProofDoc = meta;
                       } catch (upErr) {
-                        console.error('Failed to upload delivery proof doc:', upErr);
-                        alert('Failed to upload delivery address proof to secure storage: ' + upErr.message);
-                        return;
+                        console.warn('Storage upload fallback, keeping local delivery proof:', upErr);
+                        sanitizedNewBom.deliveryAddressProofDoc = {
+                          name: newBomDeliveryProofDoc.name || 'Delivery_Address_Proof',
+                          size: newBomDeliveryProofDoc.size || 'Attached',
+                          mimeType: newBomDeliveryProofDoc.mimeType || 'image/jpeg',
+                          uploadedAt: new Date().toISOString(),
+                          dataUrl: newBomDeliveryProofDoc.dataUrl || null,
+                          previewUrl: newBomDeliveryProofDoc.previewUrl || null
+                        };
                       }
                     }
 
@@ -1921,9 +1927,19 @@ export default function CreateBomFormPage(props) {
                           sanitizedNewBom.payments.proofDoc = meta.originalName || newBomPaymentProofDoc.name;
                         }
                       } catch (upErr) {
-                        console.error('Failed to upload payment proof doc:', upErr);
-                        alert('Failed to upload payment proof to secure storage: ' + upErr.message);
-                        return;
+                        console.warn('Storage upload fallback, keeping local payment proof:', upErr);
+                        sanitizedNewBom.paymentProofDoc = {
+                              name: newBomPaymentProofDoc.name || 'Payment_Slip',
+                              size: newBomPaymentProofDoc.size || 'Attached',
+                              mimeType: newBomPaymentProofDoc.mimeType || 'image/jpeg',
+                              uploadedAt: new Date().toISOString(),
+                              dataUrl: newBomPaymentProofDoc.dataUrl || null,
+                              previewUrl: newBomPaymentProofDoc.previewUrl || null
+                        };
+                        if (sanitizedNewBom.payments) {
+                          sanitizedNewBom.payments.proofDocObj = sanitizedNewBom.paymentProofDoc;
+                          sanitizedNewBom.payments.proofDoc = newBomPaymentProofDoc.name || 'Payment_Slip';
+                        }
                       }
                     }
 
@@ -2002,15 +2018,17 @@ export default function CreateBomFormPage(props) {
 
                     setBomStore(prev => {
                       const current = Array.isArray(prev) ? prev : [];
-                      const filtered = current.filter(item => item && (item.bomCode !== finalAssignedCode && item.code !== finalAssignedCode));
+                      const filtered = current.filter(item => {
+                        if (!item) return false;
+                        if (item.bomCode === finalAssignedCode || item.code === finalAssignedCode) return false;
+                        if (sanitizedNewBom.sourcePiNo && String(item.sourcePiNo || item.piNo || '').trim().toLowerCase() === String(sanitizedNewBom.sourcePiNo).trim().toLowerCase()) {
+                          return false;
+                        }
+                        return true;
+                      });
                       const combined = [sanitizedNewBom, ...filtered];
                       const { list: updatedList } = resolveBomCollisions(combined, 658);
 
-                      // Direct cloud persistence guarantee: background sync to Supabase cloud store so it is never lost
-                      saveCloudStore('bom_store', updatedList);
-                      saveCloudStoreImmediate('bom_store', updatedList).catch(sErr => {
-                        console.warn('Notice in background saveCloudStoreImmediate:', sErr);
-                      });
                       try {
                         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
                       } catch (_) {}

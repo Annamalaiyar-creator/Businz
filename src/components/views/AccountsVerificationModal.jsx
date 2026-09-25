@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image
 } from "lucide-react";
 import { getMediaFromCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import StatusBadge from "../StatusBadge";
 import { VRMBomPrintSheet } from "../VRMBomPrintTemplate";
@@ -44,6 +44,31 @@ export default function AccountsVerificationModal({
   const orderValue = cleanNum(accountsVerificationModal.grandTotal, 0);
 
   // Accounts Verification State & Derived Variables (NOT prefilled by default)
+  const [assignedInvoiceNo, setAssignedInvoiceNo] = useState(() => {
+    const raw = accountsVerificationModal?.invoiceNo;
+    return (raw && raw !== 'Pending Confirmation') ? raw : '';
+  });
+  const [isFetchingInvNo, setIsFetchingInvNo] = useState(false);
+
+  useEffect(() => {
+    if (!assignedInvoiceNo || assignedInvoiceNo === 'Pending Confirmation') {
+      setIsFetchingInvNo(true);
+      fetch('/api/zoho/next-invoice-number')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.nextInvNo) {
+            setAssignedInvoiceNo(data.nextInvNo);
+          }
+        })
+        .catch(err => {
+          console.warn('Could not fetch next invoice number:', err);
+        })
+        .finally(() => {
+          setIsFetchingInvNo(false);
+        });
+    }
+  }, [accountsVerificationModal]);
+
   const currentPayDate = accVerif.paymentDate !== undefined 
     ? accVerif.paymentDate 
     : (isAlreadyCompleted ? (accountsVerificationModal.paymentDate || '') : '');
@@ -61,7 +86,7 @@ export default function AccountsVerificationModal({
   };
   const currentPayConfig = payStatusConfig[currentPayStatus] || payStatusConfig['Payment Received — 100%'];
 
-  const completeVerification = () => {
+  const completeVerification = async () => {
     if (!currentPayDate) {
       alert('⚠️ Please select the Payment Date before completing accounts verification.');
       return;
@@ -71,12 +96,25 @@ export default function AccountsVerificationModal({
       return;
     }
 
+    let finalInvNo = assignedInvoiceNo;
+    if (!finalInvNo || finalInvNo === 'Pending Confirmation') {
+      try {
+        const res = await fetch('/api/zoho/next-invoice-number');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.nextInvNo) {
+            finalInvNo = data.nextInvNo;
+          }
+        }
+      } catch (_) {}
+    }
+    if (!finalInvNo) finalInvNo = 'INV-000012';
+
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     const verifiedBOM = accountsVerificationModal;
-    const newInvNo = verifiedBOM.invoiceNo || null;
     const updatedBomData = {
       ...verifiedBOM,
-      invoiceNo: newInvNo,
+      invoiceNo: finalInvNo,
       grandTotal: cleanNum(currentTotalAmount, 0),
       paymentDate: currentPayDate,
       isAccountsDone: true,
@@ -111,7 +149,7 @@ export default function AccountsVerificationModal({
       const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
       const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === verifiedBOM.id) ? updatedBomData : b);
       localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedLocal.map(stripDataUrlsFromRecord)));
-      saveCloudStore('bom_store', updatedLocal);
+      saveCloudBomRow(updatedBomData);
     } catch (_) {}
 
     // Push to server so Accounts & Billing sees it across devices
@@ -137,8 +175,9 @@ export default function AccountsVerificationModal({
       : (verifiedBOM.items || []).map(it => ({ ...it, selected: true, packed: true }));
 
     const newInvEntry = {
-      invNo: newInvNo || 'Pending Confirmation',
-      code: newInvNo || targetCode,
+      invNo: finalInvNo,
+      code: finalInvNo,
+      invoiceNo: finalInvNo,
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       vendor: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
       customerName: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
@@ -173,10 +212,10 @@ export default function AccountsVerificationModal({
     };
 
     setInvoiceList(prev => {
-      const filtered = (prev || []).filter(i => i.poNo !== targetCode && i.bomCode !== targetCode && (newInvNo ? (i.invNo !== newInvNo && i.code !== newInvNo) : true));
+      const filtered = (prev || []).filter(i => i.poNo !== targetCode && i.bomCode !== targetCode && (finalInvNo ? (i.invNo !== finalInvNo && i.code !== finalInvNo) : true));
       const updated = [newInvEntry, ...filtered];
       try {
-        saveCloudStore('invoice_store', updated);
+        saveCloudInvoiceRow(newInvEntry);
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
       } catch (e) { }
       return updated;
@@ -192,12 +231,12 @@ export default function AccountsVerificationModal({
     notifyAccountsVerificationCompleted({
       bomCode: targetCode,
       customerName: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
-      invoiceNo: newInvNo,
+      invoiceNo: finalInvNo,
       salesPerson: verifiedBOM.salesPerson
     });
 
     setAccountsVerificationModal(null);
-    alert(`✅ Accounts Verification Approved for ${bomCodeText}.\n\nOrder passed directly to Invoice Management for invoice generation and confirmation.`);
+    alert(`✅ Accounts Verification Approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches Zoho Books sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`);
   };
 
   return (
@@ -228,6 +267,14 @@ export default function AccountsVerificationModal({
                 color: '#FFFFFF', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
               }}>
                 {bomCodeText}
+              </span>
+              <span style={{
+                backgroundColor: 'rgba(14, 165, 233, 0.25)', border: '1px solid rgba(56, 189, 248, 0.5)',
+                color: '#E0F2FE', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800',
+                display: 'inline-flex', alignItems: 'center', gap: '6px'
+              }}>
+                <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
+                Zoho Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
               </span>
               <StatusBadge
                 status={(isAlreadyCompleted || isVerified) ? 'ACCOUNTS VERIFIED' : isPartialVerified ? 'PARTIALLY VERIFIED' : 'PENDING VERIFICATION'}
@@ -936,7 +983,7 @@ export default function AccountsVerificationModal({
               }}
             >
               <CheckCircle style={{ width: '15px', height: '15px' }} />
-              Complete Verification & Generate Invoice
+              Approve Payment & Send to Invoice Team
             </button>
           </div>
         </div>

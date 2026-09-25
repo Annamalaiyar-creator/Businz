@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Plus, Check, Trash2, Eye, Search, X, CheckCircle, ArrowLeft,
   Calendar, Edit3, Filter, RotateCcw, UploadCloud, ChevronDown,
-  Package, Info, Upload, Receipt, Image, Pause, Save
+  Package, Info, Upload, Receipt, Image, Pause, Save, RefreshCw
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
-import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from '../../utils/vrmProductsData';
-import { fetchCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
+import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from '../../utils/vrmProductsData';
+import { fetchCloudStore, subscribeToCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
 
 const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
   const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
@@ -116,10 +116,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     { code: 'MR100N', name: 'MINI RAIL 100mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'MR125', name: 'MINI RAIL 125mm (300mm)', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'LC', name: 'Locking Nut (LC)', cat: 'Aluminium', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR60', name: 'Mini Rail 60mm (MR60)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '60 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR60N', name: 'MINI RAIL 60mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR40', name: 'Mini Rail 40mm (MR40)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '40 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR40N', name: 'MINI RAIL 40mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR60', name: 'MINI RAIL 60mm (300mm) NEW', cat: '6063T6', category: '6063T6', unit: 'Nos', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
+    { code: 'MR40', name: 'MINI RAIL 40mm (300mm) NEW', cat: '6063T6', category: '6063T6', unit: 'Nos', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 0, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 0, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
     { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Aluminium', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 0, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
@@ -157,46 +155,37 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     }
   };
 
+  const [isInventoryLoading, setIsInventoryLoading] = useState(false);
+
   const [materials, setMaterials] = useState(() => {
-    // One-time client migration to ensure all stock counts are initialized to 0
     try {
-      const stockZeroKey = 'controlroom_stock_zero_reset_v5';
-      if (localStorage.getItem(stockZeroKey) !== 'true') {
-        localStorage.setItem(stockZeroKey, 'true');
-        ['controlroom_raw_materials_store', 'controlroom_central_items_v2'].forEach(key => {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            try {
-              const list = JSON.parse(raw);
-              if (Array.isArray(list)) {
-                const zeroed = list.map(item => ({
-                  ...item,
-                  stock: 0,
-                  availableStock: 0,
-                  physicalStock: 0,
-                  openingStock: 0,
-                  reserved: 0,
-                  blockedForBom: 0,
-                  goodsReceived: 0,
-                  status: 'Out of Stock'
-                }));
-                localStorage.setItem(key, JSON.stringify(zeroed));
-              }
-            } catch (_) {}
-          }
-        });
-        localStorage.setItem('controlroom_central_grns_v2', '[]');
-        localStorage.setItem('goods_receipt_notes', '[]');
+      const saved = localStorage.getItem('controlroom_raw_materials_store');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(item => {
+            const rawSt = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 5000);
+            const stockVal = Math.max(0, rawSt);
+            return {
+              ...item,
+              stock: stockVal,
+              physicalStock: Math.max(5000, Number(item.physicalStock || 5000)),
+              availableStock: stockVal,
+              openingStock: Math.max(5000, Number(item.openingStock || 5000)),
+              status: stockVal > 0 ? 'In Stock' : 'Out of Stock'
+            };
+          });
+        }
       }
     } catch (_) {}
 
-    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 15, status: 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 0, lengthMm: '300', minLevel: 50, status: 'Out of Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 5000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
     matMap.set('MR-300MM', defaultMiniRail);
 
-    // 1. Seed all official VRM standardized catalog products (285 items)
+    // 1. Seed all official VRM standardized catalog products with 5000 stock
     (VRM_PRODUCTS || []).forEach(p => {
       const code = p.code || resolveProductCode(p) || p.name;
       const key = String(code).toUpperCase().trim();
@@ -206,15 +195,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         unit: p.uom || 'Nos',
-        stock: 0,
+        stock: 5000,
+        openingStock: 5000,
+        physicalStock: 5000,
+        availableStock: 5000,
         minLevel: 50,
         reorderLevel: 100,
-        status: 'Out of Stock',
+        status: 'In Stock',
         store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
         hsn: '7604',
-        lastUpdated: 'Live Store',
+        lastUpdated: 'Stock Set to 5,000',
         reserved: 0,
-        openingStock: 0,
         goodsReceived: 0,
         issuedProd: 0,
         matReturn: 0,
@@ -223,14 +214,18 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     });
 
     (initialMaterials || []).forEach(m => {
-      const key = String(m.code).toUpperCase().trim();
+      const rawKey = String(m.code).toUpperCase().trim();
+      const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
       const existing = matMap.get(key) || {};
-      const sVal = m.stock !== undefined ? Number(m.stock) : 0;
+      const sVal = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 5000);
       matMap.set(key, {
         ...existing,
         ...m,
+        code: key,
         stock: sVal,
-        openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 0,
+        openingStock: 5000,
+        physicalStock: 5000,
+        availableStock: sVal,
         status: sVal > 0 ? 'In Stock' : 'Out of Stock'
       });
     });
@@ -239,8 +234,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const completedGrnMapInitial = getCompletedGrnItems();
     if (itemsList && itemsList.length > 0) {
       itemsList.forEach(it => {
-        const key = it.code || it.sku || it.itemId || 'RM-VRM';
-        const upperKey = String(key).toUpperCase();
+        const rawKey = it.code || it.sku || it.itemId || 'RM-VRM';
+        const rawUpper = String(rawKey).toUpperCase().trim();
+        const upperKey = CANONICAL_PRODUCT_ALIASES[rawUpper] || rawUpper;
         const upperName = it.name ? String(it.name).toUpperCase() : '';
         const grnReceived = completedGrnMapInitial.get(upperKey) || (upperName ? completedGrnMapInitial.get(upperName) : null);
         const recQty = grnReceived ? Number(grnReceived.receivedQty || 0) : 0;
@@ -251,10 +247,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           matMap.set(upperKey, {
             ...existing,
             name: it.name || existing.name,
-            stock: itStock,
-            openingStock: it.openingStock !== undefined ? Number(it.openingStock) : 0,
+            stock: itStock > 0 ? itStock : (existing.stock || 0),
+            openingStock: it.openingStock !== undefined ? Number(it.openingStock) : (existing.openingStock || 0),
             goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
-            status: itStock > 0 ? 'In Stock' : 'Out of Stock',
+            status: (itStock > 0 || (existing.stock && Number(existing.stock) > 0)) ? 'In Stock' : 'Out of Stock',
             lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
             grnNo: grnReceived ? grnReceived.grnNo : existing.grnNo
           });
@@ -262,7 +258,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         }
 
         matMap.set(upperKey, {
-          code: key,
+          code: upperKey,
           name: it.name,
           cat: it.category || it.material || 'General',
           category: it.category || it.material || 'General',
@@ -291,7 +287,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const savedMats = JSON.parse(savedMatStr);
         if (Array.isArray(savedMats) && savedMats.length > 0) {
           savedMats.forEach(sm => {
-            const mapKey = String(sm.code || sm.name).toUpperCase().trim();
+            const rawKey = String(sm.code || sm.name).toUpperCase().trim();
+            const mapKey = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
             const existing = matMap.get(mapKey) || {};
             const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
             const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
@@ -380,11 +377,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const deletedCodes = getDeletedMaterialCodes();
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
-      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 0, lengthMm: '2414', minLevel: 15, status: 'Out of Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 0, lengthMm: '300', minLevel: 50, status: 'Out of Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 0, physicalStock: 0, availableStock: 0, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 5000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       matMap.set('MR-300MM', defaultMiniRail);
-      // 1. Seed all official VRM standardized catalog products (285 items)
+      // 1. Seed all official VRM standardized catalog products (285 items) with 5000 stock
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
         const key = String(code).toUpperCase().trim();
@@ -394,15 +391,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           unit: p.uom || 'Nos',
-          stock: 0,
+          stock: 5000,
+          openingStock: 5000,
+          physicalStock: 5000,
+          availableStock: 5000,
           minLevel: 50,
           reorderLevel: 100,
-          status: 'Out of Stock',
+          status: 'In Stock',
           store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
           hsn: '7604',
-          lastUpdated: 'Live Store',
+          lastUpdated: 'Stock Set to 5,000',
           reserved: 0,
-          openingStock: 0,
           goodsReceived: 0,
           issuedProd: 0,
           matReturn: 0,
@@ -411,14 +410,18 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       });
 
       (initialMaterials || []).forEach(m => {
-        const key = String(m.code).toUpperCase().trim();
+        const rawKey = String(m.code).toUpperCase().trim();
+        const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
         const existing = matMap.get(key) || {};
-        const mStock = m.stock !== undefined ? Number(m.stock) : 0;
+        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 5000);
         matMap.set(key, {
           ...existing,
           ...m,
+          code: key,
           stock: mStock,
-          openingStock: m.openingStock !== undefined ? Number(m.openingStock) : 0,
+          openingStock: 5000,
+          physicalStock: 5000,
+          availableStock: mStock,
           status: mStock > 0 ? 'In Stock' : 'Out of Stock'
         });
       });
@@ -430,19 +433,20 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           const savedMats = JSON.parse(savedMatStr);
           if (Array.isArray(savedMats) && savedMats.length > 0) {
             savedMats.forEach(sm => {
-              const mapKey = String(sm.code || sm.name).toUpperCase().trim();
+              const rawKey = String(sm.code || sm.name).toUpperCase().trim();
+              const mapKey = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
               const existing = matMap.get(mapKey) || {};
               const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
               const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
               matMap.set(mapKey, {
                 ...existing,
                 ...sm,
-                code: sm.code || existing.code || mapKey,
-                name: sm.name || existing.name,
-                cat: isAlu2414 ? 'Raw Material' : (sm.cat || sm.category || existing.cat || 'General'),
-                category: isAlu2414 ? 'Raw Material' : (sm.category || sm.cat || existing.category || 'General'),
+                code: existing.code || sm.code || mapKey,
+                name: existing.name || sm.name,
+                cat: isAlu2414 ? 'Raw Material' : (existing.cat || sm.cat || sm.category || existing.category || 'General'),
+                category: isAlu2414 ? 'Raw Material' : (existing.category || sm.category || sm.cat || existing.cat || 'General'),
                 stock: smStock,
-                openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
+                openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : (existing.openingStock || 0),
                 status: smStock > 0 ? 'In Stock' : 'Out of Stock'
               });
             });
@@ -453,13 +457,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       // Overlay live engine inventory updates (e.g. WO stock deductions & FG additions)
       (engineInv || []).forEach(item => {
         const displayCode = item.code === 'RM-ALU-2414' ? 'ALU-LEN-2414MM' : item.code;
-        const mapKey = String(displayCode).toUpperCase().trim();
+        const rawKey = String(displayCode).toUpperCase().trim();
+        const mapKey = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
 
         const existing = matMap.get(mapKey) || {};
         const engineStock = item.physicalStock !== undefined ? Number(item.physicalStock) : null;
-        const stockVal = engineStock !== null
+        const stockVal = (engineStock !== null && engineStock > 0)
           ? engineStock
-          : (existing.stock !== undefined ? Number(existing.stock) : 0);
+          : (existing.stock !== undefined ? Number(existing.stock) : (engineStock ?? 0));
         const minLvl = Number(item.safetyStock || existing.minLevel || 50);
         let statusText = 'In Stock';
         if (stockVal === 0) statusText = 'Out of Stock';
@@ -468,8 +473,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
         matMap.set(mapKey, {
           ...existing,
-          code: displayCode,
-          name: item.name || existing.name,
+          code: existing.code || displayCode || mapKey,
+          name: existing.name || item.name,
           cat: isAlu2414 ? 'Raw Material' : (item.category || existing.cat || 'Finished Goods'),
           category: isAlu2414 ? 'Raw Material' : (item.category || existing.category || 'Finished Goods'),
           unit: item.unit || existing.unit || 'Pieces',
@@ -485,8 +490,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const completedGrnMapSync = getCompletedGrnItems();
       if (itemsList && itemsList.length > 0) {
         itemsList.forEach(it => {
-          const key = it.code || it.sku || it.itemId || 'RM-VRM';
-          const upperKey = String(key).toUpperCase().trim();
+          const rawKey = it.code || it.sku || it.itemId || 'RM-VRM';
+          const rawUpper = String(rawKey).toUpperCase().trim();
+          const upperKey = CANONICAL_PRODUCT_ALIASES[rawUpper] || rawUpper;
           const upperName = it.name ? String(it.name).toUpperCase() : '';
           const grnReceived = completedGrnMapSync.get(upperKey) || (upperName ? completedGrnMapSync.get(upperName) : null);
           const recQty = grnReceived ? Number(grnReceived.receivedQty || 0) : 0;
@@ -494,18 +500,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           if (matMap.has(upperKey)) {
             const existing = matMap.get(upperKey);
             const existingStock = existing.stock !== undefined ? Number(existing.stock) : null;
-            const baseOpen = Math.max(0, Number(existing.openingStock || 0));
-            const isExistingReduced = existingStock !== null && (existingStock < baseOpen || (existing.reserved && Number(existing.reserved) > 0));
-            const incomingStock = (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : null;
-            const finalStock = isExistingReduced
-              ? existingStock
-              : (incomingStock !== null ? incomingStock : (existingStock ?? 0));
+            const existingPhys = Number(existing.physicalStock !== undefined ? existing.physicalStock : (existing.openingStock || 0));
+            const baseOpen = Math.max(0, Number(existing.openingStock || 0), existingPhys);
+            const incomingStock = (it.stock !== undefined && it.stock !== null && Number(it.stock) > 0) ? Number(it.stock) : null;
+
+            // Never overwrite non-zero user/store stock with 0 from catalog defaults
+            let finalStock = existingStock ?? 0;
+            if (incomingStock !== null && (existingStock === 0 || existingStock === null)) {
+              finalStock = incomingStock;
+            } else if (existingStock !== null && existingStock > 0) {
+              finalStock = existingStock;
+            } else if (incomingStock !== null) {
+              finalStock = incomingStock;
+            }
 
             matMap.set(upperKey, {
               ...existing,
               name: it.name || existing.name,
               stock: finalStock,
-              openingStock: existing.openingStock || 0,
+              openingStock: baseOpen > 0 ? baseOpen : (existing.openingStock || 0),
+              physicalStock: Math.max(Number(existing.physicalStock || 0), baseOpen, finalStock),
               goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
               status: finalStock === 0 ? 'Out of Stock' : (finalStock <= (existing.minLevel || 50) ? 'Low Stock' : 'In Stock'),
               lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
@@ -515,7 +529,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           }
 
           matMap.set(upperKey, {
-            code: key,
+            code: upperKey,
             name: it.name,
             cat: it.category || it.material || 'General',
             category: it.category || it.material || 'General',
@@ -654,24 +668,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
 
         const grnQty = Number(m.goodsReceived || 0);
-        let base = Math.max(0, parseFloat(
-          m.openingStock !== undefined 
-            ? m.openingStock 
-            : (grnQty > 0 ? 0 : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0)))
-        ) || 0);
+        let base = Math.max(5000, parseFloat(m.openingStock) || 5000, parseFloat(m.physicalStock) || 5000, parseFloat(m.stock) || 5000);
 
-        if (base === 0 && grnQty === 0) {
-          m.openingStock = 0;
-          m.physicalStock = 0;
-          m.stock = 0;
-          m.availableStock = 0;
-          m.reserved = 0;
-          m.blockedForBom = 0;
-          m.status = 'Out of Stock';
-          return;
-        }
-
-        // Authoritative physical warehouse stock is initial opening baseline + all received GRNs
+        // Authoritative physical warehouse stock is initial opening baseline (5000) + all received GRNs
         const totalPhysical = base + grnQty;
 
         // Reconcile available free stock and reserved allocations
@@ -698,10 +697,34 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         m.status = rem === 0 ? 'Out of Stock' : (rem <= minL ? 'Low Stock' : 'In Stock');
       });
 
-      const filteredMaterials = Array.from(matMap.values()).filter(m => {
-        if (deletedCodes.includes(m.code)) return false;
-        return true;
+      const dedupMap = new Map();
+      Array.from(matMap.values()).forEach(m => {
+        if (!m || !m.code) return;
+        const upperCode = String(m.code).toUpperCase().trim();
+        const canonical = CANONICAL_PRODUCT_ALIASES[upperCode] || upperCode;
+        if (deletedCodes.includes(upperCode) || deletedCodes.includes(canonical)) return;
+
+        if (dedupMap.has(canonical)) {
+          const existing = dedupMap.get(canonical);
+          const mStock = Number(m.stock || 0);
+          const eStock = Number(existing.stock || 0);
+          const mPhys = Number(m.physicalStock || 0);
+          const ePhys = Number(existing.physicalStock || 0);
+          const mRes = Number(m.reserved || 0);
+          const eRes = Number(existing.reserved || 0);
+
+          existing.physicalStock = Math.max(ePhys, mPhys);
+          existing.reserved = Math.max(eRes, mRes);
+          existing.blockedForBom = existing.reserved;
+          existing.stock = Math.max(0, existing.physicalStock - existing.reserved);
+          existing.availableStock = existing.stock;
+          existing.status = existing.stock === 0 ? 'Out of Stock' : (existing.stock <= (existing.minLevel || 50) ? 'Low Stock' : 'In Stock');
+        } else {
+          dedupMap.set(canonical, { ...m, code: canonical });
+        }
       });
+
+      const filteredMaterials = Array.from(dedupMap.values());
       setMaterials(filteredMaterials);
       try {
         localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(filteredMaterials));
@@ -720,105 +743,94 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
     syncEngineInventory();
 
-    // Fetch live GRNs from server API on mount and update store
-    fetch('/api/grns')
-      .then(res => res.json())
-      .then(grns => {
+    // Single Coordinated Authoritative Server & Cloud Database Inventory Sync
+    const loadAuthoritativeInventory = async () => {
+      const hasLocalStock = (materials && materials.length > 0) || (() => {
+        try {
+          const s = localStorage.getItem('controlroom_raw_materials_store');
+          return s && JSON.parse(s).length > 0;
+        } catch (_) { return false; }
+      })();
+
+      if (!hasLocalStock) {
+        setIsInventoryLoading(true);
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        const fetchWithTimeout = (url) => 
+          fetch(url, { signal: controller.signal })
+            .then(res => res.json())
+            .catch(() => null);
+
+        const [grns, bDataRes, rawMatsRes] = await Promise.all([
+          fetchWithTimeout('/api/grns').catch(() => []),
+          fetchWithTimeout('/api/boms').catch(() => null),
+          fetchWithTimeout('/api/store/RAW_MATERIALS_STORE').catch(() => null)
+        ]);
+        clearTimeout(timeoutId);
+
+        const bData = Array.isArray(bDataRes?.data) ? bDataRes.data : (Array.isArray(bDataRes) ? bDataRes : []);
+        const rawMats = Array.isArray(rawMatsRes?.data) ? rawMatsRes.data : (Array.isArray(rawMatsRes) ? rawMatsRes : []);
+
         if (Array.isArray(grns) && grns.length > 0) {
           try {
             localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(grns));
             localStorage.setItem('goods_receipt_notes', JSON.stringify(grns));
           } catch (_) {}
-          debouncedSync();
         }
-      })
-      .catch(() => {});
+        if (Array.isArray(bData) && bData.length > 0) {
+          try {
+            localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
+          } catch (_) {}
+        }
+        if (Array.isArray(rawMats) && rawMats.length > 0) {
+          try {
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
+          } catch (_) {}
+        }
 
-    // Authoritative Server & Cloud Database Inventory Sync
-    const fetchDatabaseInventory = async () => {
-      if (isFetchingDb) return;
-      isFetchingDb = true;
-      try {
-        // 1. Authoritative sync of BOMs directly from Supabase Cloud
-        try {
-          let bData = await fetchCloudStore('BOM_STORE', []);
-          if (!Array.isArray(bData) || bData.length === 0) {
-            const bRes = await fetch('/api/boms');
-            if (bRes.ok) {
-              const json = await bRes.json();
-              bData = json?.data || json;
-            }
-          }
-          if (Array.isArray(bData) && bData.length > 0) {
-            try {
-              localStorage.setItem('controlroom_bom_store', JSON.stringify(bData));
-            } catch (_) {}
-          }
-        } catch (_) {}
-
-        // 2. Authoritative sync of RAW_MATERIALS_STORE directly from Supabase Cloud
-        try {
-          let rawMats = await fetchCloudStore('RAW_MATERIALS_STORE', []);
-          if (!Array.isArray(rawMats) || rawMats.length === 0) {
-            const rRes = await fetch('/api/raw-materials');
-            if (rRes.ok) rawMats = await rRes.json();
-          }
-          if (Array.isArray(rawMats) && rawMats.length > 0) {
-            try {
-              localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
-            } catch (_) {}
-          }
-        } catch (_) {}
-
-        debouncedSync();
+        syncEngineInventory();
+      } catch (err) {
+        console.error('Inventory initial load notice:', err);
       } finally {
-        isFetchingDb = false;
+        setIsInventoryLoading(false);
       }
     };
 
-    const debouncedFetchDatabase = () => {
-      if (debounceDbTimer) clearTimeout(debounceDbTimer);
-      debounceDbTimer = setTimeout(() => {
-        fetchDatabaseInventory();
-      }, 250);
+    loadAuthoritativeInventory();
+
+    const debouncedBackgroundSync = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        syncEngineInventory();
+      }, 400);
     };
 
-    fetchDatabaseInventory();
     const pollDbInterval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
-        fetchDatabaseInventory();
+        debouncedBackgroundSync();
       }
-    }, 30000);
+    }, 60000);
 
-    const unsubCloudBoms = subscribeToCloudStore('BOM_STORE', () => {
-      debouncedFetchDatabase();
-    });
-    const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', () => {
-      debouncedFetchDatabase();
-    });
+    const unsubCloudBoms = subscribeToCloudStore('BOM_STORE', debouncedBackgroundSync);
+    const unsubCloudRaw = subscribeToCloudStore('RAW_MATERIALS_STORE', debouncedBackgroundSync);
+    const unsubscribe = prodModuleEngine.subscribe(debouncedBackgroundSync);
 
-    const unsubscribe = prodModuleEngine.subscribe(() => {
-      debouncedSync();
-    });
-    window.addEventListener('controlroom_raw_materials_update', debouncedSync);
-    window.addEventListener('controlroom_bom_store_updated', debouncedFetchDatabase);
-    window.addEventListener('controlroom_grn_completed', debouncedSync);
-    window.addEventListener('controlroom_storage_update', debouncedSync);
-    window.addEventListener('central_inventory_updated', debouncedSync);
-    window.addEventListener('storage', debouncedSync);
+    window.addEventListener('controlroom_raw_materials_update', debouncedBackgroundSync);
+    window.addEventListener('controlroom_grn_completed', debouncedBackgroundSync);
+    window.addEventListener('central_inventory_updated', debouncedBackgroundSync);
+
     return () => {
       clearInterval(pollDbInterval);
       if (debounceTimer) clearTimeout(debounceTimer);
-      if (debounceDbTimer) clearTimeout(debounceDbTimer);
       if (unsubCloudBoms && typeof unsubCloudBoms.unsubscribe === 'function') unsubCloudBoms.unsubscribe();
       if (unsubCloudRaw && typeof unsubCloudRaw.unsubscribe === 'function') unsubCloudRaw.unsubscribe();
       unsubscribe();
-      window.removeEventListener('controlroom_raw_materials_update', debouncedSync);
-      window.removeEventListener('controlroom_bom_store_updated', debouncedFetchDatabase);
-      window.removeEventListener('controlroom_grn_completed', debouncedSync);
-      window.removeEventListener('controlroom_storage_update', debouncedSync);
-      window.removeEventListener('central_inventory_updated', debouncedSync);
-      window.removeEventListener('storage', debouncedSync);
+      window.removeEventListener('controlroom_raw_materials_update', debouncedBackgroundSync);
+      window.removeEventListener('controlroom_grn_completed', debouncedBackgroundSync);
+      window.removeEventListener('central_inventory_updated', debouncedBackgroundSync);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsList, initialMaterials]);
@@ -859,7 +871,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     const sNorm = normalizeProductName(selectedMat.name || '');
     const sFp = wordFingerprint(selectedMat.name || '');
 
-    const logs = [];
+    const transactionEvents = [];
 
     // 1. Authoritative Sales BOM Allocations & Dispatch Deductions
     try {
@@ -916,21 +928,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               if (qty > 0) {
                 const rawDate = b.salesConfirmedAt || b.createdAt || b.date;
                 let formattedDate = 'Recent Order';
+                let orderTime = 0;
                 try {
                   if (rawDate) {
                     const d = new Date(rawDate);
-                    formattedDate = !isNaN(d.getTime())
-                      ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
-                      : String(rawDate);
+                    if (!isNaN(d.getTime())) {
+                      orderTime = d.getTime();
+                      formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                    } else {
+                      formattedDate = String(rawDate);
+                    }
                   }
                 } catch (_) {}
 
-                const baseStock = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock || 0)) || 0);
-                const afterStock = Math.max(0, baseStock - qty);
+                const seqNum = parseInt(String(b.bomCode || b.code || b.id || '').replace(/\D/g, ''), 10) || 0;
 
-                logs.push({
+                transactionEvents.push({
                   id: `BOM-LOG-${b.bomCode || b.code || b.id}-${itCode}`,
                   timestamp: formattedDate,
+                  orderTime,
+                  seqNum,
                   type: isSentToDispatch ? 'BOM_DISPATCH' : 'BOM_RESERVATION',
                   typeName: isSentToDispatch ? 'BOM Dispatch Deduction' : 'BOM Order Allocation',
                   typeColor: isSentToDispatch ? '#DC2626' : '#D97706',
@@ -941,8 +958,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   itemName: selectedMat.name,
                   qty: -qty,
                   unit: it.uom || selectedMat.unit || 'NOS',
-                  previousStock: baseStock,
-                  newStock: isSentToDispatch ? afterStock : baseStock,
                   user: displaySalesPerson,
                   salesPerson: cleanSalesPerson || 'Sales Executive',
                   salesPersonCode: salesCode,
@@ -981,18 +996,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               if (recQty > 0) {
                 const rawDate = g.createdAt || g.grnDate || g.date;
                 let formattedDate = 'Recent Receipt';
+                let orderTime = 0;
                 try {
                   if (rawDate) {
                     const d = new Date(rawDate);
-                    formattedDate = !isNaN(d.getTime())
-                      ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
-                      : String(rawDate);
+                    if (!isNaN(d.getTime())) {
+                      orderTime = d.getTime();
+                      formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                    } else {
+                      formattedDate = String(rawDate);
+                    }
                   }
                 } catch (_) {}
 
-                logs.push({
+                const seqNum = parseInt(String(g.grnNo || g.id || '').replace(/\D/g, ''), 10) || 0;
+
+                transactionEvents.push({
                   id: `GRN-LOG-${g.grnNo || g.id}-${gCode || 'item'}`,
                   timestamp: formattedDate,
+                  orderTime,
+                  seqNum,
                   type: 'GOODS_RECEIPT',
                   typeName: 'Goods Receipt Note (GRN)',
                   typeColor: '#0E7490',
@@ -1003,8 +1026,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   itemName: selectedMat.name,
                   qty: +recQty,
                   unit: git.unit || git.uom || selectedMat.unit || 'NOS',
-                  previousStock: Math.max(0, (selectedMat.stock || 0) - recQty),
-                  newStock: selectedMat.stock,
                   user: g.inspectedBy || g.verifiedBy || g.receivedBy || 'Store In-Charge',
                   role: 'Warehouse Receiving',
                   reason: `Inwarded ${(Number(recQty) || 0).toLocaleString()} ${git.unit || git.uom || selectedMat.unit || 'NOS'} via ${g.grnNo || 'GRN'} from supplier ${g.vendor || g.vendorName || g.supplier || 'Vendor'}. Quality inspection approved.`,
@@ -1025,9 +1046,19 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const eCode = String(entry.itemCode || '').toUpperCase().trim();
         const eName = String(entry.itemName || '').toLowerCase().trim();
         if (eCode === sCode.toUpperCase() || eName === sName) {
-          logs.push({
+          const rawDate = entry.dateTime || entry.timestamp;
+          let orderTime = 0;
+          if (rawDate) {
+            const d = new Date(rawDate);
+            if (!isNaN(d.getTime())) orderTime = d.getTime();
+          }
+          const seqNum = parseInt(String(entry.refNo || entry.id || '').replace(/\D/g, ''), 10) || 0;
+
+          transactionEvents.push({
             id: entry.id || `TX-${Date.now()}`,
             timestamp: entry.dateTime || entry.timestamp || 'Production Log',
+            orderTime,
+            seqNum,
             type: entry.type || 'PRODUCTION_LOG',
             typeName: entry.type === 'PRODUCTION_RECEIPT' ? 'Production Output Inward' : (entry.type === 'PRODUCTION_CONSUMPTION' ? 'Raw Material Consumption' : (entry.type === 'OPENING_STOCK' ? 'Opening Stock Balance' : 'Inventory Transaction')),
             typeColor: entry.type === 'PRODUCTION_RECEIPT' ? '#16A34A' : (entry.type === 'OPENING_STOCK' ? '#2563EB' : '#4F46E5'),
@@ -1038,8 +1069,6 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             itemName: selectedMat.name,
             qty: entry.direction === 'IN' ? +(entry.qty || 0) : -(entry.qty || 0),
             unit: entry.unit || selectedMat.unit || 'NOS',
-            previousStock: entry.previousStock !== undefined ? entry.previousStock : (entry.type === 'OPENING_STOCK' ? 0 : undefined),
-            newStock: entry.newStock !== undefined ? entry.newStock : (entry.type === 'OPENING_STOCK' ? (entry.qty || 0) : undefined),
             user: entry.user || 'Production Head',
             role: entry.department || 'Production & Quality',
             reason: entry.remarks || `Production operation entry for ${selectedMat.name}.`,
@@ -1050,9 +1079,32 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       });
     } catch (_) {}
 
-    // 4. Initial Physical Stock Baseline Setup
-    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : 0) || 0);
-    logs.push({
+    // Sort transactions chronologically (oldest first)
+    transactionEvents.sort((a, b) => {
+      if (a.orderTime !== b.orderTime) {
+        return (a.orderTime || 0) - (b.orderTime || 0);
+      }
+      return (a.seqNum || 0) - (b.seqNum || 0);
+    });
+
+    // Baseline opening stock
+    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock !== undefined ? selectedMat.physicalStock : 5000)) || 0);
+    let runningBalance = initialBase;
+
+    // Calculate sequential cumulative balance from baseline
+    transactionEvents.forEach(tx => {
+      const prev = runningBalance;
+      const delta = parseFloat(tx.qty) || 0;
+      runningBalance = Math.max(0, runningBalance + delta);
+      tx.previousStock = prev;
+      tx.newStock = runningBalance;
+    });
+
+    // Reverse transactions so the newest event is at the top of the audit table
+    const finalLogs = [...transactionEvents].reverse();
+
+    // Append Initial Opening Stock Baseline at the very bottom
+    finalLogs.push({
       id: `INIT-${selectedMat.code}`,
       timestamp: 'Initial Setup Baseline',
       type: 'OPENING_STOCK',
@@ -1074,7 +1126,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       location: selectedMat.store || 'Finished Goods Bay'
     });
 
-    return logs;
+    return finalLogs;
   }, [selectedMat]);
 
   const filteredMaterials = useMemo(() => {
@@ -1111,6 +1163,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const matchesStore = selectedStore === 'All Stores' || m.store === selectedStore;
       const matchesStatus = selectedStatus === 'All Status' || m.status === selectedStatus;
       return matchesSearch && matchesCat && matchesStore && matchesStatus;
+    });
+
+    const seenCanonical = new Set();
+    return matched.filter(m => {
+      const upper = String(m.code || '').toUpperCase().trim();
+      const canonical = CANONICAL_PRODUCT_ALIASES[upper] || upper;
+      if (seenCanonical.has(canonical)) return false;
+      seenCanonical.add(canonical);
+      return true;
     }).sort((a, b) => (a.code || '').localeCompare(b.code || ''));
   }, [materials, searchQuery, selectedCat, selectedStore, selectedStatus, activeTab]);
 
@@ -1159,20 +1220,69 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       referenceDoc: adjRefDoc
     });
 
-    setMaterials(prev => prev.map(m => {
+    const updatedMaterials = materials.map(m => {
       if (m.code === selectedMat.code) {
-        const newStock = adjType === 'Add' ? m.stock + val : Math.max(0, m.stock - val);
-        const newStatus = newStock === 0 ? 'Out of Stock' : newStock <= m.minLevel ? 'Low Stock' : 'In Stock';
+        const currentPhys = Number(m.physicalStock !== undefined ? m.physicalStock : (m.stock || 0));
+        const currentOpen = Number(m.openingStock !== undefined ? m.openingStock : currentPhys);
+        const newOpening = adjType === 'Add' ? currentOpen + val : Math.max(0, currentOpen - val);
+        const newPhysical = adjType === 'Add' ? currentPhys + val : Math.max(0, currentPhys - val);
+        const currentRes = Number(m.reserved || 0);
+        const newStock = Math.max(0, newPhysical - currentRes);
+        const newStatus = newStock === 0 ? 'Out of Stock' : newStock <= (m.minLevel || 50) ? 'Low Stock' : 'In Stock';
         return {
           ...m,
+          openingStock: newOpening,
+          physicalStock: newPhysical,
           stock: newStock,
-          stockAdj: m.stockAdj + impactQty,
+          availableStock: newStock,
+          available: newStock,
+          stockAdj: (m.stockAdj || 0) + impactQty,
           status: newStatus,
-          lastUpdated: 'Just now'
+          lastUpdated: 'Stock Adjusted'
         };
       }
       return m;
-    }));
+    });
+
+    setMaterials(updatedMaterials);
+
+    try {
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedMaterials));
+    } catch (_) {}
+
+    // Post to server endpoints to update disk and trigger real-time SSE broadcasts
+    try {
+      fetch('/api/raw-materials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMaterials)
+      }).catch(() => {});
+      fetch('/api/store/raw_materials_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMaterials)
+      }).catch(() => {});
+      fetch('/api/store/item_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMaterials)
+      }).catch(() => {});
+    } catch (_) {}
+
+    try {
+      saveCloudStore('raw_materials_store', updatedMaterials);
+    } catch (_) {}
+
+    // Real-time local broadcast to other views in the same browser window
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', {
+        detail: { rawMaterials: updatedMaterials, storeData: updatedMaterials }
+      }));
+      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('central_inventory_updated'));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
+
     setShowAdjModal(false);
     setAdjQty('');
   };
@@ -1578,60 +1688,116 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       return;
     }
 
-    let targetMatCode = enteredMatCode;
+    let rawTarget = String(enteredMatCode || '').toUpperCase().trim();
+    let targetMatCode = CANONICAL_PRODUCT_ALIASES[rawTarget] || rawTarget;
     let matched = false;
 
-    setMaterials(prev => {
-      const updated = prev.map(m => {
-        const isMatch = (targetMatCode && m.code.toLowerCase() === targetMatCode.toLowerCase()) ||
-                        m.name.toLowerCase() === enteredMatName.toLowerCase();
-        if (isMatch) {
-          matched = true;
-          targetMatCode = m.code;
-          addedCount += qtyVal;
-          const newStock = m.stock + qtyVal;
-          const newReserved = m.reserved + reservedVal;
-          const newAvailable = Math.max(0, newStock - newReserved);
-          const effectiveMin = minLevelVal || m.minLevel;
-          const newStatus = newStock === 0 ? 'Out of Stock' : newStock <= effectiveMin ? 'Low Stock' : 'In Stock';
-          return {
-            ...m,
-            stock: newStock,
-            reserved: newReserved,
-            available: newAvailable,
-            minLevel: effectiveMin,
-            cat: catVal || m.cat,
-            unit: unitVal || m.unit,
-            status: newStatus,
-            lastUpdated: 'Just now'
-          };
-        }
-        return m;
-      });
-
-      if (!matched) {
-        addedCount = qtyVal;
-        if (!targetMatCode) {
-          targetMatCode = `RM-${String(prev.length + 1).padStart(3, '0')}`;
-        }
-        const availStock = Math.max(0, qtyVal - reservedVal);
-        const newStatus = qtyVal === 0 ? 'Out of Stock' : qtyVal <= minLevelVal ? 'Low Stock' : 'In Stock';
-        updated.unshift({
-          code: targetMatCode,
-          name: enteredMatName,
-          cat: catVal,
-          store: 'Main Store',
-          stock: qtyVal,
-          reserved: reservedVal,
-          available: availStock,
-          minLevel: minLevelVal,
-          unit: unitVal,
+    let updatedMaterials = materials.map(m => {
+      const canonicalMCode = CANONICAL_PRODUCT_ALIASES[String(m.code || '').toUpperCase().trim()] || String(m.code || '').toUpperCase().trim();
+      const isMatch = (targetMatCode && (String(m.code).toLowerCase() === targetMatCode.toLowerCase() || canonicalMCode.toLowerCase() === targetMatCode.toLowerCase())) ||
+                      String(m.name || '').toLowerCase() === enteredMatName.toLowerCase();
+      if (isMatch) {
+        matched = true;
+        targetMatCode = m.code;
+        addedCount += qtyVal;
+        const currentPhys = Number(m.physicalStock !== undefined ? m.physicalStock : (m.stock || 0));
+        const currentOpen = Number(m.openingStock !== undefined ? m.openingStock : currentPhys);
+        const newOpening = currentOpen + qtyVal;
+        const newPhysical = currentPhys + qtyVal;
+        const newReserved = (Number(m.reserved) || 0) + reservedVal;
+        const newStock = Math.max(0, newPhysical - newReserved);
+        const effectiveMin = minLevelVal || m.minLevel || 10;
+        const newStatus = newStock === 0 ? 'Out of Stock' : newStock <= effectiveMin ? 'Low Stock' : 'In Stock';
+        return {
+          ...m,
+          openingStock: newOpening,
+          physicalStock: newPhysical,
+          stock: newStock,
+          availableStock: newStock,
+          available: newStock,
+          reserved: newReserved,
+          blockedForBom: newReserved,
+          minLevel: effectiveMin,
+          cat: catVal || m.cat,
+          category: catVal || m.category,
+          unit: unitVal || m.unit,
           status: newStatus,
-          lastUpdated: 'Just now'
-        });
+          lastUpdated: 'Stock Added'
+        };
       }
-      return updated;
+      return m;
     });
+
+    if (!matched) {
+      addedCount = qtyVal;
+      if (!targetMatCode) {
+        targetMatCode = `RM-${String(materials.length + 1).padStart(3, '0')}`;
+      }
+      const availStock = Math.max(0, qtyVal - reservedVal);
+      const newStatus = qtyVal === 0 ? 'Out of Stock' : qtyVal <= minLevelVal ? 'Low Stock' : 'In Stock';
+      updatedMaterials = [{
+        code: targetMatCode,
+        name: enteredMatName,
+        cat: catVal,
+        category: catVal,
+        store: 'Main Store',
+        openingStock: qtyVal,
+        physicalStock: qtyVal,
+        stock: availStock,
+        availableStock: availStock,
+        available: availStock,
+        reserved: reservedVal,
+        blockedForBom: reservedVal,
+        minLevel: minLevelVal,
+        unit: unitVal,
+        status: newStatus,
+        lastUpdated: 'Stock Added'
+      }, ...updatedMaterials];
+    }
+
+    setMaterials(updatedMaterials);
+
+    // 1. Persist to local browser storage immediately
+    try {
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedMaterials));
+    } catch (_) {}
+
+    // 2. Persist to server disk store & broadcast via SSE to ALL connected users
+    try {
+      fetch('/api/raw-materials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMaterials)
+      }).catch(err => console.warn('[RawMaterials API sync error]:', err));
+
+      fetch('/api/store/raw_materials_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMaterials)
+      }).catch(err => console.warn('[Store API sync error]:', err));
+
+      fetch('/api/store/item_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMaterials)
+      }).catch(() => {});
+    } catch (_) {}
+
+    // 3. Persist to Supabase cloud database
+    try {
+      saveCloudStore('raw_materials_store', updatedMaterials);
+      saveCloudStore('item_store', updatedMaterials);
+    } catch (_) {}
+
+    // 4. Real-time local broadcast to App.jsx and other open views in this window
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', {
+        detail: { rawMaterials: updatedMaterials, storeData: updatedMaterials }
+      }));
+      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      window.dispatchEvent(new Event('central_inventory_updated'));
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
 
     // Sync with central productionModuleEngine live inventory
     try {
@@ -3181,21 +3347,31 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               </tr>
             </thead>
             <tbody>
-              {itemsLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={`skel-rm-${i}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                    <td style={{ padding: '14px' }}><div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '90px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '180px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '80px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '60px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
-                    <td style={{ padding: '14px 16px', width: '135px', textAlign: 'center', boxSizing: 'border-box' }}><div style={{ width: '85px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+              {((itemsLoading || isInventoryLoading) && (!materials || materials.length === 0)) ? (
+                <>
+                  <tr>
+                    <td colSpan={10} style={{ padding: '24px 16px', textAlign: 'center', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', color: '#0E7490', fontSize: '13px', fontWeight: '600' }}>
+                        <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Synchronizing Authoritative Warehouse Inventory & 312 Standardized Products...</span>
+                      </div>
+                    </td>
                   </tr>
-                ))
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={`skel-rm-${i}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '14px' }}><div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '90px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '220px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '100px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '70px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '50px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '70px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}><div style={{ width: '40px', height: '16px', borderRadius: '6px', backgroundColor: '#E2E8F0', marginLeft: 'auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                      <td style={{ padding: '14px 16px', width: '135px', textAlign: 'center', boxSizing: 'border-box' }}><div style={{ width: '85px', height: '22px', borderRadius: '12px', backgroundColor: '#E2E8F0', margin: '0 auto', animation: 'pulse 1.5s infinite ease-in-out' }}></div></td>
+                    </tr>
+                  ))}
+                </>
               ) : currentMaterialsPage.map((m, idx) => {
                 const isSelected = selectedRows.includes(m.code);
                 const isOut = m.status === 'Out of Stock';

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache } from "../../utils/otherViewsShared";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 
 export default function ConfirmingBomModal({
   confirmingBomModal,
@@ -168,7 +168,7 @@ export default function ConfirmingBomModal({
                   const updated = (prev || []).map(b => b.bomCode === confirmingBomModal.bomCode ? { ...b, ...updatedBomRecord } : b);
                   try {
                     localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-                    saveCloudStore('bom_store', updated);
+                    saveCloudBomRow({ ...confirmingBomModal, ...updatedBomRecord });
                   } catch (_) {}
                   return updated;
                 });
@@ -944,104 +944,114 @@ export default function ConfirmingBomModal({
               </tr>
             </thead>
             <tbody>
-              {/* PRESET KIT PACKAGE ROWS */}
-              {modalPresetGroups.map((grp, gIdx) => {
-                const gSets = parseInt(grp.setCount) || 1;
-                const gPrice = parseFloat(grp.kitPrice) || 0;
-                const gTotal = gSets * gPrice;
-                return (
-                  <tr
-                    key={`preset-kit-row-${gIdx}`}
-                    style={{
-                      backgroundColor: '#F0FDFA',
-                      borderBottom: '2px solid #A5F3FC',
-                      borderLeft: '4px solid #0E7490'
-                    }}
-                  >
-                    {!isAlreadyForwarded && (
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490' }}>📦</span>
-                      </td>
-                    )}
-                    <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>
-                      KIT {gIdx + 1}
-                    </td>
-                    <td style={{ padding: '12px 10px', fontWeight: '800', color: '#0F172A' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ backgroundColor: '#0E7490', color: 'white', fontSize: '10px', fontWeight: '800', padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          PRESET KIT
-                        </span>
-                        <span style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
-                          {grp.presetName || 'Pre-Engineered MMS Kit Package'}
-                        </span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 10px', color: '#0E7490', fontSize: '12px', fontWeight: '600' }}>
-                      Pre-Engineered MMS Structure ({gSets} Set{gSets > 1 ? 's' : ''} bundled with hardware below)
-                    </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                      SET
-                    </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
-                      {gSets}
-                    </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                      ₹ {gPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '900', color: '#0E7490', fontSize: '14px' }}>
-                      ₹ {gTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    {!isAlreadyForwarded && (
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                        <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '800', backgroundColor: '#CCFBF1', padding: '3px 8px', borderRadius: '4px' }}>
-                          KIT
-                        </span>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
+              {/* Build mapping for Preset Kit grouping to show consolidated amount in the middle of items (like PI) */}
+              {(() => {
+                const presetGroupMap = {};
+                (confirmingBomModal.items || []).forEach((item, idx) => {
+                  const itemRate = parseFloat(item.rate) || 0;
+                  const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                  if (isPartBundle) {
+                    const gid = item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit';
+                    if (!presetGroupMap[gid]) {
+                      const matchedGrp = modalPresetGroups.find(g => (g.presetGroupId || 'default_kit') === gid) || modalPresetGroups[0] || {};
+                      const sets = parseInt(matchedGrp.setCount) || 1;
+                      const price = parseFloat(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
+                      presetGroupMap[gid] = {
+                        firstIdx: idx,
+                        count: 0,
+                        presetName: matchedGrp.presetName || confirmingBomModal.presetName || 'Preset MMS Kit',
+                        setCount: sets,
+                        kitPrice: price,
+                        totalAmount: price * sets
+                      };
+                    }
+                    presetGroupMap[gid].count += 1;
+                  }
+                });
 
-              {/* PHYSICAL HARDWARE / CUSTOM COMPONENT ROWS */}
-              {(confirmingBomModal.items || []).map((item, idx) => {
-                const itemQty = parseFloat(item.qty) || 0;
-                const itemRate = parseFloat(item.rate) || 0;
-                const itemTotal = itemQty * itemRate;
-                const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                return (confirmingBomModal.items || []).map((item, idx) => {
+                  const itemQty = parseFloat(item.qty) || 0;
+                  const itemRate = parseFloat(item.rate) || 0;
+                  const itemTotal = itemQty * itemRate;
+                  const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
+                  const gid = isPartBundle ? (item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit') : null;
+                  const pInfo = gid ? presetGroupMap[gid] : null;
+                  const isFirstInKit = pInfo && pInfo.firstIdx === idx;
 
-                if (isAlreadyForwarded) {
-                  return (
-                    <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '12px 10px', fontWeight: '700', color: '#0F172A' }}>{item.name || '—'}</td>
-                      <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right' }}>
+                  if (isAlreadyForwarded) {
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isPartBundle ? '#FAFEFF' : '#FFFFFF' }}>
+                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                        <td style={{ padding: '12px 10px', fontWeight: '700', color: '#0F172A' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {isPartBundle && (
+                              <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: '10px', fontWeight: '800', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                KIT COMPONENT
+                              </span>
+                            )}
+                            <span>{item.name || '—'}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 10px', color: '#64748B' }}>{item.category || item.specs || '—'}</td>
+                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#475569' }}>{item.uom || item.unit || 'NOS'}</td>
+                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '800', color: '#2563EB' }}>{itemQty}</td>
+                        
+                        {/* Rate Column: Consolidated & Centered in Middle for Presets (Like PI) */}
                         {isPartBundle ? (
-                          <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                            Bundled in Kit
-                          </span>
+                          isFirstInKit ? (
+                            <td
+                              rowSpan={pInfo.count}
+                              style={{
+                                padding: '12px 10px',
+                                textAlign: 'right',
+                                verticalAlign: 'middle',
+                                backgroundColor: '#F0FDFA',
+                                borderLeft: '1.5px solid #CCFBF1',
+                                borderRight: '1px solid #CCFBF1'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                  {pInfo.setCount} Set{pInfo.setCount > 1 ? 's' : ''} Kit
+                                </span>
+                                <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13.5px' }}>
+                                  ₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </td>
+                          ) : null
                         ) : (
-                          <span style={{ color: '#334155' }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'right', color: '#334155' }}>
                             ₹ {itemRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
+                          </td>
                         )}
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800' }}>
+
+                        {/* Total Column: Consolidated & Centered in Middle for Presets (Like PI) */}
                         {isPartBundle ? (
-                          <span style={{ color: '#0E7490', fontSize: '11px', fontWeight: '800' }}>
-                            Included
-                          </span>
+                          isFirstInKit ? (
+                            <td
+                              rowSpan={pInfo.count}
+                              style={{
+                                padding: '12px 10px',
+                                textAlign: 'right',
+                                verticalAlign: 'middle',
+                                fontWeight: '900',
+                                color: '#0E7490',
+                                fontSize: '14px',
+                                backgroundColor: '#F0FDFA'
+                              }}
+                            >
+                              ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                          ) : null
                         ) : (
-                          <span style={{ color: '#0F172A' }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
                             ₹ {itemTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
+                          </td>
                         )}
-                      </td>
-                    </tr>
-                  );
-                }
+                      </tr>
+                    );
+                  }
 
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: item.confirmed ? '#F0FDF4' : 'transparent' }}>
@@ -1148,7 +1158,8 @@ export default function ConfirmingBomModal({
                     </td>
                   </tr>
                 );
-              })}
+              });
+            })()}
             </tbody>
           </table>
         </div>

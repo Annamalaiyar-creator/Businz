@@ -207,6 +207,77 @@ export default function SalesCrmEngine({
     const updated = [lead, ...leads.filter(l => l.id !== lead.id)];
     setLeads(updated);
     saveCrmStore('leads', updated);
+    try {
+      saveCloudStore('crm_leads', updated);
+    } catch (e) {}
+  };
+
+  const handleUpdateLeadStatus = (leadId, newStatus, extraNotes = '') => {
+    setLeads(prev => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const idx = list.findIndex(l => l.id === leadId);
+      if (idx === -1) return list;
+      const lead = { ...list[idx] };
+      const oldStatus = lead.status;
+      lead.status = newStatus;
+      
+      const newTimelineItem = {
+        id: `TL-${Date.now()}`,
+        type: 'status_change',
+        title: `Status: ${newStatus}`,
+        description: extraNotes || `Lead stage progressed from "${oldStatus}" to "${newStatus}"`,
+        timestamp: new Date().toISOString()
+      };
+      lead.timeline = [newTimelineItem, ...(lead.timeline || [])];
+      list[idx] = lead;
+      saveCrmStore('leads', list);
+      try {
+        saveCloudStore('crm_leads', list);
+      } catch (e) {}
+      return list;
+    });
+  };
+
+  const handleBatchUpdateLeads = (leadIds, updates) => {
+    setLeads(prev => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const updated = list.map(l => {
+        if (leadIds.includes(l.id)) {
+          return {
+            ...l,
+            ...updates,
+            timeline: [
+              {
+                id: `TL-${Date.now()}`,
+                type: 'batch_update',
+                title: updates.assignedSalesperson ? `Assigned to ${updates.assignedSalesperson}` : (updates.status ? `Status: ${updates.status}` : 'Updated'),
+                description: updates.status ? `Batch updated to ${updates.status}` : 'Batch updated by Sales Manager',
+                timestamp: new Date().toISOString()
+              },
+              ...(l.timeline || [])
+            ]
+          };
+        }
+        return l;
+      });
+      saveCrmStore('leads', updated);
+      try {
+        saveCloudStore('crm_leads', updated);
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const handleDeleteLeads = (leadIds) => {
+    setLeads(prev => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const updated = list.filter(l => !leadIds.includes(l.id));
+      saveCrmStore('leads', updated);
+      try {
+        saveCloudStore('crm_leads', updated);
+      } catch (e) {}
+      return updated;
+    });
   };
 
   const handleSaveCustomer = async (customer) => {
@@ -424,8 +495,12 @@ export default function SalesCrmEngine({
           <CrmLeadsView
             leads={leads}
             customers={customers}
+            userRole={userRole}
             onSaveLead={handleSaveLead}
             onConvertLead={handleConvertLead}
+            onUpdateLeadStatus={handleUpdateLeadStatus}
+            onBatchUpdateLeads={handleBatchUpdateLeads}
+            onDeleteLeads={handleDeleteLeads}
             onNavigateTab={(tab) => {
               if (tab === 'Sales BOM' || tab === 'BOM') onNavigateTab(tab);
               else setActiveTab(tab);

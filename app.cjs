@@ -93,8 +93,35 @@ if (typeof globalThis.WebSocket === 'undefined') {
   global.WebSocket = WebSocketPolyfill;
 }
 
-// 4. Dynamically import the ES Module server
+// 4. Ensure Supabase environment variables exist for Windows IISNode
+if (!process.env.SUPABASE_URL) process.env.SUPABASE_URL = 'https://qhxaqrclvdfkswdavvjd.supabase.co';
+if (!process.env.VITE_SUPABASE_URL) process.env.VITE_SUPABASE_URL = 'https://qhxaqrclvdfkswdavvjd.supabase.co';
+if (!process.env.SUPABASE_KEY) process.env.SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoeGFxcmNsdmRma3N3ZGF2dmpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNDc2MzgsImV4cCI6MjEwNTcyMzYzOH0.5eTHE3fVU5L0wvNr-xFcidfqgBTqVSpGFhiBvZcKfec';
+if (!process.env.VITE_SUPABASE_ANON_KEY) process.env.VITE_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoeGFxcmNsdmRma3N3ZGF2dmpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNDc2MzgsImV4cCI6MjEwNTcyMzYzOH0.5eTHE3fVU5L0wvNr-xFcidfqgBTqVSpGFhiBvZcKfec';
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoeGFxcmNsdmRma3N3ZGF2dmpkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDE0NzYzOCwiZXhwIjoyMTA1NzIzNjM4fQ.NZJoTzxvoiMPjOa-MIeGful8PeiYAu68vw8rZc8zegw';
+if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';
+if (!process.env.APP_ENV) process.env.APP_ENV = 'production';
+
+// 5. Dynamically import the ES Module server
 import('./server/index.js').catch((err) => {
   console.error('[IISNode Startup Error]:', err);
-  process.exit(1);
+  try {
+    const http = require('http');
+    const port = process.env.PORT || 5000;
+    const server = http.createServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'SERVER_BOOT_ERROR',
+        message: 'BUSINZ backend failed to initialize on startup.',
+        error: err?.message,
+        stack: err?.stack
+      }, null, 2));
+    });
+    server.listen(port, () => {
+      console.log(`[IISNode Fallback] Active on ${port} to report boot exception.`);
+    });
+  } catch (_) {
+    process.exit(1);
+  }
 });
+

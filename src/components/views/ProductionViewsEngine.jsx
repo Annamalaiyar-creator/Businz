@@ -105,14 +105,13 @@ export default function ProductionViewsEngine(props) {
 
   const [customerList, setCustomerList] = useState([]);
 
-  // Sync customerList with Supabase cloud database
+  // Local customerList state (authoritative source is Supabase public.customers)
   const isInitialCustMount = useRef(true);
   useEffect(() => {
     if (isInitialCustMount.current) {
       isInitialCustMount.current = false;
       return;
     }
-    saveCloudStore('customer_store', customerList);
   }, [customerList]);
 
   const [customerActionMenuIdx, setCustomerActionMenuIdx] = useState(null);
@@ -120,9 +119,19 @@ export default function ProductionViewsEngine(props) {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerToDelete, setCustomerToDelete] = useState(null);
   const [previewAddressProofModal, setPreviewAddressProofModal] = useState(null);
-  const [bomActionMenuPos, setBomActionMenuPos] = useState({ top: 0, left: 0 });
-
-  const [bomStore, setBomStore] = useState([]);
+  const [bomStore, setBomStore] = useState(() => {
+    try {
+      const local = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+      if (Array.isArray(local) && local.length > 0) {
+        const cleaned = local.filter(b => b && !((b.customerName === 'Customer' || b.customer_name === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo && !b.source_pi_no));
+        if (cleaned.length !== local.length) {
+          localStorage.setItem('controlroom_bom_store', JSON.stringify(cleaned));
+        }
+        return cleaned;
+      }
+    } catch (_) {}
+    return [];
+  });
 
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
@@ -163,13 +172,13 @@ export default function ProductionViewsEngine(props) {
 
   const hasInitialSyncedRef = useRef(false);
 
-  // Sync bomStore changes directly to Supabase cloud database
+  // Keep local convenience cache updated without cloud egress
   useEffect(() => {
     if (bomStore && Array.isArray(bomStore) && bomStore.length > 0) {
-      const sanitized = bomStore.map(stripDataUrlsFromRecord);
-      if (hasInitialSyncedRef.current) {
-        saveCloudStore('bom_store', sanitized);
-      }
+      try {
+        const sanitized = bomStore.map(stripDataUrlsFromRecord);
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
+      } catch (_) {}
     }
   }, [bomStore]);
 
@@ -193,11 +202,10 @@ export default function ProductionViewsEngine(props) {
 
         if (data && Array.isArray(data)) {
           if (data.length === 0) {
-            setBomStore([]);
+            setBomStore(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
           } else {
-            setBomStore(prev => {
-              const combined = [...(Array.isArray(data) ? data : []), ...(Array.isArray(prev) ? prev : [])];
-              const { list: resolvedList } = resolveBomCollisions(combined, 658);
+            setBomStore(() => {
+              const { list: resolvedList } = resolveBomCollisions(data, 658);
               const parseBomSeq = (code) => {
                 const m = String(code || '').match(/BOM-(\d+)/i);
                 return m ? parseInt(m[1], 10) : 0;
@@ -259,13 +267,12 @@ export default function ProductionViewsEngine(props) {
           const list = [newBom, ...filtered];
           return list.map(stripDataUrlsFromRecord);
         });
-      } else {
-        syncFromCloud();
       }
     };
 
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
     window.addEventListener('controlroom_storage_update', syncFromCloud);
+    window.addEventListener('storage', syncFromCloud);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
@@ -273,6 +280,7 @@ export default function ProductionViewsEngine(props) {
       clearInterval(fallbackInterval);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
       window.removeEventListener('controlroom_storage_update', syncFromCloud);
+      window.removeEventListener('storage', syncFromCloud);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };
@@ -441,7 +449,6 @@ export default function ProductionViewsEngine(props) {
       try {
         localStorage.setItem('controlroom_bom_store', JSON.stringify(sanitized));
       } catch (_) {}
-      saveCloudStore('bom_store', sanitized);
       return sanitized;
     });
 
@@ -572,7 +579,7 @@ export default function ProductionViewsEngine(props) {
   const [newBomDeliveryCity, setNewBomDeliveryCity] = useState('');
   const [newBomDeliveryState, setNewBomDeliveryState] = useState('');
   const [newBomDeliveryPincode, setNewBomDeliveryPincode] = useState('');
-  const [newBomPaymentType, setNewBomPaymentType] = useState('50% Advance + 50% Dispatch');
+  const [newBomPaymentType, setNewBomPaymentType] = useState('100% Paid');
   const [newBomCreditDays, setNewBomCreditDays] = useState(7);
   const [sameAsBilling, setSameAsBilling] = useState(false);
   const [newBomDeliveryProofDoc, setNewBomDeliveryProofDoc] = useState(null);
@@ -740,10 +747,9 @@ export default function ProductionViewsEngine(props) {
     }
   });
 
-  // Sync invoiceList with Supabase cloud database & localStorage
+  // Keep local convenience cache updated without cloud egress
   useEffect(() => {
     if (invoiceList && invoiceList.length > 0) {
-      saveCloudStore('invoice_store', invoiceList);
       try {
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(invoiceList.map(stripDataUrlsFromRecord)));
       } catch (_) {}
@@ -775,7 +781,24 @@ export default function ProductionViewsEngine(props) {
       if (data && Array.isArray(data) && data.length > 0) setInvoiceList(data);
     });
     const sub = subscribeToCloudStore('invoice_store', (latest) => {
-      if (latest && Array.isArray(latest) && latest.length > 0) setInvoiceList(latest);
+      if (latest && Array.isArray(latest)) {
+        if (latest.length > 0) setInvoiceList(latest);
+      } else if (latest && typeof latest === 'object' && !Array.isArray(latest)) {
+        if (latest._deleted && latest.id) {
+          setInvoiceList(prev => (prev || []).filter(i => i.id !== latest.id && i.invNo !== latest.id));
+        } else {
+          setInvoiceList(prev => {
+            const id = latest.id || latest.invNo;
+            const idx = (prev || []).findIndex(i => (i.id && i.id === id) || (i.invNo && i.invNo === id));
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], ...latest };
+              return copy;
+            }
+            return [latest, ...(prev || [])];
+          });
+        }
+      }
     });
 
     const handleInvoiceSync = (e) => {
@@ -828,6 +851,8 @@ export default function ProductionViewsEngine(props) {
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
                 setPreviewDocModal={setPreviewDocModal}
+                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                setPendingDcModal={setPendingDcModal}
               />
             );
           }
@@ -1222,6 +1247,8 @@ export default function ProductionViewsEngine(props) {
                   setShowWorkOrderForm(true);
                 } else if (activeTab === 'Customer Management' || pageConfig.title.includes('Customer')) {
                   setShowCustomerForm(true);
+                } else if (activeTab === 'Delivery Challans' || pageConfig.title?.includes('Delivery Challan')) {
+                  setPendingDcModal({ isNew: true });
                 } else {
                   alert(`Action: ${pageConfig.actionText}`);
                 }
@@ -1230,6 +1257,8 @@ export default function ProductionViewsEngine(props) {
                 if (activeTab === 'Invoice Management') {
                   setViewingInvoiceModal(row);
                   setIsEditingInvoice(false);
+                } else if (activeTab === 'Delivery Challans') {
+                  setPendingDcModal(row);
                 } else if (activeTab === 'Dispatch Orders') {
                   setQuickPreviewRecord(row);
                 } else if (activeTab === 'BOM' || activeTab === 'BOM Orders' || activeTab === 'BOM / Routing') {
@@ -1266,7 +1295,7 @@ export default function ProductionViewsEngine(props) {
                 } else if (activeTab === 'Invoice Management') {
                   setViewingInvoiceModal(targetRow);
                   setInvoiceModalActiveTab('Invoice Items');
-                  setIsEditingInvoice(!isCancelledRow);
+                  setIsEditingInvoice(false);
                   setInvoiceEditForm({
                     invNo: targetRow.invNo || targetRow.code || '',
                     customerName: targetRow.customerName || targetRow.vendor || 'Customer',
@@ -1279,13 +1308,25 @@ export default function ProductionViewsEngine(props) {
                       : [{ code: 'PRD-001', name: 'Standard Component', qty: 1, bomQty: 1, invQty: 1, rate: 1000, tax: 18, amt: 1180, selected: true }]
                   });
                 } else if (activeTab === 'Dispatch Orders') {
+                  const isAwaitingLoad = Boolean(
+                    targetRow.status === 'Awaiting Vehicle Loading & Dispatch' ||
+                    targetRow.status === 'AWAITING VEHICLE LOADING' ||
+                    targetRow.status === 'Invoice Confirmed' ||
+                    targetRow.invoiceConfirmed ||
+                    targetRow.status === 'Dispatched - Awaiting LR Copy' ||
+                    targetRow.status === 'AWAITING LR COPY' ||
+                    targetRow.status === 'Awaiting LR Copy' ||
+                    (targetRow.invoiceNo && targetRow.status !== 'Closed')
+                  );
                   if (isCancelledRow) {
                     setDispatchPackingModal({ ...targetRow, isViewOnly: true, isReadOnly: true });
-                  } else if (targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.invoiceConfirmed || targetRow.stockDeducted) {
+                  } else if (isAwaitingLoad) {
                     setVehicleLoadingModal(targetRow);
                   } else {
                     setDispatchPackingModal(targetRow);
                   }
+                } else if (activeTab === 'Delivery Challans') {
+                  setPendingDcModal(targetRow);
                 } else if (activeTab === 'Accounts Verification') {
                   setAccountsVerificationModal(targetRow);
                   setIsAccountsViewOnly(isCancelledRow ? true : false);
@@ -1329,7 +1370,20 @@ export default function ProductionViewsEngine(props) {
               setInvoiceModalActiveTab('Invoice Items');
             } else if (activeTab === 'Dispatch Orders') {
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
-              setDispatchPackingModal(isRecCancelled ? { ...rec, isViewOnly: true, isReadOnly: true } : rec);
+              const isRecAwaitingLoad = Boolean(
+                rec.status === 'Dispatched - Awaiting LR Copy' ||
+                rec.status === 'AWAITING LR COPY' ||
+                rec.status === 'Awaiting Vehicle Loading & Dispatch' ||
+                rec.status === 'AWAITING VEHICLE LOADING' ||
+                rec.status === 'Invoice Confirmed' ||
+                rec.invoiceConfirmed ||
+                (rec.invoiceNo && rec.status !== 'Closed')
+              );
+              if (isRecAwaitingLoad) {
+                setVehicleLoadingModal(rec);
+              } else {
+                setDispatchPackingModal(isRecCancelled ? { ...rec, isViewOnly: true, isReadOnly: true } : rec);
+              }
             } else if (activeTab === 'Accounts Verification') {
               setAccountsVerificationModal(rec);
               setIsAccountsViewOnly(true);
@@ -1386,6 +1440,8 @@ export default function ProductionViewsEngine(props) {
           onClose={() => setPendingDcModal(null)}
           bomStore={bomStore}
           setBomStore={setBomStore}
+          invoiceList={invoiceList}
+          setInvoiceList={setInvoiceList}
         />
       )}
 
@@ -1404,6 +1460,9 @@ export default function ProductionViewsEngine(props) {
           vehicleLoadingModal={vehicleLoadingModal}
           onClose={() => setVehicleLoadingModal(null)}
           setBomStore={setBomStore}
+          setCompletedBomSummaryModal={setCompletedBomSummaryModal}
+          setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+          setInvoiceList={setInvoiceList}
         />
       )}
 

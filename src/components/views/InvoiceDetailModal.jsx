@@ -7,10 +7,12 @@ import {
 import { getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
-import { saveCloudStore } from "../../utils/supabaseDataSync";
+import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
 import TallySyncModal from "./TallySyncModal";
+import DocPreviewModal from "./DocPreviewModal";
+import { isTamilNaduIntra } from "../../utils/gstHelper";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -28,16 +30,18 @@ export default function InvoiceDetailModal({
   invoiceList: passedInvoiceList,
   setInvoiceList: passedSetInvoiceList,
   setPreviewDocModal,
-  setActiveMediaPreviewModal = () => {}
+  setActiveMediaPreviewModal = () => {},
+  setPendingDcModal = () => {}
 }) {
   const invoiceList = passedInvoiceList || invoices || [];
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
   const inv = viewingInvoiceModal || {};
   const [showTallyModal, setShowTallyModal] = useState(false);
+  const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
-    ? (invoiceEditForm.invNo || inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'))
-    : (inv.invoiceNo || inv.invNo || (isConfirmed ? (inv.code || 'INV-00027') : 'Pending Confirmation'));
+    ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'))
+    : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'));
   const bomRefText = inv.poNo || inv.c3 || 'BOM-00007';
   const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.c2 || 'ABC Industries') : (inv.vendor || inv.c2 || 'ABC Industries');
   const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
@@ -123,6 +127,9 @@ export default function InvoiceDetailModal({
 
   const subtotal = isEditingInvoice ? computedSubtotal : (totalAmtRaw / 1.18);
   const taxGst = isEditingInvoice ? computedTaxGst : (totalAmtRaw - subtotal);
+  const invGst = inv.gstNo || inv.gstin || inv.gst || matchingBom?.gstNo || '';
+  const invState = inv.deliveryState || inv.billingState || inv.state || matchingBom?.deliveryState || matchingBom?.billingState || '';
+  const isInvIntra = isTamilNaduIntra(invGst, invState);
 
   const advanceAmt = isFullAdvance ? totalAmtRaw : (is50Percent ? totalAmtRaw * 0.5 : totalAmtRaw);
   const balanceAmt = isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0);
@@ -169,7 +176,7 @@ export default function InvoiceDetailModal({
           : item
       );
       try {
-        saveCloudStore("invoice_store", updated);
+        saveCloudInvoiceRow(updatedInvoiceRecord);
       } catch (e) { }
       return updated;
     });
@@ -192,7 +199,10 @@ export default function InvoiceDetailModal({
         invoiceNo: invoiceEditForm.invNo || b.invoiceNo
       } : b);
       try {
-        saveCloudStore("bom_store", updatedBoms);
+        const updatedBom = updatedBoms.find(b => (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode)) || (matchingBom && b.bomCode === matchingBom.bomCode));
+        if (updatedBom) {
+          saveCloudBomRow(updatedBom);
+        }
       } catch (e) { }
       return updatedBoms;
     });
@@ -338,7 +348,8 @@ export default function InvoiceDetailModal({
                       cancelledAt: nowIso
                     } : item);
                     try {
-                      saveCloudStore("invoice_store", updatedInvoices);
+                      const cancelledInv = updatedInvoices.find(item => item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode);
+                      if (cancelledInv) saveCloudInvoiceRow(cancelledInv);
                     } catch (e) { }
                     return updatedInvoices;
                   });
@@ -611,27 +622,52 @@ export default function InvoiceDetailModal({
                     unpackedItemsRemaining: unpackedItems
                   } : item);
                   try {
-                    saveCloudStore("invoice_store", updatedInvoices);
+                    const confirmedInv = updatedInvoices.find(item => (item.invNo === invNoText || item.code === invNoText || item.id === inv.id));
+                    if (confirmedInv) saveCloudInvoiceRow(confirmedInv);
                   } catch (e) { }
                   return updatedInvoices;
                 });
 
                 // 6. Update matching BOM status to 'Awaiting Vehicle Loading & Dispatch'
-                const targetCode = inv.poNo || inv.code || bomRefText;
-                setBomStore(prev => prev.map(b => (
-                  b.bomCode === targetCode ||
-                  b.salesOrderNo === targetCode ||
-                  b.code === targetCode ||
-                  (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
-                ) ? {
-                  ...b,
-                  status: 'Awaiting Vehicle Loading & Dispatch',
-                  invoiceConfirmed: true,
-                  invoiceNo: invNoText,
-                  stockDeducted: true,
-                  stockDeductionDate: new Date().toISOString(),
-                  packedItemsDeducted: packedItemsToDeduct
-                } : b));
+                const targetBomCode = matchingBom?.bomCode || matchingBom?.code || inv.bomCode || inv.poNo || inv.code || bomRefText;
+                setBomStore(prev => {
+                  const updatedBoms = (prev || []).map(b => (
+                    b.bomCode === targetBomCode ||
+                    b.code === targetBomCode ||
+                    b.salesOrderNo === targetBomCode ||
+                    (matchingBom && (b.bomCode === matchingBom.bomCode || b.code === matchingBom.code || b.id === matchingBom.id)) ||
+                    (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', ''))) ||
+                    (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode))
+                  ) ? {
+                    ...b,
+                    status: 'Awaiting Vehicle Loading & Dispatch',
+                    invoiceConfirmed: true,
+                    invoiceNo: invNoText,
+                    stockDeducted: true,
+                    stockDeductionDate: new Date().toISOString(),
+                    packedItemsDeducted: packedItemsToDeduct,
+                    unpackedItemsRemaining: unpackedItems
+                  } : b);
+
+                  try {
+                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedBoms.map(stripDataUrlsFromRecord)));
+                    const matchedUpdated = updatedBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode || (matchingBom && b.bomCode === matchingBom.bomCode));
+                    if (matchedUpdated) {
+                      saveCloudBomRow(matchedUpdated);
+                      fetch('/api/boms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(matchedUpdated), isUpdate: true })
+                      }).catch(() => {});
+                      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: matchedUpdated } }));
+                    }
+                    window.dispatchEvent(new Event('storage'));
+                  } catch (persistErr) {
+                    console.error('Error persisting BOM store upon invoice confirm:', persistErr);
+                  }
+
+                  return updatedBoms;
+                });
 
                 // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) with ONLY Preset Name and Preset Price
                 const presetName = matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Kit';
@@ -643,6 +679,7 @@ export default function InvoiceDetailModal({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       invNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
+                      invoiceNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
                       poNo: bomRefText,
                       bomCode: bomRefText,
                       vendor: customerText,
@@ -722,7 +759,7 @@ export default function InvoiceDetailModal({
                 boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
               }}
             >
-              <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} /> Confirm Invoice
+              <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} /> Confirm Invoice & Send to Dispatch Loading
             </button>
           )}
         </div>
@@ -817,10 +854,23 @@ export default function InvoiceDetailModal({
             <strong style={{ color: '#0F172A' }}>₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-            <span>Tax (18% GST)</span>
-            <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-          </div>
+          {isInvIntra ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                <span>CGST (9%)</span>
+                <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                <span>SGST (9%)</span>
+                <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+              <span>IGST (18%)</span>
+              <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
             <span>Shipping Charges</span>
@@ -945,156 +995,29 @@ export default function InvoiceDetailModal({
                                 <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
                               </span>
                             </td>
-                            <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.code || ''}
-                                  onChange={(e) => {
-                                    const newCode = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], code: newCode };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '90px', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px', fontWeight: '700' }}
-                                />
-                              ) : (
-                                it.code || `PRD-00${idx + 1}`
-                              )}
+                            <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
+                              {it.code || `PRD-00${idx + 1}`}
                             </td>
                             <td style={{ padding: '10px', fontWeight: '700', color: '#0F172A' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.name || ''}
-                                  onChange={(e) => {
-                                    const newName = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], name: newName };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '100%', minWidth: '130px', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px', fontWeight: '700' }}
-                                />
-                              ) : (
-                                it.name
-                              )}
+                              {it.name}
                             </td>
                             <td style={{ padding: '10px', color: '#64748B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.desc || it.category || ''}
-                                  onChange={(e) => {
-                                    const newDesc = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], desc: newDesc };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '100%', minWidth: '100px', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                it.desc || it.category || 'High grade component'
-                              )}
+                              {it.desc || it.category || 'High grade component'}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.uom || 'Nos'}
-                                  onChange={(e) => {
-                                    const newUom = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], uom: newUom };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '50px', textAlign: 'center', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                it.uom || 'Nos'
-                              )}
+                              {it.uom || 'Nos'}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="number"
-                                  value={it.bomQty || it.invQty || it.qty || 1}
-                                  onChange={(e) => {
-                                    const newQty = parseFloat(e.target.value) || 0;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) {
-                                        const rate = parseFloat(updated[origIdx].rate || 0);
-                                        const tax = parseFloat(updated[origIdx].tax || 18);
-                                        const sub = newQty * rate;
-                                        const tot = sub + (sub * tax / 100);
-                                        updated[origIdx] = { ...updated[origIdx], qty: newQty, bomQty: newQty, invQty: newQty, amt: tot };
-                                      }
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '60px', textAlign: 'center', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px', fontWeight: '700' }}
-                                />
-                              ) : (
-                                it.bomQty || it.qty
-                              )}
+                              {it.bomQty || it.qty || 1}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="number"
-                                  value={it.rate !== undefined ? it.rate : 0}
-                                  onChange={(e) => {
-                                    const newRate = parseFloat(e.target.value) || 0;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) {
-                                        const qty = parseFloat(updated[origIdx].bomQty || updated[origIdx].qty || 1);
-                                        const tax = parseFloat(updated[origIdx].tax || 18);
-                                        const sub = qty * newRate;
-                                        const tot = sub + (sub * tax / 100);
-                                        updated[origIdx] = { ...updated[origIdx], rate: newRate, amt: tot };
-                                      }
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '75px', textAlign: 'right', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                `₹ ${parseFloat(it.rate || 0).toFixed(2)}`
-                              )}
+                              ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="number"
-                                  value={it.tax !== undefined ? it.tax : 18}
-                                  onChange={(e) => {
-                                    const newTax = parseFloat(e.target.value) || 0;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) {
-                                        const qty = parseFloat(updated[origIdx].bomQty || updated[origIdx].qty || 1);
-                                        const rate = parseFloat(updated[origIdx].rate || 0);
-                                        const sub = qty * rate;
-                                        const tot = sub + (sub * newTax / 100);
-                                        updated[origIdx] = { ...updated[origIdx], tax: newTax, amt: tot };
-                                      }
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '50px', textAlign: 'center', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                `${it.tax || 18}%`
-                              )}
+                              {it.tax !== undefined ? it.tax : 18}%
+                            </td>
+                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                              ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
                               ₹ {((it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -1128,9 +1051,45 @@ export default function InvoiceDetailModal({
                       2. Unpacked / Pending Items ({unpackedItems.length}) — Pending Dispatch
                     </h4>
                   </div>
-                  <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <AlertCircle style={{ width: '12px', height: '12px' }} /> Hold / Create Subsequent Delivery DC
-                  </span>
+                  {unpackedItems.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof setPendingDcModal === 'function') {
+                          setPendingDcModal({
+                            ...inv,
+                            invNo: invNoText,
+                            poNo: bomRefText,
+                            bomCode: bomRefText,
+                            customerName: customerText,
+                            vendor: customerText,
+                            deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress || 'Client Delivery Site',
+                            items: unpackedItems
+                          });
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#DC2626',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(220,38,38,0.25)'
+                      }}
+                    >
+                      <Truck style={{ width: '13px', height: '13px' }} /> Create Delivery Challan (DC) for Pending Items
+                    </button>
+                  ) : (
+                    <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <AlertCircle style={{ width: '12px', height: '12px' }} /> All items dispatched
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #FEE2E2' }}>
@@ -1158,156 +1117,29 @@ export default function InvoiceDetailModal({
                                 <X style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Unpacked
                               </span>
                             </td>
-                            <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.code || ''}
-                                  onChange={(e) => {
-                                    const newCode = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], code: newCode };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '90px', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px', fontWeight: '700' }}
-                                />
-                              ) : (
-                                it.code || `PRD-00${idx + 1}`
-                              )}
+                            <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
+                              {it.code || `PRD-00${idx + 1}`}
                             </td>
                             <td style={{ padding: '10px', fontWeight: '700', color: '#991B1B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.name || ''}
-                                  onChange={(e) => {
-                                    const newName = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], name: newName };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '100%', minWidth: '130px', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px', fontWeight: '700' }}
-                                />
-                              ) : (
-                                it.name
-                              )}
+                              {it.name}
                             </td>
                             <td style={{ padding: '10px', color: '#64748B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.desc || it.category || ''}
-                                  onChange={(e) => {
-                                    const newDesc = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], desc: newDesc };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '100%', minWidth: '100px', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                it.desc || it.category || 'High grade component'
-                              )}
+                              {it.desc || it.category || 'High grade component'}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="text"
-                                  value={it.uom || 'Nos'}
-                                  onChange={(e) => {
-                                    const newUom = e.target.value;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) updated[origIdx] = { ...updated[origIdx], uom: newUom };
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '50px', textAlign: 'center', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                it.uom || 'Nos'
-                              )}
+                              {it.uom || 'Nos'}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="number"
-                                  value={it.bomQty || it.invQty || it.qty || 1}
-                                  onChange={(e) => {
-                                    const newQty = parseFloat(e.target.value) || 0;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) {
-                                        const rate = parseFloat(updated[origIdx].rate || 0);
-                                        const tax = parseFloat(updated[origIdx].tax || 18);
-                                        const sub = newQty * rate;
-                                        const tot = sub + (sub * tax / 100);
-                                        updated[origIdx] = { ...updated[origIdx], qty: newQty, bomQty: newQty, invQty: newQty, amt: tot };
-                                      }
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '60px', textAlign: 'center', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px', fontWeight: '700' }}
-                                />
-                              ) : (
-                                it.bomQty || it.qty
-                              )}
+                              {it.bomQty || it.qty || 1}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="number"
-                                  value={it.rate !== undefined ? it.rate : 0}
-                                  onChange={(e) => {
-                                    const newRate = parseFloat(e.target.value) || 0;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) {
-                                        const qty = parseFloat(updated[origIdx].bomQty || updated[origIdx].qty || 1);
-                                        const tax = parseFloat(updated[origIdx].tax || 18);
-                                        const sub = qty * newRate;
-                                        const tot = sub + (sub * tax / 100);
-                                        updated[origIdx] = { ...updated[origIdx], rate: newRate, amt: tot };
-                                      }
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '75px', textAlign: 'right', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                `₹ ${parseFloat(it.rate || 0).toFixed(2)}`
-                              )}
+                              ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {isEditingInvoice ? (
-                                <input
-                                  type="number"
-                                  value={it.tax !== undefined ? it.tax : 18}
-                                  onChange={(e) => {
-                                    const newTax = parseFloat(e.target.value) || 0;
-                                    setInvoiceEditForm(prev => {
-                                      const updated = [...(prev.items || [])];
-                                      if (updated[origIdx]) {
-                                        const qty = parseFloat(updated[origIdx].bomQty || updated[origIdx].qty || 1);
-                                        const rate = parseFloat(updated[origIdx].rate || 0);
-                                        const sub = qty * rate;
-                                        const tot = sub + (sub * newTax / 100);
-                                        updated[origIdx] = { ...updated[origIdx], tax: newTax, amt: tot };
-                                      }
-                                      return { ...prev, items: updated };
-                                    });
-                                  }}
-                                  style={{ width: '50px', textAlign: 'center', padding: '4px 6px', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '12px' }}
-                                />
-                              ) : (
-                                `${it.tax || 18}%`
-                              )}
+                              {it.tax !== undefined ? it.tax : 18}%
+                            </td>
+                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                              ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#DC2626' }}>
                               ₹ {((it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -1415,7 +1247,10 @@ export default function InvoiceDetailModal({
                                     status: 'Address Proof Reissued',
                                     addressProofReissuedAt: nowIso
                                   } : i);
-                                  try { saveCloudStore("invoice_store", updated); } catch (e) { }
+                                  try {
+                                    const reissuedInv = updated.find(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode));
+                                    if (reissuedInv) saveCloudInvoiceRow(reissuedInv);
+                                  } catch (e) { }
                                   return updated;
                                 });
 
@@ -1585,19 +1420,38 @@ export default function InvoiceDetailModal({
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button
-                        onClick={() => {
-                          const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.jpg");
-                          const docDataUrl = (typeof addressProofDoc === "string" && addressProofDoc.startsWith("data:"))
+                        type="button"
+                        onClick={async () => {
+                          const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.png");
+                          let resolvedUrl = (typeof addressProofDoc === "string" && (addressProofDoc.startsWith("data:") || addressProofDoc.startsWith("http") || addressProofDoc.startsWith("/")))
                             ? addressProofDoc
-                            : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || getMediaFromCache(docName) || null);
-                          if (docDataUrl) {
-                            const win = window.open();
-                            if (win) {
-                              win.document.write("<html><head><title>Address Proof - " + docName + "</title></head><body style=\"margin:0;background:#0B0F19;display:flex;justify-content:center;align-items:center;height:100vh;\"><img src=\"" + docDataUrl + "\" style=\"max-width:96vw;max-height:96vh;object-fit:contain;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.6);\"/></body></html>");
-                              return;
-                            }
+                            : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || addressProofDoc?.proofDocData || null);
+
+                          if (!resolvedUrl && docName) {
+                            resolvedUrl = getMediaFromCache(docName);
                           }
-                          alert("Address Proof Document: " + docName);
+                          if (!resolvedUrl && addressProofDoc?.id) {
+                            resolvedUrl = getMediaFromCache(addressProofDoc.id);
+                          }
+                          if (!resolvedUrl && typeof resolveDocumentUrlAsync === 'function') {
+                            try {
+                              const asyncUrl = await resolveDocumentUrlAsync(addressProofDoc, bomRefText);
+                              if (asyncUrl) resolvedUrl = asyncUrl;
+                            } catch (_) {}
+                          }
+
+                          const docObj = {
+                            ...(typeof addressProofDoc === 'object' ? addressProofDoc : {}),
+                            name: docName,
+                            dataUrl: resolvedUrl,
+                            url: resolvedUrl,
+                            previewUrl: resolvedUrl
+                          };
+
+                          setLocalDocPreviewModal({
+                            title: 'Delivery Address Proof Document',
+                            doc: docObj
+                          });
                         }}
                         style={{ border: 'none', backgroundColor: '#166534', color: 'white', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(22,101,52,0.2)' }}
                       >
@@ -1629,40 +1483,6 @@ export default function InvoiceDetailModal({
               <Receipt style={{ width: '18px', height: '18px', color: '#059669' }} />
               <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>Payment Information</h4>
             </div>
-            <button
-              onClick={() => {
-                const proofDoc = matchingBom?.payments?.proofDoc || inv?.payments?.proofDoc || matchingBom?.paymentProofDoc || 'Payment_Proof_Receipt.pdf';
-                const proofDocData = matchingBom?.payments?.proofDocData || matchingBom?.payments?.proofDoc?.dataUrl || inv?.payments?.proofDocData || matchingBom?.paymentProofDoc?.dataUrl || null;
-
-                setViewingProofDocModal({
-                  ...matchingBom,
-                  ...inv,
-                  bomCode: bomRefText,
-                  customerName: customerText,
-                  paymentType: paymentTypeText,
-                  grandTotal: totalAmtRaw,
-                  payments: {
-                    proofDoc: proofDoc,
-                    proofDocData: proofDocData
-                  }
-                });
-              }}
-              style={{
-                border: '1px solid #BFDBFE',
-                backgroundColor: '#EFF6FF',
-                color: '#2563EB',
-                borderRadius: '8px',
-                padding: '6px 12px',
-                fontSize: '11px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <Eye style={{ width: '14px', height: '14px' }} /> View Payment Details
-            </button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
@@ -2034,6 +1854,14 @@ export default function InvoiceDetailModal({
           onClose={() => setShowTallyModal(false)}
           records={[inv]}
           type="Sales Invoice"
+        />
+      )}
+
+      {/* Delivery Address Proof & Document Preview Modal */}
+      {localDocPreviewModal && (
+        <DocPreviewModal
+          previewDocModal={localDocPreviewModal}
+          onClose={() => setLocalDocPreviewModal(null)}
         />
       )}
     </div>

@@ -2,20 +2,23 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
+// Load environment variables
+dotenv.config({ path: path.resolve(projectRoot, '.env') });
+dotenv.config();
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing Supabase configuration.');
-  process.exit(1);
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 }
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function setAllStockTo5000() {
   console.log('--- Setting all 312 products stock level to 5,000 ---');
@@ -59,6 +62,10 @@ async function setAllStockTo5000() {
       stockOnHand: 5000,
       stockAdj: 0,
       reserved: 0,
+      blockedForBom: 0,
+      goodsReceived: 0,
+      issuedProd: 0,
+      matReturn: 0,
       status: 'In Stock',
       lastUpdated: 'Stock Set to 5,000'
     }));
@@ -83,45 +90,59 @@ async function setAllStockTo5000() {
     console.log(`✓ Set stock to 5,000 for all ${prodInv.length} items in server/vrm_prod_inventory.json`);
   }
 
-  // 4. Update Supabase Cloud Database (leaves table)
-  console.log('Syncing 5,000 stock to Supabase cloud database...');
-  const pushToSupabase = async (key, data) => {
-    const employeeKey = key.toUpperCase();
-    const { data: records } = await supabase
-      .from('leaves')
-      .select('id')
-      .eq('employee', employeeKey)
-      .order('id', { ascending: false });
+  // 4. Update Supabase Cloud Database
+  if (supabase) {
+    console.log('Syncing 5,000 stock to Supabase cloud database...');
 
-    const payload = {
-      employee: employeeKey,
-      reason: JSON.stringify(data),
-      status: 'active',
-      dates: new Date().toISOString(),
-      duration: String(Array.isArray(data) ? data.length : 1),
-      type: 'Store'
+    const pushToStore = async (storeKey, data) => {
+      try {
+        // Update controlroom_store table
+        const { error: crError } = await supabase
+          .from('controlroom_store')
+          .upsert({ key: storeKey, data, updated_at: new Date().toISOString() });
+        if (!crError) console.log(`✓ Updated controlroom_store key ${storeKey}`);
+      } catch (e) {}
+
+      try {
+        // Update leaves table as universal KV fallback
+        const employeeKey = storeKey.toUpperCase();
+        const { data: records } = await supabase
+          .from('leaves')
+          .select('id')
+          .eq('employee', employeeKey)
+          .order('id', { ascending: false });
+
+        const payload = {
+          employee: employeeKey,
+          reason: JSON.stringify(data),
+          status: 'active',
+          dates: new Date().toISOString(),
+          duration: String(Array.isArray(data) ? data.length : 1),
+          type: 'Store'
+        };
+
+        if (records && records.length > 0) {
+          const masterId = records[0].id;
+          await supabase.from('leaves').update(payload).eq('id', masterId);
+          if (records.length > 1) {
+            const excessIds = records.slice(1).map(r => r.id);
+            await supabase.from('leaves').delete().in('id', excessIds);
+          }
+          console.log(`✓ Updated Supabase leaves key ${employeeKey} (${data.length} items)`);
+        } else {
+          await supabase.from('leaves').insert(payload);
+          console.log(`✓ Inserted Supabase leaves key ${employeeKey} (${data.length} items)`);
+        }
+      } catch (e) {}
     };
 
-    if (records && records.length > 0) {
-      const masterId = records[0].id;
-      await supabase.from('leaves').update(payload).eq('id', masterId);
-      if (records.length > 1) {
-        const excessIds = records.slice(1).map(r => r.id);
-        await supabase.from('leaves').delete().in('id', excessIds);
-      }
-      console.log(`✓ Updated Supabase key ${employeeKey} (${data.length} items)`);
-    } else {
-      await supabase.from('leaves').insert(payload);
-      console.log(`✓ Inserted Supabase key ${employeeKey} (${data.length} items)`);
+    try {
+      await pushToStore('raw_materials_store', rawItems);
+      await pushToStore('item_store', items);
+      await pushToStore('vrm_prod_inventory', prodInv);
+    } catch (err) {
+      console.error('Supabase update notice:', err.message);
     }
-  };
-
-  try {
-    await pushToSupabase('raw_materials_store', rawItems);
-    await pushToSupabase('item_store', items);
-    await pushToSupabase('vrm_prod_inventory', prodInv);
-  } catch (err) {
-    console.error('Supabase update notice:', err.message);
   }
 
   // 5. Notify the running local server via API so memory cache updates & SSE broadcasts

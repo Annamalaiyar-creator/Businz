@@ -2,16 +2,13 @@
   "name": "businz",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
-    "build": "vite build",
+    "build": "vite build && cp -r dist/assets/* assets/",
     "lint": "oxlint",
     "preview": "vite preview",
-    "backup": "node scripts/backup.js",
-    "mobile:sync": "vite build && npx cap sync",
-    "mobile:open": "npx cap open android"
+    "backup": "node scripts/backup.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
@@ -24,9 +21,6 @@
     "undici": "^5.28.5"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.5.1",
-    "@capacitor/cli": "^8.5.1",
-    "@capacitor/core": "^8.5.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",

@@ -11,6 +11,7 @@ import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsDa
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
+import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 
 const defaultSalesPIs = [];
 
@@ -81,6 +82,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [printModalPi, setPrintModalPi] = useState(null); // For official Print & PDF template
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const [validationAlert, setValidationAlert] = useState(null); // Interactive Missing Fields popup modal
+  const [topToast, setTopToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const showTopToast = (message, type = 'success', duration = 5000) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setTopToast({ message, type });
+    toastTimeoutRef.current = setTimeout(() => {
+      setTopToast(null);
+    }, duration);
+  };
 
   const [bomList, setBomList] = useState(() => {
     try {
@@ -160,7 +173,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     }
   }, [targetPiNo, piList]);
 
-  // Two-way helper to find all BOMs generated from this PI
+  // Two-way helper to find all BOMs generated from this PI (Strict 1-to-1 mapping)
   const getConvertedBomsForPi = (pi) => {
     if (!pi) return [];
     // Only associate BOMs if this PI was explicitly converted or has an assigned BOM code
@@ -175,7 +188,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const piNum = (pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
     const explicitCode = (pi.convertedBomNo || pi.convertedBomCode || '').trim().toLowerCase();
 
-    return (bomList || []).filter(b => {
+    const matches = (bomList || []).filter(b => {
       if (!b) return false;
       // Do NOT link to cancelled or restored BOMs
       if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
@@ -189,6 +202,25 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
       return false;
     });
+
+    if (matches.length <= 1) return matches;
+
+    // Strict 1-to-1 deduplication safeguard:
+    // If multiple exist historically, prefer explicit convertedBomCode, otherwise sort by latest BOM number
+    if (explicitCode) {
+      const explicitMatch = matches.find(b => {
+        const bCode = (b.bomCode || b.code || b.id || '').trim().toLowerCase();
+        return bCode === explicitCode;
+      });
+      if (explicitMatch) return [explicitMatch];
+    }
+
+    const sorted = [...matches].sort((a, b) => {
+      const na = parseInt(String(a.bomCode || a.code || '').replace(/\D/g, '') || '0', 10);
+      const nb = parseInt(String(b.bomCode || b.code || '').replace(/\D/g, '') || '0', 10);
+      return nb - na;
+    });
+    return [sorted[0]];
   };
 
   const handleRevertPiToIssued = (pi) => {
@@ -216,6 +248,45 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         convertedBomNo: null,
         convertedBomCode: null
       }) : null);
+    }
+  };
+
+  const [cancellingPiNo, setCancellingPiNo] = useState(null);
+
+  const handleCancelPi = async (piToCancel) => {
+    if (!piToCancel || !piToCancel.piNo) return;
+    const cleanPiNo = String(piToCancel.piNo).trim();
+    if (!window.confirm(`Are you sure you want to mark Proforma Invoice ${cleanPiNo} as Cancelled? This will also update its status to Declined in Zoho Books.`)) {
+      return;
+    }
+
+    setCancellingPiNo(cleanPiNo);
+    const updated = piList.map(p => (p.piNo === cleanPiNo || p.id === cleanPiNo) ? { ...p, status: 'Cancelled', statusType: 'cancelled' } : p);
+    updatePiList(updated);
+
+    try {
+      const resp = await fetch('/api/zoho/estimates/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          piNo: cleanPiNo,
+          zohoEstimateId: piToCancel.zohoEstimateId,
+          reason: 'Cancelled by user in BUSINZ'
+        })
+      });
+      const data = await resp.json();
+      if (data && data.success) {
+        notifyPiCreated({
+          title: `PI ${cleanPiNo} Cancelled`,
+          message: data.message || `Proforma Invoice ${cleanPiNo} marked as Cancelled & Declined in Zoho Books.`,
+          type: 'warning'
+        });
+      }
+    } catch (err) {
+      console.warn('[PI CANCEL ERROR]', err);
+    } finally {
+      setCancellingPiNo(null);
+      setSelectedPi(null);
     }
   };
 
@@ -397,11 +468,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const cleanNo = String(targetPi.piNo || targetPi.id || '').trim();
     setSyncingPiNo(cleanNo);
     try {
+      const sanitizedPi = stripDataUrlsFromRecord(targetPi);
+      delete sanitizedPi.paymentProofDoc;
+      delete sanitizedPi.deliveryProofDoc;
+      delete sanitizedPi.deliveryAddressProofDoc;
+
       const res = await fetch('/api/zoho/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...targetPi, piNo: cleanNo })
+        body: JSON.stringify({ ...sanitizedPi, piNo: cleanNo })
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          res.status === 404
+            ? `Backend API server unreachable (HTTP 404). Please ensure the Node.js backend application is running in Plesk / hosting control panel.`
+            : `Server returned HTTP ${res.status} (${res.statusText || 'Non-JSON response'}).`
+        );
+      }
+
       const data = await res.json();
       const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
       const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
@@ -444,13 +530,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             return prev;
           });
         }
-        alert(`✓ Proforma Invoice ${finalEstNo} successfully synced with Zoho Books (Quotes # ${finalEstNo})!`);
+        showTopToast(`✓ Proforma Invoice ${finalEstNo} successfully synced with Zoho Books (Quotes # ${finalEstNo})!`, 'success');
       } else {
         const errMsg = data?.zohoError || data?.notice || data?.error || data?.message || (!res.ok ? `HTTP ${res.status} error` : 'Zoho Books synchronization could not be confirmed. Please verify your connection.');
-        alert(`Notice: Zoho Books response: ${errMsg}`);
+        showTopToast(`Notice from Zoho Books: ${errMsg}`, 'error', 6000);
       }
     } catch (err) {
-      alert(`Error syncing with Zoho Books: ${err.message}`);
+      showTopToast(`Notice syncing with Zoho Books: ${err.message}`, 'error', 6000);
     } finally {
       setSyncingPiNo(null);
     }
@@ -458,6 +544,34 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   const handleConvertToBom = (pi) => {
     if (!pi || isConvertingToBom) return;
+
+    // Strict 1-to-1 Safeguard: If this PI is already converted or linked to an active BOM, navigate directly to it!
+    const existingBoms = getConvertedBomsForPi(pi);
+    let targetExistingBom = existingBoms && existingBoms.length > 0 ? existingBoms[0] : null;
+    if (!targetExistingBom) {
+      const pNo = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
+      targetExistingBom = (bomList || []).find(b => {
+        if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
+        const sPi = String(b.sourcePiNo || b.piNo || '').trim().toLowerCase();
+        if (pNo && sPi === pNo) return true;
+        if (pi.convertedBomNo && (b.bomCode === pi.convertedBomNo || b.id === pi.convertedBomNo)) return true;
+        if (pi.convertedBomCode && (b.bomCode === pi.convertedBomCode || b.id === pi.convertedBomCode)) return true;
+        return false;
+      });
+    }
+
+    if (targetExistingBom) {
+      const targetBomCode = targetExistingBom.bomCode || targetExistingBom.code || targetExistingBom.id;
+      showTopToast(`ℹ️ Proforma Invoice ${pi.piNo || ''} is already converted to ${targetBomCode}. Opening existing BOM...`, 'info', 4000);
+      window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+        detail: { tab: 'Sales BOM', targetBom: targetBomCode } 
+      }));
+      if (typeof onNavigateTab === 'function') {
+        onNavigateTab('Sales BOM');
+      }
+      return;
+    }
+
     setIsConvertingToBom(true);
     setConvertingPiTarget(pi);
 
@@ -608,6 +722,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const clearFilters = () => {
     setSearchQuery('');
     setStatusFilter('All');
+    setStartDate('');
+    setEndDate('');
     setPiTab('All');
     setCurrentPage(1);
   };
@@ -1040,11 +1156,24 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     });
 
+    const targetState = sameAsBilling ? billingState : (deliveryState || billingState);
+    const isIntra = isTamilNaduIntra(gstNo, targetState, billingState);
+
     const gstTiers = Object.values(gstTiersMap)
       .filter(t => t.gstAmt > 0 || t.taxable > 0)
       .sort((a, b) => a.rate - b.rate);
 
-    const gst = gstTiers.reduce((sum, t) => sum + t.gstAmt, 0);
+    const formattedTiers = (gstTiers.length > 0 ? gstTiers : [{ rate: 18, taxable: sub, gstAmt: sub * 0.18 }]).map(t => ({
+      ...t,
+      cgstRate: t.rate / 2,
+      cgstAmt: t.gstAmt / 2,
+      sgstRate: t.rate / 2,
+      sgstAmt: t.gstAmt / 2,
+      igstRate: t.rate,
+      igstAmt: t.gstAmt
+    }));
+
+    const gst = formattedTiers.reduce((sum, t) => sum + t.gstAmt, 0);
     const grand = sub + gst;
     const cgst = gst / 2;
     const sgst = gst / 2;
@@ -1056,7 +1185,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       grand: isNaN(grand) ? 0 : grand,
       cgst: isNaN(cgst) ? 0 : cgst,
       sgst: isNaN(sgst) ? 0 : sgst,
-      gstTiers: gstTiers.length > 0 ? gstTiers : [{ rate: 18, taxable: sub, gstAmt: gst }]
+      isIntra,
+      taxType: isIntra ? 'INTRA' : 'INTER',
+      gstTiers: formattedTiers
     };
   };
 
@@ -1256,7 +1387,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setTransporterName('');
     setVehicleNo('');
     setTransportScope('VRM Structures');
-    setPaymentTerms('50% Advance + 50% Dispatch');
+    setPaymentTerms('100% Paid');
     setCreditDays('');
     setRemarks('');
     setPiItems([]); // Fresh empty default with 0 prefilled items
@@ -1482,7 +1613,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         sgst: totals.sgst,
         grandTotal: totals.grand,
         amount: '₹' + Math.round(totals.grand).toLocaleString('en-IN'),
-        pdfName: pdfFile ? pdfFile.name : (signedPiDoc ? signedPiDoc.name : 'pi_document.pdf'),
+        pdfName: pdfFile ? pdfFile.name : (signedPiDoc ? signedPiDoc.name : null),
         signedPiDoc: signedPiDoc || null,
         piDate: piDate || new Date().toISOString().split('T')[0],
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -1558,15 +1689,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       resetForm();
       setViewMode('list');
 
-      // Non-blocking completion notice
-      setTimeout(() => {
-        alert(isDraft
-          ? `📝 Proforma Invoice (${cleanPiNo}) saved as Draft.`
-          : `✅ Proforma Invoice (${cleanPiNo}) successfully created!`);
-      }, 50);
+      // In-app top message notification (Self-dismissing, NO browser alert modal or OK button)
+      const safeCustomer = (vendorName || customerName || 'Customer').trim();
+      showTopToast(
+        isDraft
+          ? `📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`
+          : `✅ You have completed the PI (${cleanPiNo}) for ${safeCustomer}!`,
+        'success',
+        6000
+      );
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
-      alert('Error creating Proforma Invoice: ' + (err?.message || 'Please check your connection and try again.'));
+      showTopToast('Error creating Proforma Invoice: ' + (err?.message || 'Please check your connection and try again.'), 'error', 6000);
     } finally {
       setIsSubmittingPI(false);
       setPiConfirmModal(null);
@@ -1766,6 +1900,57 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-24)', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
 
+      {/* ==================== IN-APP TOP NOTIFICATION (SELF-DISMISSING, NO BROWSER ALERT) ==================== */}
+      {topToast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '12px 24px',
+          borderRadius: '50px',
+          backgroundColor: topToast.type === 'error' ? '#DC2626' : '#0E7490',
+          color: '#FFFFFF',
+          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.2) inset',
+          fontSize: '13.5px',
+          fontWeight: '700',
+          letterSpacing: '-0.2px',
+          maxWidth: '90vw',
+          pointerEvents: 'auto',
+          transition: 'all 0.25s ease'
+        }}>
+          {topToast.type === 'error' ? (
+            <AlertCircle size={18} style={{ color: '#FEE2E2', flexShrink: 0 }} />
+          ) : (
+            <CheckCircle size={18} style={{ color: '#A7F3D0', flexShrink: 0 }} />
+          )}
+          <span>{topToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setTopToast(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255, 255, 255, 0.75)',
+              cursor: 'pointer',
+              marginLeft: '6px',
+              padding: '0 4px',
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: '15px',
+              lineHeight: 1
+            }}
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* ==================== CONVERTING PI TO BOM ANIMATED MODAL ==================== */}
       {isConvertingToBom && (
         <div style={{
@@ -1796,19 +1981,131 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             gap: '16px',
             border: '1px solid #E2E8F0'
           }}>
+            {/* Smallcase-Inspired 3D Isometric Progress Indicator */}
             <div style={{
-              width: '68px',
-              height: '68px',
-              borderRadius: '50%',
-              backgroundColor: '#ECFEFF',
-              border: '2px solid #A5F3FC',
+              perspective: '750px',
+              perspectiveOrigin: '50% 35%',
+              width: '150px',
+              height: '125px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative'
             }}>
-              <div className="businz-spin-ring" style={{ width: '60px', height: '60px', position: 'absolute' }} />
-              <Layers size={30} style={{ color: '#0E7490' }} />
+              {/* Ground Shadow */}
+              <div style={{
+                position: 'absolute',
+                bottom: '10px',
+                width: '100px',
+                height: '48px',
+                borderRadius: '50%',
+                background: 'radial-gradient(ellipse at center, rgba(14, 116, 144, 0.35) 0%, rgba(6, 182, 212, 0.08) 55%, transparent 75%)',
+                filter: 'blur(7px)',
+                transform: 'rotateX(58deg)',
+                animation: 'pulseGlow 2.5s ease-in-out infinite'
+              }} />
+
+              {/* 3D Isometric Stack Container */}
+              <div style={{
+                position: 'relative',
+                width: '84px',
+                height: '84px',
+                transformStyle: 'preserve-3d',
+                transform: 'rotateX(58deg) rotateZ(-38deg)'
+              }}>
+                {/* Base Layer Plate */}
+                <div style={{
+                  position: 'absolute',
+                  width: '84px',
+                  height: '84px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.25) 0%, rgba(6, 182, 212, 0.1) 100%)',
+                  border: '1.5px solid rgba(14, 116, 144, 0.45)',
+                  boxShadow: '0 8px 24px rgba(14, 116, 144, 0.25), inset 0 0 14px rgba(6, 182, 212, 0.15)',
+                  backdropFilter: 'blur(4px)',
+                  transformStyle: 'preserve-3d',
+                  animation: 'isoFloatBottom 3s ease-in-out infinite'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    inset: '6px',
+                    borderRadius: '10px',
+                    border: '1px dashed rgba(14, 116, 144, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      border: '1.5px solid rgba(6, 182, 212, 0.6)',
+                      animation: 'isoPulseRing 2s ease-out infinite'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Middle Floating Plate */}
+                <div style={{
+                  position: 'absolute',
+                  top: '8px',
+                  left: '8px',
+                  width: '68px',
+                  height: '68px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.38) 0%, rgba(59, 130, 246, 0.18) 100%)',
+                  border: '1.5px solid rgba(6, 182, 212, 0.65)',
+                  boxShadow: '0 10px 24px rgba(6, 182, 212, 0.28), inset 0 0 12px rgba(255, 255, 255, 0.25)',
+                  transformStyle: 'preserve-3d',
+                  animation: 'isoFloatMiddle 3s ease-in-out infinite',
+                  animationDelay: '0.2s',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent)',
+                    animation: 'isoScanBeam 2.4s ease-in-out infinite'
+                  }} />
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '6px',
+                      border: '1.5px solid rgba(255,255,255,0.65)',
+                      transform: 'rotate(45deg)'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Top Apex Plate with Glowing Symbol */}
+                <div style={{
+                  position: 'absolute',
+                  top: '16px',
+                  left: '16px',
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #0E7490 0%, #06B6D4 100%)',
+                  border: '2px solid #FFFFFF',
+                  boxShadow: '0 14px 30px rgba(14, 116, 144, 0.45), 0 0 18px rgba(6, 182, 212, 0.65)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  transformStyle: 'preserve-3d',
+                  animation: 'isoFloatTop 3s ease-in-out infinite',
+                  animationDelay: '0.4s'
+                }}>
+                  <Layers size={22} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))' }} />
+                </div>
+              </div>
             </div>
 
             <div>
@@ -1905,7 +2202,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             || (piTab === 'Issued' && currentStatus === 'Issued')
             || (piTab === 'Converted to BOM' && currentStatus === 'Converted to BOM')
             || currentStatus === piTab;
-          return matchesSearch && matchesStatus && matchesTab;
+
+          // Date Range Matching
+          let matchesDateRange = true;
+          const rawDateStr = String(pi.piDate || pi.date || pi.created_time || pi.createdAt || '').trim();
+          let piIsoDate = '';
+          if (/^\d{4}-\d{2}-\d{2}/.test(rawDateStr)) {
+            piIsoDate = rawDateStr.slice(0, 10);
+          } else if (rawDateStr) {
+            const d = new Date(rawDateStr);
+            if (!isNaN(d.getTime())) {
+              piIsoDate = d.toISOString().slice(0, 10);
+            }
+          }
+
+          if (startDate && piIsoDate && piIsoDate < startDate) {
+            matchesDateRange = false;
+          }
+          if (endDate && piIsoDate && piIsoDate > endDate) {
+            matchesDateRange = false;
+          }
+
+          return matchesSearch && matchesStatus && matchesTab && matchesDateRange;
         });
 
         const indexOfLastRow = currentPage * rowsPerPage;
@@ -1986,9 +2304,34 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', cursor: 'pointer', backgroundColor: 'white', fontSize: '13px', color: '#475569' }}>
-                  <span>Date Range</span>
-                  <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
+                {/* Live Functional Date Range Picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 10px', height: '38px', backgroundColor: 'white' }}>
+                  <Calendar style={{ width: '14px', height: '14px', color: '#0E7490', flexShrink: 0 }} />
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
+                    title="From Date"
+                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', background: 'transparent', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}>to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
+                    title="To Date"
+                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', background: 'transparent', cursor: 'pointer' }}
+                  />
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
+                      title="Clear Date Range"
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b', padding: '2px', display: 'flex', alignItems: 'center' }}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
 
                 <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
@@ -1998,11 +2341,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </option>
                   ))}
                 </select>
-
-                <button style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 16px', height: '38px', cursor: 'pointer', backgroundColor: 'white', fontSize: '13px', fontWeight: '600', color: '#475569' }}>
-                  <Filter style={{ width: '14px', height: '14px', marginRight: '4px' }} />
-                  <span>Filters</span>
-                </button>
 
                 <button
                   onClick={clearFilters}
@@ -2076,11 +2414,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   </button>
                 ))}
               </div>
-
-              <button style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 14px', backgroundColor: 'white', fontSize: '13px', fontWeight: 'bold', color: '#475569', cursor: 'pointer', marginBottom: '8px', flexShrink: 0 }}>
-                <Download style={{ width: '14px', height: '14px' }} />
-                Export
-              </button>
             </div>
 
             {/* 3. MAIN DATA TABLE MATCHING EXACT REFERENCE DESIGN */}
@@ -2495,9 +2828,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               </div>
             </div>
 
-            {/* Floating Selection Toolbar (exact reference design) */}
             {/* Floating Selection Toolbar (Single line, direct action buttons, no 3-dot menu) */}
-            {selectedPIs.length > 0 && (
+            {selectedPIs.length > 0 && !selectedPi && !printModalPi && !validationAlert && (
               <div style={{
                 position: 'fixed',
                 bottom: '24px',
@@ -2528,10 +2860,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <button
                   onClick={() => {
                     if (selectedPIs.length > 1) {
-                      alert("You can't open details for multiple files at once. Please select a single item to view details.");
+                      showTopToast("You can't open details for multiple files at once. Please select a single item to view details.", 'error', 4000);
                       return;
                     }
                     const target = piList.find(p => p.piNo === selectedPIs[0]);
+                    setSelectedPIs([]);
                     if (target) setSelectedPi(target);
                   }}
                   style={{
@@ -2570,6 +2903,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     return (
                       <button
                         onClick={() => {
+                          setSelectedPIs([]);
                           window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
                             detail: { tab: 'Sales BOM', targetBom: firstBomCode } 
                           }));
@@ -2602,7 +2936,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                   return (
                     <button
-                      onClick={() => handleConvertToBom(target)}
+                      onClick={() => {
+                        setSelectedPIs([]);
+                        handleConvertToBom(target);
+                      }}
                       style={{
                         backgroundColor: '#4F46E5',
                         border: 'none',
@@ -2639,9 +2976,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <button
                       onClick={() => {
                         if (selectedPIs.length > 1) {
-                          alert('You cannot edit multiple items at once. Please select 1 item.');
+                          showTopToast('You cannot edit multiple items at once. Please select 1 item.', 'error', 4000);
                         } else if (selectedPIs.length === 1) {
                           const idx = piList.findIndex(p => p.piNo === targetPiNo);
+                          setSelectedPIs([]);
                           handleStartEdit(targetPi || { piNo: targetPiNo }, idx >= 0 ? idx : 0);
                         }
                       }}
@@ -2676,6 +3014,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     const target = (selectedPIs && selectedPIs.length > 0)
                       ? (piList.find(p => p.piNo === selectedPIs[0]) || { piNo: selectedPIs[0], vendor: 'Customer Reference' })
                       : null;
+                    setSelectedPIs([]);
                     if (target) {
                       setPrintModalPi(target);
                     } else {
@@ -2746,7 +3085,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   return (
                     <button
                       disabled={Boolean(syncingPiNo)}
-                      onClick={() => syncPiToZoho(targetPi)}
+                      onClick={() => {
+                        setSelectedPIs([]);
+                        syncPiToZoho(targetPi);
+                      }}
                       style={{
                         backgroundColor: '#F0FDFA',
                         border: '1px solid #A5F3FC',
@@ -2772,36 +3114,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     </button>
                   );
                 })()}
-
-                {/* Delete */}
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete ${selectedPIs.length} selected PI(s)?`)) {
-                      setSelectedPIs([]);
-                    }
-                  }}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    color: '#1E293B',
-                    borderRadius: '10px',
-                    padding: '6px 14px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                >
-                  <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
-                </button>
 
                 {/* Deselect All */}
                 <button
@@ -2877,31 +3189,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setPiConfirmModal('cancel')}
-                  style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={triggerDraftConfirm}
-                  style={{ border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.18)', padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer', backdropFilter: 'blur(4px)', transition: 'all 0.15s ease' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.28)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
-                >
-                  Save as Draft
-                </button>
-                <button
-                  type="button"
-                  onClick={triggerSaveConfirm}
-                  style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)' }}
-                >
-                  {viewMode === 'edit' ? 'Update & Release PI' : 'Save & Release PI'}
-                </button>
-              </div>
+
             </div>
 
             {/* SECTION 1: PI DETAILS & DATES */}
@@ -2993,7 +3281,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Sales Engineer / Creator
+                    Sales Executive
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -3627,37 +3915,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <option value="PAIR" />
                               </datalist>
                             </td>
-                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                {(() => {
-                                  const avail = getItemStock(item.name, item.code);
-                                  if (avail === null) {
-                                    return (
-                                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', letterSpacing: '0.2px' }}>
-                                        Stock: —
-                                      </span>
-                                    );
-                                  }
-                                  const isOut = avail <= 0;
-                                  return (
-                                    <span
-                                      title={`Available Stock: ${avail.toLocaleString()}`}
-                                      style={{
-                                        fontSize: '10.5px',
-                                        fontWeight: '800',
-                                        padding: '1px 7px',
-                                        borderRadius: '10px',
-                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
-                                        color: isOut ? '#DC2626' : '#059669',
-                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
-                                        whiteSpace: 'nowrap',
-                                        lineHeight: '1.3'
-                                      }}
-                                    >
-                                      Stock: {avail.toLocaleString()}
-                                    </span>
-                                  );
-                                })()}
+                            <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
+                              <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <input
                                   type="number"
                                   value={item.qty}
@@ -3666,8 +3925,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     const val = e.target.value;
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                                   }}
-                                  style={{ width: '100%', height: '34px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
+                                  title={(() => {
+                                    const avail = getItemStock(item.name, item.code);
+                                    return avail !== null ? `Available Stock: ${avail.toLocaleString()}` : '';
+                                  })()}
+                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
                                 />
+                                {(() => {
+                                  const avail = getItemStock(item.name, item.code);
+                                  if (avail === null || avail === undefined) return null;
+                                  const isOut = avail <= 0;
+                                  return (
+                                    <span
+                                      title={`Available Stock: ${avail.toLocaleString()}`}
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: '-15px',
+                                        fontSize: '9.5px',
+                                        fontWeight: '800',
+                                        padding: '1px 5px',
+                                        borderRadius: '6px',
+                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
+                                        color: isOut ? '#DC2626' : '#059669',
+                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
+                                        whiteSpace: 'nowrap',
+                                        lineHeight: '1.2',
+                                        pointerEvents: 'none'
+                                      }}
+                                    >
+                                      Stock: {avail.toLocaleString()}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px' }}>
@@ -3940,7 +4229,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           </div>
 
           {/* SIDE-BY-SIDE SECTIONS: 4 (VRM OFFICIAL COMMERCIAL BANK DETAILS - LEFT) & 5 (FINANCIAL BREAKDOWN - RIGHT) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '24px', alignItems: 'start' }}>
             
             {/* SECTION 4: VRM OFFICIAL COMMERCIAL BANK DETAILS (LEFT) */}
             <div style={{
@@ -3951,94 +4240,80 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
               gap: '16px'
             }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
-                      4
-                    </div>
-                    <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      VRM OFFICIAL COMMERCIAL BANK DETAILS
-                    </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                  4
+                </div>
+                <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  VRM OFFICIAL COMMERCIAL BANK DETAILS
+                </h3>
+              </div>
+
+              {/* Structured Bank Detail Cards */}
+              <div style={{ backgroundColor: '#F0FDFA', borderRadius: '12px', border: '1px solid #99F6E4', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Beneficiary Name Banner */}
+                <div style={{ paddingBottom: '10px', borderBottom: '1px solid #CCFBF1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Beneficiary Account Name</div>
+                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>VRM Structures India Private Limited</div>
                   </div>
-                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #A5F3FC', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <Landmark size={13} color="#0E7490" /> Verified Settlement Account
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '6px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <ShieldCheck size={13} /> Verified
                   </span>
                 </div>
 
-                {/* Structured Bank Detail Cards */}
-                <div style={{ backgroundColor: '#F0FDFA', borderRadius: '12px', border: '1px solid #99F6E4', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {/* Beneficiary Name Banner */}
-                  <div style={{ paddingBottom: '10px', borderBottom: '1px solid #CCFBF1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Beneficiary Account Name</div>
-                      <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>VRM Structures India Private Limited</div>
-                    </div>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '6px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <ShieldCheck size={13} /> Verified
-                    </span>
+                {/* Bank Name & Account Type Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Bank Name</div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>HDFC Bank</div>
                   </div>
-
-                  {/* Bank Name & Account Type Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Bank Name</div>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>HDFC Bank</div>
-                    </div>
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Account Type</div>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>Current Account</div>
-                    </div>
-                  </div>
-
-                  {/* Account Number & IFSC with Copy Buttons */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>Current Account Number</div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
-                        title="Copy Account Number"
-                        style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                      >
-                        {copiedBankField === 'Account Number' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                      </button>
-                    </div>
-
-                    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>RTGS / NEFT / IFSC</div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>HDFC0007315</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyBankDetail('HDFC0007315', 'IFSC Code')}
-                        title="Copy IFSC Code"
-                        style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                      >
-                        {copiedBankField === 'IFSC Code' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Branch Location */}
-                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span><strong>Branch:</strong> Vinayagapuram Branch</span>
-                    <span style={{ color: '#0E7490', fontSize: '10px', fontWeight: '700' }}>Settlement: INR (₹)</span>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Account Type</div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '2px' }}>Current Account</div>
                   </div>
                 </div>
-              </div>
 
-              {/* Settlement Notice */}
-              <div style={{ fontSize: '11.5px', color: '#0E7490', padding: '10px 14px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={15} style={{ color: '#0E7490', flexShrink: 0 }} />
-                <span>Please transfer advance & milestone payments to this account. Quote PI Number in remittance remarks for instant reconciliation.</span>
+                {/* Account Number & IFSC with Copy Buttons */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>Current Account Number</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>50200031629272</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyBankDetail('50200031629272', 'Account Number')}
+                      title="Copy Account Number"
+                      style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    >
+                      {copiedBankField === 'Account Number' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #99F6E4', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase' }}>RTGS / NEFT / IFSC</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace', letterSpacing: '0.5px', marginTop: '2px' }}>HDFC0007315</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyBankDetail('HDFC0007315', 'IFSC Code')}
+                      title="Copy IFSC Code"
+                      style={{ border: '1px solid #99F6E4', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    >
+                      {copiedBankField === 'IFSC Code' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branch Location */}
+                <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #CCFBF1', borderRadius: '8px', padding: '8px 12px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span><strong>Branch:</strong> Vinayagapuram Branch</span>
+                  <span style={{ color: '#0E7490', fontSize: '10px', fontWeight: '700' }}>Settlement: INR (₹)</span>
+                </div>
               </div>
             </div>
 
@@ -4089,12 +4364,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <span>₹{totals.sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
-                  {(totals.gstTiers || []).map(tier => (
-                    <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#475569' }}>
-                      <span>IGST ({tier.rate}%):</span>
-                      <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  ))}
+                  {/* Dynamic GST Tiers Breakdown */}
+                  {totals.isIntra ? (
+                    (totals.gstTiers || []).map(tier => (
+                      <React.Fragment key={tier.rate}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                          <span>CGST ({tier.cgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.cgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                          <span>SGST ({tier.sgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.sgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    (totals.gstTiers || []).map(tier => (
+                      <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                        <span>IGST ({tier.rate}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                        <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    ))
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '7px 12px', borderRadius: '8px' }}>
                     <span>Total GST Amount:</span>
@@ -4122,92 +4413,77 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
               </div>
 
-              {/* Action Buttons Column / Grid */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={previewCurrentFormAsTemplate}
-                    style={{
-                      height: '42px',
-                      borderRadius: '10px',
-                      backgroundColor: '#ECFEFF',
-                      color: '#0E7490',
-                      border: '1.5px solid #A5F3FC',
-                      fontSize: '12.5px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Printer size={15} /> Preview Print / PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={triggerDraftConfirm}
-                    style={{
-                      height: '42px',
-                      borderRadius: '10px',
-                      backgroundColor: '#FFFFFF',
-                      color: '#0E7490',
-                      border: '1.5px solid #0E7490',
-                      fontSize: '12.5px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Save as Draft
-                  </button>
-                </div>
-
+              {/* Action Buttons in a Single Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setPiConfirmModal('cancel')}
+                  style={{
+                    height: '42px',
+                    borderRadius: '10px',
+                    backgroundColor: '#F8FAFC',
+                    color: '#64748B',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#334155'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
+                >
+                  Discard Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={triggerDraftConfirm}
+                  style={{
+                    height: '42px',
+                    borderRadius: '10px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#0E7490',
+                    border: '1.5px solid #0E7490',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                >
+                  Save as Draft
+                </button>
                 <button
                   type="button"
                   onClick={triggerSaveConfirm}
                   style={{
-                    width: '100%',
-                    height: '46px',
+                    height: '42px',
                     borderRadius: '10px',
                     backgroundColor: '#10B981',
                     color: 'white',
                     border: 'none',
-                    fontSize: '14px',
+                    fontSize: '12.5px',
                     fontWeight: '900',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     boxShadow: '0 4px 10px rgba(16, 185, 129, 0.35)',
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.15s ease'
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
                 >
                   Confirm & Save Proforma Invoice
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPiConfirmModal('cancel')}
-                  style={{
-                    width: '100%',
-                    height: '36px',
-                    borderRadius: '10px',
-                    backgroundColor: 'transparent',
-                    color: '#64748B',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '12.5px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  Discard Changes
                 </button>
               </div>
             </div>
@@ -4268,6 +4544,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             modalGstTiersMap[rate].gstAmt += amt;
           });
         }
+
+        const modalTargetGst = selectedPi.gstin || selectedPi.gstNo || selectedPi.gst || '';
+        const modalTargetState = (isSame ? bState : (dState || bState)) || selectedPi.state || '';
+        const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
 
         const modalGstTiers = Object.values(modalGstTiersMap)
           .filter(t => t.gstAmt > 0 || t.taxable > 0)
@@ -4790,7 +5070,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 {/* 4b. Attached Document / Signed PI Doc (if present) */}
-                {(selectedPi.signedPiDoc || selectedPi.pdfName || selectedPi.pdfFile) && (
+                {Boolean(selectedPi.signedPiDoc?.dataUrl || (selectedPi.pdfName && selectedPi.pdfName !== 'pi_document.pdf' && selectedPi.signedPiDoc)) && (
                   <div style={{ backgroundColor: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '14px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -4798,7 +5078,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </div>
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                          {selectedPi.signedPiDoc?.name || selectedPi.pdfName || 'Signed Proforma Invoice Document'}
+                          {selectedPi.signedPiDoc?.name || selectedPi.pdfName}
                         </div>
                         <div style={{ fontSize: '11px', color: '#64748B' }}>
                           {selectedPi.signedPiDoc?.size ? `${Math.round(selectedPi.signedPiDoc.size / 1024)} KB • ` : ''}
@@ -4843,12 +5123,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </div>
                     )}
                     {modalGstTiers.length > 0 ? (
-                      modalGstTiers.map(tier => (
-                        <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                          <span>IGST ({tier.rate}%):</span>
-                          <strong style={{ color: '#0F172A' }}>₹ {tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                        </div>
-                      ))
+                      isModalIntra ? (
+                        modalGstTiers.map(tier => (
+                          <React.Fragment key={tier.rate}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
+                              <span>CGST ({(tier.rate / 2)}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
+                              <strong style={{ color: '#0F172A' }}>₹ {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
+                              <span>SGST ({(tier.rate / 2)}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
+                              <strong style={{ color: '#0F172A' }}>₹ {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                            </div>
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        modalGstTiers.map(tier => (
+                          <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '12.5px', paddingLeft: '4px' }}>
+                            <span>IGST ({tier.rate}%){modalGstTiers.length > 1 ? ` (${tier.rate}% items)` : ''}:</span>
+                            <strong style={{ color: '#0F172A' }}>₹ {tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                          </div>
+                        ))
+                      )
                     ) : (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
                         <span>Applicable GST (Taxes):</span>
@@ -4915,13 +5210,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   {selectedPi.status !== 'Cancelled' && !isConverted && (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm(`Are you sure you want to mark Proforma Invoice ${selectedPi.piNo} as Cancelled?`)) {
-                          const updated = piList.map(p => p.piNo === selectedPi.piNo ? { ...p, status: 'Cancelled', statusType: 'cancelled' } : p);
-                          updatePiList(updated);
-                          setSelectedPi(null);
-                        }
-                      }}
+                      disabled={cancellingPiNo === selectedPi.piNo}
+                      onClick={() => handleCancelPi(selectedPi)}
                       style={{
                         padding: '10px 16px',
                         borderRadius: '10px',
@@ -4930,10 +5220,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         color: '#DC2626',
                         fontSize: '13px',
                         fontWeight: '700',
-                        cursor: 'pointer'
+                        cursor: cancellingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
+                        opacity: cancellingPiNo === selectedPi.piNo ? 0.7 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
                       }}
                     >
-                      Cancel PI
+                      {cancellingPiNo === selectedPi.piNo ? 'Cancelling in Zoho...' : 'Cancel PI'}
                     </button>
                   )}
 

@@ -3456,9 +3456,43 @@ export const wordFingerprint = (str) => {
   return Array.from(new Set(words)).sort().join('_');
 };
 
+export const CANONICAL_PRODUCT_ALIASES = {
+  'MR40N': 'MR40',
+  'MR60N': 'MR60',
+  'FG-6732': 'MR125',
+  'FG-5185': 'MR120',
+  'FG-6731': 'MR100',
+  'FG-4272': 'ANM10*100',
+  'FG-5057': 'ANM10*100',
+  'FG-0234': 'ANM10*100',
+  'FG-8184': 'HP3600',
+  'FG-5184': 'HP3600',
+  'FG-4569': 'HP2485',
+  'FG-9681': 'ABD540',
+  'FG-5068': 'DHT40',
+  'FG-3914': 'WTD610',
+  'FG-8311': 'WTD585',
+  'FG-9323': 'ABD545',
+  'FG-4484': 'ABD555',
+  'FG-5845': 'RC40',
+  'FG-5846': 'CB3000',
+  'FG-0472': 'AM8*50',
+  'FG-4621': 'CP3000',
+  'FG-4047': 'HP3035',
+  'FG-7997': 'WTD580',
+  'FG-7998': 'EPC6',
+  'FG-7999': 'MC4',
+  'FG-1041': 'PS4',
+  'FG-7910': 'MR40',
+  'FG-8001': 'MR60',
+  'FG-7244': 'MR100O',
+  'FG-8886': 'MR100O'
+};
+
 export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
   if (!item) return '';
-  const direct = String(item.code || item.sku || '').trim().toUpperCase();
+  const rawDirect = String(item.code || item.sku || '').trim().toUpperCase();
+  const direct = CANONICAL_PRODUCT_ALIASES[rawDirect] || rawDirect;
   if (direct && direct !== 'VRM-ITEM' && direct !== 'ITEM' && !direct.startsWith('FG-')) {
     return direct;
   }
@@ -3473,7 +3507,12 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
     const mm = mrMatch[1];
     if (mm === '300') return 'MR-300MM';
     if (cleanStr.includes('old')) return ('MR' + mm + 'O').toUpperCase();
-    if (cleanStr.includes('new')) return ('MR' + mm + 'N').toUpperCase();
+    if (mm === '40') return 'MR40';
+    if (mm === '60') return 'MR60';
+    if (mm === '125') return 'MR125';
+    if (mm === '120') return 'MR120';
+    if (mm === '75') return 'MR75';
+    if (cleanStr.includes('new') && mm === '100') return 'MR100N';
     return ('MR' + mm).toUpperCase();
   }
   if (cleanStr.includes('mini rail') && (cleanStr.includes('300 mm') || cleanStr.includes('300mm') || cleanStr.includes('- 300'))) {
@@ -3505,13 +3544,19 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
     p.name.toLowerCase().trim() === rawName.toLowerCase().trim() ||
     normalizeProductName(p.name) === normRaw
   ));
-  if (exact && exact.code) return exact.code.toUpperCase();
+  if (exact && exact.code) {
+    const c = exact.code.toUpperCase();
+    return CANONICAL_PRODUCT_ALIASES[c] || c;
+  }
 
   // 2. Word fingerprint match
   const fp = wordFingerprint(rawName);
   if (fp) {
     const fpMatch = productsList.find(p => p.name && wordFingerprint(p.name) === fp);
-    if (fpMatch && fpMatch.code) return fpMatch.code.toUpperCase();
+    if (fpMatch && fpMatch.code) {
+      const c = fpMatch.code.toUpperCase();
+      return CANONICAL_PRODUCT_ALIASES[c] || c;
+    }
   }
 
   // 3. Clean parenthetical variations (e.g. "(300mm)", "(100mm)", "new", "old")
@@ -3523,7 +3568,10 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
         const pNorm = normalizeProductName(p.name.replace(/\([^)]*\)/g, '').replace(/\b(new|old|nos|mm)\b/gi, ''));
         return pNorm && normStripped && (pNorm === normStripped || (normStripped.length >= 5 && (pNorm.includes(normStripped) || normStripped.includes(pNorm))));
       });
-      if (stripMatch && stripMatch.code) return stripMatch.code.toUpperCase();
+      if (stripMatch && stripMatch.code) {
+        const c = stripMatch.code.toUpperCase();
+        return CANONICAL_PRODUCT_ALIASES[c] || c;
+      }
     }
   }
 
@@ -3535,10 +3583,19 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
       return (pCode && pCode.length >= 2 && normRaw === pCode) ||
              (pNorm && normRaw.length >= 5 && (normRaw.includes(pNorm) || pNorm.includes(normRaw)));
     });
-    if (subMatch && subMatch.code) return subMatch.code.toUpperCase();
+    if (subMatch && subMatch.code) {
+      const c = subMatch.code.toUpperCase();
+      return CANONICAL_PRODUCT_ALIASES[c] || c;
+    }
   }
 
-  return direct || '';
+  return CANONICAL_PRODUCT_ALIASES[direct] || direct || '';
+};
+
+export default {
+  VRM_PRODUCTS,
+  wordFingerprint,
+  resolveProductCode
 };
 
 
