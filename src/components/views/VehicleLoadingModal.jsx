@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Trash2, X, CheckCircle, Phone, UploadCloud, Truck, Package,
-  Upload, Camera, Image, Video, Film, Loader2, FileText
+  Upload, Camera, Image, Loader2, FileText
 } from "lucide-react";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
@@ -34,27 +34,6 @@ function VehicleMediaImg({ photo, bomCode, onClick }) {
   );
 }
 
-function VehicleMediaVideo({ video, bomCode }) {
-  const [resolvedSrc, setResolvedSrc] = useState(video.url || video.dataUrl || '');
-  useEffect(() => {
-    let active = true;
-    if (!resolvedSrc && (video.storageBucket || video.storagePath)) {
-      resolveDocumentUrlAsync(video, bomCode).then(url => {
-        if (active && url) setResolvedSrc(url);
-      });
-    }
-    return () => { active = false; };
-  }, [video, bomCode, resolvedSrc]);
-
-  return (
-    <video
-      controls
-      src={resolvedSrc}
-      style={{ width: '100%', height: '180px', backgroundColor: '#0F172A', objectFit: 'contain' }}
-    />
-  );
-}
-
 export default function VehicleLoadingModal({
   vehicleLoadingModal,
   onClose,
@@ -82,9 +61,7 @@ export default function VehicleLoadingModal({
     lrNo: existingLoading.lrNo || "LR-881204",
     sealNo: existingLoading.sealNo || "SL-884920"
   });
-  const [loadingMediaMode, setLoadingMediaMode] = useState('photo'); // 'photo' | 'video' | 'camera'
   const [loadingPhotos, setLoadingPhotos] = useState([]);
-  const [loadingVideos, setLoadingVideos] = useState([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
@@ -131,7 +108,7 @@ export default function VehicleLoadingModal({
   const seal = vehicleLoadingData.sealNo || existingLoading.sealNo || 'SL-884920';
 
 const currentPhotos = loadingPhotos.length > 0 ? loadingPhotos : (existingLoading.photos || []);
-const currentVideos = loadingVideos.length > 0 ? loadingVideos : (existingLoading.videos || []);
+const currentVideos = existingLoading.videos || [];
 
 const packedItems = (bom.dispatchPacking && Array.isArray(bom.dispatchPacking) && bom.dispatchPacking.length > 0)
   ? bom.dispatchPacking.filter(p => Boolean(p.packed))
@@ -165,39 +142,6 @@ const handleAddPhotoFiles = async (files) => {
     console.error('Photo upload error:', err);
     setUploadError(err.message || 'Failed to upload photo');
     alert(`Failed to upload photo: ${err.message}`);
-  } finally {
-    setUploadingMedia(false);
-  }
-};
-
-const handleAddVideoFiles = async (files) => {
-  if (!files || files.length === 0) return;
-  setUploadingMedia(true);
-  setUploadError('');
-  try {
-    for (const file of Array.from(files)) {
-      validateClientFile(file);
-      const metadata = await uploadBomDocumentFile({
-        file,
-        bomCode: bCode,
-        category: 'dispatch/videos'
-      });
-      const newVideo = {
-        id: `video_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: metadata.originalName || file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-        storageBucket: metadata.storageBucket,
-        storagePath: metadata.storagePath,
-        mimeType: metadata.mimeType,
-        uploadedAt: metadata.uploadedAt,
-        recordedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      };
-      setLoadingVideos(prev => [...prev, newVideo]);
-    }
-  } catch (err) {
-    console.error('Video upload error:', err);
-    setUploadError(err.message || 'Failed to upload video');
-    alert(`Failed to upload video: ${err.message}`);
   } finally {
     setUploadingMedia(false);
   }
@@ -282,8 +226,8 @@ const handleFinalizeVehicleLoading = () => {
       alert('⚠️ Please enter the Vehicle / Lorry Registration Number before completing dispatch!');
       return;
     }
-    if (currentPhotos.length === 0 && currentVideos.length === 0) {
-      alert('⚠️ Verification Photo/Video Mandatory!\n\nPlease capture or upload at least one loading photo or video of the vehicle before finalizing.');
+    if (currentPhotos.length === 0) {
+      alert('⚠️ Verification Photo Mandatory!\n\nPlease capture or upload at least one loading photo of the vehicle before finalizing.');
       return;
     }
   }
@@ -707,214 +651,117 @@ return (
           )}
         </div>
 
-        {/* 3. Vehicle Loading Proof Media (Photos & Videos Verification - CRITICAL) */}
+        {/* 3. Vehicle Loading Proof Photos (Mandatory Verification) */}
         <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Camera size={18} style={{ color: '#4F46E5' }} />
                 <span style={{ fontSize: '15px', fontWeight: '900', color: '#0F172A' }}>
-                  Vehicle Loading Proof Media (Photos & Videos)
+                  Vehicle Loading Proof Photos
                 </span>
               </div>
               <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-                Capture or upload live media of packed items placed inside vehicle.
+                Capture or upload live photos of packed items placed inside vehicle.
               </p>
             </div>
 
-            {/* Mode selector */}
-            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setLoadingMediaMode('photo')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', border: 'none',
-                  backgroundColor: loadingMediaMode === 'photo' ? '#FFFFFF' : 'transparent',
-                  color: loadingMediaMode === 'photo' ? '#4F46E5' : '#64748B',
-                  fontSize: '12px', fontWeight: '800', cursor: 'pointer',
-                  boxShadow: loadingMediaMode === 'photo' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                <Image size={14} /> Photos ({currentPhotos.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoadingMediaMode('video')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', border: 'none',
-                  backgroundColor: loadingMediaMode === 'video' ? '#FFFFFF' : 'transparent',
-                  color: loadingMediaMode === 'video' ? '#4F46E5' : '#64748B',
-                  fontSize: '12px', fontWeight: '800', cursor: 'pointer',
-                  boxShadow: loadingMediaMode === 'video' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                <Video size={14} /> Videos ({currentVideos.length})
-              </button>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              backgroundColor: '#EEF2FF',
+              color: '#4F46E5',
+              fontSize: '12px',
+              fontWeight: '800'
+            }}>
+              <Image size={14} /> Photos ({currentPhotos.length})
             </div>
           </div>
 
           {/* PHOTOS PANE */}
-          {loadingMediaMode === 'photo' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {!isReadOnly && (
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <label style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '8px',
-                    backgroundColor: '#4F46E5', color: '#FFFFFF',
-                    padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                    cursor: 'pointer', boxShadow: '0 2px 6px rgba(79,70,229,0.3)'
-                  }}>
-                    <UploadCloud size={16} /> Upload Loading Photos
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleAddPhotoFiles(e.target.files)}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {!isReadOnly && (
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  backgroundColor: '#4F46E5', color: '#FFFFFF',
+                  padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', boxShadow: '0 2px 6px rgba(79,70,229,0.3)'
+                }}>
+                  <UploadCloud size={16} /> Upload Loading Photos
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAddPhotoFiles(e.target.files)}
+                  />
+                </label>
+
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  backgroundColor: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0',
+                  padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', boxShadow: '0 2px 6px rgba(22,101,52,0.15)'
+                }}>
+                  <Camera size={16} /> 📸 Capture Live Camera Photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAddPhotoFiles(e.target.files)}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Uploading indicator */}
+            {uploadingMedia && (
+              <div style={{ padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #06B6D4', borderRadius: '8px', color: '#0E7490', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Loader2 size={16} className="animate-spin" /> Uploading media files to secure storage...
+              </div>
+            )}
+
+            {/* Photo Grid Gallery */}
+            {currentPhotos.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '14px' }}>
+                {currentPhotos.map((p, pIdx) => (
+                  <div key={p.id || pIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                    <VehicleMediaImg
+                      photo={p}
+                      bomCode={bCode}
+                      onClick={(resolvedUrl) => setActiveMediaPreviewModal({ type: 'image', url: resolvedUrl, name: p.name, bomCode: bCode })}
                     />
-                  </label>
-
-                  <label style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '8px',
-                    backgroundColor: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0',
-                    padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                    cursor: 'pointer', boxShadow: '0 2px 6px rgba(22,101,52,0.15)'
-                  }}>
-                    <Camera size={16} /> 📸 Capture Live Camera Photo
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleAddPhotoFiles(e.target.files)}
-                    />
-                  </label>
-                </div>
-              )}
-
-              {/* Uploading indicator */}
-              {uploadingMedia && (
-                <div style={{ padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #06B6D4', borderRadius: '8px', color: '#0E7490', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Loader2 size={16} className="animate-spin" /> Uploading media files to secure storage...
-                </div>
-              )}
-
-              {/* Photo Grid Gallery */}
-              {currentPhotos.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '14px' }}>
-                  {currentPhotos.map((p, pIdx) => (
-                    <div key={p.id || pIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                      <VehicleMediaImg
-                        photo={p}
-                        bomCode={bCode}
-                        onClick={(resolvedUrl) => setActiveMediaPreviewModal({ type: 'image', url: resolvedUrl, name: p.name, bomCode: bCode })}
-                      />
-                      <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
-                          <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                          <div style={{ fontSize: '10px', color: '#64748B' }}>{p.size || '1.2 MB'} • {p.capturedAt || 'Verified'}</div>
-                        </div>
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => setLoadingPhotos(prev => prev.filter((_, idx) => idx !== pIdx))}
-                            style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+                    <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontSize: '10px', color: '#64748B' }}>{p.size || '1.2 MB'} • {p.capturedAt || 'Verified'}</div>
                       </div>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => setLoadingPhotos(prev => prev.filter((_, idx) => idx !== pIdx))}
+                          style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ border: '2px dashed #CBD5E1', borderRadius: '14px', padding: '28px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', backgroundColor: '#FAFAFA' }}>
-                  <Camera size={32} style={{ color: '#94A3B8' }} />
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#475569' }}>No vehicle loading photos uploaded yet</div>
-                  <div style={{ fontSize: '11px', color: '#94A3B8' }}>Take or upload photos of packed boxes and mounting rails inside the lorry.</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* VIDEOS PANE */}
-          {loadingMediaMode === 'video' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {!isReadOnly && (
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <label style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '8px',
-                    backgroundColor: '#0284C7', color: '#FFFFFF',
-                    padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                    cursor: 'pointer', boxShadow: '0 2px 6px rgba(2,132,199,0.3)'
-                  }}>
-                    <UploadCloud size={16} /> Upload Loading Video
-                    <input
-                      type="file"
-                      accept="video/*,.mp4,.webm,.mov"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleAddVideoFiles(e.target.files)}
-                    />
-                  </label>
-
-                  <label style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '8px',
-                    backgroundColor: '#EFF6FF', color: '#1E40AF', border: '1px solid #BFDBFE',
-                    padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                    cursor: 'pointer'
-                  }}>
-                    <Video size={16} /> 🎥 Record Live Camera Video
-                    <input
-                      type="file"
-                      accept="video/*"
-                      capture="environment"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleAddVideoFiles(e.target.files)}
-                    />
-                  </label>
-                </div>
-              )}
-
-              {/* Uploading indicator */}
-              {uploadingMedia && (
-                <div style={{ padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #06B6D4', borderRadius: '8px', color: '#0E7490', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Loader2 size={16} className="animate-spin" /> Uploading media files to secure storage...
-                </div>
-              )}
-
-              {/* Video Player Gallery */}
-              {currentVideos.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-                  {currentVideos.map((vid, vIdx) => (
-                    <div key={vid.id || vIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-                      <VehicleMediaVideo video={vid} bomCode={bCode} />
-                      <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>{vid.name}</div>
-                          <div style={{ fontSize: '10px', color: '#64748B' }}>{vid.size || '3.5 MB'} • Recorded {vid.recordedAt}</div>
-                        </div>
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => setLoadingVideos(prev => prev.filter((_, idx) => idx !== vIdx))}
-                            style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ border: '2px dashed #CBD5E1', borderRadius: '14px', padding: '28px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', backgroundColor: '#FAFAFA' }}>
-                  <Film size={32} style={{ color: '#94A3B8' }} />
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#475569' }}>No loading video recorded yet</div>
-                  <div style={{ fontSize: '11px', color: '#94A3B8' }}>Record video of the vehicle loading process for physical dispatch audit.</div>
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ border: '2px dashed #CBD5E1', borderRadius: '14px', padding: '28px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', backgroundColor: '#FAFAFA' }}>
+                <Camera size={32} style={{ color: '#94A3B8' }} />
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#475569' }}>No vehicle loading photos uploaded yet</div>
+                <div style={{ fontSize: '11px', color: '#94A3B8' }}>Take or upload photos of packed boxes and mounting rails inside the lorry.</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -943,7 +790,6 @@ return (
             onClick={() => {
               onClose();
               setLoadingPhotos([]);
-              setLoadingVideos([]);
             }}
             style={{ padding: '10px 18px', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
           >
