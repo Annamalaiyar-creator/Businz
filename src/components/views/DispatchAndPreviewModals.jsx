@@ -159,15 +159,28 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 }
 
 export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
-  if (!activeMediaPreviewModal) return null;
-
-  const initialUrl = (activeMediaPreviewModal.url && !activeMediaPreviewModal.url.startsWith('blob:'))
-    ? activeMediaPreviewModal.url
-    : (activeMediaPreviewModal.dataUrl || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id) || activeMediaPreviewModal.url || '');
+  const initialUrl = activeMediaPreviewModal?.url ||
+    activeMediaPreviewModal?.dataUrl ||
+    activeMediaPreviewModal?.previewUrl ||
+    (activeMediaPreviewModal?.name ? getMediaFromCache(activeMediaPreviewModal.name) : '') ||
+    (activeMediaPreviewModal?.id ? getMediaFromCache(activeMediaPreviewModal.id) : '') ||
+    '';
 
   const [mediaUrl, setMediaUrl] = React.useState(initialUrl);
 
   React.useEffect(() => {
+    if (!activeMediaPreviewModal) return;
+    const direct = activeMediaPreviewModal.url ||
+      activeMediaPreviewModal.dataUrl ||
+      activeMediaPreviewModal.previewUrl ||
+      getMediaFromCache(activeMediaPreviewModal.name) ||
+      getMediaFromCache(activeMediaPreviewModal.id) ||
+      '';
+
+    if (direct) {
+      setMediaUrl(direct);
+    }
+
     if (activeMediaPreviewModal.storageBucket && activeMediaPreviewModal.storagePath) {
       resolveDocumentUrlAsync(activeMediaPreviewModal, activeMediaPreviewModal.bomCode || activeMediaPreviewModal.storagePath.split('/')[0])
         .then(url => {
@@ -177,13 +190,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
       return;
     }
 
-    const direct = (activeMediaPreviewModal.url && !activeMediaPreviewModal.url.startsWith('blob:'))
-      ? activeMediaPreviewModal.url
-      : (activeMediaPreviewModal.dataUrl || getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id) || '');
-    if (direct) {
-      setMediaUrl(direct);
-      return;
-    }
+    if (direct) return;
 
     const docName = activeMediaPreviewModal.name || activeMediaPreviewModal.id;
     if (docName) {
@@ -198,6 +205,12 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
         .catch(() => {});
     }
   }, [activeMediaPreviewModal]);
+
+  if (!activeMediaPreviewModal) return null;
+
+  const isPdf = activeMediaPreviewModal.type === 'pdf' ||
+    (activeMediaPreviewModal.name && activeMediaPreviewModal.name.toLowerCase().endsWith('.pdf')) ||
+    (mediaUrl && (mediaUrl.toLowerCase().includes('.pdf') || mediaUrl.startsWith('data:application/pdf')));
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100005 }}>
@@ -250,6 +263,12 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
             >
               Your browser does not support playing this video.
             </video>
+          ) : isPdf ? (
+            <iframe
+              src={mediaUrl}
+              title={activeMediaPreviewModal.name || "PDF Document Preview"}
+              style={{ width: '100%', height: '72vh', border: 'none', borderRadius: '10px', backgroundColor: '#FFFFFF' }}
+            />
           ) : (
             <img
               src={mediaUrl}
