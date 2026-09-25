@@ -570,7 +570,9 @@ function App() {
             <MaterialCalculationEngine onBack={() => handleTabChange('BOM')} />
           ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
             <InventoryAutoConversion />
-          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Sales & CRM' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard') ? (
+          ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
+            <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard') ? (
             <OtherViews 
               activeTab={activeTab} 
               onChangeTab={handleTabChange} 
@@ -583,8 +585,6 @@ function App() {
               itemsList={itemsList}
               purchaseOrders={purchaseOrders}
             />
-          ) : (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head')) ? (
-            <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
             <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (activeTab === 'Dashboard' && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
