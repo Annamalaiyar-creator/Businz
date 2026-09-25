@@ -626,11 +626,24 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             'confirmed',
             'packed & ready for dispatch',
             'partially packed',
-            'closed',
             'dispatch packing verified - sent to accounts',
             'awaiting vehicle loading & dispatch'
           ].some(s => st.includes(s));
-          if (isSentToDispatch && !st.includes('cancel') && !st.includes('restored')) {
+
+          // A BOM that is completed or already deducted has physically dispatched goods, so its reservation is RELEASED
+          const isCompletedOrDeducted = Boolean(
+            b.fullyCompleted ||
+            (b.vehicleLoading && (b.vehicleLoading.fullyCompleted || b.vehicleLoading.loadedAt)) ||
+            st === 'completed' ||
+            st === 'closed' ||
+            st.includes('completed') ||
+            st.includes('closed') ||
+            st.includes('fully dispatched') ||
+            st.includes('delivered') ||
+            st.includes('awaiting lr copy')
+          );
+
+          if (isSentToDispatch && !isCompletedOrDeducted && !st.includes('cancel') && !st.includes('restored')) {
             (b.items || []).forEach(it => {
               const q = parseFloat(it.qty || it.bomQty || 0) || 0;
               if (q > 0) {
@@ -680,15 +693,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         if (allocated > 0) {
           finalReserved = allocated;
           rem = Math.max(0, totalPhysical - allocated);
-        } else if (m.stock !== undefined && m.reserved !== undefined && Number(m.reserved) > 0 && Number(m.stock) + Number(m.reserved) === totalPhysical) {
-          rem = Number(m.stock);
-          finalReserved = Number(m.reserved);
         } else {
-          rem = Math.max(0, totalPhysical - (Number(m.reserved) || 0));
+          finalReserved = 0;
+          rem = (m.stock !== undefined && Number(m.stock) >= 0) ? Number(m.stock) : totalPhysical;
         }
 
         m.openingStock = base;
-        m.physicalStock = totalPhysical;
+        m.physicalStock = Math.max(totalPhysical, rem);
         m.stock = rem;
         m.availableStock = rem;
         m.reserved = finalReserved;

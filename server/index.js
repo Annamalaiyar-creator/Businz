@@ -4491,13 +4491,24 @@ const reconcileServerInventoryWithBoms = async (bomsList = null) => {
         'confirmed',
         'packed & ready for dispatch',
         'partially packed',
-        'closed',
         'dispatch packing verified - sent to accounts',
         'awaiting vehicle loading & dispatch'
       ].some(s => st.includes(s));
 
-      // ONLY deduct stock when BOM is completed and sent to dispatch
-      if (isSentToDispatch && !st.includes('cancel') && !st.includes('stock restored')) {
+      const isCompletedOrDeducted = Boolean(
+        b?.fullyCompleted ||
+        (b?.vehicleLoading && (b?.vehicleLoading.fullyCompleted || b?.vehicleLoading.loadedAt)) ||
+        st === 'completed' ||
+        st === 'closed' ||
+        st.includes('completed') ||
+        st.includes('closed') ||
+        st.includes('fully dispatched') ||
+        st.includes('delivered') ||
+        st.includes('awaiting lr copy')
+      );
+
+      // ONLY allocate active reserved stock when BOM is in progress and NOT yet completed or dispatched
+      if (isSentToDispatch && !isCompletedOrDeducted && !st.includes('cancel') && !st.includes('stock restored')) {
         (b?.items || []).forEach(it => {
           const q = parseFloat(it?.qty || it?.bomQty || 0) || 0;
           if (q > 0) {
@@ -8155,7 +8166,7 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
         mat.stock = newStock;
         mat.physicalStock = newStock;
         mat.availableStock = newStock;
-        mat.reserved = (parseFloat(mat.reserved) || 0) + qty;
+        mat.reserved = Math.max(0, (parseFloat(mat.reserved) || 0) - qty);
         mat.blockedForBom = mat.reserved;
         mat.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user || 'System'}`;
         deductedList.push({ code: mat.code, name: mat.name, deducted: qty, remaining: newStock });
@@ -8179,7 +8190,7 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
         itMatch.stock = newStock;
         itMatch.physicalStock = newStock;
         itMatch.availableStock = newStock;
-        itMatch.reserved = (parseFloat(itMatch.reserved) || 0) + qty;
+        itMatch.reserved = Math.max(0, (parseFloat(itMatch.reserved) || 0) - qty);
       }
     });
 
