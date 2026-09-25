@@ -98,6 +98,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
         { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
         { label: 'Delivery Challans', icon: FileCheck },
+        { label: 'Items Directory', icon: Boxes },
         { label: 'Inventory', icon: Warehouse },
         { label: 'Raw Material Directory', icon: Layers }
       ]
@@ -221,6 +222,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'BOM Orders', icon: GitBranch },
             { label: 'Proforma Invoice', icon: Receipt },
+            { label: 'Items Directory', icon: Boxes },
             { label: 'Inventory Stores', icon: Warehouse },
             { label: 'Raw Material Directory', icon: Layers }
           ]

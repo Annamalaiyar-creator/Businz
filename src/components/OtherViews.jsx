@@ -126,16 +126,7 @@ export default function OtherViews(props) {
           )
         )}
         {activeTab === 'Price Comparison' && <PriceComparisonView {...props} />}
-        {activeTab === 'Items Directory' && (
-          (userRole === 'Sales Head' || userRole === 'Sales Executive') ? (
-            <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
-              <p style={{ fontSize: '13px', color: '#64748B' }}>Items & Materials Catalog is restricted for Sales accounts.</p>
-            </div>
-          ) : (
-            <ItemsDirectoryView {...props} />
-          )
-        )}
+        {activeTab === 'Items Directory' && <ItemsDirectoryView {...props} />}
         {(activeTab === 'Procurement Reports' || activeTab === 'Spend Reports' || activeTab === 'Supplier Reports') && <ProcurementReportsView {...props} />}
         {(activeTab === 'Dispatch Dashboard' || (userRole === 'Dispatch Head' && activeTab === 'Dashboard')) && <DispatchDashboardView {...props} />}
 

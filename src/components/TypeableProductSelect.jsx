@@ -370,32 +370,10 @@ export default function TypeableProductSelect({
               const isSelected = (value || '').toLowerCase() === (prod.name || '').toLowerCase();
               const isHighlighted = highlightedIndex === idx;
               let stockNum = Number(
-                prod.stock !== undefined ? prod.stock :
-                (prod.availableStock !== undefined ? prod.availableStock : 0)
+                prod.availableStock !== undefined ? prod.availableStock :
+                (prod.stock !== undefined ? prod.stock : (prod.physicalStock || 0))
               );
-              const pCodeL = String(prod.code || '').toLowerCase().trim();
-              const pNameL = String(prod.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
-              const isMr300 = (pCodeL === 'mr-300mm' || pCodeL === 'mr300') ||
-                ((pNameL.includes('mini rail') || pNameL.includes('minirail')) && (pNameL.includes('300') || pNameL === 'mini rail'));
-
-              if (isMr300) {
-                if (stockNum <= 0 || stockNum >= 5000) {
-                  try {
-                    const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
-                    if (rawSaved) {
-                      const rawList = JSON.parse(rawSaved);
-                      const rf = (rawList || []).find(r => r.code === 'MR-300MM' || r.code === 'MR300');
-                      if (rf) {
-                        const s = Number(rf.availableStock !== undefined ? rf.availableStock : (rf.stock !== undefined ? rf.stock : (rf.physicalStock || 0)));
-                        if (s > 0 && s < 5000) stockNum = s;
-                      }
-                    }
-                  } catch (_) {}
-                  if (stockNum <= 0 || stockNum >= 5000) stockNum = 1800;
-                }
-              } else if (stockNum >= 5000) {
-                stockNum = 0;
-              }
+              if (isNaN(stockNum) || stockNum < 0) stockNum = 0;
               const isOutOfStock = stockNum <= 0;
               const uom = prod.uom || prod.unit || 'NOS';
               const price = prod.price || prod.rate || null;

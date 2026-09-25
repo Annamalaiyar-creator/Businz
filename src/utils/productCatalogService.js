@@ -90,10 +90,10 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     const rawBal = findInStore(rawStoreMap);
     const centralBal = findInStore(stockMap);
 
-    if (rawBal !== null && !isNaN(rawBal) && rawBal < 5000) {
+    if (rawBal !== null && !isNaN(rawBal)) {
       realStock = Math.max(0, rawBal);
       baseStock = realStock;
-    } else if (centralBal !== null && !isNaN(centralBal) && centralBal < 5000) {
+    } else if (centralBal !== null && !isNaN(centralBal)) {
       realStock = Math.max(0, centralBal);
       baseStock = realStock;
     } else {
