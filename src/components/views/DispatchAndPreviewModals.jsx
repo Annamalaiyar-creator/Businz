@@ -49,23 +49,6 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
               </div>
             </div>
 
-            {/* Media Storage & Location Info Panel */}
-            <div style={{ backgroundColor: '#F1F5F9', borderRadius: '14px', border: '1px solid #CBD5E1', padding: '14px 18px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase' }}>
-                  📁 Media Storage & Audit Information
-                </div>
-                <span style={{ fontSize: '10px', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '8px', fontWeight: '800' }}>
-                  Synced & Quota-Protected
-                </span>
-              </div>
-              <div style={{ fontSize: '12px', color: '#334155', lineHeight: '1.4' }}>
-                • <strong>Storage Target:</strong> LocalStorage + Cache API (<code style={{ color: '#0E7490', backgroundColor: '#E0F2FE', padding: '1px 4px', borderRadius: '4px' }}>controlroom_media_cache</code>)<br />
-                • <strong>Loading Photos:</strong> {completedBomSummaryModal.vehicleLoading?.photos?.length || 0} files captured<br />
-                • <strong>Loading Videos:</strong> {completedBomSummaryModal.vehicleLoading?.videos?.length || 0} files captured<br />
-                • <strong>Timestamp:</strong> {completedBomSummaryModal.vehicleLoading?.loadedTimeStr || new Date().toLocaleString()}
-              </div>
-            </div>
 
             {/* Customer Sharing Actions (WhatsApp / Email) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -213,7 +196,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
     (mediaUrl && (mediaUrl.toLowerCase().includes('.pdf') || mediaUrl.startsWith('data:application/pdf')));
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100005 }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000005 }}>
       <div style={{ maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '850px', alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>

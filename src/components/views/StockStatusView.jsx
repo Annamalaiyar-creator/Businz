@@ -29,6 +29,7 @@ export default function StockStatusView(props) {
   } = props;
 
   const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
+  const isDispatchUser = userRole === 'Dispatch Head' || String(userRole || '').toLowerCase().includes('dispatch');
 
   // Common states
   const [searchQuery, setSearchQuery] = useState('');
@@ -1335,6 +1336,8 @@ export default function StockStatusView(props) {
     }
     const headers = isSalesUser
       ? ['Material / SKU', 'Code', 'Product Type', 'Category', 'Warehouse', 'Available Qty', 'Reserved Qty', 'Status']
+      : isDispatchUser
+      ? ['Material / SKU', 'Code', 'Product Type', 'Category', 'Warehouse', 'Available Qty', 'Reserved Qty', 'Incoming Qty', 'Reorder Level', 'Status']
       : ['Material / SKU', 'Code', 'Product Type', 'Category', 'Warehouse', 'Available Qty', 'Reserved Qty', 'Incoming Qty', 'Reorder Level', 'Stock Value', 'Status'];
 
     const rows = rowsToExport.map(r => {
@@ -1347,6 +1350,20 @@ export default function StockStatusView(props) {
           `"${String(r.location || '').replace(/"/g, '""')}"`,
           `"${String(r.stock || '0').replace(/"/g, '""')}"`,
           `"${String(r.allocated || '0').replace(/"/g, '""')}"`,
+          `"${String(r.status || '').replace(/"/g, '""')}"`
+        ];
+      }
+      if (isDispatchUser) {
+        return [
+          `"${String(r.item || '').replace(/"/g, '""')}"`,
+          `"${String(r.code || '').replace(/"/g, '""')}"`,
+          `"${String(r.productType || 'Finished Goods').replace(/"/g, '""')}"`,
+          `"${String(r.category || '').replace(/"/g, '""')}"`,
+          `"${String(r.location || '').replace(/"/g, '""')}"`,
+          `"${String(r.stock || '0').replace(/"/g, '""')}"`,
+          `"${String(r.allocated || '0').replace(/"/g, '""')}"`,
+          `"${String(r.incoming || '0').replace(/"/g, '""')}"`,
+          `"${String(r.minLevel || '0').replace(/"/g, '""')}"`,
           `"${String(r.status || '').replace(/"/g, '""')}"`
         ];
       }
@@ -2309,14 +2326,20 @@ export default function StockStatusView(props) {
             if (Array.isArray(bomStore)) {
               bomStore.forEach(b => {
                 const bStatus = String(b.status || '').toLowerCase();
-                const isSentToDispatch = Boolean(b.salesConfirmed) || [
+                const isCompletedOrDeducted = Boolean(b.stockDeducted) ||
+                  Boolean(b.fullyCompleted) ||
+                  Boolean(b.lifecycleCompleted) ||
+                  Boolean(b.vehicleLoading?.completed) ||
+                  Boolean(b.vehicleLoading?.loaded) ||
+                  Boolean(b.vehicleLoading?.fullyCompleted) ||
+                  ['completed', 'delivered', 'closed', 'shipped', 'dispatched'].some(s => bStatus.includes(s));
+                const isSentToDispatch = !isCompletedOrDeducted && (Boolean(b.salesConfirmed) || [
                   'sales confirmed - sent to dispatch',
                   'sent to production',
                   'confirmed',
                   'packed & ready for dispatch',
-                  'partially packed',
-                  'closed'
-                ].some(s => bStatus.includes(s));
+                  'partially packed'
+                ].some(s => bStatus.includes(s)));
                 if (isSentToDispatch && !bStatus.includes('cancelled') && !bStatus.includes('stock restored')) {
                   (b.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
@@ -2371,8 +2394,7 @@ export default function StockStatusView(props) {
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
                 (itNorm && bomReservedMap.get(itNorm)) || 0,
                 (nameKey && bomReservedMap.get(nameKey)) || 0,
-                (itFp && bomReservedMap.get(itFp)) || 0,
-                Number(matchedMat?.reserved || it.reserved || 0)
+                (itFp && bomReservedMap.get(itFp)) || 0
               );
               let availableQty = Math.max(0, physicalBase - activeBlocked);
               if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
@@ -2514,20 +2536,27 @@ export default function StockStatusView(props) {
           {/* Bottom Row: Stock Status List Table (Full Width) */}
           {(() => {
             const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
+            const isDispatchUser = userRole === 'Dispatch Head' || String(userRole || '').toLowerCase().includes('dispatch');
 
-            // 1. Calculate reserved quantities ONLY from completed BOMs sent to dispatch (PIs never reserve stock)
+            // 1. Calculate reserved quantities ONLY from active BOMs sent to dispatch (completed/deducted BOMs release reservation)
             const bomReservedMap = new Map();
             if (Array.isArray(bomStore)) {
               bomStore.forEach(b => {
                 const bStatus = String(b.status || '').toLowerCase();
-                const isSentToDispatch = Boolean(b.salesConfirmed) || [
+                const isCompletedOrDeducted = Boolean(b.stockDeducted) ||
+                  Boolean(b.fullyCompleted) ||
+                  Boolean(b.lifecycleCompleted) ||
+                  Boolean(b.vehicleLoading?.completed) ||
+                  Boolean(b.vehicleLoading?.loaded) ||
+                  Boolean(b.vehicleLoading?.fullyCompleted) ||
+                  ['completed', 'delivered', 'closed', 'shipped', 'dispatched'].some(s => bStatus.includes(s));
+                const isSentToDispatch = !isCompletedOrDeducted && (Boolean(b.salesConfirmed) || [
                   'sales confirmed - sent to dispatch',
                   'sent to production',
                   'confirmed',
                   'packed & ready for dispatch',
-                  'partially packed',
-                  'closed'
-                ].some(s => bStatus.includes(s));
+                  'partially packed'
+                ].some(s => bStatus.includes(s)));
                 if (isSentToDispatch && !bStatus.includes('cancelled') && !bStatus.includes('stock restored') && bStatus !== 'delivered') {
                   (b.items || []).forEach(pItem => {
                     const qty = parseFloat(pItem.qty || pItem.bomQty || 0) || 0;
@@ -2620,8 +2649,7 @@ export default function StockStatusView(props) {
                 (codeKey && bomReservedMap.get(codeKey)) || 0,
                 (itNorm && bomReservedMap.get(itNorm)) || 0,
                 (nameKey && bomReservedMap.get(nameKey)) || 0,
-                (itFp && bomReservedMap.get(itFp)) || 0,
-                Number(matchedMat?.reserved || it.reserved || 0)
+                (itFp && bomReservedMap.get(itFp)) || 0
               );
               let availableQty = Math.max(0, physicalBase - activeBlocked);
               if (matchedMat && matchedMat.stock !== undefined && !isNaN(matchedMat.stock) && Number(matchedMat.stock) > 0) {
@@ -3010,7 +3038,7 @@ export default function StockStatusView(props) {
                         {!isSalesUser && (
                           <th style={{ padding: '12px 14px', width: '110px', minWidth: '110px', textAlign: 'center' }}>Reorder Level</th>
                         )}
-                        {!isSalesUser && (
+                        {!isSalesUser && !isDispatchUser && (
                           <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px', textAlign: 'right' }}>Stock Value (₹)</th>
                         )}
                         <th style={{ padding: '12px 14px', width: '125px', minWidth: '125px', textAlign: 'center' }}>Status</th>
@@ -3019,7 +3047,7 @@ export default function StockStatusView(props) {
                     <tbody>
                       {displayedRows.length === 0 ? (
                         <tr>
-                          <td colSpan={isSalesUser ? 9 : 12} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748B' }}>
+                          <td colSpan={isSalesUser ? 9 : (isDispatchUser ? 11 : 12)} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748B' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                               <Package style={{ width: '32px', height: '32px', color: '#94A3B8' }} />
                               <strong style={{ color: '#334155' }}>No stock items match the selected criteria</strong>
@@ -3145,7 +3173,7 @@ export default function StockStatusView(props) {
                                   {row.minLevel}
                                 </td>
                               )}
-                              {!isSalesUser && (
+                              {!isSalesUser && !isDispatchUser && (
                                 <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
                                   {row.val}
                                 </td>
@@ -3542,7 +3570,7 @@ export default function StockStatusView(props) {
                               <strong style={{ fontSize: '13px', color: '#0F172A' }}>{viewingStockItem.minLevel} NOS</strong>
                             </div>
                           )}
-                          {!isSalesUser && (
+                          {!isSalesUser && !isDispatchUser && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
                               <span style={{ fontSize: '13px', color: '#64748B' }}>Total Stock Valuation</span>
                               <strong style={{ fontSize: '13px', color: '#0F172A' }}>{viewingStockItem.val}</strong>

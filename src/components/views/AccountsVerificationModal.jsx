@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
-  UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image
+  UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
+  Loader2, ExternalLink
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -1090,309 +1091,429 @@ export default function AccountsVerificationModal({
       )}
 
       {/* ─── RECORDED PAYMENT PROOF DOCUMENT VIEWER MODAL ─── */}
-      {viewingProofDocModal && (() => {
-        const rawProof = viewingProofDocModal.paymentProofDoc ||
-          viewingProofDocModal.payments?.proofDocObj ||
-          viewingProofDocModal.payments?.proofDoc ||
-          viewingProofDocModal.proofDoc ||
-          viewingProofDocModal.salesPoDetails?.proofDocObj;
-        
-        let docName = null;
-        if (rawProof) {
-          if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
-            if (rawProof !== 'Payment_Proof_Receipt.pdf' && rawProof !== 'Payment_Proof_Receipt.jpg') {
-              docName = rawProof;
-            }
-          } else if (rawProof.name && rawProof.name !== 'Payment_Proof_Receipt.pdf' && rawProof.name !== 'Payment_Proof_Receipt.jpg') {
-            docName = rawProof.name;
+      {viewingProofDocModal && (
+        <RecordedProofViewerModal
+          viewingProofDocModal={viewingProofDocModal}
+          onClose={() => setViewingProofDocModal(null)}
+          initialResolvedUrl={resolvedProofDataUrl}
+          custNameText={custNameText}
+          orderValue={orderValue}
+          payTypeText={payTypeText}
+        />
+      )}
+    </div>
+  );
+}
+
+function RecordedProofViewerModal({
+  viewingProofDocModal,
+  onClose,
+  initialResolvedUrl,
+  custNameText,
+  orderValue,
+  payTypeText
+}) {
+  const [docUrl, setDocUrl] = useState(initialResolvedUrl || null);
+  const [loading, setLoading] = useState(!initialResolvedUrl);
+
+  const rawProof = viewingProofDocModal.paymentProofDoc ||
+    viewingProofDocModal.payments?.proofDocObj ||
+    viewingProofDocModal.payments?.proofDoc ||
+    viewingProofDocModal.proofDoc ||
+    viewingProofDocModal.salesPoDetails?.proofDocObj;
+
+  let docName = null;
+  if (rawProof) {
+    if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
+      if (rawProof !== 'Payment_Proof_Receipt.pdf' && rawProof !== 'Payment_Proof_Receipt.jpg') {
+        docName = rawProof;
+      }
+    } else if (rawProof.name && rawProof.name !== 'Payment_Proof_Receipt.pdf' && rawProof.name !== 'Payment_Proof_Receipt.jpg') {
+      docName = rawProof.name;
+    }
+  }
+  if (!docName && viewingProofDocModal.paymentProofDocName && viewingProofDocModal.paymentProofDocName !== 'Payment_Proof_Receipt.jpg' && viewingProofDocModal.paymentProofDocName !== 'Payment_Proof_Receipt.pdf') {
+    docName = viewingProofDocModal.paymentProofDocName;
+  }
+
+  const bCode = viewingProofDocModal.bomCode || viewingProofDocModal.code || 'BOM-2026';
+  const cName = viewingProofDocModal.customerName || viewingProofDocModal.companyName || custNameText;
+  const amtVal = parseFloat(viewingProofDocModal.grandTotal || orderValue || 0);
+  const pType = viewingProofDocModal.paymentType || payTypeText || '100% Advance';
+
+  useEffect(() => {
+    let active = true;
+
+    // 1. Direct synchronous values
+    let direct = (typeof rawProof === 'string' && rawProof.startsWith('data:'))
+      ? rawProof
+      : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || viewingProofDocModal.proofDocData || viewingProofDocModal.payments?.proofDocData || null);
+    if (!direct && docName) {
+      direct = getMediaFromCache(docName);
+    }
+    if (direct) {
+      setDocUrl(direct);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const resolveAsync = async () => {
+      // 2. Storage resolver
+      if (rawProof && (rawProof.storageBucket || rawProof.storagePath)) {
+        try {
+          const url = await resolveDocumentUrlAsync(rawProof, bCode);
+          if (active && url) {
+            setDocUrl(url);
+            if (docName) saveMediaToCache(docName, url);
+            setLoading(false);
+            return;
           }
-        }
-        if (!docName && viewingProofDocModal.paymentProofDocName && viewingProofDocModal.paymentProofDocName !== 'Payment_Proof_Receipt.jpg' && viewingProofDocModal.paymentProofDocName !== 'Payment_Proof_Receipt.pdf') {
-          docName = viewingProofDocModal.paymentProofDocName;
-        }
+        } catch (_) {}
+      }
 
-        let pDocDataUrl = resolvedProofDataUrl || ((typeof rawProof === 'string' && rawProof.startsWith('data:'))
-          ? rawProof
-          : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || viewingProofDocModal.proofDocData || viewingProofDocModal.payments?.proofDocData || null));
-        if (!pDocDataUrl && docName) {
-          pDocDataUrl = getMediaFromCache(docName);
-        }
-        const bCode = viewingProofDocModal.bomCode || viewingProofDocModal.code || 'BOM-2026';
-        const cName = viewingProofDocModal.customerName || viewingProofDocModal.companyName || custNameText;
-        const amtVal = parseFloat(viewingProofDocModal.grandTotal || orderValue || 0);
-        const pType = viewingProofDocModal.paymentType || payTypeText || '100% Advance';
+      // 3. Media cache async
+      if (docName) {
+        try {
+          const cUrl = await getMediaFromCacheAsync(docName);
+          if (active && cUrl) {
+            setDocUrl(cUrl);
+            setLoading(false);
+            return;
+          }
+        } catch (_) {}
 
-        return (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.7)',
-            backdropFilter: 'blur(6px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 10000,
-            padding: '20px',
-            fontFamily: "'DM Sans', sans-serif"
-          }}>
+        // 4. Server find API
+        try {
+          const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
+          const data = await res.json();
+          if (active && data?.found && data?.url) {
+            setDocUrl(data.url);
+            saveMediaToCache(docName, data.url);
+            setLoading(false);
+            return;
+          }
+        } catch (_) {}
+      }
+
+      if (active) setLoading(false);
+    };
+
+    resolveAsync();
+    return () => { active = false; };
+  }, [viewingProofDocModal, docName, bCode]);
+
+  const isPdf = Boolean(
+    (docName && docName.toLowerCase().endsWith('.pdf')) ||
+    (rawProof && rawProof.type === 'application/pdf') ||
+    (docUrl && (docUrl.toLowerCase().includes('.pdf') || docUrl.startsWith('data:application/pdf')))
+  );
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 2000005,
+      padding: '20px',
+      fontFamily: "'DM Sans', sans-serif"
+    }}>
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: '20px',
+        maxWidth: '740px',
+        width: '100%',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
+        overflow: 'hidden',
+        border: '1px solid #E2E8F0',
+        display: 'flex',
+        flexDirection: 'column',
+        maxHeight: '92vh'
+      }}>
+        {/* Modal Header */}
+        <div style={{
+          padding: '18px 24px',
+          borderBottom: '1px solid #F1F5F9',
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)',
+          color: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '20px',
-              maxWidth: '680px',
-              width: '100%',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
-              overflow: 'hidden',
-              border: '1px solid #E2E8F0',
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: '92vh'
+              width: '38px', height: '38px', borderRadius: '10px',
+              background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(37,99,235,0.3)'
             }}>
-              {/* Modal Header */}
-              <div style={{
-                padding: '18px 24px',
-                borderBottom: '1px solid #F1F5F9',
-                background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)',
-                color: '#FFFFFF',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '38px', height: '38px', borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 2px 6px rgba(37,99,235,0.3)'
-                  }}>
-                    <Receipt style={{ width: '20px', height: '20px', color: '#FFFFFF' }} />
-                  </div>
-                  <div>
-                    <h2 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#FFFFFF' }}>
-                      Recorded Payment Proof Document
-                    </h2>
-                    <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>
-                      {docName} • {bCode} • {cName}
-                    </p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => window.print()}
-                    title="Print Receipt"
-                    style={{
-                      background: 'rgba(255,255,255,0.12)', border: 'none',
-                      color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                  >
-                    <Printer style={{ width: '16px', height: '16px' }} />
-                  </button>
-                  <button
-                    onClick={() => setViewingProofDocModal(null)}
-                    style={{
-                      background: 'rgba(255,255,255,0.12)', border: 'none',
-                      color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                  >
-                    <X style={{ width: '18px', height: '18px' }} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Modal Body: Document Viewer Sheet */}
-              <div style={{ padding: '24px', overflowY: 'auto', flex: 1, backgroundColor: '#F8FAFC' }}>
-                {pDocDataUrl ? (
-                  /* User Uploaded Image Preview */
-                  <div style={{
-                    borderRadius: '14px', overflow: 'hidden', border: '1px solid #E2E8F0',
-                    backgroundColor: '#FFFFFF', padding: '12px', textAlign: 'center'
-                  }}>
-                    <img
-                      src={pDocDataUrl}
-                      alt="Payment Proof Attachment"
-                      style={{ maxWidth: '100%', maxHeight: '420px', objectFit: 'contain', borderRadius: '8px' }}
-                    />
-                  </div>
-                ) : (
-                  /* Official E-Payment Remittance Receipt Paper Card */
-                  <div style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: '16px',
-                    border: '1px solid #CBD5E1',
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
-                    padding: '28px',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}>
-                    {/* Watermark */}
-                    <div style={{
-                      position: 'absolute', top: '45%', left: '50%',
-                      transform: 'translate(-50%, -50%) rotate(-25deg)',
-                      fontSize: '48px', fontWeight: '900', color: 'rgba(37,99,235,0.04)',
-                      whiteSpace: 'nowrap', pointerEvents: 'none', userSelect: 'none', zIndex: 0
-                    }}>
-                      PAYMENT CLEARED
-                    </div>
-
-                    {/* Bank Receipt Header */}
-                    <div style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                      borderBottom: '2px solid #0F172A', paddingBottom: '16px', position: 'relative', zIndex: 1
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#2563EB', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                          HDFC BANK CORPORATE E-PAYMENT
-                        </div>
-                        <div style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A', marginTop: '2px' }}>
-                          Electronic Funds Transfer Advice
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                          RBI RTGS / NEFT Inter-Bank Settlement System
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '5px',
-                          padding: '5px 12px', borderRadius: '20px',
-                          backgroundColor: '#DCFCE7', color: '#166534',
-                          fontSize: '12px', fontWeight: '800', border: '1px solid #BBF7D0'
-                        }}>
-                          <CheckCircle style={{ width: '14px', height: '14px' }} />
-                          TRANSACTION CLEARED
-                        </span>
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>
-                          Ref: TXN-{Date.now().toString().slice(-8)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Key Highlights Banner */}
-                    <div style={{
-                      margin: '18px 0', padding: '14px 18px', borderRadius: '12px',
-                      backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      position: 'relative', zIndex: 1
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
-                          Amount Credited & Verified
-                        </div>
-                        <div style={{ fontSize: '22px', fontWeight: '900', color: '#1E40AF', marginTop: '2px' }}>
-                          ₹ {amtVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
-                          Payment Terms
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
-                          {pType}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Transaction Details Grid */}
-                    <div style={{
-                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
-                      fontSize: '12px', position: 'relative', zIndex: 1,
-                      padding: '16px 0', borderBottom: '1px solid #E2E8F0'
-                    }}>
-                      <div>
-                        <div style={{ color: '#64748B', fontWeight: '600' }}>Remitter (Customer):</div>
-                        <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', marginTop: '2px' }}>{cName}</div>
-                        <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11px' }}>A/C: ••••••••5812 (HDFC Bank)</div>
-                      </div>
-
-                      <div>
-                        <div style={{ color: '#64748B', fontWeight: '600' }}>Beneficiary Legal Entity:</div>
-                        <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', marginTop: '2px' }}>CONTROLROOM INDUSTRIAL MANUFACTURING PVT LTD</div>
-                        <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11px' }}>A/C: ••••••••4821 • IFSC: HDFC0001092</div>
-                      </div>
-
-                      <div>
-                        <div style={{ color: '#64748B', fontWeight: '600' }}>UTR / Reference Number:</div>
-                        <div style={{ color: '#0F172A', fontWeight: '800', fontFamily: 'monospace', fontSize: '13px', marginTop: '2px' }}>
-                          HDFCR520260818{Date.now().toString().slice(-6)}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ color: '#64748B', fontWeight: '600' }}>Value Date & Time:</div>
-                        <div style={{ color: '#0F172A', fontWeight: '700', marginTop: '2px' }}>
-                          {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, 09:15:30 AM IST
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ color: '#64748B', fontWeight: '600' }}>Target Bill of Materials (BOM):</div>
-                        <div style={{ color: '#2563EB', fontWeight: '800', marginTop: '2px' }}>{bCode}</div>
-                      </div>
-
-                      <div>
-                        <div style={{ color: '#64748B', fontWeight: '600' }}>Recorded File Name:</div>
-                        <div style={{ color: '#0F172A', fontWeight: '700', marginTop: '2px' }}>{docName}</div>
-                      </div>
-                    </div>
-
-                    {/* Stamp and Accounts Signatory Block */}
-                    <div style={{
-                      marginTop: '20px', display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'center', position: 'relative', zIndex: 1
-                    }}>
-                      {/* Verified Stamp */}
-                      <div style={{
-                        border: '2px solid #16A34A', borderRadius: '10px',
-                        padding: '8px 16px', display: 'inline-flex', flexDirection: 'column',
-                        alignItems: 'center', transform: 'rotate(-4deg)', backgroundColor: 'rgba(220, 252, 231, 0.4)'
-                      }}>
-                        <span style={{ fontSize: '11px', fontWeight: '900', color: '#166534', letterSpacing: '1px' }}>
-                          ACCOUNTS VERIFIED
-                        </span>
-                        <span style={{ fontSize: '9px', fontWeight: '700', color: '#15803D' }}>
-                          CONTROLROOM PVT LTD
-                        </span>
-                      </div>
-
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>Arun (Accounts Officer)</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>Finance & Accounts Dept</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer */}
-              <div style={{
-                padding: '16px 24px',
-                backgroundColor: '#FFFFFF',
-                borderTop: '1px solid #E2E8F0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <span style={{ fontSize: '12px', color: '#64748B' }}>
-                  Digitally sealed electronic transaction advice
-                </span>
-                <button
-                  onClick={() => setViewingProofDocModal(null)}
-                  style={{
-                    border: 'none',
-                    backgroundColor: '#0F172A',
-                    color: '#FFFFFF',
-                    height: '38px',
-                    padding: '0 22px',
-                    borderRadius: '9px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Close Viewer
-                </button>
-              </div>
+              <Receipt style={{ width: '20px', height: '20px', color: '#FFFFFF' }} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#FFFFFF' }}>
+                Recorded Payment Proof Document
+              </h2>
+              <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>
+                {docName || 'Payment Proof Attachment'} • {bCode} • {cName}
+              </p>
             </div>
           </div>
-        );
-      })()}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {docUrl && (
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={docName || 'Payment_Proof'}
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  color: '#FFFFFF',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <ExternalLink style={{ width: '14px', height: '14px' }} /> Open / Download
+              </a>
+            )}
+            <button
+              onClick={() => window.print()}
+              title="Print Receipt"
+              style={{
+                background: 'rgba(255,255,255,0.12)', border: 'none',
+                color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              <Printer style={{ width: '16px', height: '16px' }} />
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,255,255,0.12)', border: 'none',
+                color: '#FFFFFF', width: '34px', height: '34px', borderRadius: '8px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              <X style={{ width: '18px', height: '18px' }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Body: Document Viewer Sheet */}
+        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, backgroundColor: '#F8FAFC' }}>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
+              <Loader2 className="animate-spin" size={36} style={{ color: '#2563EB' }} />
+              <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Loading Payment Proof Document...</div>
+              <div style={{ fontSize: '12px', color: '#64748B' }}>{docName || 'Fetching attachment'}</div>
+            </div>
+          ) : docUrl ? (
+            isPdf ? (
+              <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E2E8F0', height: '500px' }}>
+                <iframe src={docUrl} title="Payment Proof PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
+              </div>
+            ) : (
+              <div style={{
+                borderRadius: '14px', overflow: 'hidden', border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF', padding: '16px', textAlign: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'center', alignItems: 'center'
+              }}>
+                <img
+                  src={docUrl}
+                  alt="Payment Proof Attachment"
+                  style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain', borderRadius: '8px' }}
+                />
+              </div>
+            )
+          ) : (
+            /* Official E-Payment Remittance Receipt Paper Card (Fallback if no attachment was provided) */
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #CBD5E1',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+              padding: '28px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              {/* Watermark */}
+              <div style={{
+                position: 'absolute', top: '45%', left: '50%',
+                transform: 'translate(-50%, -50%) rotate(-25deg)',
+                fontSize: '48px', fontWeight: '900', color: 'rgba(37,99,235,0.04)',
+                whiteSpace: 'nowrap', pointerEvents: 'none', userSelect: 'none', zIndex: 0
+              }}>
+                PAYMENT CLEARED
+              </div>
+
+              {/* Bank Receipt Header */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                borderBottom: '2px solid #0F172A', paddingBottom: '16px', position: 'relative', zIndex: 1
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '800', color: '#2563EB', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                    BUSINZ CORPORATE E-PAYMENT
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A', marginTop: '2px' }}>
+                    Electronic Funds Transfer Advice
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                    RBI RTGS / NEFT Inter-Bank Settlement System
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                    padding: '5px 12px', borderRadius: '20px',
+                    backgroundColor: '#DCFCE7', color: '#166534',
+                    fontSize: '12px', fontWeight: '800', border: '1px solid #BBF7D0'
+                  }}>
+                    <CheckCircle style={{ width: '14px', height: '14px' }} />
+                    TRANSACTION CLEARED
+                  </span>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>
+                    Ref: TXN-{Date.now().toString().slice(-8)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Highlights Banner */}
+              <div style={{
+                margin: '18px 0', padding: '14px 18px', borderRadius: '12px',
+                backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                position: 'relative', zIndex: 1
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
+                    Amount Credited & Verified
+                  </div>
+                  <div style={{ fontSize: '22px', fontWeight: '900', color: '#1E40AF', marginTop: '2px' }}>
+                    ₹ {amtVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
+                    Payment Terms
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
+                    {pType}
+                  </div>
+                </div>
+              </div>
+
+              {/* Transaction Details Grid */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
+                fontSize: '12px', position: 'relative', zIndex: 1,
+                padding: '16px 0', borderBottom: '1px solid #E2E8F0'
+              }}>
+                <div>
+                  <div style={{ color: '#64748B', fontWeight: '600' }}>Remitter (Customer):</div>
+                  <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', marginTop: '2px' }}>{cName}</div>
+                  <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11px' }}>A/C: ••••••••5812 (HDFC Bank)</div>
+                </div>
+
+                <div>
+                  <div style={{ color: '#64748B', fontWeight: '600' }}>Beneficiary Legal Entity:</div>
+                  <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', marginTop: '2px' }}>BUSINZ INDUSTRIAL MANUFACTURING PVT LTD</div>
+                  <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11px' }}>A/C: ••••••••4821 • IFSC: HDFC0001092</div>
+                </div>
+
+                <div>
+                  <div style={{ color: '#64748B', fontWeight: '600' }}>UTR / Reference Number:</div>
+                  <div style={{ color: '#0F172A', fontWeight: '800', fontFamily: 'monospace', fontSize: '13px', marginTop: '2px' }}>
+                    HDFCR520260818{Date.now().toString().slice(-6)}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ color: '#64748B', fontWeight: '600' }}>Value Date & Time:</div>
+                  <div style={{ color: '#0F172A', fontWeight: '700', marginTop: '2px' }}>
+                    {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, 09:15:30 AM IST
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ color: '#64748B', fontWeight: '600' }}>Target Bill of Materials (BOM):</div>
+                  <div style={{ color: '#2563EB', fontWeight: '800', marginTop: '2px' }}>{bCode}</div>
+                </div>
+
+                <div>
+                  <div style={{ color: '#64748B', fontWeight: '600' }}>Recorded File Name:</div>
+                  <div style={{ color: '#0F172A', fontWeight: '700', marginTop: '2px' }}>{docName || 'Electronic Transfer Record'}</div>
+                </div>
+              </div>
+
+              {/* Stamp and Accounts Signatory Block */}
+              <div style={{
+                marginTop: '20px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', position: 'relative', zIndex: 1
+              }}>
+                {/* Verified Stamp */}
+                <div style={{
+                  border: '2px solid #16A34A', borderRadius: '10px',
+                  padding: '8px 16px', display: 'inline-flex', flexDirection: 'column',
+                  alignItems: 'center', transform: 'rotate(-4deg)', backgroundColor: 'rgba(220, 252, 231, 0.4)'
+                }}>
+                  <span style={{ fontSize: '11px', fontWeight: '900', color: '#166534', letterSpacing: '1px' }}>
+                    ACCOUNTS VERIFIED
+                  </span>
+                  <span style={{ fontSize: '9px', fontWeight: '700', color: '#15803D' }}>
+                    BUSINZ PVT LTD
+                  </span>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>Arun (Accounts Officer)</div>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Finance & Accounts Dept</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{
+          padding: '16px 24px',
+          backgroundColor: '#FFFFFF',
+          borderTop: '1px solid #E2E8F0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>
+            {docUrl ? 'Official verified payment proof attachment' : 'Digitally sealed electronic transaction advice'}
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              border: 'none',
+              backgroundColor: '#0F172A',
+              color: '#FFFFFF',
+              height: '38px',
+              padding: '0 22px',
+              borderRadius: '9px',
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            Close Viewer
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

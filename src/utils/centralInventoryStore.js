@@ -78,6 +78,8 @@ class CentralInventoryStore {
                 'awaiting vehicle loading & dispatch'
               ].some(s => st.includes(s));
               const isCompletedOrDeducted = Boolean(
+                b?.stockDeducted ||
+                b?.lifecycleCompleted ||
                 b?.fullyCompleted ||
                 (b?.vehicleLoading && (b?.vehicleLoading.fullyCompleted || b?.vehicleLoading.loadedAt)) ||
                 st === 'completed' ||

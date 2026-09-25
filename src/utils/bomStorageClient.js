@@ -13,6 +13,7 @@
 
 import { resolveDocumentUrlAsync, invalidateDocumentUrlCache } from './documentResolver.js';
 import { supabase } from '../supabaseClient.js';
+import { saveMediaToCache } from './mediaUtils.js';
 
 export const MAX_FILE_SIZE = 52428800; // 50 MB
 
@@ -103,6 +104,9 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
 
   const { mime } = validateClientFile(file);
   const dataUrl = await readFileAsDataUrl(file);
+  if (file && file.name && dataUrl) {
+    saveMediaToCache(file.name, dataUrl);
+  }
   const sessionId = getActiveSessionId();
 
   const headers = {

@@ -7,6 +7,8 @@ import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../util
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
+import { getMediaFromCache, saveMediaToCache } from "../../utils/mediaUtils";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve) => {
@@ -137,6 +139,7 @@ export default function VehicleLoadingModal({
 }) {
   const bom = vehicleLoadingModal;
   const existingLoading = bom.vehicleLoading || {};
+  const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
 
   const [deliveryMode, setDeliveryMode] = useState(
     bom.deliveryMode || existingLoading.deliveryMode || 'transport' // 'transport' | 'direct'
@@ -200,24 +203,71 @@ export default function VehicleLoadingModal({
   const handlePreviewLrCopy = async () => {
     if (!lrCopyDoc) return;
     let targetUrl = lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.previewUrl;
+    if (!targetUrl && lrCopyDoc.name) {
+      targetUrl = getMediaFromCache(lrCopyDoc.name);
+    }
     if (!targetUrl && (lrCopyDoc.storageBucket || lrCopyDoc.storagePath)) {
       targetUrl = await resolveDocumentUrlAsync(lrCopyDoc, bCode);
     }
-    if (targetUrl) {
-      const isPdf = lrCopyDoc.mimeType === 'application/pdf' ||
-                    (lrCopyDoc.name && lrCopyDoc.name.toLowerCase().endsWith('.pdf'));
-      setActiveMediaPreviewModal({
-        type: isPdf ? 'pdf' : 'image',
-        url: targetUrl,
-        dataUrl: targetUrl,
-        previewUrl: targetUrl,
-        title: `LR Copy - ${lrCopyDoc.name || bCode}`,
-        name: lrCopyDoc.name || `LR Copy - ${bCode}`,
-        bomCode: bCode
-      });
-    } else {
-      alert('Unable to load LR copy preview. Please try re-uploading the document.');
+    if (!targetUrl && lrCopyDoc.name) {
+      try {
+        const r = await fetch(`/api/media/find/${encodeURIComponent(lrCopyDoc.name)}`);
+        const d = await r.json();
+        if (d && d.found && d.url) {
+          targetUrl = d.url;
+          saveMediaToCache(lrCopyDoc.name, d.url);
+        }
+      } catch (_) {}
     }
+    const isPdf = lrCopyDoc.mimeType === 'application/pdf' ||
+                  (lrCopyDoc.name && lrCopyDoc.name.toLowerCase().endsWith('.pdf'));
+    const modalPayload = {
+      type: isPdf ? 'pdf' : 'image',
+      url: targetUrl || '',
+      dataUrl: targetUrl || '',
+      previewUrl: targetUrl || '',
+      title: `LR Copy - ${lrCopyDoc.name || bCode}`,
+      name: lrCopyDoc.name || `LR Copy - ${bCode}`,
+      bomCode: bCode,
+      storageBucket: lrCopyDoc.storageBucket,
+      storagePath: lrCopyDoc.storagePath
+    };
+    setLocalMediaPreviewModal(modalPayload);
+    setActiveMediaPreviewModal(modalPayload);
+  };
+
+  const openPhotoPreview = async (photo) => {
+    if (!photo) return;
+    let src = photo.url || photo.dataUrl || photo.previewUrl;
+    if (!src && photo.name) {
+      src = getMediaFromCache(photo.name);
+    }
+    if (!src && (photo.storageBucket || photo.storagePath)) {
+      src = await resolveDocumentUrlAsync(photo, bCode);
+    }
+    if (!src && photo.name) {
+      try {
+        const r = await fetch(`/api/media/find/${encodeURIComponent(photo.name)}`);
+        const d = await r.json();
+        if (d && d.found && d.url) {
+          src = d.url;
+          saveMediaToCache(photo.name, d.url);
+        }
+      } catch (_) {}
+    }
+    const modalPayload = {
+      type: 'image',
+      url: src || photo.url || photo.dataUrl || photo.previewUrl || '',
+      dataUrl: src || photo.url || photo.dataUrl || photo.previewUrl || '',
+      previewUrl: src || photo.url || photo.dataUrl || photo.previewUrl || '',
+      name: photo.name,
+      title: `Loading Proof Photo - ${photo.name || bCode}`,
+      bomCode: bCode,
+      storageBucket: photo.storageBucket,
+      storagePath: photo.storagePath
+    };
+    setLocalMediaPreviewModal(modalPayload);
+    setActiveMediaPreviewModal(modalPayload);
   };
 
   const vNo = vehicleLoadingData.vehicleNo || existingLoading.vehicleNo || '';
@@ -893,15 +943,7 @@ return (
                     <VehicleMediaImg
                       photo={p}
                       bomCode={bCode}
-                      onClick={(resolvedUrl) => setActiveMediaPreviewModal({
-                        type: 'image',
-                        url: resolvedUrl || p.url || p.dataUrl || p.previewUrl,
-                        dataUrl: resolvedUrl || p.url || p.dataUrl || p.previewUrl,
-                        previewUrl: resolvedUrl || p.url || p.dataUrl || p.previewUrl,
-                        name: p.name,
-                        title: `Loading Proof Photo - ${p.name || bCode}`,
-                        bomCode: bCode
-                      })}
+                      onClick={() => openPhotoPreview(p)}
                     />
                     <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
@@ -911,15 +953,7 @@ return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button
                           type="button"
-                          onClick={() => setActiveMediaPreviewModal({
-                            type: 'image',
-                            url: p.url || p.dataUrl || p.previewUrl,
-                            dataUrl: p.url || p.dataUrl || p.previewUrl,
-                            previewUrl: p.url || p.dataUrl || p.previewUrl,
-                            name: p.name,
-                            title: `Loading Proof Photo - ${p.name || bCode}`,
-                            bomCode: bCode
-                          })}
+                          onClick={() => openPhotoPreview(p)}
                           style={{
                             border: '1px solid #CBD5E1',
                             background: '#F8FAFC',
@@ -1040,6 +1074,17 @@ return (
         </div>
       </div>
     </div>
+
+    {/* Local Media Lightbox Preview (Overlays directly above Vehicle Loading Modal) */}
+    {localMediaPreviewModal && (
+      <ActiveMediaPreviewModal
+        activeMediaPreviewModal={localMediaPreviewModal}
+        onClose={() => {
+          setLocalMediaPreviewModal(null);
+          setActiveMediaPreviewModal(null);
+        }}
+      />
+    )}
   </div>
 );
 }

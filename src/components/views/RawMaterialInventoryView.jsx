@@ -632,6 +632,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           // A BOM that is completed or already deducted has physically dispatched goods, so its reservation is RELEASED
           const isCompletedOrDeducted = Boolean(
+            b.stockDeducted ||
+            b.lifecycleCompleted ||
             b.fullyCompleted ||
             (b.vehicleLoading && (b.vehicleLoading.fullyCompleted || b.vehicleLoading.loadedAt)) ||
             st === 'completed' ||
