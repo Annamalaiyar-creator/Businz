@@ -1458,24 +1458,43 @@ app.post('/api/media/upload', async (req, res) => {
 app.get('/api/media/find/:name', (req, res) => {
   try {
     const rawSearch = decodeURIComponent(req.params.name || '').toLowerCase().trim();
-    if (!rawSearch || !fs.existsSync(uploadsDir)) {
+    if (!rawSearch) {
       return res.json({ found: false });
     }
-    const files = fs.readdirSync(uploadsDir);
-    // 1. Exact filename match
-    const exact = files.find(f => f.toLowerCase() === rawSearch);
-    if (exact) {
-      return res.json({ found: true, url: `/api/uploads/${exact}`, filename: exact });
+
+    // 1. Check server media_cache.json
+    const mediaCachePath = path.join(__dirname, 'media_cache.json');
+    if (fs.existsSync(mediaCachePath)) {
+      try {
+        const mediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8'));
+        for (const [k, v] of Object.entries(mediaCache)) {
+          const lowerK = String(k || '').toLowerCase();
+          if (lowerK === rawSearch || lowerK.includes(rawSearch) || rawSearch.includes(lowerK)) {
+            return res.json({ found: true, url: v, filename: k });
+          }
+        }
+      } catch (_) {}
     }
-    // 2. Base slug match (ignoring timestamps and special characters)
-    const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '');
-    const matched = files.find(f => {
-      const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
-      return searchBase && (fBase.includes(searchBase) || searchBase.includes(fBase));
-    });
-    if (matched) {
-      return res.json({ found: true, url: `/api/uploads/${matched}`, filename: matched });
+
+    // 2. Check uploadsDir
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      // Exact filename match
+      const exact = files.find(f => f.toLowerCase() === rawSearch);
+      if (exact) {
+        return res.json({ found: true, url: `/api/uploads/${exact}`, filename: exact });
+      }
+      // Base slug match (ignoring timestamps and special characters)
+      const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '');
+      const matched = files.find(f => {
+        const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
+        return searchBase && (fBase.includes(searchBase) || searchBase.includes(fBase));
+      });
+      if (matched) {
+        return res.json({ found: true, url: `/api/uploads/${matched}`, filename: matched });
+      }
     }
+
     res.json({ found: false });
   } catch (err) {
     res.status(500).json({ found: false, error: err.message });
@@ -4967,6 +4986,25 @@ app.post('/api/boms/:bomCode/documents', requireBusinzSession, async (req, res) 
       fileName,
       mimeType: resolvedMime
     });
+
+    // Also mirror to media_cache.json so instant lookup works seamlessly across sessions
+    try {
+      const mediaCachePath = path.join(__dirname, 'media_cache.json');
+      let mediaCache = {};
+      if (fs.existsSync(mediaCachePath)) {
+        mediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8') || '{}');
+      }
+      const dataUrlToStore = (typeof fileData === 'string' && fileData.startsWith('data:'))
+        ? fileData
+        : `data:${resolvedMime};base64,${buffer.toString('base64')}`;
+      mediaCache[fileName] = dataUrlToStore;
+      if (metadata && metadata.storagePath) {
+        mediaCache[metadata.storagePath] = dataUrlToStore;
+      }
+      fs.writeFileSync(mediaCachePath, JSON.stringify(mediaCache, null, 2), 'utf8');
+    } catch (cacheErr) {
+      console.warn('[BOM Document Upload] Failed to update media_cache.json:', cacheErr.message);
+    }
 
     res.json({
       success: true,
