@@ -5684,23 +5684,100 @@ app.post('/api/zoho/invoices', async (req, res) => {
 
     const invDateStr = normalizeZohoDate(req.body.date);
 
-    // User Requirement: Show ONLY the Preset Name with total preset price in Zoho Books invoice (do NOT show individual product prices)
-    const presetName = req.body.presetName || (req.body.items && req.body.items.length === 1 && req.body.items[0].name) || 'Solar Structure Package';
-    const totalPresetPrice = Number(
-      req.body.totalPresetPrice ||
-      (req.body.invAmt ? String(req.body.invAmt).replace(/[^0-9.]/g, '') : null) ||
-      (req.body.items && req.body.items.length === 1 ? req.body.items[0].rate : null) ||
-      (req.body.items && req.body.items.length > 1 ? req.body.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.quantity || it.qty || 1)), 0) : null) ||
-      5000
+    // Support dynamic distinction: Individual Products vs Preset Packages
+    const hasPresetGroups = Array.isArray(req.body.presetGroups)
+      ? req.body.presetGroups.length > 0
+      : (req.body.presetGroups && typeof req.body.presetGroups === 'object' && Object.keys(req.body.presetGroups).length > 0);
+
+    const isPreset = Boolean(
+      req.body.isPreset === true ||
+      (req.body.isPreset !== false && (hasPresetGroups || (req.body.presetName && req.body.presetName !== 'Solar Mounting Structure Kit')))
     );
 
-    const lineItems = [{
-      name: presetName,
-      rate: totalPresetPrice,
-      quantity: 1,
-      account_id: '4080449000000000567',
-      description: `Preset Structure Package: ${presetName}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
-    }];
+    let lineItems = [];
+
+    if (isPreset) {
+      if (hasPresetGroups) {
+        const groupEntries = Array.isArray(req.body.presetGroups) ? req.body.presetGroups : Object.values(req.body.presetGroups);
+        groupEntries.forEach(grp => {
+          if (!grp) return;
+          const setCount = parseFloat(grp.setCount) || 1;
+          const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
+          const name = grp.presetName || grp.name || req.body.presetName || 'Solar Mounting Structure Preset Kit';
+          lineItems.push({
+            name: name,
+            rate: unitPrice,
+            quantity: setCount,
+            unit: 'SET',
+            account_id: '4080449000000000567',
+            description: `Preset Structure Package: ${name}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
+          });
+        });
+
+        // Add non-preset custom items if present
+        if (Array.isArray(req.body.items)) {
+          req.body.items.forEach(it => {
+            if (it.isPresetItem || Boolean(it.presetGroupId)) return;
+            const q = parseFloat(it.quantity != null ? it.quantity : (it.invQty != null ? it.invQty : it.qty)) || 1;
+            let r = parseFloat(it.rate != null ? it.rate : it.unitPrice);
+            if (isNaN(r) || r < 0) r = 0;
+            lineItems.push({
+              name: it.name || it.productName || 'Solar Structure Component',
+              rate: r,
+              quantity: q,
+              unit: it.unit || it.uom || 'Nos',
+              account_id: '4080449000000000567',
+              description: it.description || it.desc || ''
+            });
+          });
+        }
+      } else {
+        const presetName = req.body.presetName || 'Solar Mounting Structure Preset Kit';
+        const totalPresetPrice = Number(
+          req.body.totalPresetPrice ||
+          (req.body.invAmt ? String(req.body.invAmt).replace(/[^0-9.]/g, '') : null) ||
+          (req.body.items && req.body.items.length === 1 ? req.body.items[0].rate : null) ||
+          5000
+        );
+        lineItems.push({
+          name: presetName,
+          rate: totalPresetPrice,
+          quantity: 1,
+          unit: 'SET',
+          account_id: '4080449000000000567',
+          description: `Preset Structure Package: ${presetName}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
+        });
+      }
+    } else {
+      // Individual products flow (single product or multiple distinct items)
+      const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+      if (rawItems.length > 0) {
+        rawItems.forEach(it => {
+          const q = parseFloat(it.quantity != null ? it.quantity : (it.invQty != null ? it.invQty : it.qty)) || 1;
+          let r = parseFloat(it.rate != null ? it.rate : it.unitPrice);
+          if (isNaN(r) || r < 0) r = 0;
+          lineItems.push({
+            name: it.name || it.productName || 'Solar Structure Component',
+            rate: r,
+            quantity: q,
+            unit: it.unit || it.uom || 'Nos',
+            account_id: '4080449000000000567',
+            description: it.description || it.desc || ''
+          });
+        });
+      } else {
+        const fallbackName = req.body.productName || req.body.name || 'Solar Mounting Structure';
+        const fallbackRate = parseFloat(req.body.invAmt || req.body.total || 0) || 1000;
+        lineItems.push({
+          name: fallbackName,
+          rate: fallbackRate,
+          quantity: 1,
+          unit: 'Nos',
+          account_id: '4080449000000000567',
+          description: req.body.bomCode ? `BOM Ref: ${req.body.bomCode}` : ''
+        });
+      }
+    }
 
     const assignedInvNo = (req.body.invNo && req.body.invNo !== 'Pending Confirmation')
       ? req.body.invNo
