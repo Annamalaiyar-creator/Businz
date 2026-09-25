@@ -1,9 +1,9 @@
 import React from "react";
 import {
   Plus, Check, Trash2, FileText, AlertCircle, CheckCircle,
-  CheckSquare, Truck, Package, Upload, Camera, Video
+  CheckSquare, Truck, Package, Upload, Camera, Video, Eye
 } from "lucide-react";
-import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache } from "../../utils/otherViewsShared";
+import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 
@@ -713,13 +713,30 @@ export default function ConfirmingBomModal({
                             <div style={{ fontSize: '10px', color: '#64748B' }}>{confirmingBomModal.deliveryAddressProofDoc.size || '1.2 MB'} • Uploaded</div>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressProofDoc: null })}
-                          style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const doc = confirmingBomModal.deliveryAddressProofDoc;
+                              const url = doc.dataUrl || doc.previewUrl || doc.url || getMediaFromCache(doc.name);
+                              setActiveMediaPreviewModal({
+                                type: (doc.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(doc.name)) ? 'image' : 'document',
+                                url,
+                                name: doc.name
+                              });
+                            }}
+                            style={{ border: 'none', background: '#EFF6FF', color: '#1D4ED8', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Eye style={{ width: '13px', height: '13px' }} /> View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressProofDoc: null })}
+                            style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -738,15 +755,17 @@ export default function ConfirmingBomModal({
                             onChange={(e) => {
                               const file = e.target.files && e.target.files[0];
                               if (file) {
-                                setConfirmingBomModal(prev => ({
-                                  ...prev,
-                                  deliveryAddressProofDoc: {
-                                    name: file.name,
-                                    size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                    type: file.type || "application/pdf",
-                                    uploadedAt: new Date().toISOString()
+                                compressAndSaveFile(file, (meta) => {
+                                  if (meta) {
+                                    if (meta.name && meta.dataUrl) {
+                                      saveMediaToCache(meta.name, meta.dataUrl);
+                                    }
+                                    setConfirmingBomModal(prev => ({
+                                      ...prev,
+                                      deliveryAddressProofDoc: meta
+                                    }));
                                   }
-                                }));
+                                });
                               }
                             }}
                           />

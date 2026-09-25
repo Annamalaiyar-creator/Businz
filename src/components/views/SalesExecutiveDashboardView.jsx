@@ -82,22 +82,31 @@ function categorizeProduct(item) {
 }
 
 export default function SalesExecutiveDashboardView({ userRole = 'Sales Executive', onNavigateTab }) {
-  // Live Collection States
-  const [quotations, setQuotations] = useState([]);
-  const [opportunities, setOpportunities] = useState([]);
-  const [leads, setLeads] = useState([]);
-  const [followups, setFollowups] = useState([]);
-  const [proformaInvoices, setProformaInvoices] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [boms, setBoms] = useState([]);
+  const getCached = (key) => {
+    try {
+      const val = localStorage.getItem(key);
+      return val ? JSON.parse(val) : [];
+    } catch { return []; }
+  };
+
+  const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || userRole === 'Super Admin' || userRole === 'Admin';
+  const loggedUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : null) || 'Mohit JV';
+
+  // Live Collection States (hydrated immediately from local cache with zero delay)
+  const [quotations, setQuotations] = useState(() => getCached('controlroom_crm_quotations'));
+  const [opportunities, setOpportunities] = useState(() => getCached('controlroom_crm_opportunities'));
+  const [leads, setLeads] = useState(() => getCached('controlroom_crm_leads'));
+  const [followups, setFollowups] = useState(() => getCached('controlroom_crm_followups'));
+  const [proformaInvoices, setProformaInvoices] = useState(() => getCached('controlroom_sales_pi_store'));
+  const [invoices, setInvoices] = useState(() => getCached('controlroom_invoice_store'));
+  const [customers, setCustomers] = useState(() => getCached('controlroom_customer_store'));
+  const [boms, setBoms] = useState(() => getCached('controlroom_bom_store'));
   const [isZohoConnected, setIsZohoConnected] = useState(true);
-  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
 
-  // Filter States
-  const [selectedExecutive, setSelectedExecutive] = useState('All');
+  // Filter States: Executive view defaults to logged user; management sees All
+  const [selectedExecutive, setSelectedExecutive] = useState(isManagementRole ? 'All' : loggedUserName);
   const [selectedPeriod, setSelectedPeriod] = useState('This Month');
 
   // Table interactive selection states
@@ -278,7 +287,6 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     } catch (err) {
       console.error('[SalesExecutiveDashboard] Error loading live sales data:', err);
     } finally {
-      setLoading(false);
       setIsRefreshing(false);
     }
   }, []);
@@ -830,16 +838,6 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     }).slice(0, 3);
   }, [filteredQuotations]);
 
-  if (loading) {
-    return (
-      <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-        <RefreshCw size={28} style={{ animation: 'spin 1s linear infinite', color: '#0E7490', margin: '0 auto 14px auto', display: 'block' }} />
-        <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>Loading Real-Time Sales Metrics...</div>
-        <div style={{ fontSize: '13px', color: '#64748B', marginTop: '6px' }}>Connecting to Zoho Books, Supabase CRM & live proforma invoice stores</div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', minWidth: 0, boxSizing: 'border-box', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
 
@@ -863,7 +861,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-                Welcome back, {userRole === 'Sales Head' ? 'Vijay' : (localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV')}!
+                Welcome back, {userRole === 'Sales Head' ? 'Vijay' : (localStorage.getItem('controlroom_logged_user_name') || 'Mohit JV')}!
               </h2>
               <span style={{
                 fontSize: '11px',
@@ -888,31 +886,33 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
         {/* Right Status Indicators and Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', zIndex: 2, flexWrap: 'wrap' }}>
-          {/* Executive Selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              SALES REP
-            </span>
-            <select
-              value={selectedExecutive}
-              onChange={(e) => setSelectedExecutive(e.target.value)}
-              style={{
-                height: '32px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                padding: '0 8px',
-                fontSize: '12px',
-                fontWeight: '700',
-                color: '#0F172A',
-                backgroundColor: '#FFFFFF',
-                cursor: 'pointer'
-              }}
-            >
-              {availableExecutives.map(exec => (
-                <option key={exec} value={exec}>{exec === 'All' ? 'All Sales Reps' : exec}</option>
-              ))}
-            </select>
-          </div>
+          {/* Executive Selector (Strictly for Sales Head, Management & Admin; hidden for Sales Executive) */}
+          {isManagementRole && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                SALES REP
+              </span>
+              <select
+                value={selectedExecutive}
+                onChange={(e) => setSelectedExecutive(e.target.value)}
+                style={{
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  padding: '0 8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  color: '#0F172A',
+                  backgroundColor: '#FFFFFF',
+                  cursor: 'pointer'
+                }}
+              >
+                {availableExecutives.map(exec => (
+                  <option key={exec} value={exec}>{exec === 'All' ? 'All Sales Reps' : exec}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Period Selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
