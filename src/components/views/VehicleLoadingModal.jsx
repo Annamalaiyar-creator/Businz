@@ -1,34 +1,127 @@
 import React, { useState, useEffect } from "react";
 import {
   Trash2, X, CheckCircle, Phone, UploadCloud, Truck, Package,
-  Upload, Camera, Image, Loader2, FileText
+  Upload, Camera, Image, Loader2, FileText, Eye
 } from "lucide-react";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve) => {
+    if (!file) return resolve(null);
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 function VehicleMediaImg({ photo, bomCode, onClick }) {
-  const [resolvedSrc, setResolvedSrc] = useState(photo.url || photo.dataUrl || '');
+  const initial = photo.url || photo.dataUrl || photo.previewUrl || '';
+  const [resolvedSrc, setResolvedSrc] = useState(initial);
+  const [loading, setLoading] = useState(!initial && Boolean(photo.storageBucket || photo.storagePath));
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
     let active = true;
-    if (!resolvedSrc && (photo.storageBucket || photo.storagePath)) {
-      resolveDocumentUrlAsync(photo, bomCode).then(url => {
-        if (active && url) setResolvedSrc(url);
-      });
+    const current = photo.url || photo.dataUrl || photo.previewUrl || '';
+    if (current) {
+      setResolvedSrc(current);
+      setLoading(false);
+      setLoadError(false);
+      return;
+    }
+    if (photo.storageBucket || photo.storagePath) {
+      setLoading(true);
+      resolveDocumentUrlAsync(photo, bomCode)
+        .then(url => {
+          if (active) {
+            if (url) {
+              setResolvedSrc(url);
+              setLoadError(false);
+            } else {
+              setLoadError(true);
+            }
+            setLoading(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setLoadError(true);
+            setLoading(false);
+          }
+        });
     }
     return () => { active = false; };
-  }, [photo, bomCode, resolvedSrc]);
+  }, [photo, bomCode]);
+
+  const handleClick = async () => {
+    let src = resolvedSrc || photo.url || photo.dataUrl || photo.previewUrl || '';
+    if (!src && (photo.storageBucket || photo.storagePath)) {
+      src = await resolveDocumentUrlAsync(photo, bomCode);
+      if (src) setResolvedSrc(src);
+    }
+    if (onClick) onClick(src || photo.url || photo.dataUrl || photo.previewUrl || '');
+  };
 
   return (
     <div
-      onClick={() => onClick && onClick(resolvedSrc)}
-      style={{ height: '120px', width: '100%', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={handleClick}
+      title="Click to view full photo"
+      style={{
+        height: '130px',
+        width: '100%',
+        backgroundColor: '#0F172A',
+        cursor: 'pointer',
+        overflow: 'hidden',
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
     >
-      {resolvedSrc ? (
-        <img src={resolvedSrc} alt={photo.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {resolvedSrc && !loadError ? (
+        <>
+          <img
+            src={resolvedSrc}
+            alt={photo.name || 'Vehicle Loading Proof'}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s ease' }}
+            onError={() => setLoadError(true)}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              opacity: 0,
+              transition: 'opacity 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              fontWeight: '800',
+              fontSize: '12px',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0'; }}
+          >
+            <Eye size={16} /> Click to View
+          </div>
+        </>
+      ) : loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#38BDF8' }}>
+          <Loader2 className="animate-spin text-cyan-400" size={22} />
+          <span style={{ fontSize: '11px', color: '#94A3B8' }}>Loading photo...</span>
+        </div>
       ) : (
-        <Loader2 className="animate-spin text-cyan-400" size={20} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#94A3B8', padding: '12px', textAlign: 'center' }}>
+          <Image size={24} style={{ color: '#64748B' }} />
+          <span style={{ fontSize: '11px', color: '#E2E8F0', fontWeight: '700' }}>{photo.name || 'Proof Photo'}</span>
+          <span style={{ fontSize: '10px', color: '#38BDF8', textDecoration: 'underline' }}>Click to preview</span>
+        </div>
       )}
     </div>
   );
@@ -78,6 +171,8 @@ export default function VehicleLoadingModal({
     setUploadingLr(true);
     try {
       validateClientFile(file);
+      const localPreview = URL.createObjectURL(file);
+      const localDataUrl = await readFileAsDataUrl(file);
       const metadata = await uploadBomDocumentFile({
         file,
         bomCode: bCode,
@@ -89,14 +184,39 @@ export default function VehicleLoadingModal({
         size: `${(file.size / 1024).toFixed(1)} KB`,
         storageBucket: metadata.storageBucket,
         storagePath: metadata.storagePath,
-        url: metadata.url || null,
-        mimeType: metadata.mimeType,
+        url: metadata.url || localPreview,
+        dataUrl: metadata.dataUrl || localDataUrl,
+        previewUrl: localPreview,
+        mimeType: metadata.mimeType || file.type,
         uploadedAt: new Date().toISOString()
       });
     } catch (err) {
       alert(`LR Copy upload error: ${err.message}`);
     } finally {
       setUploadingLr(false);
+    }
+  };
+
+  const handlePreviewLrCopy = async () => {
+    if (!lrCopyDoc) return;
+    let targetUrl = lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.previewUrl;
+    if (!targetUrl && (lrCopyDoc.storageBucket || lrCopyDoc.storagePath)) {
+      targetUrl = await resolveDocumentUrlAsync(lrCopyDoc, bCode);
+    }
+    if (targetUrl) {
+      const isPdf = lrCopyDoc.mimeType === 'application/pdf' ||
+                    (lrCopyDoc.name && lrCopyDoc.name.toLowerCase().endsWith('.pdf'));
+      setActiveMediaPreviewModal({
+        type: isPdf ? 'pdf' : 'image',
+        url: targetUrl,
+        dataUrl: targetUrl,
+        previewUrl: targetUrl,
+        title: `LR Copy - ${lrCopyDoc.name || bCode}`,
+        name: lrCopyDoc.name || `LR Copy - ${bCode}`,
+        bomCode: bCode
+      });
+    } else {
+      alert('Unable to load LR copy preview. Please try re-uploading the document.');
     }
   };
 
@@ -121,6 +241,8 @@ const handleAddPhotoFiles = async (files) => {
   try {
     for (const file of Array.from(files)) {
       validateClientFile(file);
+      const localPreview = URL.createObjectURL(file);
+      const localDataUrl = await readFileAsDataUrl(file);
       const metadata = await uploadBomDocumentFile({
         file,
         bomCode: bCode,
@@ -132,8 +254,11 @@ const handleAddPhotoFiles = async (files) => {
         size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         storageBucket: metadata.storageBucket,
         storagePath: metadata.storagePath,
-        mimeType: metadata.mimeType,
-        uploadedAt: metadata.uploadedAt,
+        url: metadata.url || localPreview,
+        dataUrl: metadata.dataUrl || localDataUrl,
+        previewUrl: localPreview,
+        mimeType: metadata.mimeType || file.type,
+        uploadedAt: metadata.uploadedAt || new Date().toISOString(),
         capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       };
       setLoadingPhotos(prev => [...prev, newPhoto]);
@@ -192,6 +317,8 @@ const handleAddSamplePhoto = () => {
     try {
       const fileName = `Truck_Loading_LivePhoto_${Date.now().toString().slice(-4)}.jpg`;
       const file = new File([blob], fileName, { type: 'image/jpeg' });
+      const sampleBlobUrl = URL.createObjectURL(blob);
+      const sampleDataUrl = canvas.toDataURL('image/jpeg', 0.85);
       const metadata = await uploadBomDocumentFile({
         file,
         bomCode: bCode,
@@ -203,8 +330,11 @@ const handleAddSamplePhoto = () => {
         size: '1.4 MB',
         storageBucket: metadata.storageBucket,
         storagePath: metadata.storagePath,
-        mimeType: metadata.mimeType,
-        uploadedAt: metadata.uploadedAt,
+        url: metadata.url || sampleBlobUrl,
+        dataUrl: metadata.dataUrl || sampleDataUrl,
+        previewUrl: sampleBlobUrl,
+        mimeType: metadata.mimeType || 'image/jpeg',
+        uploadedAt: metadata.uploadedAt || new Date().toISOString(),
         capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       };
       setLoadingPhotos(prev => [...prev, samplePhoto]);
@@ -609,7 +739,23 @@ return (
               </div>
 
               {lrCopyDoc ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <div
+                  onClick={handlePreviewLrCopy}
+                  title="Click to view LR Copy document"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#FFFFFF',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#0284C7'; e.currentTarget.style.backgroundColor = '#F0F9FF'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <FileText size={20} style={{ color: '#0284C7' }} />
                     <div>
@@ -617,27 +763,35 @@ return (
                       <div style={{ fontSize: '11px', color: '#64748B' }}>{lrCopyDoc.size || 'Attached'} • Uploaded {new Date(lrCopyDoc.uploadedAt || Date.now()).toLocaleTimeString()}</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {(lrCopyDoc.url || lrCopyDoc.dataUrl) && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveMediaPreviewModal({
-                          type: 'image',
-                          url: lrCopyDoc.url || lrCopyDoc.dataUrl,
-                          title: `LR Copy - ${bCode}`
-                        })}
-                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #0284C7', backgroundColor: '#F0F9FF', color: '#0369A1', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
-                      >
-                        👁️ Preview LR
-                      </button>
-                    )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={handlePreviewLrCopy}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #0284C7',
+                        backgroundColor: '#0284C7',
+                        color: '#FFFFFF',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        boxShadow: '0 1px 3px rgba(2,132,199,0.3)'
+                      }}
+                    >
+                      <Eye size={13} /> View LR Copy
+                    </button>
                     {!isReadOnly && (
                       <button
                         type="button"
                         onClick={() => setLrCopyDoc(null)}
                         style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
+                        title="Remove LR Copy"
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={16} />
                       </button>
                     )}
                   </div>
@@ -734,22 +888,61 @@ return (
                     <VehicleMediaImg
                       photo={p}
                       bomCode={bCode}
-                      onClick={(resolvedUrl) => setActiveMediaPreviewModal({ type: 'image', url: resolvedUrl, name: p.name, bomCode: bCode })}
+                      onClick={(resolvedUrl) => setActiveMediaPreviewModal({
+                        type: 'image',
+                        url: resolvedUrl || p.url || p.dataUrl || p.previewUrl,
+                        dataUrl: resolvedUrl || p.url || p.dataUrl || p.previewUrl,
+                        previewUrl: resolvedUrl || p.url || p.dataUrl || p.previewUrl,
+                        name: p.name,
+                        title: `Loading Proof Photo - ${p.name || bCode}`,
+                        bomCode: bCode
+                      })}
                     />
                     <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
                         <div style={{ fontSize: '11px', fontWeight: '800', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                         <div style={{ fontSize: '10px', color: '#64748B' }}>{p.size || '1.2 MB'} • {p.capturedAt || 'Verified'}</div>
                       </div>
-                      {!isReadOnly && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button
                           type="button"
-                          onClick={() => setLoadingPhotos(prev => prev.filter((_, idx) => idx !== pIdx))}
-                          style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                          onClick={() => setActiveMediaPreviewModal({
+                            type: 'image',
+                            url: p.url || p.dataUrl || p.previewUrl,
+                            dataUrl: p.url || p.dataUrl || p.previewUrl,
+                            previewUrl: p.url || p.dataUrl || p.previewUrl,
+                            name: p.name,
+                            title: `Loading Proof Photo - ${p.name || bCode}`,
+                            bomCode: bCode
+                          })}
+                          style={{
+                            border: '1px solid #CBD5E1',
+                            background: '#F8FAFC',
+                            color: '#0284C7',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                          title="View photo"
                         >
-                          <Trash2 size={14} />
+                          <Eye size={12} /> View
                         </button>
-                      )}
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setLoadingPhotos(prev => prev.filter((_, idx) => idx !== pIdx))}
+                            style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                            title="Remove photo"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

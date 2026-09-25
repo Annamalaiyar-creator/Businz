@@ -129,7 +129,11 @@ export async function uploadBomDocumentFile({ file, bomCode, category }) {
     if (res.ok) {
       const resJson = await res.json();
       if (resJson && resJson.success && resJson.metadata) {
-        return resJson.metadata;
+        return {
+          ...resJson.metadata,
+          dataUrl,
+          previewUrl: typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null
+        };
       }
     }
   } catch (backendErr) {
