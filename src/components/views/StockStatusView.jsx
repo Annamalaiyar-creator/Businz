@@ -3327,6 +3327,7 @@ export default function StockStatusView(props) {
                       onClick={() => {
                         const firstKey = selectedStockRows[0];
                         const targetRow = combinedList.find(r => (r.code || r.item) === firstKey);
+                        setSelectedStockRows([]);
                         if (targetRow) setViewingStockItem(targetRow);
                       }}
                       style={{
@@ -3351,7 +3352,11 @@ export default function StockStatusView(props) {
 
                     {!isSalesUser && (
                       <button
-                        onClick={() => handleCreatePoFromSelectedStock(selectedStockRows, combinedList)}
+                        onClick={() => {
+                          const targets = [...selectedStockRows];
+                          setSelectedStockRows([]);
+                          handleCreatePoFromSelectedStock(targets, combinedList);
+                        }}
                         style={{
                           backgroundColor: '#0E7490',
                           border: 'none',
@@ -3376,6 +3381,7 @@ export default function StockStatusView(props) {
                     <button
                       onClick={() => {
                         const selectedData = combinedList.filter(r => selectedStockRows.includes(r.code || r.item));
+                        setSelectedStockRows([]);
                         handleExportStockCSV(selectedData);
                       }}
                       style={{

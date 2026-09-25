@@ -853,6 +853,7 @@ export default function ProductionViewsEngine(props) {
                 setPreviewDocModal={setPreviewDocModal}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setPendingDcModal={setPendingDcModal}
+                showCustomAlert={showCustomAlert}
               />
             );
           }
@@ -946,6 +947,7 @@ export default function ProductionViewsEngine(props) {
                 handleCancelBomOrder={handleCancelBomOrder}
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
+                showCustomAlert={showCustomAlert}
               />
             );
           }

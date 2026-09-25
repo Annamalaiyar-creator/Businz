@@ -2960,6 +2960,7 @@ export default function GoodsReceiptNoteView(props) {
                         return;
                       }
                       const target = grnList.find(g => g.id === selectedGrnRows[0]);
+                      setSelectedGrnRows([]);
                       if (target) handleOpenViewGrn(target);
                     }}
                     style={{
@@ -2990,7 +2991,10 @@ export default function GoodsReceiptNoteView(props) {
                     if (isClosed) return null;
                     return (
                       <button
-                        onClick={() => handleOpenEditGrn(target)}
+                        onClick={() => {
+                          setSelectedGrnRows([]);
+                          handleOpenEditGrn(target);
+                        }}
                         style={{
                           backgroundColor: '#FFFFFF',
                           border: '1px solid #E2E8F0',
@@ -3015,7 +3019,10 @@ export default function GoodsReceiptNoteView(props) {
                   })()}
 
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      setSelectedGrnRows([]);
+                      window.print();
+                    }}
                     style={{
                       backgroundColor: '#FFFFFF',
                       border: '1px solid #E2E8F0',

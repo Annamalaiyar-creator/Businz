@@ -2982,6 +2982,7 @@ export default function VendorManagementView(props) {
                     const targetRow = codeVal
                       ? ((vendorList || []).find(r => r.code === codeVal || r.id === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
                       : (vendorList && vendorList[0] ? vendorList[0] : { code: 'VEND-001', name: 'Sample Vendor' });
+                    setSelectedVendors([]);
                     setQuickPreviewRecord(targetRow);
                   }}
                   style={{
@@ -3015,6 +3016,7 @@ export default function VendorManagementView(props) {
                     } else if (selectedVendors.length === 1) {
                       const codeVal = selectedVendors[0];
                       const targetRow = (vendorList || []).find(r => r.code === codeVal || r.id === codeVal) || { code: codeVal };
+                      setSelectedVendors([]);
                       setEditingVendor(targetRow);
                     }
                   }}
@@ -3044,10 +3046,13 @@ export default function VendorManagementView(props) {
                 {/* Clone / Duplicate */}
                 <button
                   onClick={() => {
-                    if (selectedVendors.length === 1) {
-                      alert(`Cloned #${selectedVendors[0]} as a new duplicate draft.`);
+                    const count = selectedVendors.length;
+                    const firstVal = selectedVendors[0];
+                    setSelectedVendors([]);
+                    if (count === 1) {
+                      alert(`Cloned #${firstVal} as a new duplicate draft.`);
                     } else {
-                      alert(`Cloned ${selectedVendors.length} selected items.`);
+                      alert(`Cloned ${count} selected items.`);
                     }
                   }}
                   style={{
@@ -3076,6 +3081,7 @@ export default function VendorManagementView(props) {
                 {/* Export / Print PDF */}
                 <button
                   onClick={() => {
+                    setSelectedVendors([]);
                     window.print();
                   }}
                   style={{

@@ -1128,6 +1128,7 @@ export default function WorkOrdersView({
                 onClick={() => {
                   const targetId = selectedRows[0];
                   const targetRow = allWorkOrderRows.find(w => w.woNo === targetId) || allWorkOrderRows[0];
+                  setSelectedRows([]);
                   if (targetRow) {
                     setSelectedWoForAcceptanceModal(targetRow.rawWO || targetRow);
                   }
@@ -1194,6 +1195,7 @@ export default function WorkOrdersView({
               <button
                 onClick={() => {
                   const targetWO = selectedWoObjects[0] || prodModuleEngine.getWorkOrderById(selectedRows[0]) || prodModuleEngine.getWorkOrders()[0];
+                  setSelectedRows([]);
                   if (targetWO) {
                     setSelectedWoForStatusUpdate(targetWO);
                     setActualGoodOutputVal(String(targetWO.targetQty || ''));
@@ -1230,6 +1232,7 @@ export default function WorkOrdersView({
                 onClick={() => {
                   const targetId = selectedRows[0];
                   const targetRow = allWorkOrderRows.find(w => w.woNo === targetId) || allWorkOrderRows[0];
+                  setSelectedRows([]);
                   if (targetRow) {
                     setSelectedWoForAcceptanceModal(targetRow.rawWO || targetRow);
                   }

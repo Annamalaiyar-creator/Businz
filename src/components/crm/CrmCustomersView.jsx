@@ -1529,6 +1529,7 @@ export default function CrmCustomersView({
               } else if (selectedRows.length === 1) {
                 const codeVal = selectedRows[0];
                 const targetCust = customers.find(c => c.customerCode === codeVal || c.id === codeVal);
+                setSelectedRows([]);
                 if (targetCust) handleOpenEditPage(targetCust);
               }
             }}
@@ -1555,6 +1556,7 @@ export default function CrmCustomersView({
               if (selectedRows.length === 1) {
                 const codeVal = selectedRows[0];
                 const targetCust = customers.find(c => c.customerCode === codeVal || c.id === codeVal);
+                setSelectedRows([]);
                 if (targetCust) {
                   setSelectedCustomer(targetCust);
                   setViewMode('details');

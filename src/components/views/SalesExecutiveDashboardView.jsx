@@ -2217,7 +2217,10 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           </span>
 
           <button
-            onClick={() => onNavigateTab && onNavigateTab('Opportunities')}
+            onClick={() => {
+              setSelectedFollowups([]);
+              if (onNavigateTab) onNavigateTab('Opportunities');
+            }}
             style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #CBD5E1',
@@ -2238,6 +2241,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           <button
             onClick={() => {
               alert(`Rescheduling follow-up for ${selectedFollowups.length} selected record(s)`);
+              setSelectedFollowups([]);
             }}
             style={{
               backgroundColor: '#FFFFFF',

@@ -2434,7 +2434,11 @@ export default function MaterialReorderView(props) {
 
               {/* Create PO button when 1 item is selected; Create Bulk PO button when 2 or more items are selected */}
               <button
-                onClick={() => handleCreatePoFromReorder(selectedReorders)}
+                onClick={() => {
+                  const targets = [...selectedReorders];
+                  setSelectedReorders([]);
+                  handleCreatePoFromReorder(targets);
+                }}
                 style={{
                   backgroundColor: '#0E7490',
                   border: 'none',
@@ -2459,6 +2463,7 @@ export default function MaterialReorderView(props) {
               <button
                 onClick={() => {
                   const firstItem = reorderAlerts.find(r => selectedReorders.includes(r.id));
+                  setSelectedReorders([]);
                   if (firstItem) setEditingReorderItem({ ...firstItem });
                 }}
                 style={{

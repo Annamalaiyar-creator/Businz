@@ -2149,6 +2149,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           const targetPoNo = selectedPOs[0];
                           const idx = poList.findIndex(p => p.poNo === targetPoNo);
                           const targetPo = poList[idx] || { poNo: targetPoNo, vendor: '' };
+                          setSelectedPOs([]);
                           handleStartEdit(targetPo, idx >= 0 ? idx : 0);
                         }
                       }}
@@ -2208,7 +2209,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     if (isMdApproved) {
                       return (
                         <button
-                          onClick={() => handleOpenPaymentProcessModal(target)}
+                          onClick={() => {
+                            setSelectedPOs([]);
+                            handleOpenPaymentProcessModal(target);
+                          }}
                           style={{
                             backgroundColor: '#FFFBEB',
                             border: '1px solid #FDE68A',
@@ -2253,7 +2257,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   if (canApproveAsMD && isDraftOrPending) {
                     return (
                       <button
-                        onClick={() => setApprovingPo(target)}
+                        onClick={() => {
+                          setSelectedPOs([]);
+                          setApprovingPo(target);
+                        }}
                         title="Approve Purchase Order directly as MD / CEO"
                         style={{
                           backgroundColor: '#F0FDF4',
@@ -2284,6 +2291,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       <button
                         onClick={() => {
                           setProceedEmailInput(target.email || email || (target.vendor ? `contact@${target.vendor.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : ''));
+                          setSelectedPOs([]);
                           setProceedingPo(target);
                         }}
                         style={{
@@ -2313,7 +2321,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   if (isProceedPo) {
                     return (
                       <button
-                        onClick={() => handlePushToGrn(target)}
+                        onClick={() => {
+                          setSelectedPOs([]);
+                          handlePushToGrn(target);
+                        }}
                         style={{
                           backgroundColor: '#0E7490',
                           border: 'none',
@@ -2380,6 +2391,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     const target = (selectedPOs && selectedPOs.length > 0)
                       ? (poList.find(p => p.poNo === selectedPOs[0] || p.id === selectedPOs[0]) || { poNo: selectedPOs[0], id: selectedPOs[0], vendor: 'Vendor Reference' })
                       : (poList[0] || null);
+                    setSelectedPOs([]);
                     if (target) {
                       handleStartView(target);
                     }
@@ -2407,7 +2419,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 {/* 6. Export / Print PDF */}
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    setSelectedPOs([]);
+                    window.print();
+                  }}
                   style={{
                     backgroundColor: '#FFFFFF',
                     border: '1px solid #E2E8F0',
@@ -2432,7 +2447,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                 {/* 7. Export to Tally */}
                 {(isAccounts || isAdminOrTech) && (
                   <button
-                    onClick={() => setShowTallyModal(true)}
+                    onClick={() => {
+                      setSelectedPOs([]);
+                      setShowTallyModal(true);
+                    }}
                     style={{
                       backgroundColor: '#FEF3C7',
                       border: '1px solid #FDE68A',

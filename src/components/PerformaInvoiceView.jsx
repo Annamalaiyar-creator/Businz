@@ -3052,6 +3052,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         href={`https://books.zoho.in/app/60082137608#/quotes/${targetPi.zohoEstimateId}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={() => setSelectedPIs([])}
                         style={{
                           backgroundColor: '#ECFDF5',
                           border: '1px solid #A7F3D0',
