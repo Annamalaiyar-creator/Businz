@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package, FileText, FileCode
+  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import TallySyncModal from './TallySyncModal';
