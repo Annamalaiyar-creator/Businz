@@ -829,7 +829,7 @@ export default function ProductionViewsEngine(props) {
       ].includes(activeTab) || ['Work Orders', 'Planning & Scheduling', 'Production Monitoring',
         'Quality Control', 'Machine Maintenance', 'Inventory', 'BOM / Routing', 'BOM', 'Customer Management',
         'Production Reports', 'Efficiency Reports', 'Downtime Analytics',
-        'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management'
+        'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management', 'Delivery Challans'
       ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && (() => {
         try {
           // If viewing an individual Invoice in full screen

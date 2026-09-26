@@ -3486,7 +3486,10 @@ export const CANONICAL_PRODUCT_ALIASES = {
   'FG-7910': 'MR40',
   'FG-8001': 'MR60',
   'FG-7244': 'MR100O',
-  'FG-8886': 'MR100O'
+  'FG-8886': 'MR100O',
+  'MR300': 'MR-300MM',
+  'MR300MM': 'MR-300MM',
+  'MINI-RAIL-300MM': 'MR-300MM'
 };
 
 export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {

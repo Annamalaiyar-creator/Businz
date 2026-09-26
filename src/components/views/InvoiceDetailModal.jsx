@@ -1418,8 +1418,8 @@ export default function InvoiceDetailModal({
 
         {/* TAB CONTENT: ADDITIONAL INFORMATION (ADDRESSES & MANDATORY ADDRESS PROOF) */}
         {invoiceModalActiveTab === 'Additional Information' && (() => {
-          const foundBom = bomStore.find(b => (b.bomCode && b.bomCode === (inv.poNo || inv.code || bomRefText)) || (b.code && b.code === (inv.poNo || inv.code || bomRefText)) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))) || b.deliveryAddressProofDoc);
-          const addressProofDoc = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || (bomStore.find(b => b.deliveryAddressProofDoc))?.deliveryAddressProofDoc || null;
+          const foundBom = bomStore.find(b => (b.bomCode && b.bomCode === (inv.poNo || inv.code || bomRefText)) || (b.code && b.code === (inv.poNo || inv.code || bomRefText)) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+          const addressProofDoc = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
           const bObj = inv.billingAddressObj || matchingBom?.billingAddressObj || {};
           const dObj = inv.deliveryAddressObj || matchingBom?.deliveryAddressObj || {};
           const bAddr = inv.billingAddress || matchingBom?.billingAddress || bObj.address || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai, Tamil Nadu - 600058';

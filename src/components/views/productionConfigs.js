@@ -86,7 +86,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 deliveryAddressProofDoc: b.deliveryAddressProofDoc || null,
                 sameAsBilling: b.sameAsBilling,
                 accountsVerification: b.accountsVerification,
-                proofDoc: b.proofDoc || b.payments?.proofDoc || b.paymentProofDoc?.name || 'Payment_Proof_Receipt.pdf',
+                proofDoc: b.proofDoc || b.payments?.proofDoc || b.paymentProofDoc?.name || null,
                 proofDocData: b.proofDocData || b.payments?.proofDocData || b.paymentProofDoc?.dataUrl || null,
                 paymentProofDoc: b.paymentProofDoc || null
               };

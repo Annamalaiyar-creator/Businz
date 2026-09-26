@@ -12,9 +12,22 @@
 
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from './supabaseDataSync';
 import { stripDataUrlsFromRecord } from './mediaUtils';
+import { CANONICAL_PRODUCT_ALIASES } from './vrmProductsData';
 
 // Initial Manufacturing Recipes (BOMs)
 export const INITIAL_MANUFACTURING_RECIPES = [
+  {
+    id: 'RECIPE-MR300',
+    productCode: 'MR-300MM',
+    productName: 'Mini Rail - 300 mm',
+    outputUnit: 'Pieces',
+    expectedOutputQty: 8,
+    rawMaterialCode: 'ALU-LEN-2414MM',
+    rawMaterialName: 'Aluminium Length (2414 mm)',
+    rawMaterialUnit: 'Length',
+    inputQty: 1,
+    notes: 'Mini Rail profile (300mm Cut Length). 1 Aluminium Length (2414 mm) yields 8 pieces (300mm each) with 2mm saw kerf.'
+  },
   {
     id: 'RECIPE-MR100',
     productCode: 'MR100',
@@ -123,6 +136,20 @@ export const INITIAL_INVENTORY_ITEMS = [
     safetyStock: 50,
     unitRate: 260,
     bayLocation: 'Bay #2 - Storage'
+  },
+  {
+    code: 'MR-300MM',
+    name: 'Mini Rail - 300 mm',
+    category: 'Finished Goods',
+    unit: 'Pieces',
+    physicalStock: 0,
+    reservedStock: 0,
+    availableStock: 0,
+    issuedStock: 0,
+    consumedStock: 0,
+    safetyStock: 50,
+    unitRate: 140,
+    bayLocation: 'Bay #4 - FG Store'
   },
   {
     code: 'MR100N',
@@ -302,7 +329,8 @@ class ProductionModuleEngine {
 
   // Calculate Raw Material Requirement from Manufacturing Recipe & Custom Cut Length (mm)
   calculateMaterialRequirement(productCode, targetQty, customCutLengthMm = null, allProductItems = []) {
-    const recipe = this.recipes.find(r => r.productCode === productCode);
+    const canonicalCode = CANONICAL_PRODUCT_ALIASES[String(productCode || '').toUpperCase().trim()] || productCode;
+    const recipe = this.recipes.find(r => r.productCode === productCode || r.productCode === canonicalCode);
 
     // Parse cut length entered by user (e.g., "100", "100 mm", "500")
     let cutLenMm = 0;
@@ -316,6 +344,8 @@ class ProductionModuleEngine {
       'CC4.8N': 4800,
       'CC3.6': 3600,
       'SR3.6': 3600,
+      'MR-300MM': 2414,
+      'MR300': 2414,
       'MR100O': 2414,
       'MR100N': 2414,
       'LC': 3000,
@@ -339,7 +369,7 @@ class ProductionModuleEngine {
     };
 
     // Determine raw bar total length for the selected product (Defaults to 2414 mm if not specified)
-    const rawLengthMm = PRODUCT_RAW_BAR_LENGTHS[productCode] || 2414;
+    const rawLengthMm = PRODUCT_RAW_BAR_LENGTHS[productCode] || PRODUCT_RAW_BAR_LENGTHS[canonicalCode] || 2414;
     const bladeKerfMm = 2; // 2mm saw blade kerf width per cut stroke
 
     // Calculate how many pieces N fit in 1 length of rawLengthMm (where N pieces require N - 1 cuts of bladeKerfMm)
@@ -495,7 +525,9 @@ class ProductionModuleEngine {
 
   // Create Work Order (Production Head)
   createWorkOrder(data) {
-    const calc = this.calculateMaterialRequirement(data.finishedProductCode || 'MR100', data.targetQty || 1, data.cutLength || 300);
+    const rawFgCode = data.finishedProductCode || 'MR-300MM';
+    const canonicalFgCode = CANONICAL_PRODUCT_ALIASES[String(rawFgCode).toUpperCase().trim()] || rawFgCode;
+    const calc = this.calculateMaterialRequirement(canonicalFgCode, data.targetQty || 1, data.cutLength || 300);
 
     // Enforce strict raw material availability check: Do not create WO if raw material is insufficient
     if (!calc.isSufficient) {
@@ -503,9 +535,9 @@ class ProductionModuleEngine {
     }
 
     const recipe = calc.recipe || {
-      productName: data.finishedProductCode || 'Mini Rail 100 mm',
+      productName: data.finishedProductName || (canonicalFgCode === 'MR-300MM' ? 'Mini Rail - 300 mm' : canonicalFgCode),
       outputUnit: 'Pieces',
-      id: 'RECIPE-MR100',
+      id: `RECIPE-${canonicalFgCode}`,
       rawMaterialCode: 'ALU-LEN-2414MM',
       rawMaterialName: 'Aluminium Length (2414 mm)',
       rawMaterialUnit: 'Length',
@@ -513,12 +545,13 @@ class ProductionModuleEngine {
     };
 
     const woId = data.id || this.getNextWoNumber();
+    const resolvedFgName = data.finishedProductName || recipe.productName || (canonicalFgCode === 'MR-300MM' ? 'Mini Rail - 300 mm' : 'Finished Product');
     const newWO = {
       id: woId,
       date: data.date || new Date().toISOString().split('T')[0],
       productionHead: data.productionHead || 'Senthil Kumar (Production Head)',
-      finishedProductCode: data.finishedProductCode,
-      finishedProductName: recipe.productName,
+      finishedProductCode: canonicalFgCode,
+      finishedProductName: resolvedFgName,
       targetQty: Number(data.targetQty) || 1,
       cutLengthMm: data.cutLength ? parseFloat(String(data.cutLength).replace(/[^\d.]/g, '')) : (calc.cutLenMm || 300),
       productItems: data.productItems || [],
@@ -894,21 +927,24 @@ class ProductionModuleEngine {
     });
 
     // 2. Finished Goods Stock Addition (Only Good Output) directly into Main Branch item
-    const mainBranchCode = wo.finishedProductCode || wo.parentCode || 'AR120';
-    const mainBranchName = wo.finishedProductName || 'Finished Product';
-    const targetFgCode = mainBranchCode;
-    const targetFgName = mainBranchName;
+    const rawBranchCode = wo.finishedProductCode || wo.parentCode || 'MR-300MM';
+    const targetFgCode = CANONICAL_PRODUCT_ALIASES[String(rawBranchCode).toUpperCase().trim()] || rawBranchCode;
+    const targetFgName = wo.finishedProductName || (targetFgCode === 'MR-300MM' ? 'Mini Rail - 300 mm' : 'Finished Product');
+    const goodQty = Number(wo.actualGoodOutput) || Number(wo.targetQty) || 1;
 
-    let fgItem = this.inventory.find(i => 
-      (i.code && i.code.toUpperCase() === targetFgCode.toUpperCase()) ||
-      (i.name && i.name.toLowerCase() === targetFgName.toLowerCase())
-    );
+    let fgItem = this.inventory.find(i => {
+      const c = String(i.code || '').toUpperCase().trim();
+      const cCanon = CANONICAL_PRODUCT_ALIASES[c] || c;
+      const n = String(i.name || '').toLowerCase().trim();
+      return c === targetFgCode || cCanon === targetFgCode || n === targetFgName.toLowerCase();
+    });
 
     let fgPrevStock = 0;
     if (fgItem) {
       fgPrevStock = fgItem.physicalStock;
-      fgItem.physicalStock += wo.actualGoodOutput;
-      fgItem.availableStock = fgItem.physicalStock - fgItem.reservedStock;
+      fgItem.code = targetFgCode;
+      fgItem.physicalStock += goodQty;
+      fgItem.availableStock = fgItem.physicalStock - (fgItem.reservedStock || 0);
     } else {
       // Create new FG main branch item in inventory catalog
       fgItem = {
@@ -916,9 +952,9 @@ class ProductionModuleEngine {
         name: targetFgName,
         category: 'Finished Goods',
         unit: wo.unit || 'Pieces',
-        physicalStock: wo.actualGoodOutput,
+        physicalStock: goodQty,
         reservedStock: 0,
-        availableStock: wo.actualGoodOutput,
+        availableStock: goodQty,
         issuedStock: 0,
         consumedStock: 0,
         safetyStock: 20,
@@ -976,16 +1012,24 @@ class ProductionModuleEngine {
         }
 
         // 2. Add / increment Finished Goods product in store
-        let fgMatch = currentMats.find(m => 
-          (m.code && m.code.toUpperCase() === targetFgCode.toUpperCase()) ||
-          (m.name && m.name.toLowerCase() === targetFgName.toLowerCase())
-        );
+        let fgMatch = currentMats.find(m => {
+          const mCode = String(m.code || '').toUpperCase().trim();
+          const mCanon = CANONICAL_PRODUCT_ALIASES[mCode] || mCode;
+          const mName = String(m.name || '').toLowerCase().trim();
+          return mCanon === targetFgCode || 
+            mCode === targetFgCode || 
+            (targetFgCode === 'MR-300MM' && (mCode === 'MR300' || mName.includes('mini rail - 300') || mName.includes('mini rail 300'))) ||
+            mName === targetFgName.toLowerCase();
+        });
 
         if (fgMatch) {
           const currStock = Number(fgMatch.stock || 0);
-          const newStock = currStock + wo.actualGoodOutput;
+          const newStock = currStock + goodQty;
+          fgMatch.code = targetFgCode;
           fgMatch.stock = newStock;
-          fgMatch.goodsReceived = (Number(fgMatch.goodsReceived) || 0) + wo.actualGoodOutput;
+          fgMatch.physicalStock = (Number(fgMatch.physicalStock) || currStock) + goodQty;
+          fgMatch.availableStock = (Number(fgMatch.availableStock) || currStock) + goodQty;
+          fgMatch.goodsReceived = (Number(fgMatch.goodsReceived) || 0) + goodQty;
           fgMatch.status = newStock === 0 ? 'Out of Stock' : (newStock <= (fgMatch.minLevel || 50) ? 'Low Stock' : 'In Stock');
           fgMatch.lastUpdated = 'Production Approved';
         } else {
@@ -993,27 +1037,67 @@ class ProductionModuleEngine {
             code: targetFgCode,
             name: targetFgName,
             cat: 'Finished Goods',
+            category: 'Finished Goods',
             unit: wo.unit || 'Pieces',
-            stock: wo.actualGoodOutput,
+            stock: goodQty,
+            physicalStock: goodQty,
+            availableStock: goodQty,
+            openingStock: 0,
             minLevel: 20,
-            status: wo.actualGoodOutput > 0 ? 'In Stock' : 'Out of Stock',
-            store: 'Main Store',
+            status: goodQty > 0 ? 'In Stock' : 'Out of Stock',
+            store: 'Bay #4 - FG Store',
             hsn: '7616',
             lastUpdated: 'Production Approved',
             reserved: 0,
-            openingStock: 0,
-            goodsReceived: wo.actualGoodOutput,
+            goodsReceived: goodQty,
             issuedProd: 0,
             matReturn: 0,
             stockAdj: 0
           });
         }
 
+        // 3. Also sync to central items store if present
+        try {
+          const centralRaw = localStorage.getItem('controlroom_central_items_v2');
+          if (centralRaw) {
+            const centralList = JSON.parse(centralRaw);
+            if (Array.isArray(centralList)) {
+              let cMatch = centralList.find(ci => {
+                const cCode = String(ci.code || '').toUpperCase().trim();
+                const cCanon = CANONICAL_PRODUCT_ALIASES[cCode] || cCode;
+                const cName = String(ci.name || '').toLowerCase().trim();
+                return cCanon === targetFgCode || cCode === targetFgCode || (targetFgCode === 'MR-300MM' && (cName.includes('mini rail - 300') || cName.includes('mini rail 300')));
+              });
+              if (cMatch) {
+                cMatch.physicalStock = (Number(cMatch.physicalStock) || 0) + goodQty;
+                cMatch.stock = (Number(cMatch.stock) || 0) + goodQty;
+                cMatch.available = (Number(cMatch.available) || 0) + goodQty;
+                cMatch.availableStock = (Number(cMatch.availableStock) || 0) + goodQty;
+                localStorage.setItem('controlroom_central_items_v2', JSON.stringify(centralList));
+                saveCloudStore('item_store', centralList);
+              }
+            }
+          }
+        } catch (_) {}
+
         localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
         saveCloudStore('raw_materials_store', currentMats);
         window.dispatchEvent(new Event('controlroom_raw_materials_update'));
         window.dispatchEvent(new Event('central_inventory_updated'));
         window.dispatchEvent(new Event('controlroom_storage_update'));
+        window.dispatchEvent(new Event('controlroom_workorder_updated'));
+
+        try {
+          fetch('/api/workorders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workOrderNo: wo.id,
+              status: 'Completed',
+              completedQty: goodQty
+            })
+          }).catch(() => {});
+        } catch (_) {}
       }
     } catch (e) {
       console.warn('Error syncing to controlroom_raw_materials_store:', e);
