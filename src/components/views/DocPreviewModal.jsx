@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Download, X, FileText, Upload } from "lucide-react";
-import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache } from "../../utils/otherViewsShared";
+import { Download, X, FileText, Upload, AlertTriangle } from "lucide-react";
+import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { validateClientFile } from "../../utils/bomStorageClient";
 
 export default function DocPreviewModal({ previewDocModal, onClose }) {
   const rawDoc = previewDocModal?.doc;
@@ -173,59 +174,111 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
           {!resolvedData ? (
             <div style={{
               backgroundColor: '#1E293B',
-              borderRadius: '14px',
-              padding: '28px 36px',
+              borderRadius: '16px',
+              padding: '28px 32px',
               textAlign: 'center',
-              maxWidth: '480px',
+              maxWidth: '520px',
               border: '1px solid #334155',
               boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
               color: '#F1F5F9'
             }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '14px', backgroundColor: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', color: '#FFFFFF' }}>
-                <FileText size={30} />
+              <div style={{ width: '56px', height: '56px', borderRadius: '14px', backgroundColor: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', color: '#FFFFFF' }}>
+                <AlertTriangle size={28} />
               </div>
               <h4 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '800', color: '#FFFFFF' }}>
-                Official Document Record
+                Image Preview Not Loaded
               </h4>
               <div style={{ fontSize: '13px', fontWeight: '700', color: '#38BDF8', wordBreak: 'break-all' }}>
                 {docName}
               </div>
-              <div style={{ margin: '14px 0', padding: '10px 14px', backgroundColor: '#0F172A', borderRadius: '8px', border: '1px solid #334155', fontSize: '11.5px', color: '#94A3B8', textAlign: 'left', lineHeight: '1.5' }}>
-                <div><strong>Document Status:</strong> <span style={{ color: '#4ADE80' }}>✓ Verified Order Attachment</span></div>
+
+              {/* Informative size & limitation badge */}
+              <div style={{ margin: '14px 0', padding: '12px 14px', backgroundColor: '#0F172A', borderRadius: '10px', border: '1px solid #334155', fontSize: '12px', color: '#94A3B8', textAlign: 'left', lineHeight: '1.6' }}>
+                <div><strong>Status:</strong> <span style={{ color: '#FCD34D' }}>⚠️ Exceeded 5 MB Limit ({rawDoc?.size || '9.00 MB'})</span></div>
                 <div><strong>Reference:</strong> {previewDocModal.bomCode || 'Order Confirmation'}</div>
-                <div><strong>Size:</strong> {rawDoc?.size || 'Attached'}</div>
+                <div style={{ marginTop: '6px', color: '#CBD5E1', fontSize: '11.5px', borderTop: '1px solid #1E293B', paddingTop: '6px' }}>
+                  The original file was larger than 5 MB, so its raw image could not be stored in local memory. To view the image, please compress or reduce the file below 5 MB and upload below.
+                </div>
               </div>
+
               <label style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
                 backgroundColor: '#0E7490',
                 color: '#FFFFFF',
-                padding: '8px 18px',
+                padding: '9px 20px',
                 borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: '700',
                 cursor: 'pointer',
-                marginTop: '6px'
+                marginTop: '6px',
+                boxShadow: '0 2px 6px rgba(14,116,144,0.3)'
               }}>
-                <Upload size={14} /> Attach / Re-upload Image File
+                <Upload size={14} /> Upload Compressed Image (&lt; 5 MB)
                 <input
                   type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
+                  accept=".jpg,.jpeg,.png,.webp,.pdf"
                   style={{ display: 'none' }}
                   onChange={(e) => {
                     const file = e.target.files && e.target.files[0];
                     if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (re) => {
-                        const url = re.target?.result;
-                        if (url) {
-                          setResolvedData(url);
-                          saveMediaToCache(docName, url);
-                          if (file.name) saveMediaToCache(file.name, url);
-                        }
-                      };
-                      reader.readAsDataURL(file);
+                      try {
+                        validateClientFile(file);
+                        compressAndSaveFile(file, (res) => {
+                          if (res && res.dataUrl) {
+                            setResolvedData(res.dataUrl);
+                            saveMediaToCache(docName, res.dataUrl);
+                            if (file.name) saveMediaToCache(file.name, res.dataUrl);
+
+                            // Save to localStorage stores
+                            try {
+                              if (bomCode) {
+                                const bStore = JSON.parse(localStorage.getItem('bom_orders_store') || '[]');
+                                const updatedB = bStore.map(b => {
+                                  if (b.bomCode === bomCode || b.code === bomCode) {
+                                    return {
+                                      ...b,
+                                      deliveryAddressProofDoc: {
+                                        ...(b.deliveryAddressProofDoc || {}),
+                                        name: file.name,
+                                        size: res.size || `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                        dataUrl: res.dataUrl,
+                                        previewUrl: res.dataUrl
+                                      }
+                                    };
+                                  }
+                                  return b;
+                                });
+                                localStorage.setItem('bom_orders_store', JSON.stringify(updatedB));
+                              }
+                              const invStore = JSON.parse(localStorage.getItem('invoices_store') || '[]');
+                              const updatedInv = invStore.map(inv => {
+                                if (inv.poNo === bomCode || inv.code === bomCode || (inv.deliveryAddressProofDoc && inv.deliveryAddressProofDoc.name === docName)) {
+                                  return {
+                                    ...inv,
+                                    deliveryAddressProofDoc: {
+                                      ...(inv.deliveryAddressProofDoc || {}),
+                                      name: file.name,
+                                      size: res.size || `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+                                      dataUrl: res.dataUrl,
+                                      previewUrl: res.dataUrl
+                                    }
+                                  };
+                                }
+                                return inv;
+                              });
+                              localStorage.setItem('invoices_store', JSON.stringify(updatedInv));
+                            } catch (_) {}
+                            if (previewDocModal.onUpdateDoc) {
+                              previewDocModal.onUpdateDoc(res);
+                            }
+                          }
+                        });
+                      } catch (err) {
+                        e.target.value = '';
+                        alert(`⚠️ Cannot Proceed: ${err.message}`);
+                      }
                     }
                   }}
                 />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Search, X, CheckCircle, Edit3, RotateCcw, Eye } from "lucide-react";
 import { prodModuleEngine } from "../../utils/productionModuleEngine";
+import { CANONICAL_PRODUCT_ALIASES } from "../../utils/vrmProductsData";
 import { fetchCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 
@@ -55,12 +56,16 @@ export default function WorkOrdersView({
             else if (sw.status === 'Completed' || sw.status === 'COMPLETED' || sw.status === 'COMPLETED_PENDING_VERIFICATION') parsedStatus = 'COMPLETED_PENDING_VERIFICATION';
             else if (String(sw.status || '').toUpperCase() === 'OVERDUE') parsedStatus = 'OVERDUE';
 
+            const rawBranchCode = sw.finishedProductCode || sw.productCode || (sw.productName ? (CANONICAL_PRODUCT_ALIASES[String(sw.productName).toUpperCase()] || sw.productName) : 'MR-300MM');
+            const targetFgCode = CANONICAL_PRODUCT_ALIASES[String(rawBranchCode).toUpperCase().trim()] || rawBranchCode;
+            const targetFgName = sw.finishedProductName || (targetFgCode === 'MR-300MM' ? 'Mini Rail - 300 mm' : (sw.productName || 'Mini Rail 100 mm'));
+
             const formattedWO = {
               id: woId,
               date: sw.targetDate || sw.date || new Date().toISOString().split('T')[0],
               productionHead: 'Senthil Kumar (Production Head)',
-              finishedProductCode: sw.productName || sw.finishedProductCode || 'MR100',
-              finishedProductName: sw.productName || sw.finishedProductName || 'Mini Rail 100 mm',
+              finishedProductCode: targetFgCode,
+              finishedProductName: targetFgName,
               targetQty: Number(sw.plannedQty || sw.targetQty) || 500,
               cutLengthMm: 300,
               productItems: sw.productItems || (existingWO ? existingWO.productItems : []),
@@ -1091,7 +1096,36 @@ export default function WorkOrdersView({
                   }}>
                     <CheckCircle size={14} style={{ color: '#15803D' }} /> Approved & Closed (FG Stock Added)
                   </span>
-                ) : null
+                ) : (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => {
+                        const targetWO = selectedWoForAcceptanceModal;
+                        setSelectedWoForAcceptanceModal(null);
+                        setSelectedWoForStatusUpdate(targetWO);
+                        setActualGoodOutputVal(String(targetWO.targetQty || ''));
+                        setActualRejectedOutputVal('0');
+                        setOperatorRemarksVal('');
+                        setUpdateStatusChoice('IN_PROGRESS');
+                      }}
+                      style={{
+                        padding: '9px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#FFFFFF',
+                        color: '#0284C7',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Edit3 size={14} style={{ color: '#0284C7' }} /> Update Status
+                    </button>
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -1254,6 +1288,41 @@ export default function WorkOrdersView({
               >
                 <Eye size={14} style={{ color: '#0F172A' }} /> View Details
               </button>
+
+              {/* UPDATE STATUS ACTION (PRODUCTION HEAD / ADMIN) */}
+              <button
+                onClick={() => {
+                  const targetWO = selectedWoObjects[0] || prodModuleEngine.getWorkOrderById(selectedRows[0]) || prodModuleEngine.getWorkOrders()[0];
+                  setSelectedRows([]);
+                  if (targetWO) {
+                    setSelectedWoForStatusUpdate(targetWO);
+                    setActualGoodOutputVal(String(targetWO.targetQty || ''));
+                    setActualRejectedOutputVal('0');
+                    setOperatorRemarksVal('');
+                    setUpdateStatusChoice(targetWO.status === 'ACCEPTED' ? 'IN_PROGRESS' : 'IN_PROGRESS');
+                  }
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#0284C7',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0F9FF'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+              >
+                <Edit3 size={14} style={{ color: '#0284C7' }} /> Update Status
+              </button>
+
               {(!isFloorEmployee && selectedWoObjects.some(w => w.status === 'COMPLETED_PENDING_VERIFICATION')) && (
                 <button
                   onClick={() => {

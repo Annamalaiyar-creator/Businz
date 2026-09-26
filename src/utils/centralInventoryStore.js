@@ -13,12 +13,12 @@ export const INITIAL_CENTRAL_ITEMS = VRM_PRODUCTS.map((p, idx) => ({
   maxLevel: 10000,
   location: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
   unitRate: p.price || (1200 + (idx * 50) % 2500),
-  openingStock: 5000,
-  physicalStock: 5000,
-  stock: 5000,
-  available: 5000,
-  availableStock: 5000,
-  onHand: 5000,
+  openingStock: 0,
+  physicalStock: 0,
+  stock: 0,
+  available: 0,
+  availableStock: 0,
+  onHand: 0,
   reserved: 0
 }));
 
@@ -107,7 +107,7 @@ class CentralInventoryStore {
       const sanitized = list.map(item => {
         const upperCode = String(item.code || '').toUpperCase().trim();
         const alloc = bomAllocMap.get(upperCode) || 0;
-        const basePhysical = Number(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 5000)));
+        const basePhysical = Number(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock !== undefined ? item.openingStock : 0)));
         const curRes = alloc;
         const effectiveStock = Math.max(0, basePhysical - curRes);
 
@@ -742,6 +742,139 @@ class CentralInventoryStore {
       window.dispatchEvent(new Event('controlroom_raw_materials_update'));
       window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
+      window.dispatchEvent(new Event('storage'));
+    } catch (_) {}
+  }
+
+  // Deduct Inventory immediately upon Delivery Challan (DC) issue from Billing login
+  deductStockForDC(dcNo, invNo, itemsList = [], user = 'Billing Executive') {
+    if (!Array.isArray(itemsList) || itemsList.length === 0) return;
+    const timestamp = new Date().toISOString();
+
+    // Read current raw materials store to keep in sync
+    let currentMats = [];
+    try {
+      const rawStr = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawStr) currentMats = JSON.parse(rawStr);
+    } catch (_) {}
+    if (!Array.isArray(currentMats)) currentMats = [];
+
+    // Read current items list
+    let currentItems = [];
+    try {
+      const itemsStr = localStorage.getItem('controlroom_items_list');
+      if (itemsStr) currentItems = JSON.parse(itemsStr);
+    } catch (_) {}
+    if (!Array.isArray(currentItems)) currentItems = [];
+
+    itemsList.forEach(pItem => {
+      const qty = parseFloat(pItem.dcQty || pItem.qty || pItem.bomQty || 1) || 0;
+      if (qty <= 0) return;
+      const resCode = resolveProductCode(pItem);
+      const rawCode = String(resCode || pItem.code || '').toUpperCase().trim();
+      const pCode = CANONICAL_PRODUCT_ALIASES[rawCode] || rawCode;
+      const pName = String(pItem.name || pItem.description || '').trim();
+      const normPName = normalizeProductName(pName);
+
+      // 1. Update central item
+      let item = this.items.find(i => {
+        const iCode = String(i.code || '').toUpperCase().trim();
+        const normIName = normalizeProductName(i.name);
+        if (pCode && iCode === pCode) return true;
+        if (normPName && normIName === normPName) return true;
+        if (normPName && (normIName.includes(normPName) || normPName.includes(normIName))) return true;
+        if (pName && i.name && i.name.toLowerCase() === pName.toLowerCase()) return true;
+        return false;
+      });
+
+      const targetCode = item ? item.code : (pCode || `ITEM-${Date.now().toString().slice(-4)}`);
+      const targetName = item ? item.name : (pItem.name || 'DC Item');
+      const targetUnit = (item && item.uom) || pItem.uom || pItem.unit || 'Nos';
+
+      if (item) {
+        const curPhysical = Math.max(0, parseFloat(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 0))) || 0);
+        const nextStock = Math.max(0, curPhysical - qty);
+        item.stock = nextStock;
+        item.physicalStock = nextStock;
+        item.available = nextStock;
+        item.availableStock = nextStock;
+        item.onHand = nextStock;
+      }
+
+      // 2. Record ledger transaction
+      this.transactions.unshift({
+        id: `TX-DC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        timestamp,
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        type: TX_TYPES.SALES_DISPATCH,
+        itemCode: targetCode,
+        itemName: targetName,
+        qty: -qty,
+        balanceAfter: item ? item.stock : 0,
+        unit: targetUnit,
+        refDoc: dcNo,
+        batchNo: `DC-${dcNo}`,
+        party: `Delivery Challan for Invoice ${invNo}`,
+        user: user || 'Billing Team',
+        notes: `Delivery Challan (Rule 55 CGST) outward stock deduction against Invoice ${invNo}`
+      });
+
+      // 3. Update raw materials store
+      let m = currentMats.find(mat => {
+        const mCode = String(mat.code || '').toUpperCase().trim();
+        const normMName = normalizeProductName(mat.name);
+        if (pCode && mCode === pCode) return true;
+        if (normPName && normMName === normPName) return true;
+        if (normPName && (normMName.includes(normPName) || normPName.includes(normMName))) return true;
+        if (pName && mat.name && mat.name.toLowerCase() === pName.toLowerCase()) return true;
+        return false;
+      });
+
+      if (m) {
+        const curM = Math.max(0, parseFloat(m.stock !== undefined ? m.stock : (m.physicalStock || 0)) || 0);
+        const nextM = Math.max(0, curM - qty);
+        m.stock = nextM;
+        m.availableStock = nextM;
+        m.physicalStock = Math.max(0, parseFloat(m.physicalStock || curM) - qty);
+        m.issuedProd = (parseFloat(m.issuedProd || 0) + qty);
+        m.lastUpdated = `DC Outward: -${qty} ${targetUnit} (${dcNo})`;
+        m.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (m.minLevel || 50) ? 'Low Stock' : 'In Stock');
+      }
+
+      // 4. Update controlroom_items_list
+      let itMatch = currentItems.find(it => {
+        const itCode = String(it.code || it.sku || '').toUpperCase().trim();
+        const itNorm = normalizeProductName(it.name);
+        return (pCode && itCode === pCode) || (normPName && itNorm === normPName);
+      });
+      if (itMatch) {
+        const curIt = Math.max(0, parseFloat(itMatch.stock !== undefined ? itMatch.stock : (itMatch.physicalStock || 0)) || 0);
+        const nextIt = Math.max(0, curIt - qty);
+        itMatch.stock = nextIt;
+        itMatch.availableStock = nextIt;
+        itMatch.physicalStock = nextIt;
+        itMatch.status = nextIt <= 0 ? 'Out of Stock' : (nextIt <= (itMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
+      }
+    });
+
+    try {
+      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
+      saveCloudStore('raw_materials_store', currentMats);
+    } catch (_) {}
+
+    try {
+      localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
+      saveCloudStore('item_store', currentItems);
+    } catch (_) {}
+
+    this.saveItems();
+    this.saveTransactions();
+    this.notifyChange();
+
+    try {
+      window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+      window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_raw_materials_store' } }));
+      window.dispatchEvent(new Event('central_inventory_updated'));
       window.dispatchEvent(new Event('storage'));
     } catch (_) {}
   }

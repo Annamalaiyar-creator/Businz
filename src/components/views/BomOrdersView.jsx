@@ -3239,15 +3239,15 @@ export default function BomOrdersView(props) {
                                 if (file) {
                                   try {
                                     validateClientFile(file);
-                                    setNewBomDeliveryProofDoc({
-                                      name: file.name,
-                                      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                      mimeType: file.type || 'application/pdf',
-                                      _rawFile: file,
-                                      previewUrl: URL.createObjectURL(file)
+                                    compressAndSaveFile(file, (res) => {
+                                      if (res) {
+                                        if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                        setNewBomDeliveryProofDoc(res);
+                                      }
                                     });
                                   } catch (err) {
-                                    alert(err.message);
+                                    alert(`⚠️ Cannot Proceed: ${err.message}`);
+                                    setNewBomDeliveryProofDoc(null);
                                   }
                                 }
                               }}
@@ -3270,22 +3270,23 @@ export default function BomOrdersView(props) {
                                       if (file) {
                                         try {
                                           validateClientFile(file);
-                                          setNewBomDeliveryProofDoc({
-                                            name: file.name,
-                                            size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                            mimeType: file.type || 'application/pdf',
-                                            _rawFile: file,
-                                            previewUrl: URL.createObjectURL(file)
+                                          compressAndSaveFile(file, (res) => {
+                                            if (res) {
+                                              if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                              setNewBomDeliveryProofDoc(res);
+                                            }
                                           });
                                         } catch (err) {
-                                          alert(err.message);
+                                          e.target.value = '';
+                                          alert(`⚠️ Cannot Proceed: ${err.message}`);
+                                          setNewBomDeliveryProofDoc(null);
                                         }
                                       }
                                     }}
                                   />
                                 </label>
                               </div>
-                              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported: PDF, JPG, PNG (Max 50MB)</span>
+                              <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported: PDF, JPG, PNG (Max 5 MB)</span>
                             </div>
                           )}
                         </div>
@@ -4157,13 +4158,19 @@ export default function BomOrdersView(props) {
                         e.preventDefault();
                         const file = e.dataTransfer.files && e.dataTransfer.files[0];
                         if (file) {
-                          compressAndSaveFile(file, (res) => {
-                            if (res) {
-                              if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                              setNewBomPaymentProofDoc(res);
-                              setFormErrors(prev => ({ ...prev, paymentProof: null }));
-                            }
-                          });
+                          try {
+                            validateClientFile(file);
+                            compressAndSaveFile(file, (res) => {
+                              if (res) {
+                                if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                setNewBomPaymentProofDoc(res);
+                                setFormErrors(prev => ({ ...prev, paymentProof: null }));
+                              }
+                            });
+                          } catch (err) {
+                            alert(`⚠️ Cannot Proceed: ${err.message}`);
+                            setNewBomPaymentProofDoc(null);
+                          }
                         }
                       }}
                       style={{
@@ -4197,23 +4204,24 @@ export default function BomOrdersView(props) {
                               if (file) {
                                 try {
                                   validateClientFile(file);
-                                  setNewBomPaymentProofDoc({
-                                    name: file.name,
-                                    size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                    mimeType: file.type || 'application/pdf',
-                                    _rawFile: file,
-                                    previewUrl: URL.createObjectURL(file)
+                                  compressAndSaveFile(file, (res) => {
+                                    if (res) {
+                                      if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                      setNewBomPaymentProofDoc(res);
+                                      setFormErrors(prev => ({ ...prev, paymentProof: null }));
+                                    }
                                   });
-                                  setFormErrors(prev => ({ ...prev, paymentProof: null }));
                                 } catch (err) {
-                                  alert(err.message);
+                                  e.target.value = '';
+                                  alert(`⚠️ Cannot Proceed: ${err.message}`);
+                                  setNewBomPaymentProofDoc(null);
                                 }
                               }
                             }}
                           />
                         </label>
                       </div>
-                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG (Max 50MB)</span>
+                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG (Max 5 MB)</span>
                     </div>
                   )}
                   {formErrors.paymentProof && (
@@ -5625,7 +5633,8 @@ export default function BomOrdersView(props) {
                                           }
                                         }));
                                       } catch (err) {
-                                        alert(`Address proof upload failed: ${err.message}`);
+                                        e.target.value = '';
+                                        alert(`⚠️ Cannot Proceed: ${err.message}`);
                                       }
                                     }
                                   }}
@@ -5681,7 +5690,8 @@ export default function BomOrdersView(props) {
                                       }
                                     }));
                                   } catch (err) {
-                                    alert(`Address proof upload failed: ${err.message}`);
+                                    e.target.value = '';
+                                    alert(`⚠️ Cannot Proceed: ${err.message}`);
                                   }
                                 }
                               }}
@@ -7617,7 +7627,9 @@ export default function BomOrdersView(props) {
                                 validateClientFile(f);
                                 setPaymentProofFile(f);
                               } catch (err) {
-                                alert(err.message);
+                                e.target.value = '';
+                                alert(`⚠️ Cannot Proceed: ${err.message}`);
+                                setPaymentProofFile(null);
                               }
                             }
                           }}

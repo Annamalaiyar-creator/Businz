@@ -21,9 +21,11 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
         const nameKey = String(ci.name || '').toLowerCase().trim();
         const normKey = normalizeProductName(ci.name);
         const fpKey = wordFingerprint(ci.name);
-        const st = ci.available !== undefined 
+        const isDemo = codeKey === 'alu-len-2414mm' || origCode === 'alu-len-2414mm' || codeKey === 'mr-300mm' || origCode === 'mr-300mm';
+        const isLegacyDummy = !isDemo && (ci.lastUpdated === 'Stock Set to 5,000' || (Number(ci.stock) === 5000 && Number(ci.openingStock) === 5000 && Number(ci.goodsReceived || 0) === 0));
+        const st = isLegacyDummy ? 0 : (ci.available !== undefined 
           ? Number(ci.available) 
-          : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock !== undefined ? ci.stock : 0));
+          : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock !== undefined ? ci.stock : 0)));
         
         if (codeKey) stockMap.set(codeKey, st);
         if (origCode) stockMap.set(origCode, st);
@@ -51,7 +53,10 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
           const nameKey = String(rm.name || '').toLowerCase().trim();
           const normKey = normalizeProductName(rm.name);
           const fpKey = wordFingerprint(rm.name);
-          const st = Number(rm.stock !== undefined ? rm.stock : (rm.availableStock !== undefined ? rm.availableStock : (rm.physicalStock || 0)));
+          const isDemo = codeKey === 'alu-len-2414mm' || origCode === 'alu-len-2414mm' || codeKey === 'mr-300mm' || origCode === 'mr-300mm';
+          const isLegacyDummy = !isDemo && Number(rm.goodsReceived || 0) === 0 && Number(rm.issuedProd || 0) === 0 &&
+            (rm.lastUpdated === 'Stock Set to 5,000' || (Number(rm.stock) === 5000 && Number(rm.physicalStock) === 5000));
+          const st = isLegacyDummy ? 0 : Number(rm.availableStock !== undefined ? rm.availableStock : (rm.stock !== undefined ? rm.stock : (rm.physicalStock || 0)));
           if (codeKey) rawStoreMap.set(codeKey, st);
           if (origCode) rawStoreMap.set(origCode, st);
           if (nameKey) rawStoreMap.set(nameKey, st);
@@ -189,30 +194,30 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
         } else {
           realStock = mr300Stock;
         }
-        if (realStock <= 0 || realStock >= 5000) realStock = 1800;
+        if (realStock <= 0) realStock = 1800;
       } else if (lookupCode === 'alu-len-2414mm' || lookupCode === 'rm-alu-2414') {
         if (rawStoreMap.has('alu-len-2414mm')) {
           realStock = Math.max(0, Number(rawStoreMap.get('alu-len-2414mm')));
         } else if (stockMap.has('alu-len-2414mm')) {
           realStock = Math.max(0, Number(stockMap.get('alu-len-2414mm')));
         } else {
-          realStock = 250;
+          realStock = 5000;
         }
       } else if (lookupCode && rawStoreMap.has(lookupCode)) {
         const val = Number(rawStoreMap.get(lookupCode));
-        realStock = val >= 5000 ? 0 : Math.max(0, val);
+        realStock = Math.max(0, val);
       } else if (lookupCode && stockMap.has(lookupCode)) {
         const val = Number(stockMap.get(lookupCode));
-        realStock = val >= 5000 ? 0 : Math.max(0, val);
+        realStock = Math.max(0, val);
       } else if (nameKey && rawStoreMap.has(nameKey)) {
         const val = Number(rawStoreMap.get(nameKey));
-        realStock = val >= 5000 ? 0 : Math.max(0, val);
+        realStock = Math.max(0, val);
       } else if (nameKey && stockMap.has(nameKey)) {
         const val = Number(stockMap.get(nameKey));
-        realStock = val >= 5000 ? 0 : Math.max(0, val);
+        realStock = Math.max(0, val);
       } else {
         const val = Number(ci.stock !== undefined ? ci.stock : (ci.availableStock !== undefined ? ci.availableStock : (ci.physicalStock || 0)));
-        realStock = val >= 5000 ? 0 : Math.max(0, val);
+        realStock = Math.max(0, val);
       }
 
       if (itemKey) {

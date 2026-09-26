@@ -1336,149 +1336,47 @@ function RecordedProofViewerModal({
               </div>
             )
           ) : (
-            /* Official E-Payment Remittance Receipt Paper Card (Fallback if no attachment was provided) */
+            /* Authentic Document Status Card (When image preview is not present in local cache) */
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '16px',
-              border: '1px solid #CBD5E1',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
-              padding: '28px',
-              position: 'relative',
-              overflow: 'hidden'
+              border: '1.5px dashed #CBD5E1',
+              padding: '36px 24px',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              {/* Watermark */}
               <div style={{
-                position: 'absolute', top: '45%', left: '50%',
-                transform: 'translate(-50%, -50%) rotate(-25deg)',
-                fontSize: '48px', fontWeight: '900', color: 'rgba(37,99,235,0.04)',
-                whiteSpace: 'nowrap', pointerEvents: 'none', userSelect: 'none', zIndex: 0
+                width: '56px', height: '56px', borderRadius: '14px',
+                backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#64748B'
               }}>
-                PAYMENT CLEARED
+                <Receipt style={{ width: '28px', height: '28px' }} />
               </div>
-
-              {/* Bank Receipt Header */}
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                borderBottom: '2px solid #0F172A', paddingBottom: '16px', position: 'relative', zIndex: 1
-              }}>
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: '800', color: '#2563EB', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    BUSINZ CORPORATE E-PAYMENT
-                  </div>
-                  <div style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A', marginTop: '2px' }}>
-                    Electronic Funds Transfer Advice
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                    RBI RTGS / NEFT Inter-Bank Settlement System
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                    padding: '5px 12px', borderRadius: '20px',
-                    backgroundColor: '#DCFCE7', color: '#166534',
-                    fontSize: '12px', fontWeight: '800', border: '1px solid #BBF7D0'
-                  }}>
-                    <CheckCircle style={{ width: '14px', height: '14px' }} />
-                    TRANSACTION CLEARED
-                  </span>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>
-                    Ref: TXN-{Date.now().toString().slice(-8)}
-                  </div>
-                </div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                {docName ? `Recorded File: ${docName}` : 'No Payment Proof Uploaded'}
               </div>
-
-              {/* Key Highlights Banner */}
-              <div style={{
-                margin: '18px 0', padding: '14px 18px', borderRadius: '12px',
-                backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                position: 'relative', zIndex: 1
-              }}>
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
-                    Amount Credited & Verified
-                  </div>
-                  <div style={{ fontSize: '22px', fontWeight: '900', color: '#1E40AF', marginTop: '2px' }}>
-                    ₹ {amtVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
-                    Payment Terms
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
-                    {pType}
-                  </div>
-                </div>
+              <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '440px', lineHeight: '1.5' }}>
+                {docName
+                  ? `The payment document "${docName}" is recorded for this order. The file content is not stored in local browser cache.`
+                  : 'No payment proof file or receipt attachment was uploaded during order creation.'}
               </div>
-
-              {/* Transaction Details Grid */}
               <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
-                fontSize: '12px', position: 'relative', zIndex: 1,
-                padding: '16px 0', borderBottom: '1px solid #E2E8F0'
+                marginTop: '12px',
+                padding: '12px 18px',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                display: 'inline-flex',
+                gap: '24px',
+                fontSize: '12px',
+                color: '#475569'
               }}>
-                <div>
-                  <div style={{ color: '#64748B', fontWeight: '600' }}>Remitter (Customer):</div>
-                  <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', marginTop: '2px' }}>{cName}</div>
-                  <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11px' }}>A/C: ••••••••5812 (HDFC Bank)</div>
-                </div>
-
-                <div>
-                  <div style={{ color: '#64748B', fontWeight: '600' }}>Beneficiary Legal Entity:</div>
-                  <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '13px', marginTop: '2px' }}>BUSINZ INDUSTRIAL MANUFACTURING PVT LTD</div>
-                  <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11px' }}>A/C: ••••••••4821 • IFSC: HDFC0001092</div>
-                </div>
-
-                <div>
-                  <div style={{ color: '#64748B', fontWeight: '600' }}>UTR / Reference Number:</div>
-                  <div style={{ color: '#0F172A', fontWeight: '800', fontFamily: 'monospace', fontSize: '13px', marginTop: '2px' }}>
-                    HDFCR520260818{Date.now().toString().slice(-6)}
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ color: '#64748B', fontWeight: '600' }}>Value Date & Time:</div>
-                  <div style={{ color: '#0F172A', fontWeight: '700', marginTop: '2px' }}>
-                    {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, 09:15:30 AM IST
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ color: '#64748B', fontWeight: '600' }}>Target Bill of Materials (BOM):</div>
-                  <div style={{ color: '#2563EB', fontWeight: '800', marginTop: '2px' }}>{bCode}</div>
-                </div>
-
-                <div>
-                  <div style={{ color: '#64748B', fontWeight: '600' }}>Recorded File Name:</div>
-                  <div style={{ color: '#0F172A', fontWeight: '700', marginTop: '2px' }}>{docName || 'Electronic Transfer Record'}</div>
-                </div>
-              </div>
-
-              {/* Stamp and Accounts Signatory Block */}
-              <div style={{
-                marginTop: '20px', display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', position: 'relative', zIndex: 1
-              }}>
-                {/* Verified Stamp */}
-                <div style={{
-                  border: '2px solid #16A34A', borderRadius: '10px',
-                  padding: '8px 16px', display: 'inline-flex', flexDirection: 'column',
-                  alignItems: 'center', transform: 'rotate(-4deg)', backgroundColor: 'rgba(220, 252, 231, 0.4)'
-                }}>
-                  <span style={{ fontSize: '11px', fontWeight: '900', color: '#166534', letterSpacing: '1px' }}>
-                    ACCOUNTS VERIFIED
-                  </span>
-                  <span style={{ fontSize: '9px', fontWeight: '700', color: '#15803D' }}>
-                    BUSINZ PVT LTD
-                  </span>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>Arun (Accounts Officer)</div>
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>Finance & Accounts Dept</div>
-                </div>
+                <div><strong>BOM Order:</strong> {bCode}</div>
+                <div><strong>Customer:</strong> {cName}</div>
+                <div><strong>Amount:</strong> ₹{amtVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               </div>
             </div>
           )}

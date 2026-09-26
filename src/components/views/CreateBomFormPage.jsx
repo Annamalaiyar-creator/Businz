@@ -731,15 +731,20 @@ export default function CreateBomFormPage(props) {
                             if (file) {
                               try {
                                 validateClientFile(file);
-                                setNewBomDeliveryProofDoc({
-                                  name: file.name,
-                                  size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                  mimeType: file.type || 'application/pdf',
-                                  _rawFile: file,
-                                  previewUrl: URL.createObjectURL(file)
+                                compressAndSaveFile(file, (res) => {
+                                  if (res) {
+                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                    setNewBomDeliveryProofDoc({
+                                      ...res,
+                                      _rawFile: file,
+                                      dataUrl: res.dataUrl || null,
+                                      previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+                                    });
+                                  }
                                 });
                               } catch (err) {
-                                alert(err.message);
+                                setNewBomDeliveryProofDoc(null);
+                                alert(`⚠️ Cannot Proceed: ${err.message}`);
                               }
                             }
                           }}
@@ -762,22 +767,28 @@ export default function CreateBomFormPage(props) {
                                   if (file) {
                                     try {
                                       validateClientFile(file);
-                                      setNewBomDeliveryProofDoc({
-                                        name: file.name,
-                                        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                        mimeType: file.type || 'application/pdf',
-                                        _rawFile: file,
-                                        previewUrl: URL.createObjectURL(file)
+                                      compressAndSaveFile(file, (res) => {
+                                        if (res) {
+                                          if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                          setNewBomDeliveryProofDoc({
+                                            ...res,
+                                            _rawFile: file,
+                                            dataUrl: res.dataUrl || null,
+                                            previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+                                          });
+                                        }
                                       });
                                     } catch (err) {
-                                      alert(err.message);
+                                      e.target.value = '';
+                                      setNewBomDeliveryProofDoc(null);
+                                      alert(`⚠️ Cannot Proceed: ${err.message}`);
                                     }
                                   }
                                 }}
                               />
                             </label>
                           </div>
-                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 50MB)</span>
+                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 5 MB)</span>
                         </div>
                       )}
                     </div>
@@ -1522,15 +1533,20 @@ export default function CreateBomFormPage(props) {
                       if (file) {
                         try {
                           validateClientFile(file);
-                          setNewBomPaymentProofDoc({
-                            name: file.name,
-                            size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                            mimeType: file.type || 'application/pdf',
-                            _rawFile: file,
-                            previewUrl: URL.createObjectURL(file)
+                          compressAndSaveFile(file, (res) => {
+                            if (res) {
+                              if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                              setNewBomPaymentProofDoc({
+                                ...res,
+                                _rawFile: file,
+                                dataUrl: res.dataUrl || null,
+                                previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+                              });
+                            }
                           });
                         } catch (err) {
-                          alert(err.message);
+                          setNewBomPaymentProofDoc(null);
+                          alert(`⚠️ Cannot Proceed: ${err.message}`);
                         }
                       }
                     }}
@@ -1559,15 +1575,21 @@ export default function CreateBomFormPage(props) {
                             if (file) {
                               try {
                                 validateClientFile(file);
-                                setNewBomPaymentProofDoc({
-                                  name: file.name,
-                                  size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-                                  mimeType: file.type || 'application/pdf',
-                                  _rawFile: file,
-                                  previewUrl: URL.createObjectURL(file)
+                                compressAndSaveFile(file, (res) => {
+                                  if (res) {
+                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+                                    setNewBomPaymentProofDoc({
+                                      ...res,
+                                      _rawFile: file,
+                                      dataUrl: res.dataUrl || null,
+                                      previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+                                    });
+                                  }
                                 });
                               } catch (err) {
-                                alert(err.message);
+                                e.target.value = '';
+                                setNewBomPaymentProofDoc(null);
+                                alert(`⚠️ Cannot Proceed: ${err.message}`);
                               }
                             }
                           }}
@@ -1576,7 +1598,7 @@ export default function CreateBomFormPage(props) {
                     </div>
 
                     <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                      Supported formats: PDF, JPG, PNG (Max 50MB)
+                      Supported formats: PDF, JPG, PNG (Max 5 MB)
                     </span>
                   </div>
                 )}
