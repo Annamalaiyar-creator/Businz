@@ -5,6 +5,7 @@ import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } 
 import StatusBadge from './StatusBadge';
 import NotificationToast from './NotificationToast';
 import TallySyncModal from './views/TallySyncModal';
+import ModernDateRangePicker from './ModernDateRangePicker';
 
 const PRESET_MATERIALS = [
   { name: 'GI Steel Coil 2mm', account: 'Raw Material', unit: 'MT', rate: 45000, tax: 18 },
@@ -198,6 +199,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
   const [statusFilter, setStatusFilter] = useState('All');
   const [filterDate, setFilterDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [poTab, setPoTab] = useState('All');
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -206,6 +208,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     setSearchQuery('');
     setStatusFilter('All');
     setFilterDate('');
+    setFilterEndDate('');
     setPoTab('All');
     setCurrentPage(1);
   };
@@ -1733,19 +1736,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const matchesTab = poTab === 'All' || currentStage === poTab;
 
           let matchesDate = true;
-          if (filterDate) {
-            if (po.poDate) {
-              const pD = new Date(po.poDate);
-              const fD = new Date(filterDate);
-              if (!isNaN(pD.getTime()) && !isNaN(fD.getTime())) {
-                const pStr = pD.toISOString().split('T')[0];
-                const fStr = fD.toISOString().split('T')[0];
-                if (pStr !== fStr && !String(po.poDate).includes(filterDate)) {
-                  matchesDate = false;
-                }
-              } else if (!String(po.poDate).includes(filterDate)) {
-                matchesDate = false;
-              }
+          if (filterDate || filterEndDate) {
+            const rawDate = po.poDate || po.date || po.createdAt;
+            if (rawDate) {
+              const dStr = String(rawDate).substring(0, 10);
+              if (filterDate && dStr < filterDate) matchesDate = false;
+              if (filterEndDate && dStr > filterEndDate) matchesDate = false;
             } else {
               matchesDate = false;
             }
@@ -1844,16 +1840,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
-                  <Calendar style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
-                  <input
-                    type="date"
-                    value={filterDate}
-                    title="Filter by Date"
-                    onChange={(e) => { setFilterDate(e.target.value); setCurrentPage(1); }}
-                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', backgroundColor: 'transparent' }}
-                  />
-                </div>
+                <ModernDateRangePicker
+                  startDate={filterDate}
+                  endDate={filterEndDate}
+                  onChange={({ startDate, endDate }) => {
+                    setFilterDate(startDate);
+                    setFilterEndDate(endDate);
+                    setCurrentPage(1);
+                  }}
+                />
 
                 <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
                   {allStatusOptions.map(s => (
