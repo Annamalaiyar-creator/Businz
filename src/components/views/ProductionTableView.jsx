@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import TallySyncModal from './TallySyncModal';
+import ModernDateRangePicker from '../ModernDateRangePicker';
 
 export default function ProductionTableView({
   pageConfig,
@@ -19,6 +20,8 @@ export default function ProductionTableView({
   setProdSearchQueryText,
   prodFilterDateVal,
   setProdFilterDateVal,
+  prodFilterEndDateVal,
+  setProdFilterEndDateVal,
   prodFilterStatusSelect,
   setProdFilterStatusSelect,
   prodActiveSubTab,
@@ -108,19 +111,22 @@ export default function ProductionTableView({
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
-            <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
-            <input
-              type="date"
-              value={prodFilterDateVal}
-              onChange={(e) => setProdFilterDateVal(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent' }}
-            />
-          </div>
+          <ModernDateRangePicker
+            startDate={prodFilterDateVal}
+            endDate={prodFilterEndDateVal}
+            onChange={({ startDate, endDate }) => {
+              setProdFilterDateVal(startDate);
+              if (setProdFilterEndDateVal) setProdFilterEndDateVal(endDate);
+              if (setCurrentPage) setCurrentPage(1);
+            }}
+          />
 
           <select
             value={prodFilterStatusSelect}
-            onChange={(e) => setProdFilterStatusSelect(e.target.value)}
+            onChange={(e) => {
+              setProdFilterStatusSelect(e.target.value);
+              if (setCurrentPage) setCurrentPage(1);
+            }}
             style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
           >
             <option value="All">Status: All</option>
@@ -130,7 +136,13 @@ export default function ProductionTableView({
           </select>
 
           <button
-            onClick={() => { setProdSearchQueryText(''); setProdFilterDateVal(''); setProdFilterStatusSelect('All'); }}
+            onClick={() => {
+              setProdSearchQueryText('');
+              setProdFilterDateVal('');
+              if (setProdFilterEndDateVal) setProdFilterEndDateVal('');
+              setProdFilterStatusSelect('All');
+              if (setCurrentPage) setCurrentPage(1);
+            }}
             title="Clear Filters"
             style={{
               background: '#f1f5f9',
@@ -603,8 +615,8 @@ export default function ProductionTableView({
             );
           })()}
 
-          {/* Delete Button */}
-          {!isSuperUser && activeTab !== 'Dispatch Orders' && (
+          {/* Delete Button - Excluded for BOM Orders & Client Specifications per user request */}
+          {!isSuperUser && activeTab !== 'Dispatch Orders' && activeTab !== 'BOM Orders & Client Specifications' && activeTab !== 'Sales BOM' && pageConfig?.title !== 'BOM Orders & Client Specifications' && !String(pageConfig?.title || '').toLowerCase().includes('bom') && (
             <button
               onClick={() => {
                 if (window.confirm(`Are you sure you want to delete ${selectedRows.length} selected item(s)?`)) {

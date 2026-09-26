@@ -70,12 +70,15 @@ export default function ProductionViewsEngine(props) {
   const [prodActiveSubTab, setProdActiveSubTab] = useState('All');
   const [prodSearchQueryText, setProdSearchQueryText] = useState('');
   const [prodFilterDateVal, setProdFilterDateVal] = useState('');
+  const [prodFilterEndDateVal, setProdFilterEndDateVal] = useState('');
   const [prodFilterStatusSelect, setProdFilterStatusSelect] = useState('All');
   const [prodStatusFilterText, setProdStatusFilterText] = useState('All');
 
   useEffect(() => {
     setProdActiveSubTab('All');
     setProdSearchQueryText('');
+    setProdFilterDateVal('');
+    setProdFilterEndDateVal('');
     setProdFilterStatusSelect('All');
     setSelectedRows([]);
     setCurrentPage(1);
@@ -1185,6 +1188,15 @@ export default function ProductionViewsEngine(props) {
               (r.c3 && r.c3.toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
               (r.customerName && r.customerName.toLowerCase().includes(prodSearchQueryText.toLowerCase()));
 
+            // Date range filter matching
+            let matchesDate = true;
+            const rDateStr = r.c4 || r.date || r.createdAt || r.bomDate;
+            if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
+              const rIso = String(rDateStr).substring(0, 10);
+              if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
+              if (prodFilterEndDateVal && rIso > prodFilterEndDateVal) matchesDate = false;
+            }
+
             const subTab = (prodActiveSubTab || 'All').toLowerCase();
             const rStatus = (r.status || '').toLowerCase();
             const rTabGroup = (r.tabGroup || '').toLowerCase();
@@ -1199,7 +1211,7 @@ export default function ProductionViewsEngine(props) {
               (subTab.includes('draft') && rStatus.includes('draft')) ||
               (subTab.includes('sent') && (rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')));
 
-            return matchesSearch && matchesTab;
+            return matchesSearch && matchesDate && matchesTab;
           });
 
           return (
@@ -1216,6 +1228,8 @@ export default function ProductionViewsEngine(props) {
               setProdSearchQueryText={setProdSearchQueryText}
               prodFilterDateVal={prodFilterDateVal}
               setProdFilterDateVal={setProdFilterDateVal}
+              prodFilterEndDateVal={prodFilterEndDateVal}
+              setProdFilterEndDateVal={setProdFilterEndDateVal}
               prodFilterStatusSelect={prodFilterStatusSelect}
               setProdFilterStatusSelect={setProdFilterStatusSelect}
               prodActiveSubTab={prodActiveSubTab}

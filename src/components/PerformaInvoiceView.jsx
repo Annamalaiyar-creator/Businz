@@ -3,6 +3,7 @@ import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, C
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
+import ModernDateRangePicker from './ModernDateRangePicker';
 import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../utils/otherViewsShared';
@@ -2304,35 +2305,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                {/* Live Functional Date Range Picker */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 10px', height: '38px', backgroundColor: 'white' }}>
-                  <Calendar style={{ width: '14px', height: '14px', color: '#0E7490', flexShrink: 0 }} />
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
-                    title="From Date"
-                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', background: 'transparent', cursor: 'pointer' }}
-                  />
-                  <span style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}>to</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
-                    title="To Date"
-                    style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', background: 'transparent', cursor: 'pointer' }}
-                  />
-                  {(startDate || endDate) && (
-                    <button
-                      type="button"
-                      onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
-                      title="Clear Date Range"
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b', padding: '2px', display: 'flex', alignItems: 'center' }}
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
+                {/* Modern Date Range Picker */}
+                <ModernDateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onChange={({ startDate: s, endDate: e }) => {
+                    setStartDate(s);
+                    setEndDate(e);
+                    setCurrentPage(1);
+                  }}
+                />
 
                 <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
                   {uniqueStatuses.map(s => (

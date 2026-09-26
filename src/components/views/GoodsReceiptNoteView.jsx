@@ -12,6 +12,7 @@ import {
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
 import StatusBadge from '../StatusBadge';
+import ModernDateRangePicker from '../ModernDateRangePicker';
 import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../../services/zohoSafeSync';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
@@ -97,6 +98,7 @@ export default function GoodsReceiptNoteView(props) {
   const [grnRowsPerPage, setGrnRowsPerPage] = useState(10);
   const [selectedGrnRows, setSelectedGrnRows] = useState([]);
   const [filterDate, setFilterDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [grnListStatusFilter, setGrnListStatusFilter] = useState('All');
   const [grnListActiveTab, setGrnListActiveTab] = useState('All');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2538,16 +2540,15 @@ export default function GoodsReceiptNoteView(props) {
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
-                    <Calendar style={{ width: '14px', height: '14px', color: '#64748b', flexShrink: 0 }} />
-                    <input
-                      type="date"
-                      value={filterDate}
-                      title="Filter by Date"
-                      onChange={(e) => { setFilterDate(e.target.value); setGrnPage(1); }}
-                      style={{ border: 'none', outline: 'none', fontSize: '12px', color: '#334155', backgroundColor: 'transparent' }}
-                    />
-                  </div>
+                  <ModernDateRangePicker
+                    startDate={filterDate}
+                    endDate={filterEndDate}
+                    onChange={({ startDate, endDate }) => {
+                      setFilterDate(startDate);
+                      setFilterEndDate(endDate);
+                      setGrnPage(1);
+                    }}
+                  />
 
                   <select
                     value={grnListStatusFilter}
@@ -2565,6 +2566,7 @@ export default function GoodsReceiptNoteView(props) {
                     onClick={() => {
                       setSearchQuery('');
                       setFilterDate('');
+                      setFilterEndDate('');
                       setGrnListStatusFilter('All');
                       setGrnListActiveTab('All');
                       setGrnPage(1);
@@ -2653,15 +2655,11 @@ export default function GoodsReceiptNoteView(props) {
                     st === grnListActiveTab;
 
                   let matchesDate = true;
-                  if (filterDate) {
+                  if (filterDate || filterEndDate) {
                     if (g.date) {
-                      const d = new Date(g.date);
-                      const fd = new Date(filterDate);
-                      if (!isNaN(d.getTime()) && !isNaN(fd.getTime())) {
-                        matchesDate = d.toISOString().split('T')[0] === fd.toISOString().split('T')[0];
-                      } else {
-                        matchesDate = String(g.date).includes(filterDate);
-                      }
+                      const dStr = String(g.date).substring(0, 10);
+                      if (filterDate && dStr < filterDate) matchesDate = false;
+                      if (filterEndDate && dStr > filterEndDate) matchesDate = false;
                     } else {
                       matchesDate = false;
                     }
@@ -2708,6 +2706,7 @@ export default function GoodsReceiptNoteView(props) {
                         onClick={() => {
                           setSearchQuery('');
                           setFilterDate('');
+                          setFilterEndDate('');
                           setStatusFilter('All');
                           setGrnTab('All');
                           setGrnPage(1);
