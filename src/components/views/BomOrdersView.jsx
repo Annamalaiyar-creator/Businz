@@ -17,6 +17,7 @@ import { getFullProductsCatalogWithStock } from '../../utils/productCatalogServi
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
+import ModernDateRangePicker from '../ModernDateRangePicker';
 import { is5PctSolarProduct } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch } from '../../services/notificationService';
@@ -32,6 +33,7 @@ export default function BomOrdersView(props) {
   // Search & Filter states
   const [searchQueryText, setSearchQueryText] = useState('');
   const [filterDateVal, setFilterDateVal] = useState('');
+  const [filterEndDateVal, setFilterEndDateVal] = useState('');
   const [filterStatusSelect, setFilterStatusSelect] = useState('All');
   const [activeSubTab, setActiveSubTab] = useState('All');
   const [selectedRows, setSelectedRows] = useState([]);
@@ -464,12 +466,13 @@ export default function BomOrdersView(props) {
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     if (userRole === 'Procurement Head') return 'ARUN BOOPATHI M';
     if (userRole === 'Production Head') return 'Senthil Kumar';
+    if (userRole === 'Sales Executive') return 'Mohith JV';
     return userRole || 'Sales Executive';
   };
   const defaultSalesPersonName = getEffectiveSalesPerson();
   const [newBomSalesPerson, setNewBomSalesPerson] = useState(defaultSalesPersonName);
 
-  const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+  const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '').trim();
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
@@ -481,8 +484,11 @@ export default function BomOrdersView(props) {
     const rawList = (bomStore || []).filter(Boolean);
     if (!isRestrictedSalesUser) return rawList;
 
-    const curCode = currentEmpId.toUpperCase();
-    const effectiveCurName = (currentEmpName || defaultSalesPersonName || '').trim();
+    const curCode = (currentEmpId || (userRole === 'Sales Executive' ? 'SE-VRM001' : '')).toUpperCase();
+    let effectiveCurName = (currentEmpName || defaultSalesPersonName || '').trim();
+    if (!effectiveCurName || effectiveCurName.toLowerCase() === 'sales executive') {
+      effectiveCurName = 'Mohith JV';
+    }
     const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
     const curEmail = currentLoggedEmail;
 
@@ -524,6 +530,11 @@ export default function BomOrdersView(props) {
         if (spName && (spName === curName || spName.includes(curName) || curName.includes(spName))) return true;
         if (creatorName && (creatorName === curName || creatorName.includes(curName) || curName.includes(creatorName))) return true;
         if (curName.includes('mohit') && (spName.includes('mohit') || creatorName.includes('mohit') || spCode === 'SE-VRM001' || spCode === 'SE-VRM004')) return true;
+      }
+
+      // If user is Mohit JV / default sales executive, also allow records created by SE-VRM001 or Mohit
+      if ((curName.includes('mohit') || curCode === 'SE-VRM001' || userRole === 'Sales Executive') && (spCode === 'SE-VRM001' || spName.includes('mohit') || creatorName.includes('mohit'))) {
+        return true;
       }
 
       if (curEmail && (b.salesPersonEmail || b.email || '').toLowerCase() === curEmail) {
@@ -1277,7 +1288,8 @@ export default function BomOrdersView(props) {
       { id: 'Draft', label: 'Draft', count: (visibleBomStore || []).filter(b => b.status === 'Draft').length, bg: '#fff7ed', fg: '#c2410c' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'AddressAction', label: 'Address Proof Requested', count: (visibleBomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales').length, bg: '#fee2e2', fg: '#b91c1c' },
-      { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: (visibleBomStore || []).filter(b => b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed).length, bg: '#dcfce7', fg: '#166534' },
+      { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: (visibleBomStore || []).filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed').length, bg: '#dcfce7', fg: '#166534' },
+      { id: 'Closed', label: 'Closed / Completed', count: (visibleBomStore || []).filter(b => b && (b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed'))).length, bg: '#ecfdf5', fg: '#047857' },
       { id: 'Cancelled', label: 'Cancelled & Restored', count: (visibleBomStore || []).filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled).length, bg: '#f1f5f9', fg: '#64748b' }
     ],
     headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Status'],
@@ -1285,6 +1297,7 @@ export default function BomOrdersView(props) {
       const isDraft = b.status === 'Draft';
       const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled;
       const isAddressRequested = b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales';
+      const isClosedOrCompleted = b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed');
       const isPending = !b.status || b.status === 'Pending Sales Confirmation' || b.status === 'Pending Confirmation' || b.status === 'Pending';
       const isPackedOrDispatch = (b.status || '').toLowerCase().includes('dispatch') || (b.status || '').toLowerCase().includes('packed') || (b.status || '').toLowerCase().includes('loading');
       const isConfirmed = b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed || isPackedOrDispatch;
@@ -1299,6 +1312,11 @@ export default function BomOrdersView(props) {
         stFg = '#64748b';
         stBorder = '1px solid #cbd5e1';
         tabGroup = 'Cancelled';
+      } else if (isClosedOrCompleted) {
+        stBg = '#ecfdf5';
+        stFg = '#047857';
+        stBorder = '1px solid #a7f3d0';
+        tabGroup = 'Closed';
       } else if (isDraft) {
         stBg = '#fff7ed';
         stFg = '#c2410c';
@@ -1334,7 +1352,7 @@ export default function BomOrdersView(props) {
         sourcePiNo: b.sourcePiNo || b.piNo || null,
         c4: normalizePaymentTerm(b.paymentType || b.paymentTerms || b.piPaymentTerms),
         c5: formatCurrency(b.grandTotal),
-        status: isAddressRequested ? 'Address Proof Requested from Sales' : (b.status || 'Pending Sales Confirmation'),
+        status: isAddressRequested ? 'Address Proof Requested from Sales' : (isClosedOrCompleted ? (b.status || 'Completed') : (b.status || 'Pending Sales Confirmation')),
         stBg,
         stFg,
         stBorder,
@@ -1357,14 +1375,24 @@ export default function BomOrdersView(props) {
 
     const matchesTab = subTab === 'all' ||
       subTab === 'all boms' ||
-      rTabGroup.toLowerCase() === subTab ||
+      rTabGroup === subTab ||
+      ((subTab.includes('closed') || subTab.includes('complete')) && (rTabGroup === 'closed' || rStatus.includes('closed') || rStatus.includes('complete') || r.fullyCompleted)) ||
       (subTab === 'addressaction' && (r.addressProofReuploadRequested || rStatus.includes('address proof'))) ||
       (subTab.includes('cancel') && (rStatus.includes('cancel') || r.cancelled)) ||
       (subTab.includes('pending') && (rStatus.includes('pending') || rStatus.includes('draft')) && !r.cancelled) ||
       (subTab.includes('draft') && rStatus.includes('draft') && !r.cancelled) ||
-      (subTab.includes('sent') && (rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production') || r.salesConfirmed) && !r.cancelled);
+      (subTab.includes('sent') && (rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !r.cancelled);
 
-    return matchesSearch && matchesTab;
+    // Date range filter matching
+    let matchesDate = true;
+    const rDateStr = r.c2 || r.date || r.createdAt || r.bomDate;
+    if (rDateStr && (filterDateVal || filterEndDateVal)) {
+      const rIso = String(rDateStr).substring(0, 10);
+      if (filterDateVal && rIso < filterDateVal) matchesDate = false;
+      if (filterEndDateVal && rIso > filterEndDateVal) matchesDate = false;
+    }
+
+    return matchesSearch && matchesTab && matchesDate;
   });
 
   // Calculate totals for Create BOM form
@@ -6414,18 +6442,18 @@ export default function BomOrdersView(props) {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
-            <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
-            <input
-              type="date"
-              value={filterDateVal}
-              onChange={(e) => setFilterDateVal(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent' }}
-            />
-          </div>
+          <ModernDateRangePicker
+            startDate={filterDateVal}
+            endDate={filterEndDateVal}
+            onChange={({ startDate, endDate }) => {
+              setFilterDateVal(startDate);
+              setFilterEndDateVal(endDate);
+              setCurrentPage(1);
+            }}
+          />
 
           <button
-            onClick={() => { setSearchQueryText(''); setFilterDateVal(''); setFilterStatusSelect('All'); }}
+            onClick={() => { setSearchQueryText(''); setFilterDateVal(''); setFilterEndDateVal(''); setFilterStatusSelect('All'); }}
             title="Clear Filters"
             style={{
               background: '#f1f5f9',
@@ -6590,10 +6618,10 @@ export default function BomOrdersView(props) {
                       <span style={{ fontSize: '12px', color: '#94A3B8' }}>
                         No records match your active search or filter criteria. Try adjusting your query or clear filters.
                       </span>
-                      {(searchQueryText || filterDateVal || filterStatusSelect !== 'All' || activeSubTab !== 'All') && (
+                      {(searchQueryText || filterDateVal || filterEndDateVal || filterStatusSelect !== 'All' || activeSubTab !== 'All') && (
                         <button
                           type="button"
-                          onClick={() => { setSearchQueryText(''); setFilterDateVal(''); setFilterStatusSelect('All'); setActiveSubTab('All'); }}
+                          onClick={() => { setSearchQueryText(''); setFilterDateVal(''); setFilterEndDateVal(''); setFilterStatusSelect('All'); setActiveSubTab('All'); }}
                           style={{
                             marginTop: '6px',
                             padding: '6px 14px',
@@ -6846,7 +6874,7 @@ export default function BomOrdersView(props) {
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
             const isSentToDispatch = (selectedRows || []).some(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return r && (r.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(r.status));
+              return r && (r.salesConfirmed || r.fullyCompleted || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Completed', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(r.status));
             });
             if (isSentToDispatch) return null;
 
@@ -6884,46 +6912,12 @@ export default function BomOrdersView(props) {
             );
           })()}
 
-          {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (
-            <button
-              onClick={() => {
-                if (window.confirm(`Are you sure you want to delete ${selectedRows.length} selected BOM item(s)?`)) {
-                  const toDelete = [...selectedRows];
-                  const updatedList = (bomStore || []).filter(b => !toDelete.includes(b.bomCode || b.code));
-                  setBomStore(updatedList);
-                  safeSaveBomStoreToLocal(updatedList);
-                  toDelete.forEach(code => {
-                    fetch(`/api/boms/${encodeURIComponent(code)}`, { method: 'DELETE' }).catch(() => {});
-                    deleteCloudBomRow(code).catch(() => {});
-                  });
-                  setSelectedRows([]);
-                }
-              }}
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                color: '#1E293B',
-                borderRadius: '10px',
-                padding: '6px 14px',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
-            >
-              <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
-            </button>
-          )}
+          {/* Delete button removed for BOM Orders & Client Specifications per user request */}
 
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
             const isTargetAlreadyConfirmed = (selectedRows || []).every(codeVal => {
               const row = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return row && (row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts'].includes(row.status));
+              return row && (row.salesConfirmed || row.fullyCompleted || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Completed', 'Dispatch Packing Verified - Sent to Accounts'].includes(row.status));
             });
             if (isTargetAlreadyConfirmed) return null;
 
@@ -7028,7 +7022,7 @@ export default function BomOrdersView(props) {
           {canCancelBom && (() => {
             const hasCancellable = (selectedRows || []).some(codeVal => {
               const row = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return row && row.status !== 'Cancelled & Stock Restored';
+              return row && row.status !== 'Cancelled & Stock Restored' && row.status !== 'Completed' && row.status !== 'Closed' && !row.fullyCompleted;
             });
             if (!hasCancellable) return null;
 
