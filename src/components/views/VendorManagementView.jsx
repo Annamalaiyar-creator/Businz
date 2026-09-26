@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, MoreVertical, RotateCcw, UploadCloud, ChevronDown, ChevronUp, ExternalLink,
   Truck, Shield, Package, Star, Download, HelpCircle, Info, ShoppingCart, Upload, Printer, Maximize2,
   ShieldCheck, Layers, Factory, Cpu, Receipt, IndianRupee, Smartphone, Camera, Image, RefreshCw,
-  CreditCard, Bell, Video, Play, Pause, Film, Sparkles, MoreHorizontal, Copy, Hourglass, Boxes, Send
+  CreditCard, Bell, Video, Play, Pause, Film, Sparkles, MoreHorizontal, Copy, Hourglass, Boxes, Send, Loader2
 } from 'lucide-react';
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
@@ -2523,9 +2523,7 @@ export default function VendorManagementView(props) {
 
                 {vendorModalLoading ? (
                   <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '60px 0', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" style={{ animation: 'spin 1s linear infinite' }} fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
+                    <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: '#2563EB' }} />
                     <span style={{ fontSize: '14px', color: '#2563EB', fontWeight: '600' }}>Fetching live contact details & addresses from Zoho Books…</span>
                   </div>
                 ) : (

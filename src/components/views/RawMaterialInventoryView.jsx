@@ -164,23 +164,25 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(item => {
-            const rawSt = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 0);
-            const stockVal = Math.max(0, rawSt);
-            const physVal = Number(item.physicalStock !== undefined ? item.physicalStock : (item.openingStock !== undefined ? item.openingStock : 0));
-            const c = String(item.code || '').toUpperCase().trim();
-            const isDemoItem = c === 'ALU-LEN-2414MM' || c === 'MR-300MM';
-            const grn = Number(item.goodsReceived || 0);
-            const issued = Number(item.issuedProd || 0);
-            const isLegacyDummy = !isDemoItem && grn === 0 && issued === 0 && (item.lastUpdated === 'Stock Set to 5,000' || (stockVal === 5000 && physVal === 5000));
-            const cleanStock = isLegacyDummy ? 0 : stockVal;
-            const cleanPhys = isLegacyDummy ? 0 : physVal;
+            let openVal = Number(item.openingStock !== undefined ? item.openingStock : 5000);
+            if (isNaN(openVal) || openVal < 0) openVal = 5000;
+            // Clean up any legacy compounding corruption where openingStock grew beyond baseline without manual adjustment
+            if (openVal > 5000 && (!item.stockAdj || item.stockAdj === 0)) openVal = 5000;
+            const recQty = Number(item.goodsReceived || 0);
+            const dispatched = Number(item.dispatched || 0);
+            const physVal = Math.max(0, (openVal + recQty) - dispatched);
+            const resVal = Number(item.reserved !== undefined ? item.reserved : (item.blockedForBom || 0));
+            const availVal = Math.max(0, physVal - resVal);
+
             return {
               ...item,
-              stock: cleanStock,
-              physicalStock: cleanPhys,
-              availableStock: cleanStock,
-              openingStock: isLegacyDummy ? 0 : Number(item.openingStock !== undefined ? item.openingStock : cleanPhys),
-              status: cleanStock > 0 ? 'In Stock' : 'Out of Stock'
+              openingStock: openVal,
+              physicalStock: physVal,
+              reserved: resVal,
+              blockedForBom: resVal,
+              stock: availVal,
+              availableStock: availVal,
+              status: availVal > 0 ? 'In Stock' : 'Out of Stock'
             };
           });
         }
@@ -193,7 +195,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
     matMap.set('MR-300MM', defaultMiniRail);
 
-    // 1. Catalog products baseline (0 stock unless inwarded through GRN or production)
+    // 1. Catalog products baseline (5,000 standard ready baseline for active catalog)
     (VRM_PRODUCTS || []).forEach(p => {
       const code = p.code || resolveProductCode(p) || p.name;
       const key = String(code).toUpperCase().trim();
@@ -203,13 +205,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         unit: p.uom || 'Nos',
-        stock: 0,
-        openingStock: 0,
-        physicalStock: 0,
-        availableStock: 0,
+        stock: 5000,
+        openingStock: 5000,
+        physicalStock: 5000,
+        availableStock: 5000,
         minLevel: 50,
         reorderLevel: 100,
-        status: 'Out of Stock',
+        status: 'In Stock',
         store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
         hsn: '7604',
         lastUpdated: 'Live Store',
@@ -331,7 +333,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         for (const [k, v] of matMap.entries()) {
           const vName = String(v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const gName = String(grnItem.name || grnItem.materialName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (vName && gName && (vName === gName || vName.includes(gName) || gName.includes(vName))) {
+          if (vName && gName && vName === gName) {
             matchedKey = k;
             break;
           }
@@ -352,14 +354,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           name: grnItem.materialName || grnItem.itemName || grnItem.name || itemKey,
           cat: grnItem.category || 'Aluminium',
           unit: grnItem.unit || grnItem.uom || 'Nos',
-          stock: recQty,
+          stock: 5000 + recQty,
+          openingStock: 5000,
+          physicalStock: 5000 + recQty,
+          availableStock: 5000 + recQty,
           minLevel: 50,
           status: 'In Stock',
           store: 'Main Store',
           hsn: '7604',
           lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
           reserved: 0,
-          openingStock: 0,
           goodsReceived: recQty,
           issuedProd: 0,
           matReturn: 0,
@@ -389,7 +393,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 1800, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 1800, physicalStock: 1800, availableStock: 1800, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       matMap.set('MR-300MM', defaultMiniRail);
-      // 1. Catalog products baseline (0 stock unless inwarded through GRN or production)
+      // 1. Catalog products baseline (5,000 standard ready baseline for all catalog products)
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
         const key = String(code).toUpperCase().trim();
@@ -399,13 +403,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           unit: p.uom || 'Nos',
-          stock: 0,
-          openingStock: 0,
-          physicalStock: 0,
-          availableStock: 0,
+          stock: 5000,
+          openingStock: 5000,
+          physicalStock: 5000,
+          availableStock: 5000,
           minLevel: 50,
           reorderLevel: 100,
-          status: 'Out of Stock',
+          status: 'In Stock',
           store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
           hsn: '7604',
           lastUpdated: 'Live Store',
@@ -446,6 +450,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               const existing = matMap.get(mapKey) || {};
               const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
               const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
+              let smOpen = sm.openingStock !== undefined ? Number(sm.openingStock) : (existing.openingStock || 5000);
+              if (isNaN(smOpen) || smOpen < 0) smOpen = 5000;
+              if (smOpen > 5000 && (!sm.stockAdj || sm.stockAdj === 0)) smOpen = 5000;
               matMap.set(mapKey, {
                 ...existing,
                 ...sm,
@@ -454,7 +461,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 cat: isAlu2414 ? 'Raw Material' : (existing.cat || sm.cat || sm.category || existing.category || 'General'),
                 category: isAlu2414 ? 'Raw Material' : (existing.category || sm.category || sm.cat || existing.cat || 'General'),
                 stock: smStock,
-                openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : (existing.openingStock || 0),
+                openingStock: smOpen,
                 status: smStock > 0 ? 'In Stock' : 'Out of Stock'
               });
             });
@@ -508,12 +515,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           if (matMap.has(upperKey)) {
             const existing = matMap.get(upperKey);
             const existingStock = existing.stock !== undefined ? Number(existing.stock) : null;
-            const existingPhys = Number(existing.physicalStock !== undefined ? existing.physicalStock : (existing.openingStock || 0));
-            const baseOpen = Math.max(0, Number(existing.openingStock || 0), existingPhys);
+            let openVal = Number(existing.openingStock !== undefined ? existing.openingStock : 5000);
+            if (isNaN(openVal) || openVal < 0) openVal = 5000;
+            if (openVal > 5000 && (!existing.stockAdj || existing.stockAdj === 0)) openVal = 5000;
             const incomingStock = (it.stock !== undefined && it.stock !== null && Number(it.stock) > 0) ? Number(it.stock) : null;
 
             // Never overwrite non-zero user/store stock with 0 from catalog defaults
-            let finalStock = existingStock ?? 0;
+            let finalStock = existingStock ?? 5000;
             if (incomingStock !== null && (existingStock === 0 || existingStock === null)) {
               finalStock = incomingStock;
             } else if (existingStock !== null && existingStock > 0) {
@@ -526,8 +534,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               ...existing,
               name: it.name || existing.name,
               stock: finalStock,
-              openingStock: baseOpen > 0 ? baseOpen : (existing.openingStock || 0),
-              physicalStock: Math.max(Number(existing.physicalStock || 0), baseOpen, finalStock),
+              openingStock: openVal,
+              physicalStock: Math.max(openVal, Number(existing.physicalStock || openVal)),
               goodsReceived: Math.max(Number(existing.goodsReceived || 0), recQty),
               status: finalStock === 0 ? 'Out of Stock' : (finalStock <= (existing.minLevel || 50) ? 'Low Stock' : 'In Stock'),
               lastUpdated: recQty > 0 ? `Received via ${grnReceived.grnNo || 'GRN'}` : existing.lastUpdated,
@@ -542,14 +550,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             cat: it.category || it.material || 'General',
             category: it.category || it.material || 'General',
             unit: it.unit || it.uom || 'Nos',
-            stock: (it.stock !== undefined && it.stock !== null) ? Number(it.stock) : 0,
+            stock: 5000,
+            openingStock: 5000,
+            physicalStock: 5000 + recQty,
             minLevel: 50,
-            status: (it.stock !== undefined && Number(it.stock) > 0) ? 'In Stock' : 'Out of Stock',
+            status: 'In Stock',
             store: it.location || (it.material === 'HDG' ? 'Store B' : 'Main Store'),
             hsn: '7604',
             lastUpdated: grnReceived ? `Received via ${grnReceived.grnNo || 'GRN'}` : 'Live Store',
             reserved: 0,
-            openingStock: 0,
             goodsReceived: recQty,
             issuedProd: 0,
             matReturn: 0,
@@ -574,7 +583,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           for (const [k, v] of matMap.entries()) {
             const vName = String(v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             const gName = String(grnItem.name || grnItem.materialName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (vName && gName && (vName === gName || vName.includes(gName) || gName.includes(vName))) {
+            if (vName && gName && vName === gName) {
               matchedKey = k;
               break;
             }
@@ -595,14 +604,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             name: grnItem.materialName || grnItem.itemName || grnItem.name || itemKey,
             cat: grnItem.category || 'Aluminium',
             unit: grnItem.unit || grnItem.uom || 'Nos',
-            stock: recQty,
+            stock: 5000 + recQty,
+            openingStock: 5000,
+            physicalStock: 5000 + recQty,
+            availableStock: 5000 + recQty,
             minLevel: 50,
             status: 'In Stock',
             store: 'Main Store',
             hsn: '7604',
             lastUpdated: `Received via ${grnItem.grnNo || 'GRN'}`,
             reserved: 0,
-            openingStock: 0,
             goodsReceived: recQty,
             issuedProd: 0,
             matReturn: 0,
@@ -721,7 +732,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
 
         const grnQty = Number(m.goodsReceived || 0);
-        let base = parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0;
+        let base = parseFloat(m.openingStock !== undefined ? m.openingStock : 5000);
+        if (isNaN(base) || base < 0) base = 5000;
+        if (base > 5000 && (!m.stockAdj || m.stockAdj === 0)) {
+          base = 5000;
+        }
 
         // Authoritative physical stock = (Opening Baseline + Received GRNs) - Dispatched via Vehicle Loading
         const totalPhysical = Math.max(0, (base + grnQty) - dispatched);
@@ -750,13 +765,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
         if (dedupMap.has(canonical)) {
           const existing = dedupMap.get(canonical);
-          const mStock = Number(m.stock || 0);
-          const eStock = Number(existing.stock || 0);
           const mPhys = Number(m.physicalStock || 0);
           const ePhys = Number(existing.physicalStock || 0);
           const mRes = Number(m.reserved || 0);
           const eRes = Number(existing.reserved || 0);
+          const mGrn = Number(m.goodsReceived || 0);
+          const eGrn = Number(existing.goodsReceived || 0);
+          const mOpen = Number(m.openingStock || 5000);
+          const eOpen = Number(existing.openingStock || 5000);
 
+          existing.openingStock = Math.max(eOpen, mOpen);
+          existing.goodsReceived = Math.max(eGrn, mGrn);
           existing.physicalStock = Math.max(ePhys, mPhys);
           existing.reserved = Math.max(eRes, mRes);
           existing.blockedForBom = existing.reserved;
@@ -830,8 +849,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           } catch (_) {}
         }
         if (Array.isArray(rawMats) && rawMats.length > 0) {
+          const sanitizedRawMats = rawMats.map(rm => {
+            let openVal = Number(rm.openingStock !== undefined ? rm.openingStock : 5000);
+            if (isNaN(openVal) || openVal < 0) openVal = 5000;
+            if (openVal > 5000 && (!rm.stockAdj || rm.stockAdj === 0)) openVal = 5000;
+            return {
+              ...rm,
+              openingStock: openVal
+            };
+          });
           try {
-            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawMats));
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(sanitizedRawMats));
           } catch (_) {}
         }
 
@@ -1204,7 +1232,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const filteredMaterials = useMemo(() => {
     const isRawMaterialDirectory = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
     
-    return materials.filter(m => {
+    const matched = materials.filter(m => {
       const mName = String(m.name || '').trim();
       const mCode = String(m.code || '').trim();
       const mCodeLower = mCode.toLowerCase();

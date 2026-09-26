@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Search, Check, AlertCircle, Package, Plus } from 'lucide-react';
+import { ChevronDown, Search, Check, AlertCircle, AlertTriangle, Package, Plus } from 'lucide-react';
 import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 
@@ -20,7 +20,8 @@ export default function TypeableProductSelect({
   disabled = false,
   style = {},
   inputStyle = {},
-  accentColor = '#0E7490'
+  accentColor = '#0E7490',
+  showStock = false
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(value || '');
@@ -425,20 +426,32 @@ export default function TypeableProductSelect({
 
                   {/* Right side: Stock Badge & Price */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '10.5px',
-                      fontWeight: '800',
-                      padding: '2px 7px',
-                      borderRadius: '12px',
-                      backgroundColor: isOutOfStock ? '#FEF2F2' : '#ECFDF5',
-                      color: isOutOfStock ? '#DC2626' : '#059669',
-                      border: isOutOfStock ? '1px solid #FECACA' : '1px solid #A7F3D0'
-                    }}>
-                      {isOutOfStock ? `⚠️ 0 ${uom}` : `✓ ${stockNum.toLocaleString()} ${uom}`}
-                    </span>
+                    {showStock && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '10.5px',
+                        fontWeight: '800',
+                        padding: '2px 7px',
+                        borderRadius: '12px',
+                        backgroundColor: isOutOfStock ? '#FEF2F2' : '#ECFDF5',
+                        color: isOutOfStock ? '#DC2626' : '#059669',
+                        border: isOutOfStock ? '1px solid #FECACA' : '1px solid #A7F3D0'
+                      }}>
+                        {isOutOfStock ? (
+                          <>
+                            <AlertTriangle size={11} style={{ flexShrink: 0 }} />
+                            <span>0 {uom}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check size={11} style={{ flexShrink: 0 }} />
+                            <span>{stockNum.toLocaleString()} {uom}</span>
+                          </>
+                        )}
+                      </span>
+                    )}
 
                     {price && (
                       <span style={{ fontSize: '11px', fontWeight: '700', color: '#475569' }}>
