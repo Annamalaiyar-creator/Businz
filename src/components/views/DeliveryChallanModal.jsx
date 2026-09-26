@@ -3,6 +3,7 @@ import { ChevronLeft, Truck, Printer, CheckCircle, Package, AlertCircle, FileTex
 import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { centralInventoryStore, TX_TYPES } from "../../utils/centralInventoryStore";
 import { resolveProductCode, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from "../../utils/vrmProductsData";
+import { notifyDispatchCompletedToSales } from "../../services/notificationService";
 
 export default function DeliveryChallanModal({
   pendingDcModal,
@@ -245,6 +246,22 @@ export default function DeliveryChallanModal({
     window.dispatchEvent(new CustomEvent('controlroom_storage_update', { detail: { key: 'controlroom_dc_store' } }));
     window.dispatchEvent(new Event('controlroom_storage_update'));
     window.dispatchEvent(new Event('storage'));
+
+    // Notify Sales Person that goods dispatch via DC is completed
+    try {
+      const matchedBom = (bomStore || []).find(b => b.bomCode === bomRefText || b.code === bomRefText || b.bomCode === inv.poNo || b.bomCode === inv.invNo);
+      notifyDispatchCompletedToSales({
+        bomCode: bomRefText || invNoText,
+        customerName: customerText,
+        salesPerson: matchedBom?.salesPerson || inv.salesPerson,
+        salesPersonCode: matchedBom?.salesPersonCode || inv.salesPersonCode,
+        vehicleNo: vehicleNo.toUpperCase().trim(),
+        lrNo: lrNo ? lrNo.trim() : generatedDcNo,
+        transporter: transporter ? transporter.trim() : 'Delivery Challan Fleet',
+        deliveryMode: transportMode,
+        status: 'Completed'
+      });
+    } catch (_) {}
 
     alert(`🚚 Delivery Challan ${generatedDcNo} created successfully!\n\n• Reference Invoice: ${invNoText}\n• Customer: ${customerText}\n• Billing Amount: ₹0.00 (Non-Chargeable / Customer already paid in original invoice)\n• Inventory Stock: Automatically reduced for all dispatched items.`);
     onClose();

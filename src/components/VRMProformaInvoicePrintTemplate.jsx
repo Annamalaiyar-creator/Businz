@@ -995,7 +995,7 @@ export function VRMProformaInvoicePrintSheet({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
             <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>👁️ Removed Elements ({hiddenElements.length})</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Eye size={13} style={{ color: '#92400E' }} /> Removed Elements ({hiddenElements.length})</span>
               <span style={{ fontSize: '10.5px', fontWeight: '500', color: '#B45309' }}>— Click any pill below to restore it back onto the invoice:</span>
             </span>
             <button

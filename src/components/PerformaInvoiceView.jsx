@@ -3926,38 +3926,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     const val = e.target.value;
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                                   }}
-                                  title={(() => {
-                                    const avail = getItemStock(item.name, item.code);
-                                    return avail !== null ? `Available Stock: ${avail.toLocaleString()}` : '';
-                                  })()}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
                                 />
-                                {(() => {
-                                  const avail = getItemStock(item.name, item.code);
-                                  if (avail === null || avail === undefined) return null;
-                                  const isOut = avail <= 0;
-                                  return (
-                                    <span
-                                      title={`Available Stock: ${avail.toLocaleString()}`}
-                                      style={{
-                                        position: 'absolute',
-                                        bottom: '-15px',
-                                        fontSize: '9.5px',
-                                        fontWeight: '800',
-                                        padding: '1px 5px',
-                                        borderRadius: '6px',
-                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
-                                        color: isOut ? '#DC2626' : '#059669',
-                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
-                                        whiteSpace: 'nowrap',
-                                        lineHeight: '1.2',
-                                        pointerEvents: 'none'
-                                      }}
-                                    >
-                                      Stock: {avail.toLocaleString()}
-                                    </span>
-                                  );
-                                })()}
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px' }}>

@@ -1825,36 +1825,7 @@ export default function CrmQuotationsView({
                            </td>
                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                               {(() => {
-                                 const avail = getItemStock(item.name, item.code);
-                                 if (avail === null) {
-                                   return (
-                                     <span style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', letterSpacing: '0.2px' }}>
-                                       Stock: —
-                                     </span>
-                                   );
-                                 }
-                                 const isOut = avail <= 0;
-                                 return (
-                                   <span
-                                     title={`Available Stock: ${avail.toLocaleString()}`}
-                                     style={{
-                                       fontSize: '10.5px',
-                                       fontWeight: '800',
-                                       padding: '1px 7px',
-                                       borderRadius: '10px',
-                                       backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
-                                       color: isOut ? '#DC2626' : '#059669',
-                                       border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0',
-                                       whiteSpace: 'nowrap',
-                                       lineHeight: '1.3'
-                                     }}
-                                   >
-                                     Stock: {avail.toLocaleString()}
-                                   </span>
-                                 );
-                               })()}
-                               <input
+                                                              <input
                                  type="number"
                                  value={item.qty}
                                  placeholder="0"

@@ -864,7 +864,7 @@ export default function ConfirmingBomModal({
                           padding: '2px 6px', fontSize: '10px', fontWeight: '700',
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                         }}>
-                          <span>📷 View Photo</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Camera size={11} /> View Photo</span>
                           <span>›</span>
                         </div>
                       </div>
@@ -902,7 +902,7 @@ export default function ConfirmingBomModal({
                           padding: '2px 6px', fontSize: '10px', fontWeight: '700',
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                         }}>
-                          <span>🎥 Watch Video</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Video size={11} /> Watch Video</span>
                           <span>›</span>
                         </div>
                       </div>
