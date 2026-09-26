@@ -258,12 +258,7 @@ export default function DispatchPackingModal({
 
     const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
 
-    // 1. Deduct / Reserve Stock in Central Inventory & Raw Materials Stores immediately
-    try {
-      centralInventoryStore.deductStockForBOM(targetCode, itemsToPack, 'Dispatch Packing');
-    } catch (cErr) {
-      console.warn('Central store deduction error in DispatchPackingModal:', cErr);
-    }
+    // Stock remains strictly in Reserved state during packing until Vehicle Loading is finalized
 
     // 2. Update React state immediately
     setBomStore(prev => {
