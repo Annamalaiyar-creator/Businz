@@ -276,8 +276,14 @@ class ProductionModuleEngine {
       fetchCloudStore('vrm_prod_recipes', this.recipes),
       fetchCloudStore('vrm_prod_ledger', this.ledger)
     ]).then(([cloudWOs, cloudInv, cloudRecipes, cloudLedger]) => {
-      if (Array.isArray(cloudWOs) && cloudWOs.length > 0) this.workOrders = cloudWOs.map(w => this._sanitizeWorkOrder(w));
-      if (Array.isArray(cloudInv) && cloudInv.length > 0) this.inventory = cloudInv;
+      if (Array.isArray(cloudWOs) && cloudWOs.length > 0) {
+        this.workOrders = cloudWOs.map(w => this._sanitizeWorkOrder(w));
+        try { localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders)); } catch (_) {}
+      }
+      if (Array.isArray(cloudInv) && cloudInv.length > 0) {
+        this.inventory = cloudInv;
+        try { localStorage.setItem('vrm_prod_inventory', JSON.stringify(this.inventory)); } catch (_) {}
+      }
       if (Array.isArray(cloudRecipes) && cloudRecipes.length > 0) this.recipes = cloudRecipes;
       if (Array.isArray(cloudLedger) && cloudLedger.length > 0) this.ledger = cloudLedger;
       this.notifySubscribers();
@@ -287,6 +293,7 @@ class ProductionModuleEngine {
     subscribeToCloudStore('vrm_prod_workorders', (latestWOs) => {
       if (Array.isArray(latestWOs)) {
         this.workOrders = latestWOs.map(w => this._sanitizeWorkOrder(w));
+        try { localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders)); } catch (_) {}
         this.notifySubscribers();
       }
     });
@@ -294,17 +301,38 @@ class ProductionModuleEngine {
     subscribeToCloudStore('vrm_prod_inventory', (latestInv) => {
       if (Array.isArray(latestInv)) {
         this.inventory = latestInv;
+        try { localStorage.setItem('vrm_prod_inventory', JSON.stringify(this.inventory)); } catch (_) {}
         this.notifySubscribers();
       }
     });
   }
 
   loadFromStorage() {
-    // Synchronous memory default initialization; async cloud sync loads true authoritative state from Supabase
+    try {
+      const rawWOs = localStorage.getItem('vrm_prod_workorders');
+      if (rawWOs) {
+        const parsed = JSON.parse(rawWOs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.workOrders = parsed.map(w => this._sanitizeWorkOrder(w));
+        }
+      }
+      const rawInv = localStorage.getItem('vrm_prod_inventory');
+      if (rawInv) {
+        const parsed = JSON.parse(rawInv);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.inventory = parsed;
+        }
+      }
+    } catch (_) {}
   }
 
   saveToStorage() {
     try {
+      try {
+        localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders));
+        localStorage.setItem('vrm_prod_inventory', JSON.stringify(this.inventory));
+      } catch (_) {}
+
       saveCloudStore('vrm_prod_recipes', this.recipes);
       saveCloudStore('vrm_prod_inventory', this.inventory);
       saveCloudStore('vrm_prod_workorders', this.workOrders);

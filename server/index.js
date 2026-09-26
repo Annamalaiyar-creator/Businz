@@ -1249,6 +1249,11 @@ const saveDatabaseStore = async (key, storeData) => {
     } else if (cleanKey === 'grn_store' && Array.isArray(storeData)) {
       const grnPath = getStoreFilePath('grn_store.json');
       fs.writeFileSync(grnPath, JSON.stringify(storeData, null, 2), 'utf8');
+    } else if ((cleanKey === 'workorder_store' || cleanKey === 'vrm_prod_workorders') && Array.isArray(storeData)) {
+      try {
+        fs.writeFileSync(getStoreFilePath('workorder_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
+        fs.writeFileSync(getStoreFilePath('vrm_prod_workorders.json'), JSON.stringify(storeData, null, 2), 'utf8');
+      } catch (_) {}
     }
   } catch (diskErr) {
     console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
@@ -1310,16 +1315,44 @@ const pushStoreToSupabase = async (key, storeData) => saveDatabaseStore(key, sto
 
 // Helpers for Production Work Orders Database store
 const loadLocalWorkOrders = () => {
+  if (supabaseMemoryStore['vrm_prod_workorders'] && Array.isArray(supabaseMemoryStore['vrm_prod_workorders']) && supabaseMemoryStore['vrm_prod_workorders'].length > 0) {
+    return supabaseMemoryStore['vrm_prod_workorders'];
+  }
   if (supabaseMemoryStore['workorder_store'] && Array.isArray(supabaseMemoryStore['workorder_store']) && supabaseMemoryStore['workorder_store'].length > 0) {
     return supabaseMemoryStore['workorder_store'];
+  }
+  const diskPath = getStoreFilePath('vrm_prod_workorders.json');
+  if (fs.existsSync(diskPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(data) && data.length > 0) {
+        supabaseMemoryStore['vrm_prod_workorders'] = data;
+        return data;
+      }
+    } catch (_) {}
+  }
+  const diskPath2 = getStoreFilePath('workorder_store.json');
+  if (fs.existsSync(diskPath2)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(diskPath2, 'utf8'));
+      if (Array.isArray(data) && data.length > 0) {
+        supabaseMemoryStore['workorder_store'] = data;
+        return data;
+      }
+    } catch (_) {}
   }
   return [];
 };
 
 const saveLocalWorkOrders = (orders) => {
   supabaseMemoryStore['workorder_store'] = orders;
+  supabaseMemoryStore['vrm_prod_workorders'] = orders;
   saveDatabaseStore('workorder_store', orders);
   saveDatabaseStore('vrm_prod_workorders', orders);
+  try {
+    fs.writeFileSync(getStoreFilePath('vrm_prod_workorders.json'), JSON.stringify(orders, null, 2), 'utf8');
+    fs.writeFileSync(getStoreFilePath('workorder_store.json'), JSON.stringify(orders, null, 2), 'utf8');
+  } catch (_) {}
 };
 
 // Authoritative Boot Sync from Supabase Cloud Database
@@ -1842,10 +1875,10 @@ const loadLocalPOs = () => {
           let effStatus = winner.status || d.status || existing.status || 'Draft';
           let effStatusType = winner.statusType || d.statusType || existing.statusType || 'draft';
 
-          if (d.status === 'OPEN / PARTIALLY RECEIVED' || (dOrd > 0 && dRec > 0 && dRec < dOrd)) {
+          if (dOrd > 0 && dRec > 0 && dRec < dOrd) {
             effStatus = 'OPEN / PARTIALLY RECEIVED';
             effStatusType = 'partially_received';
-          } else if (existing.status === 'OPEN / PARTIALLY RECEIVED' || (exOrd > 0 && exRec > 0 && exRec < exOrd)) {
+          } else if (exOrd > 0 && exRec > 0 && exRec < exOrd) {
             effStatus = 'OPEN / PARTIALLY RECEIVED';
             effStatusType = 'partially_received';
           }
@@ -5298,11 +5331,12 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
       }
 
       const translated = data.purchaseorders.map(po => {
-        // Calculate total received across all GRNs linked to this PO
-        const poRefClean = String(po.purchaseorder_number || po.purchaseorder_id || '').toLowerCase();
+        // Calculate total received across all GRNs linked strictly to this exact PO
+        const clean = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+        const poRefClean = clean(po.purchaseorder_number || po.purchaseorder_id);
         const matchingGRNs = localGRNs.filter(g => {
-          const gRef = String(g.poRef || g.poNo || g.poId || '').toLowerCase();
-          return gRef && (gRef === poRefClean || poRefClean.includes(gRef) || gRef.includes(poRefClean));
+          const gRef = clean(g.poRef || g.poNo || g.poId);
+          return gRef && gRef === poRefClean;
         });
         let totalReceived = 0;
         matchingGRNs.forEach(grn => {
@@ -5321,10 +5355,6 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         const matchingClosedGRN = matchingGRNs.some(g => {
           const gs = String(g.status || '').toUpperCase();
           return gs.includes('CLOSED') || gs.includes('FULLY') || g.forceClosePO === true;
-        });
-        const matchingPartialGRN = matchingGRNs.some(g => {
-          const gs = String(g.status || '').toUpperCase();
-          return gs.includes('PARTIAL');
         });
 
         const currentLocalPOs = loadLocalPOs();
@@ -5360,20 +5390,13 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
 
         const isFullyReceived = (totalOrdered > 0 && totalReceived >= totalOrdered) || 
                                 matchingClosedGRN || 
-                                (lpMatch && (lpMatch.status === 'CLOSED / FULLY RECEIVED' || lpMatch.statusType === 'closed')) ||
-                                (po.status === 'closed');
-        const isPartial = !isFullyReceived && ((totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered) || 
-                          matchingPartialGRN ||
-                          matchingGRNs.length > 0 || 
-                          po.status === 'partially_received' || 
-                          po.status === 'received' || 
-                          po.is_received === true ||
-                          (lpMatch && (lpMatch.status === 'OPEN / PARTIALLY RECEIVED' || lpMatch.statusType === 'partially_received')));
+                                (lpMatch && (lpMatch.status === 'CLOSED / FULLY RECEIVED' || lpMatch.statusType === 'closed'));
+        const isPartial = !isFullyReceived && (totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered);
 
         if (isFullyReceived) {
           statusType = 'closed';
           statusText = 'CLOSED / FULLY RECEIVED';
-        } else if (isPartial) {
+        } else if (isPartial && totalReceived > 0) {
           statusType = 'partially_received';
           statusText = 'OPEN / PARTIALLY RECEIVED';
         } else if (lpMatch && (lpMatch.status === 'Proceed PO' || lpMatch.statusType === 'proceed_po' || Boolean(lpMatch.proceedDetails))) {
@@ -5431,7 +5454,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           gstNo: effectiveGst,
           deliveryAddress: effectiveDelAddr,
           billingAddress: effectiveBillAddr,
-          poDate: po.date,
+          poDate: (lpMatch && lpMatch.poDate) ? lpMatch.poDate : (po.date || '—'),
           deliveryDate: po.delivery_date || (lpMatch ? lpMatch.deliveryDate : '—'),
           paymentTerms: (lpMatch && lpMatch.paymentTerms && lpMatch.paymentTerms !== 'Net 30 Days') ? lpMatch.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
           purchaser: (lpMatch && lpMatch.purchaser && lpMatch.purchaser !== '—') ? lpMatch.purchaser : (po.purchaser_name || '—'),
@@ -5452,7 +5475,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           amount: calcTotalWithGst,
           status: statusText,
           statusType: statusType,
-          order_status: isFullyReceived ? 'closed' : (isPartial ? 'received' : (lpMatch?.order_status || po.status)),
+          order_status: isFullyReceived ? 'closed' : ((isPartial && totalReceived > 0) ? 'received' : (lpMatch?.proceedDetails ? 'proceed_po' : (lpMatch?.paymentDetails ? 'payment_processed' : (lpMatch?.approvedBy ? 'approved' : 'draft')))),
           totalOrderedQty: totalOrdered,
           totalReceivedQty: totalReceived,
           totalRemainingQty: Math.max(0, totalOrdered - totalReceived),
@@ -5530,7 +5553,8 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           if (lp.grnCount !== undefined && !translated[existsIdx].grnCount) translated[existsIdx].grnCount = lp.grnCount;
           if (Array.isArray(lp.grnHistory) && lp.grnHistory.length > 0) translated[existsIdx].grnHistory = lp.grnHistory;
 
-          if (lp.status === 'OPEN / PARTIALLY RECEIVED' || lp.statusType === 'partially_received') {
+          const lpRec = Number(lp.totalReceivedQty !== undefined ? lp.totalReceivedQty : (lp.totalReceived || 0));
+          if ((lp.status === 'OPEN / PARTIALLY RECEIVED' || lp.statusType === 'partially_received') && lpRec > 0) {
             translated[existsIdx].status = 'OPEN / PARTIALLY RECEIVED';
             translated[existsIdx].statusType = 'partially_received';
           } else if (lp.status === 'CLOSED / FULLY RECEIVED' || lp.statusType === 'closed') {
@@ -7378,7 +7402,7 @@ app.post('/api/grns', async (req, res) => {
         const poNum = normalize(po.poNo);
         const poId = normalize(po.id);
         const poZohoId = normalize(po.zohoId);
-        if (poRefTarget === poNum || poRefTarget === poId || poRefTarget === poZohoId || (poNum && poRefTarget.includes(poNum)) || (poNum && poNum.includes(poRefTarget))) {
+        if (poRefTarget === poNum || poRefTarget === poId || poRefTarget === poZohoId) {
           matched = true;
           const ord = totalOrdered > 0 ? totalOrdered : Number(po.totalOrderedQty || (po.items ? po.items.reduce((s, it) => s + (Number(it.qty) || 0), 0) : 0));
           const rec = totalReceivedSoFar;
@@ -7651,6 +7675,7 @@ app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'Payment Processed';
     localPOs[matchedIdx].statusType = 'payment_processed';
+    localPOs[matchedIdx].order_status = 'payment_processed';
     localPOs[matchedIdx].paymentDetails = {
       mode: paymentMode,
       refNo: paymentRef,
