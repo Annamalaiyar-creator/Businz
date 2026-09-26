@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle, Clock, Send, Search, CheckCircle2, XCircle } from 'lucide-react';
 
 /**
  * Format string to Title Case (First letter capitalized, remaining lowercase)
@@ -40,55 +41,14 @@ export function formatTitleCase(text) {
  * - Expired / Draft / Inactive -> Clock
  */
 
-const IconPending = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-    <line x1="12" y1="9" x2="12" y2="13"/>
-    <line x1="12" y1="17" x2="12.01" y2="17"/>
-  </svg>
-);
+const IconPending = ({ size = 13 }) => <AlertTriangle size={size} style={{ flexShrink: 0 }} />;
+const IconInProgress = ({ size = 13 }) => <Clock size={size} style={{ flexShrink: 0 }} />;
+const IconSubmitted = ({ size = 13 }) => <Send size={size} style={{ flexShrink: 0 }} />;
+const IconInReview = ({ size = 13 }) => <Search size={size} style={{ flexShrink: 0 }} />;
+const IconSuccess = ({ size = 13 }) => <CheckCircle2 size={size} style={{ flexShrink: 0 }} />;
+const IconFailed = ({ size = 13 }) => <XCircle size={size} style={{ flexShrink: 0 }} />;
+const IconExpired = ({ size = 13 }) => <Clock size={size} style={{ flexShrink: 0 }} />;
 
-const IconInProgress = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeDasharray="3 3" strokeLinecap="round" style={{ flexShrink: 0 }}>
-    <circle cx="12" cy="12" r="9"/>
-  </svg>
-);
-
-const IconSubmitted = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'rotate(-25deg)', transformOrigin: 'center', flexShrink: 0 }}>
-    <path d="m22 2-7 20-4-9-9-4Z"/>
-    <path d="M22 2 11 13"/>
-  </svg>
-);
-
-const IconInReview = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <circle cx="11" cy="11" r="8"/>
-    <path d="m21 21-4.3-4.3"/>
-  </svg>
-);
-
-const IconSuccess = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <circle cx="12" cy="12" r="9"/>
-    <path d="m9 12 2 2 4-4"/>
-  </svg>
-);
-
-const IconFailed = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <circle cx="12" cy="12" r="9"/>
-    <path d="m15 9-6 6"/>
-    <path d="m9 9 6 6"/>
-  </svg>
-);
-
-const IconExpired = ({ size = 13 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <circle cx="12" cy="12" r="9"/>
-    <polyline points="12 6 12 12 16 14"/>
-  </svg>
-);
 
 export function getStatusStyleConfig(statusOrType, customLabel) {
   const raw = String(statusOrType || customLabel || '').trim().toLowerCase();

@@ -279,7 +279,7 @@ export function getPorterVoiceCue(titleOrMessage, metadata = {}) {
     status = 'Payment Verification Needed';
   } else if (upperText.includes('READY FOR INVOICE') || upperText.includes('READY FOR INVOICING')) {
     status = 'Invoice Ready';
-  } else if (upperText.includes('DISPATCHED') || upperText.includes('VEHICLE LOADED')) {
+  } else if (step.includes('DISPATCH') || upperText.includes('DISPATCH') || upperText.includes('VEHICLE LOADED')) {
     status = 'Order Dispatched';
   } else if (upperText.includes('PROFORMA INVOICE') || upperText.includes('CONVERTED TO PI') || upperText.includes('PI CREATED')) {
     status = 'Proforma Invoice Created';
@@ -927,6 +927,69 @@ export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerso
       cancelledBy: safeCancelledBy,
       reason: safeReason,
       step: 'BOM_CANCELLED_NOTIF'
+    }
+  });
+}
+
+/**
+ * STEP 6: Vehicle Loading & Dispatch Completed Notification.
+ * Notifies the Sales Person who raised/owns this BOM that dispatch is completed.
+ * Voice alert: "[Customer Name], Order Dispatched!"
+ * Target: Sales Person (by name, ID, role: Sales Executive, Sales Head), plus leadership.
+ */
+export function notifyDispatchCompletedToSales({
+  bomCode,
+  customerName,
+  salesPerson,
+  salesPersonCode,
+  createdBy,
+  createdById,
+  vehicleNo,
+  lrNo,
+  transporter,
+  deliveryMode,
+  status
+}) {
+  const safeCustomer = customerName || 'Customer';
+  const resolvedSalesPerson = (salesPerson || createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+  const resolvedCode = salesPersonCode || createdById || '';
+  const vText = vehicleNo ? ` via Vehicle ${vehicleNo}` : '';
+  const lrText = lrNo && lrNo !== 'N/A' && lrNo !== 'N/A (Self-Pickup)' ? ` (LR: ${lrNo})` : '';
+  const isDirect = deliveryMode === 'direct';
+
+  const salesTargets = [
+    resolvedSalesPerson,
+    resolvedCode,
+    'Sales Executive',
+    'Sales Head',
+    'All',
+    'CEO',
+    'Managing Director',
+    'MD',
+    'Technical Administrator'
+  ].filter(Boolean);
+
+  const message = isDirect
+    ? `Dispatch for BOM ${bomCode} (${safeCustomer}) is COMPLETED! Goods directly handed over / customer self-pickup completed.`
+    : `Dispatch for BOM ${bomCode} (${safeCustomer}) is COMPLETED! Goods loaded${vText}${lrText} and dispatched to customer.`;
+
+  return sendWorkflowNotification({
+    title: `🚚 BOM Dispatched: ${bomCode}`,
+    message,
+    targetTab: 'BOM Orders',
+    targetRoles: salesTargets,
+    type: 'success',
+    soundType: 'success',
+    metadata: {
+      bomCode,
+      customerName: safeCustomer,
+      salesPerson: resolvedSalesPerson || 'Sales Executive',
+      salesPersonCode: resolvedCode,
+      createdBy: resolvedSalesPerson,
+      vehicleNo,
+      lrNo,
+      transporter,
+      step: 'DISPATCH_COMPLETED'
     }
   });
 }

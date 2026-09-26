@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle
+  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail
 } from "lucide-react";
 import { getMediaFromCache } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -88,7 +88,7 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
                     boxShadow: '0 2px 6px rgba(22,163,74,0.3)'
                   }}
                 >
-                  <span>💬 Send to Customer via WhatsApp</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><MessageSquare size={15} /> Send to Customer via WhatsApp</span>
                 </button>
 
                 <button
@@ -122,7 +122,7 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
                     gap: '6px'
                   }}
                 >
-                  <span>✉️ Send via Email</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Mail size={15} /> Send via Email</span>
                 </button>
               </div>
             </div>

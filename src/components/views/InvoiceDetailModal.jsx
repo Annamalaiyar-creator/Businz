@@ -13,6 +13,7 @@ import { addLiveNotification } from "../Header";
 import TallySyncModal from "./TallySyncModal";
 import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra } from "../../utils/gstHelper";
+import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -433,35 +434,39 @@ export default function InvoiceDetailModal({
                 const isStockAlreadyBlocked = Boolean(matchingBom?.stockBlocked || inv.stockDeducted || inv.stockBlocked);
 
                 if (!isStockAlreadyBlocked) {
-                  // 2. Reduce stock in stockRegistry
-                  setStockRegistry(prevRegistry => {
-                    const updated = [...prevRegistry];
-                    packedItemsToDeduct.forEach(pItem => {
-                      const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
-                    const matchIdx = updated.findIndex(r =>
-                      (r.code && pItem.code && r.code.toLowerCase().trim() === pItem.code.toLowerCase().trim()) ||
-                      (r.item && pItem.name && (
-                        r.item.toLowerCase().trim() === pItem.name.toLowerCase().trim() ||
-                        r.item.toLowerCase().includes(pItem.name.toLowerCase().trim()) ||
-                        pItem.name.toLowerCase().includes(r.item.toLowerCase().trim())
-                      ))
-                    );
-                    if (matchIdx !== -1) {
-                      const currentStock = Math.max(0, parseInt(String(updated[matchIdx].stock).replace(/,/g, ''), 10) || 0);
-                      const newStock = Math.max(0, currentStock - qtyToDeduct);
-                      const minLvl = parseInt(String(updated[matchIdx].minLevel || '500').replace(/,/g, ''), 10) || 500;
-                      updated[matchIdx] = {
-                        ...updated[matchIdx],
-                        stock: String(newStock),
-                        status: newStock === 0 ? 'Out of Stock' : (newStock <= minLvl ? 'Low Stock' : 'In Stock')
-                      };
-                    }
-                  });
+                  // 2. Reduce stock in stockRegistry (if available)
                   try {
-                    localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updated));
-                  } catch (e) { }
-                  return updated;
-                });
+                    if (typeof setStockRegistry === 'function') {
+                      setStockRegistry(prevRegistry => {
+                        const updated = [...(prevRegistry || [])];
+                        packedItemsToDeduct.forEach(pItem => {
+                          const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
+                          const matchIdx = updated.findIndex(r =>
+                            (r.code && pItem.code && r.code.toLowerCase().trim() === pItem.code.toLowerCase().trim()) ||
+                            (r.item && pItem.name && (
+                              r.item.toLowerCase().trim() === pItem.name.toLowerCase().trim() ||
+                              r.item.toLowerCase().includes(pItem.name.toLowerCase().trim()) ||
+                              pItem.name.toLowerCase().includes(r.item.toLowerCase().trim())
+                            ))
+                          );
+                          if (matchIdx !== -1) {
+                            const currentStock = Math.max(0, parseInt(String(updated[matchIdx].stock).replace(/,/g, ''), 10) || 0);
+                            const newStock = Math.max(0, currentStock - qtyToDeduct);
+                            const minLvl = parseInt(String(updated[matchIdx].minLevel || '500').replace(/,/g, ''), 10) || 500;
+                            updated[matchIdx] = {
+                              ...updated[matchIdx],
+                              stock: String(newStock),
+                              status: newStock === 0 ? 'Out of Stock' : (newStock <= minLvl ? 'Low Stock' : 'In Stock')
+                            };
+                          }
+                        });
+                        try {
+                          localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updated));
+                        } catch (e) { }
+                        return updated;
+                      });
+                    }
+                  } catch (e) { console.warn('Stock registry update warning in InvoiceDetailModal:', e); }
 
                 // 3. Deduct stock directly from prodModuleEngine central live inventory
                 try {
@@ -601,15 +606,6 @@ export default function InvoiceDetailModal({
               }
 
                 // 5. Update Invoice status & persist to localStorage / cloud store
-                setViewingInvoiceModal(prev => prev ? {
-                  ...prev,
-                  status: 'Invoice Confirmed',
-                  match: 'Matched',
-                  pay: 'Completed & Locked',
-                  stockDeducted: true,
-                  stockDeductionDate: new Date().toISOString()
-                } : prev);
-
                 const unpackedItems = (itemsList || []).filter(it => it.selected === false);
                 setInvoiceList(prev => {
                   const updatedInvoices = prev.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
@@ -799,17 +795,22 @@ export default function InvoiceDetailModal({
                 } catch (e) { console.error('Zoho invoice fetch trigger error:', e); }
 
                 // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch
-                notifyInvoiceCompletedReadyForDispatch({
-                  invoiceNo: invNoText,
-                  bomCode: bomRefText,
-                  customerName: customerText,
-                  salesPerson: inv.salesPerson || (matchingBom && matchingBom.salesPerson)
-                });
+                try {
+                  notifyInvoiceCompletedReadyForDispatch({
+                    invoiceNo: invNoText,
+                    bomCode: bomRefText,
+                    customerName: customerText,
+                    salesPerson: inv.salesPerson || (matchingBom && matchingBom.salesPerson)
+                  });
+                } catch (notifErr) {
+                  console.warn('Dispatch notification warning in InvoiceDetailModal:', notifErr);
+                }
 
-                // Return to main page cleanly and trigger workflow alerts
+                // Return to main page cleanly - close modal and push user back to invoice ledger / table
+                setIsEditingInvoice(false);
                 setViewingInvoiceModal(null);
                 if (typeof showCustomAlert === 'function') {
-                  showCustomAlert(`✅ Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Stock reduced for packed items and order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
+                  showCustomAlert(`✅ Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
                 }
               }}
               style={{

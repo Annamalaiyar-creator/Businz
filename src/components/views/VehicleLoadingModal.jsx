@@ -9,6 +9,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { getMediaFromCache, saveMediaToCache } from "../../utils/mediaUtils";
+import { notifyDispatchCompletedToSales } from "../../services/notificationService";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve) => {
@@ -489,6 +490,23 @@ const handleFinalizeVehicleLoading = () => {
   window.dispatchEvent(new Event('controlroom_storage_update'));
   window.dispatchEvent(new Event('storage'));
 
+  // Notify Sales Person that dispatch for this BOM is completed
+  try {
+    notifyDispatchCompletedToSales({
+      bomCode: bCode,
+      customerName: custName,
+      salesPerson: bom.salesPerson || bom.createdBy,
+      salesPersonCode: bom.salesPersonCode || bom.createdById,
+      vehicleNo: vNo,
+      lrNo: isTransport ? lr : 'Self-Pickup',
+      transporter: isTransport ? transp : 'Self-Pickup / Customer Handover',
+      deliveryMode,
+      status: nextBomStatus
+    });
+  } catch (nErr) {
+    console.warn('Dispatch completion notification error:', nErr);
+  }
+
   const completedSummary = {
     bomCode: bCode,
     invoiceNo: invNo,
@@ -912,7 +930,7 @@ return (
                   padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '800',
                   cursor: 'pointer', boxShadow: '0 2px 6px rgba(22,101,52,0.15)'
                 }}>
-                  <Camera size={16} /> 📸 Capture Live Camera Photo
+                  <Camera size={16} /> Capture Live Camera Photo
                   <input
                     type="file"
                     accept="image/*"
