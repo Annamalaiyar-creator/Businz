@@ -640,6 +640,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           // A BOM is vehicle loaded / completed when its vehicle loading is finalized or marked dispatched
           const isVehicleLoaded = Boolean(
+            b.stockDeducted ||
             (b.vehicleLoading && (b.vehicleLoading.fullyCompleted || b.vehicleLoading.loadedAt)) ||
             st === 'completed' ||
             st === 'closed' ||
@@ -938,11 +939,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         }
       } catch (_) {}
 
+      const processedBomCodes = new Set();
       if (Array.isArray(boms)) {
         boms.forEach(b => {
+          const bCode = String(b?.bomCode || b?.code || b?.id || '').toUpperCase().trim();
+          if (!bCode || processedBomCodes.has(bCode)) return;
+          processedBomCodes.add(bCode);
+
           const st = String(b?.status || '').toLowerCase();
           if (st.includes('cancel') || st.includes('stock restored')) return;
           const isVehicleLoaded = Boolean(
+            b?.stockDeducted ||
             (b?.vehicleLoading && (b?.vehicleLoading.fullyCompleted || b?.vehicleLoading.loadedAt)) ||
             st === 'completed' ||
             st === 'closed' ||
@@ -963,6 +970,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             'awaiting vehicle loading & dispatch'
           ].some(s => st.includes(s));
 
+          if (!isVehicleLoaded && !isSentToDispatch) return;
+
           const rawSales = b.salesPerson || b.salesperson || b.salesRep || b.createdBy || b.createdByName || b.salesPersonName || (b.sourcePiNo ? piMap[String(b.sourcePiNo).toUpperCase().trim()] : '') || '';
           const cleanSalesPerson = rawSales ? rawSales.replace(/\s*\([^)]*\)/g, '').trim() : '';
           const salesCode = b.salesPersonCode || b.createdById || '';
@@ -979,7 +988,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             if (isMatch) {
               const qty = parseFloat(it.qty || it.bomQty || 0) || 0;
               if (qty > 0) {
-                const rawDate = b.salesConfirmedAt || b.createdAt || b.date;
+                const rawDate = (isVehicleLoaded && b.vehicleLoading?.loadedAt) ? b.vehicleLoading.loadedAt : (b.salesConfirmedAt || b.createdAt || b.date);
                 let formattedDate = 'Recent Order';
                 let orderTime = 0;
                 try {
@@ -1092,10 +1101,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       }
     } catch (_) {}
 
-    // 3. Central Ledger & Production Work Orders
+    // 3. Central Ledger & Production Work Orders (Non-BOM entries only)
     try {
       const engineLedger = (typeof prodModuleEngine !== 'undefined' && prodModuleEngine.getLedger) ? prodModuleEngine.getLedger() : [];
       (engineLedger || []).forEach(entry => {
+        const refUpper = String(entry.refNo || '').toUpperCase().trim();
+        const typeUpper = String(entry.type || '').toUpperCase().trim();
+        // Skip duplicate BOM dispatch entries since all BOMs are authoritatively represented above
+        if (refUpper.startsWith('BOM-') || typeUpper.includes('BOM') || processedBomCodes.has(refUpper)) {
+          return;
+        }
+
         const eCode = String(entry.itemCode || '').toUpperCase().trim();
         const eName = String(entry.itemName || '').toLowerCase().trim();
         if (eCode === sCode.toUpperCase() || eName === sName) {
@@ -1131,6 +1147,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         }
       });
     } catch (_) {}
+
 
     // Sort transactions chronologically (oldest first)
     transactionEvents.sort((a, b) => {
