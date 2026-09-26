@@ -53,7 +53,8 @@ export default function WorkOrdersView({
             let parsedStatus = sw.status;
             if (sw.status === 'In Progress' || sw.status === 'IN_PROGRESS') parsedStatus = 'IN_PROGRESS';
             else if (sw.status === 'Pending' || sw.status === 'PENDING_MATERIAL') parsedStatus = 'PENDING_MATERIAL';
-            else if (sw.status === 'Completed' || sw.status === 'COMPLETED' || sw.status === 'COMPLETED_PENDING_VERIFICATION') parsedStatus = 'COMPLETED_PENDING_VERIFICATION';
+            else if (sw.status === 'Completed' || sw.status === 'COMPLETED' || sw.status === 'COMPLETED_PENDING_VERIFICATION') parsedStatus = (sw.status === 'APPROVED_CLOSED' || sw.status === 'CLOSED') ? 'APPROVED_CLOSED' : 'COMPLETED_PENDING_VERIFICATION';
+            else if (sw.status === 'APPROVED_CLOSED' || sw.status === 'CLOSED') parsedStatus = 'APPROVED_CLOSED';
             else if (String(sw.status || '').toUpperCase() === 'OVERDUE') parsedStatus = 'OVERDUE';
 
             const rawBranchCode = sw.finishedProductCode || sw.productCode || (sw.productName ? (CANONICAL_PRODUCT_ALIASES[String(sw.productName).toUpperCase()] || sw.productName) : 'MR-300MM');
@@ -61,16 +62,19 @@ export default function WorkOrdersView({
             const targetFgName = sw.finishedProductName || (targetFgCode === 'MR-300MM' ? 'Mini Rail - 300 mm' : (sw.productName || 'Mini Rail 100 mm'));
 
             const formattedWO = {
+              ...sw,
               id: woId,
               date: sw.targetDate || sw.date || new Date().toISOString().split('T')[0],
-              productionHead: 'Senthil Kumar (Production Head)',
+              productionHead: sw.productionHead || 'Senthil Kumar (Production Head)',
               finishedProductCode: targetFgCode,
               finishedProductName: targetFgName,
               targetQty: Number(sw.plannedQty || sw.targetQty) || 500,
-              cutLengthMm: 300,
+              cutLengthMm: sw.cutLengthMm || 300,
               productItems: sw.productItems || (existingWO ? existingWO.productItems : []),
-              unit: 'Pieces',
-              rawMaterialName: sw.rawMaterial || sw.rawMaterialName || 'Raw Aluminum Coil 1.5mm',
+              unit: sw.unit || 'Pieces',
+              rawMaterialName: sw.rawMaterial || sw.rawMaterialName || (existingWO ? existingWO.rawMaterialName : 'Raw Aluminum Coil 1.5mm'),
+              rawMaterialCode: sw.rawMaterialCode || (existingWO ? existingWO.rawMaterialCode : 'ALU-LEN-2414MM'),
+              rawMaterialPhysicalToIssue: sw.rawMaterialPhysicalToIssue || (existingWO ? existingWO.rawMaterialPhysicalToIssue : 125),
               priority: sw.priority || (existingWO ? existingWO.priority : 'Normal'),
               assignedEmployee: sw.assignedEmployee || (existingWO ? existingWO.assignedEmployee : 'Floor Team'),
               status: (existingWO && existingWO.status && existingWO.status !== 'PENDING_MATERIAL') ? existingWO.status : (parsedStatus || 'PENDING_MATERIAL')
@@ -89,29 +93,29 @@ export default function WorkOrdersView({
       }
     };
 
-    fetch('/api/workorders')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.workOrders) {
-          applyWorkOrders(data.workOrders);
-        }
-      })
-      .catch(() => {
-        fetchCloudStore('workorder_store', prodModuleEngine.getWorkOrders()).then(cloudWOs => {
-          if (cloudWOs) applyWorkOrders(cloudWOs);
-        });
-      });
-
-    // Instant Real-Time Push Listener: Refetches Work Orders the millisecond a new Work Order is created or updated
-    const handleWorkOrderPush = () => {
+    const loadWOs = () => {
       fetch('/api/workorders')
         .then(res => res.json())
         .then(data => {
-          if (data && data.workOrders) {
+          if (data && Array.isArray(data.workOrders) && data.workOrders.length > 0) {
             applyWorkOrders(data.workOrders);
+          } else {
+            fetchCloudStore('vrm_prod_workorders', prodModuleEngine.getWorkOrders()).then(cloudWOs => {
+              if (Array.isArray(cloudWOs) && cloudWOs.length > 0) applyWorkOrders(cloudWOs);
+            });
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          fetchCloudStore('vrm_prod_workorders', prodModuleEngine.getWorkOrders()).then(cloudWOs => {
+            if (Array.isArray(cloudWOs) && cloudWOs.length > 0) applyWorkOrders(cloudWOs);
+          });
+        });
+    };
+    loadWOs();
+
+    // Instant Real-Time Push Listener: Refetches Work Orders the millisecond a new Work Order is created or updated
+    const handleWorkOrderPush = () => {
+      loadWOs();
     };
 
     window.addEventListener('controlroom_workorder_updated', handleWorkOrderPush);
@@ -153,6 +157,7 @@ export default function WorkOrdersView({
     if (statusStr === 'ACCEPTED') { formattedStatus = 'Accepted / Ready'; }
     else if (statusStr === 'COMPLETED_PENDING_VERIFICATION') { formattedStatus = 'Pending Verification'; }
     else if (statusStr === 'PENDING_MATERIAL') { formattedStatus = 'Pending Material'; }
+    else if (statusStr === 'APPROVED_CLOSED' || statusStr === 'COMPLETED' || statusStr === 'CLOSED') { formattedStatus = 'Completed'; }
     else if (statusStr === 'OVERDUE') { formattedStatus = 'Overdue'; }
 
     if (statusStr === 'OVERDUE') { stBg = '#FEE2E2'; stFg = '#DC2626'; progress = 50; }
@@ -219,11 +224,14 @@ export default function WorkOrdersView({
   const filteredRows = allWorkOrderRows.filter(row => {
     const searchLower = (prodSearchQueryText || '').toLowerCase();
     const matchesSearch = !searchLower || row.woNo.toLowerCase().includes(searchLower) || row.product.toLowerCase().includes(searchLower) || row.customer.toLowerCase().includes(searchLower);
-    const matchesStatusSelect = prodFilterStatusSelect === 'All' || row.status === prodFilterStatusSelect;
+    const matchesStatusSelect = prodFilterStatusSelect === 'All' || row.status === prodFilterStatusSelect || (prodFilterStatusSelect === 'Completed' && (row.status === 'Completed' || row.status === 'Approved Closed'));
     const matchesTab = prodStatusFilterText === 'All' || 
       row.status.toLowerCase().includes(prodStatusFilterText.toLowerCase()) || 
       (prodStatusFilterText === 'Pending Material' && row.rawWO?.status === 'PENDING_MATERIAL') ||
+      (prodStatusFilterText === 'Material Issued' && (row.rawWO?.status === 'MATERIAL_ISSUED' || row.rawWO?.status === 'MATERIAL_RESERVED')) ||
       (prodStatusFilterText === 'In Progress' && (row.rawWO?.status === 'IN_PROGRESS' || row.rawWO?.status === 'ACCEPTED')) ||
+      (prodStatusFilterText === 'Pending Verification' && (row.rawWO?.status === 'COMPLETED_PENDING_VERIFICATION' || row.status === 'Pending Verification')) ||
+      (prodStatusFilterText === 'Completed' && (row.rawWO?.status === 'APPROVED_CLOSED' || row.rawWO?.status === 'COMPLETED' || row.rawWO?.status === 'CLOSED' || row.status === 'Completed' || row.status === 'Approved Closed')) ||
       (prodStatusFilterText === 'Overdue' && (row.status === 'Overdue' || String(row.rawWO?.status || '').toUpperCase() === 'OVERDUE'));
     return matchesSearch && matchesStatusSelect && matchesTab;
   });

@@ -172,7 +172,7 @@ export default function GoodsReceiptNoteView(props) {
         const pNo = normalize(p.poNo);
         const pId = normalize(p.id);
         const pZohoId = normalize(p.zohoId);
-        return pNo === pRef || pId === pRef || pZohoId === pRef || (pNo && pRef.includes(pNo)) || (pNo && pNo.includes(pRef));
+        return pNo === pRef || pId === pRef || pZohoId === pRef;
       });
       if (matchedPO) {
         const isPoClosed = String(matchedPO.status || '').toUpperCase().includes('CLOSED') ||

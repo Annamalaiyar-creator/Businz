@@ -436,20 +436,16 @@ const handleFinalizeVehicleLoading = () => {
     fullyCompleted: willCloseBom
   };
 
-  // Deduct Inventory in Central Inventory Store & Raw Materials Store (only once)
-  if (!bom.stockDeducted) {
-    try {
-      const itemsToDeduct = (bom.items && bom.items.length > 0) ? bom.items : packedItems;
-      centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, bom.salesPerson || 'Dispatch Vehicle Loading');
-    } catch (cErr) {
-      console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
-    }
-  } else {
-    // Ensure active reservations for this BOM are released now that vehicle is loaded
-    try {
-      centralInventoryStore.releaseReservation(bCode);
-    } catch (_) {}
+  // Permanently Deduct Inventory in Central Inventory Store & Raw Materials Store upon Vehicle Loading
+  try {
+    const itemsToDeduct = (bom.items && bom.items.length > 0) ? bom.items : packedItems;
+    centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, bom.salesPerson || 'Dispatch Vehicle Loading', true);
+  } catch (cErr) {
+    console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
   }
+  try {
+    centralInventoryStore.releaseReservation(bCode);
+  } catch (_) {}
 
   // Update BOM status to Fully Completed or Awaiting LR Copy & persist
   setBomStore(prev => {

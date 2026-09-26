@@ -543,11 +543,11 @@ class CentralInventoryStore {
     this.notifyChange();
   }
 
-  // Deduct Inventory immediately upon BOM Verification & Sent to Dispatch
-  deductStockForBOM(bomCode, itemsList = [], user = 'Production Admin') {
+  // Deduct Inventory permanently upon BOM Vehicle Loading & Dispatch
+  deductStockForBOM(bomCode, itemsList = [], user = 'Production Admin', force = false) {
     if (!Array.isArray(itemsList) || itemsList.length === 0) return;
     if (!this.deductedBomCodes) this.deductedBomCodes = new Set();
-    if (bomCode && this.deductedBomCodes.has(bomCode)) {
+    if (bomCode && this.deductedBomCodes.has(bomCode) && !force) {
       console.log(`[Central Store] BOM ${bomCode} stock already deducted. Skipping duplicate deduction.`);
       return;
     }
