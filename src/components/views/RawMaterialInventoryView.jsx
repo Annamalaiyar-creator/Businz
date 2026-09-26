@@ -634,7 +634,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const seenBomIds = new Set();
       if (Array.isArray(bomsList)) {
         bomsList.forEach(b => {
-          const bomKey = String(b.bomNumber || b.bomNo || b.id || '').toUpperCase().trim();
+          const bomKey = String(b.bomNumber || b.bomNo || b.id || b.bomCode || b.code || '').toUpperCase().trim();
           if (bomKey && seenBomIds.has(bomKey)) return;
           if (bomKey) seenBomIds.add(bomKey);
 
@@ -669,19 +669,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 const q = parseFloat(it.qty || it.bomQty || 0) || 0;
                 if (q > 0) {
                   const resCode = resolveProductCode(it);
-                  const c = String(resCode || it.code || '').toUpperCase().trim();
+                  const rawCode = String(it.code || '').toUpperCase().trim();
+                  const resUpper = resCode ? String(resCode).toUpperCase().trim() : '';
+                  let c = CANONICAL_PRODUCT_ALIASES[rawCode] || CANONICAL_PRODUCT_ALIASES[resUpper] || resUpper || rawCode;
                   const n = normalizeProductName(it.name || it.description || '');
                   const fp = wordFingerprint(it.name || it.description || '');
-                  if (c) dispatchedDeductions.set(c, (dispatchedDeductions.get(c) || 0) + q);
-                  if (n) dispatchedDeductions.set(n, (dispatchedDeductions.get(n) || 0) + q);
-                  if (fp) dispatchedDeductions.set(fp, (dispatchedDeductions.get(fp) || 0) + q);
 
                   const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
                     ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
                   if (isMr300) {
-                    dispatchedDeductions.set('MR-300MM', (dispatchedDeductions.get('MR-300MM') || 0) + q);
-                    dispatchedDeductions.set('MR300', (dispatchedDeductions.get('MR300') || 0) + q);
+                    c = 'MR-300MM';
                   }
+
+                  if (c) {
+                    dispatchedDeductions.set(c, (dispatchedDeductions.get(c) || 0) + q);
+                    if (c === 'MR-300MM') {
+                      dispatchedDeductions.set('MR300', dispatchedDeductions.get('MR-300MM'));
+                    }
+                  }
+                  if (n) dispatchedDeductions.set(n, (dispatchedDeductions.get(n) || 0) + q);
+                  if (fp) dispatchedDeductions.set(fp, (dispatchedDeductions.get(fp) || 0) + q);
                 }
               });
             } else if (isSentToDispatch) {
@@ -690,19 +697,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 const q = parseFloat(it.qty || it.bomQty || 0) || 0;
                 if (q > 0) {
                   const resCode = resolveProductCode(it);
-                  const c = String(resCode || it.code || '').toUpperCase().trim();
+                  const rawCode = String(it.code || '').toUpperCase().trim();
+                  const resUpper = resCode ? String(resCode).toUpperCase().trim() : '';
+                  let c = CANONICAL_PRODUCT_ALIASES[rawCode] || CANONICAL_PRODUCT_ALIASES[resUpper] || resUpper || rawCode;
                   const n = normalizeProductName(it.name || it.description || '');
                   const fp = wordFingerprint(it.name || it.description || '');
-                  if (c) bomAllocations.set(c, (bomAllocations.get(c) || 0) + q);
-                  if (n) bomAllocations.set(n, (bomAllocations.get(n) || 0) + q);
-                  if (fp) bomAllocations.set(fp, (bomAllocations.get(fp) || 0) + q);
 
                   const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
                     ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
                   if (isMr300) {
-                    bomAllocations.set('MR-300MM', (bomAllocations.get('MR-300MM') || 0) + q);
-                    bomAllocations.set('MR300', (bomAllocations.get('MR300') || 0) + q);
+                    c = 'MR-300MM';
                   }
+
+                  if (c) {
+                    bomAllocations.set(c, (bomAllocations.get(c) || 0) + q);
+                    if (c === 'MR-300MM') {
+                      bomAllocations.set('MR300', bomAllocations.get('MR-300MM'));
+                    }
+                  }
+                  if (n) bomAllocations.set(n, (bomAllocations.get(n) || 0) + q);
+                  if (fp) bomAllocations.set(fp, (bomAllocations.get(fp) || 0) + q);
                 }
               });
             }
@@ -717,19 +731,21 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const mFp = wordFingerprint(m.name || '');
         const isMr300Only = (mCode === 'MR-300MM' || mCode === 'MR300') ||
           ((mNorm.includes('mini rail') || mNorm.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(mNorm) && (mNorm.includes('300') || mNorm === 'mini rail'));
-        const allocated = Math.max(
-          (mCode && bomAllocations.get(mCode)) || 0,
-          (mNorm && bomAllocations.get(mNorm)) || 0,
-          (mFp && bomAllocations.get(mFp)) || 0,
-          isMr300Only ? (bomAllocations.get('MR-300MM') || bomAllocations.get('MR300') || 0) : 0
-        );
+        const allocated = isMr300Only
+          ? (bomAllocations.get('MR-300MM') || bomAllocations.get('MR300') || bomAllocations.get(mNorm) || bomAllocations.get(mFp) || 0)
+          : Math.max(
+              (mCode && bomAllocations.get(mCode)) || 0,
+              (mNorm && bomAllocations.get(mNorm)) || 0,
+              (mFp && bomAllocations.get(mFp)) || 0
+            );
 
-        const dispatched = Math.max(
-          (mCode && dispatchedDeductions.get(mCode)) || 0,
-          (mNorm && dispatchedDeductions.get(mNorm)) || 0,
-          (mFp && dispatchedDeductions.get(mFp)) || 0,
-          isMr300Only ? (dispatchedDeductions.get('MR-300MM') || dispatchedDeductions.get('MR300') || 0) : 0
-        );
+        const dispatched = isMr300Only
+          ? (dispatchedDeductions.get('MR-300MM') || dispatchedDeductions.get('MR300') || dispatchedDeductions.get(mNorm) || dispatchedDeductions.get(mFp) || 0)
+          : Math.max(
+              (mCode && dispatchedDeductions.get(mCode)) || 0,
+              (mNorm && dispatchedDeductions.get(mNorm)) || 0,
+              (mFp && dispatchedDeductions.get(mFp)) || 0
+            );
 
         const grnQty = Number(m.goodsReceived || 0);
         let base = parseFloat(m.openingStock !== undefined ? m.openingStock : 5000);
