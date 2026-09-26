@@ -920,33 +920,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const isMr300 = cleanCode === 'mr-300mm' || resolvedCode === 'mr-300mm' || cleanCode === 'mr300' ||
       ((cleanName.includes('mini rail') || normName.includes('mini rail')) && (cleanName.includes('300') || cleanName === 'mini rail'));
 
-    // 1. Direct priority lookup from raw materials store in localStorage
-    try {
-      const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
-      if (rawSaved) {
-        const rawList = JSON.parse(rawSaved);
-        if (Array.isArray(rawList)) {
-          const rawFound = rawList.find(rm => {
-            const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
-            const rmResCode = resolveProductCode(rm).toLowerCase().trim();
-            const rmName = (rm.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
-            if (isMr300) {
-              return rmCode === 'mr-300mm' || rmCode === 'mr300' || (rmName.includes('mini rail') && (rmName.includes('300') || rmName === 'mini rail'));
-            }
-            return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
-              (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
-              (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName))) ||
-              (normName && (normalizeProductName(rm.name) === normName));
-          });
-          if (rawFound) {
-            const st = Number(rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.stock !== undefined ? rawFound.stock : (rawFound.physicalStock || 0)));
-            if (!isNaN(st) && st >= 0) return st;
-          }
-        }
-      }
-    } catch (_) {}
-
-    // 2. Search in itemsList (carries live stock from central inventory and raw materials)
+    // 1. Primary authoritative lookup: search in itemsList (synchronous with TypeableProductSelect dropdown)
     const found = (itemsList || []).find(p => {
       const pCode = (p.code || '').toLowerCase().trim();
       const pResCode = resolveProductCode(p).toLowerCase().trim();
@@ -965,6 +939,36 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const st = Number(found.availableStock !== undefined ? found.availableStock : (found.stock !== undefined ? found.stock : 0));
       if (!isNaN(st) && st >= 0) return st;
     }
+
+    // 2. Fallback to raw materials store in localStorage
+    try {
+      const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
+      if (rawSaved) {
+        const rawList = JSON.parse(rawSaved);
+        if (Array.isArray(rawList)) {
+          const rawFound = rawList.find(rm => {
+            const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
+            const rmResCode = resolveProductCode(rm).toLowerCase().trim();
+            const rmName = (rm.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
+            if (isMr300) {
+              return rmCode === 'mr-300mm' || rmCode === 'mr300' || (rmName.includes('mini rail') && (rmName.includes('300') || rmName === 'mini rail'));
+            }
+            return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
+              (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
+              (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName))) ||
+              (normName && (normalizeProductName(rm.name) === normName));
+          });
+          if (rawFound) {
+            const isDemo = cleanCode === 'alu-len-2414mm' || resolvedCode === 'alu-len-2414mm' || isMr300;
+            const isLegacyDummy = !isDemo && Number(rawFound.goodsReceived || 0) === 0 && Number(rawFound.issuedProd || 0) === 0 &&
+              (rawFound.lastUpdated === 'Stock Set to 5,000' || (Number(rawFound.stock) === 5000 && Number(rawFound.physicalStock) === 5000));
+            if (isLegacyDummy) return 0;
+            const st = Number(rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.stock !== undefined ? rawFound.stock : (rawFound.physicalStock || 0)));
+            if (!isNaN(st) && st >= 0) return st;
+          }
+        }
+      }
+    } catch (_) {}
 
     return 0;
   };

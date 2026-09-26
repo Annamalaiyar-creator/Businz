@@ -15,7 +15,7 @@ import { resolveDocumentUrlAsync, invalidateDocumentUrlCache } from './documentR
 import { supabase } from '../supabaseClient.js';
 import { saveMediaToCache } from './mediaUtils.js';
 
-export const MAX_FILE_SIZE = 52428800; // 50 MB
+export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB maximum allowed limit
 
 export const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
@@ -55,8 +55,8 @@ export function validateClientFile(file) {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    const mbSize = (file.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`File size (${mbSize} MB) exceeds maximum allowed limit of 50 MB`);
+    const mbSize = (file.size / (1024 * 1024)).toFixed(2);
+    throw new Error(`File size (${mbSize} MB) exceeds the maximum allowed limit of 5 MB. Please reduce or compress the image size below 5 MB and upload again to proceed.`);
   }
 
   // Derive mime type

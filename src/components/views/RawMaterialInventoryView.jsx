@@ -164,29 +164,36 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(item => {
-            const rawSt = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 5000);
+            const rawSt = item.stock !== undefined ? Number(item.stock) : (item.physicalStock !== undefined ? Number(item.physicalStock) : 0);
             const stockVal = Math.max(0, rawSt);
-            const physVal = Number(item.physicalStock !== undefined ? item.physicalStock : (item.openingStock || 5000));
+            const physVal = Number(item.physicalStock !== undefined ? item.physicalStock : (item.openingStock !== undefined ? item.openingStock : 0));
+            const c = String(item.code || '').toUpperCase().trim();
+            const isDemoItem = c === 'ALU-LEN-2414MM' || c === 'MR-300MM';
+            const grn = Number(item.goodsReceived || 0);
+            const issued = Number(item.issuedProd || 0);
+            const isLegacyDummy = !isDemoItem && grn === 0 && issued === 0 && (item.lastUpdated === 'Stock Set to 5,000' || (stockVal === 5000 && physVal === 5000));
+            const cleanStock = isLegacyDummy ? 0 : stockVal;
+            const cleanPhys = isLegacyDummy ? 0 : physVal;
             return {
               ...item,
-              stock: stockVal,
-              physicalStock: physVal,
-              availableStock: stockVal,
-              openingStock: Number(item.openingStock || physVal),
-              status: stockVal > 0 ? 'In Stock' : 'Out of Stock'
+              stock: cleanStock,
+              physicalStock: cleanPhys,
+              availableStock: cleanStock,
+              openingStock: isLegacyDummy ? 0 : Number(item.openingStock !== undefined ? item.openingStock : cleanPhys),
+              status: cleanStock > 0 ? 'In Stock' : 'Out of Stock'
             };
           });
         }
       }
     } catch (_) {}
 
-    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 5000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 1800, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 1800, physicalStock: 1800, availableStock: 1800, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
     matMap.set('MR-300MM', defaultMiniRail);
 
-    // 1. Seed all official VRM standardized catalog products with 5000 stock
+    // 1. Catalog products baseline (0 stock unless inwarded through GRN or production)
     (VRM_PRODUCTS || []).forEach(p => {
       const code = p.code || resolveProductCode(p) || p.name;
       const key = String(code).toUpperCase().trim();
@@ -196,16 +203,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
         unit: p.uom || 'Nos',
-        stock: 5000,
-        openingStock: 5000,
-        physicalStock: 5000,
-        availableStock: 5000,
+        stock: 0,
+        openingStock: 0,
+        physicalStock: 0,
+        availableStock: 0,
         minLevel: 50,
         reorderLevel: 100,
-        status: 'In Stock',
+        status: 'Out of Stock',
         store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
         hsn: '7604',
-        lastUpdated: 'Stock Set to 5,000',
+        lastUpdated: 'Live Store',
         reserved: 0,
         goodsReceived: 0,
         issuedProd: 0,
@@ -218,14 +225,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const rawKey = String(m.code).toUpperCase().trim();
       const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
       const existing = matMap.get(key) || {};
-      const sVal = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 5000);
+      const sVal = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 0);
       matMap.set(key, {
         ...existing,
         ...m,
         code: key,
         stock: sVal,
-        openingStock: 5000,
-        physicalStock: 5000,
+        openingStock: existing.openingStock !== undefined ? existing.openingStock : sVal,
+        physicalStock: existing.physicalStock !== undefined ? existing.physicalStock : sVal,
         availableStock: sVal,
         status: sVal > 0 ? 'In Stock' : 'Out of Stock'
       });
@@ -378,11 +385,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const deletedCodes = getDeletedMaterialCodes();
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
-      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 5000, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Stock Set to 5,000', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 1800, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 1800, physicalStock: 1800, availableStock: 1800, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
       matMap.set('MR-300MM', defaultMiniRail);
-      // 1. Seed all official VRM standardized catalog products (285 items) with 5000 stock
+      // 1. Catalog products baseline (0 stock unless inwarded through GRN or production)
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
         const key = String(code).toUpperCase().trim();
@@ -392,16 +399,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           cat: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           category: p.material === 'HDG' || p.material === 'GAL' ? 'Structure Assemblies' : (p.material === 'ALU' ? 'Aluminium Profiles' : 'Finished Goods'),
           unit: p.uom || 'Nos',
-          stock: 5000,
-          openingStock: 5000,
-          physicalStock: 5000,
-          availableStock: 5000,
+          stock: 0,
+          openingStock: 0,
+          physicalStock: 0,
+          availableStock: 0,
           minLevel: 50,
           reorderLevel: 100,
-          status: 'In Stock',
+          status: 'Out of Stock',
           store: p.material === 'HDG' ? 'Finished Goods Bay - HDG' : p.material === 'GAL' ? 'Finished Goods Bay - GAL' : 'Finished Goods Bay - Aluminium',
           hsn: '7604',
-          lastUpdated: 'Stock Set to 5,000',
+          lastUpdated: 'Live Store',
           reserved: 0,
           goodsReceived: 0,
           issuedProd: 0,
@@ -414,14 +421,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const rawKey = String(m.code).toUpperCase().trim();
         const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
         const existing = matMap.get(key) || {};
-        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 5000);
+        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 0);
         matMap.set(key, {
           ...existing,
           ...m,
           code: key,
           stock: mStock,
-          openingStock: 5000,
-          physicalStock: 5000,
+          openingStock: existing.openingStock !== undefined ? existing.openingStock : mStock,
+          physicalStock: existing.physicalStock !== undefined ? existing.physicalStock : mStock,
           availableStock: mStock,
           status: mStock > 0 ? 'In Stock' : 'Out of Stock'
         });
@@ -684,9 +691,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         );
 
         const grnQty = Number(m.goodsReceived || 0);
-        let base = parseFloat(m.physicalStock !== undefined ? m.physicalStock : (m.openingStock !== undefined ? m.openingStock : (m.stock !== undefined ? m.stock : 5000))) || 0;
+        let base = parseFloat(m.physicalStock !== undefined ? m.physicalStock : (m.openingStock !== undefined ? m.openingStock : (m.stock !== undefined ? m.stock : 0))) || 0;
 
-        // Authoritative physical warehouse stock is initial opening baseline (5000) + all received GRNs
+        // Authoritative physical warehouse stock is initial opening baseline + all received GRNs
         const totalPhysical = base + grnQty;
 
         // Reconcile available free stock and reserved allocations
@@ -1101,11 +1108,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       return (a.seqNum || 0) - (b.seqNum || 0);
     });
 
-    // Baseline opening stock
-    const initialBase = Math.max(0, parseFloat(selectedMat.openingStock !== undefined ? selectedMat.openingStock : (selectedMat.physicalStock !== undefined ? selectedMat.physicalStock : 5000)) || 0);
+    // Baseline opening available stock derived from current available stock minus net transaction movements
+    const curLiveAvailable = Math.max(0, parseFloat(selectedMat.stock !== undefined ? selectedMat.stock : (selectedMat.availableStock !== undefined ? selectedMat.availableStock : 0)) || 0);
+    const netTransactionsDelta = transactionEvents.reduce((acc, tx) => acc + (parseFloat(tx.qty) || 0), 0);
+    const initialBase = Math.max(0, curLiveAvailable - netTransactionsDelta);
     let runningBalance = initialBase;
 
-    // Calculate sequential cumulative balance from baseline
+    // Calculate sequential cumulative balance of Available Quantity
     transactionEvents.forEach(tx => {
       const prev = runningBalance;
       const delta = parseFloat(tx.qty) || 0;
@@ -1135,7 +1144,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       newStock: initialBase,
       user: 'Central Inventory Master',
       role: 'System Setup',
-      reason: `Initial ready physical stock balance of ${(Number(initialBase) || 0).toLocaleString()} ${selectedMat.unit || 'NOS'} provisioned for active sales dispatch and manufacturing assembly.`,
+      reason: `Initial ready available stock balance of ${(Number(initialBase) || 0).toLocaleString()} ${selectedMat.unit || 'NOS'} provisioned for active sales dispatch and manufacturing assembly.`,
       source: 'Central Finished Goods Registry',
       location: selectedMat.store || 'Finished Goods Bay'
     });
@@ -1698,7 +1707,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       return;
     }
     if (qtyVal <= 0) {
-      showCustomAlert('Please enter a valid Physical Stock quantity (> 0).', 'Quantity Required', 'warning');
+      showCustomAlert('Please enter a valid Available Stock quantity (> 0).', 'Quantity Required', 'warning');
       return;
     }
 
@@ -1893,7 +1902,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Stock Creation Details</h3>
-              <span style={{ fontSize: '11.5px', color: '#64748B' }}>Specify material code, physical stock, reserved stock, and min level</span>
+              <span style={{ fontSize: '11.5px', color: '#64748B' }}>Specify material code, available stock, reserved stock, and min level</span>
             </div>
           </div>
 
@@ -2126,10 +2135,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               );
             })()}
 
-            {/* 5. Physical Stock */}
+            {/* 5. Available Stock Quantity */}
             <div>
               <label style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Physical Stock <span style={{ color: '#DC2626' }}>*</span>
+                Available Stock Quantity <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <div style={{ position: 'relative', width: '100%' }}>
                 <input
@@ -2389,7 +2398,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           {/* Live Calculation Preview */}
           {adjQty && !isNaN(adjQty) && (
             <div style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px', padding: '14px 18px', color: '#1E40AF', fontSize: '13px', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Resulting New Physical Stock:</span>
+              <span>Resulting New Available Stock:</span>
               <span style={{ fontSize: '18px', fontWeight: '800', color: '#1D4ED8' }}>
                 {adjType === 'Add' ? selectedMat.stock + Number(adjQty) : Math.max(0, selectedMat.stock - Number(adjQty))} {selectedMat.unit}
               </span>
@@ -2590,55 +2599,42 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             </div>
           </div>
 
-          {/* 4 Executive Stock KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          {/* 3 Executive Stock KPI Cards (Physical stock removed as requested) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             
-            {/* KPI 1: Physical Stock Baseline */}
-            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Physical Warehouse Stock
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A' }}>
-                {(Number(physicalStockVal) || 0).toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-                Physical count & opening balance baseline
-              </div>
-            </div>
-
-            {/* KPI 2: Reserved for Orders */}
-            <div style={{ backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Allocated / In Dispatch
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#D97706' }}>
-                {reservedVal > 0 ? `-${(Number(reservedVal) || 0).toLocaleString()}` : '0'} <span style={{ fontSize: '13px', fontWeight: '600', color: '#B45309' }}>{selectedMat.unit || 'NOS'}</span>
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#92400E' }}>
-                Blocked for confirmed sales BOMs
-              </div>
-            </div>
-
-            {/* KPI 3: Live Available Stock */}
-            <div style={{ backgroundColor: '#ECFEFF', border: '1.5px solid #0E7490', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 2px 6px rgba(14, 116, 144, 0.08)' }}>
+            {/* KPI 1: Live Available Free Stock (Primary Source of Truth) */}
+            <div style={{ backgroundColor: '#ECFEFF', border: '1.5px solid #0E7490', borderRadius: '12px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 2px 6px rgba(14, 116, 144, 0.08)' }}>
               <div style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Live Available Free Stock
               </div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#0E7490' }}>
-                {(Number(availableVal) || 0).toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490' }}>{selectedMat.unit || 'NOS'}</span>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#0E7490' }}>
+                {(Number(availableVal) || 0).toLocaleString()} <span style={{ fontSize: '14px', fontWeight: '700', color: '#0E7490' }}>{selectedMat.unit || 'NOS'}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: '#155E75', fontWeight: '600' }}>
                 Ready for immediate sales dispatch booking
               </div>
             </div>
 
-            {/* KPI 4: Minimum Threshold & Safety Buffer */}
-            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* KPI 2: Reserved for Orders */}
+            <div style={{ backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7', borderRadius: '12px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Allocated / In Dispatch
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#D97706' }}>
+                {reservedVal > 0 ? `-${(Number(reservedVal) || 0).toLocaleString()}` : '0'} <span style={{ fontSize: '14px', fontWeight: '600', color: '#B45309' }}>{selectedMat.unit || 'NOS'}</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#92400E' }}>
+                Blocked for confirmed sales BOMs
+              </div>
+            </div>
+
+            {/* KPI 3: Minimum Threshold & Safety Buffer */}
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Min. Reorder Threshold
               </div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#334155' }}>
-                {(Number(minLevelVal) || 0).toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#334155' }}>
+                {(Number(minLevelVal) || 0).toLocaleString()} <span style={{ fontSize: '14px', fontWeight: '600', color: '#64748B' }}>{selectedMat.unit || 'NOS'}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: availableVal <= minLevelVal ? '#DC2626' : '#16A34A', fontWeight: '600' }}>
                 {availableVal <= minLevelVal ? '⚠️ Below safety reorder level' : '✓ Stock is above minimum threshold'}
@@ -2731,7 +2727,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     <th style={{ padding: '12px 16px', fontWeight: '800', width: '130px' }}>Ref Document</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800' }}>Activity Description / Narrative</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'right', width: '120px' }}>Impact Qty</th>
-                    <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'center', width: '140px' }}>Stock Balance</th>
+                    <th style={{ padding: '12px 16px', fontWeight: '800', textAlign: 'center', width: '150px' }}>Available Balance</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800', width: '180px' }}>Sales Owner / Authorized By</th>
                     <th style={{ padding: '12px 16px', fontWeight: '800', width: '140px' }}>Warehouse Bay</th>
                   </tr>

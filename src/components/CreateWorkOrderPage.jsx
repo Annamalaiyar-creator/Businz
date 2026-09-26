@@ -28,7 +28,7 @@ export const PRODUCT_CATALOG_OPTIONS = [
   { label: "Double C Rail NEW", code: "CC4.8N", totalLen: 4800, defaultCutLen: 4800, profileGroup: "double_c" },
   { label: "Double C Rail", code: "CC3.6", totalLen: 3600, defaultCutLen: 3600, profileGroup: "double_c" },
   { label: "Strut Rail", code: "SR3.6", totalLen: 3600, defaultCutLen: 3600, profileGroup: "strut_rail" },
-  { label: "Mini Rail - 300mm", code: "MR300", totalLen: 2414, defaultCutLen: 300, profileGroup: "mini_rail" },
+  { label: "Mini Rail - 300mm", code: "MR-300MM", totalLen: 2414, defaultCutLen: 300, profileGroup: "mini_rail" },
   { label: "Mini Rail - 100mm", code: "MR100O", totalLen: 2414, defaultCutLen: 100, profileGroup: "mini_rail" },
   { label: "Mini Rail - 100mm (New)", code: "MR100N", totalLen: 2414, defaultCutLen: 100, profileGroup: "mini_rail" },
   { label: "Locking Nut", code: "LC", totalLen: 3000, defaultCutLen: 40, profileGroup: "locking_nut" },
@@ -608,7 +608,10 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             workOrderNo: newWO.id || woNumber,
-            productName: fgProductName || newWO.finishedProductName || 'Adhesive rail 120 mm',
+            productName: fgProductName || newWO.finishedProductName || 'Mini Rail - 300 mm',
+            productCode: fgProductCode,
+            finishedProductCode: fgProductCode,
+            finishedProductName: fgProductName,
             plannedQty: Number(targetQty),
             completedQty: 0,
             status: 'PENDING_MATERIAL',
@@ -1055,13 +1058,15 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
               </button>
             </div>
 
-            <button
-              type="submit"
-              onClick={handleCreateWorkOrder}
-              style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '10px 24px', borderRadius: '8px', fontSize: '13.5px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(14, 116, 144, 0.3)' }}
-            >
-              <Send style={{ width: '16px', height: '16px' }} /> Save & Issue WO with Work Plan
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <button
+                type="submit"
+                onClick={handleCreateWorkOrder}
+                style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '10px 24px', borderRadius: '8px', fontSize: '13.5px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(14, 116, 144, 0.3)' }}
+              >
+                <Send style={{ width: '16px', height: '16px' }} /> Save & Issue WO with Work Plan
+              </button>
+            </div>
           </div>
 
         </div>
@@ -1702,63 +1707,84 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => {
-                if (invalidCutLengthItem) {
-                  const cat = PRODUCT_CATALOG_OPTIONS.find(p => p.code === invalidCutLengthItem.productCode);
-                  const rawLen = cat?.totalLen || 2414;
-                  const parsedCut = parseFloat(String(invalidCutLengthItem.cutLength || '').replace(/[^\d.]/g, '')) || 0;
-                  setToastAlert({
-                    type: 'error',
-                    title: 'Cut Length Required to Proceed',
-                    message: parsedCut <= 0 
-                      ? `Cut length for ${cat?.label || invalidCutLengthItem.productCode || 'product'} is missing. Please enter a valid cut length (e.g. ${cat?.defaultCutLen || 35} mm) before proceeding.`
-                      : `Cut length (${parsedCut} mm) exceeds the raw bar length (${rawLen} mm) for ${cat?.label || invalidCutLengthItem.productCode}. Cannot proceed.`
-                  });
-                  return;
-                }
-                if (!targetQty || Number(targetQty) <= 0) {
-                  setToastAlert({
-                    type: 'error',
-                    title: 'Target Quantity Required',
-                    message: 'Please enter a valid target quantity (> 0).'
-                  });
-                  return;
-                }
-                if (matCalc && !matCalc.isSufficient) {
-                  setToastAlert({
-                    type: 'error',
-                    title: 'Insufficient Raw Material Stock',
-                    message: `Cannot proceed! Required raw material: ${matCalc.physicalMatToIssue} ${matCalc.recipe.rawMaterialUnit}s, but available stock is only ${matCalc.availableStock} ${matCalc.recipe.rawMaterialUnit}s (Shortage: ${matCalc.shortageQty} ${matCalc.recipe.rawMaterialUnit}s).`
-                  });
-                  return;
-                }
-                setFormStep(2);
-              }}
-              style={{
-                width: '100%',
-                height: '42px',
-                backgroundColor: '#0E7490',
-                border: 'none',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '13px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
-                marginTop: '4px',
-                transition: 'background-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-            >
-              Next: Configure Process Routing Plan →
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+              <button
+                type="submit"
+                onClick={handleCreateWorkOrder}
+                style={{
+                  width: '100%',
+                  height: '42px',
+                  backgroundColor: '#0E7490',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
+                  transition: 'background-color 0.2s ease'
+                }}
+              >
+                <Send style={{ width: '15px', height: '15px' }} /> Save & Issue Work Order
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (invalidCutLengthItem) {
+                    const cat = PRODUCT_CATALOG_OPTIONS.find(p => p.code === invalidCutLengthItem.productCode);
+                    const rawLen = cat?.totalLen || 2414;
+                    const parsedCut = parseFloat(String(invalidCutLengthItem.cutLength || '').replace(/[^\d.]/g, '')) || 0;
+                    setToastAlert({
+                      type: 'error',
+                      title: 'Cut Length Required to Proceed',
+                      message: parsedCut <= 0 
+                        ? `Cut length for ${cat?.label || invalidCutLengthItem.productCode || 'product'} is missing. Please enter a valid cut length (e.g. ${cat?.defaultCutLen || 35} mm) before proceeding.`
+                        : `Cut length (${parsedCut} mm) exceeds the raw bar length (${rawLen} mm) for ${cat?.label || invalidCutLengthItem.productCode}. Cannot proceed.`
+                    });
+                    return;
+                  }
+                  if (!targetQty || Number(targetQty) <= 0) {
+                    setToastAlert({
+                      type: 'error',
+                      title: 'Target Quantity Required',
+                      message: 'Please enter a valid target quantity (> 0).'
+                    });
+                    return;
+                  }
+                  if (matCalc && !matCalc.isSufficient) {
+                    setToastAlert({
+                      type: 'error',
+                      title: 'Insufficient Raw Material Stock',
+                      message: `Cannot proceed! Required raw material: ${matCalc.physicalMatToIssue} ${matCalc.recipe.rawMaterialUnit}s, but available stock is only ${matCalc.availableStock} ${matCalc.recipe.rawMaterialUnit}s (Shortage: ${matCalc.shortageQty} ${matCalc.recipe.rawMaterialUnit}s).`
+                    });
+                    return;
+                  }
+                  setFormStep(2);
+                }}
+                style={{
+                  width: '100%',
+                  height: '38px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  color: '#475569',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                Configure Process Routing Plan (Step 2) →
+              </button>
+            </div>
           </div>
 
         </div>
