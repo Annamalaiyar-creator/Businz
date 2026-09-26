@@ -52,6 +52,7 @@ export async function getSafeZohoPOs() {
               branch: cloudMatch.branch || zohoPo.branch || '',
               contactPerson: cloudMatch.contactPerson || zohoPo.contactPerson || '',
               gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (zohoPo.gstNo || '—'),
+              poDate: cloudMatch.poDate || zohoPo.poDate || zohoPo.date,
               status: (() => {
                 const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
                 const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
@@ -63,22 +64,19 @@ export async function getSafeZohoPOs() {
                 }
                 const cStatus = String(cloudMatch.status || '').toUpperCase();
                 const zStatus = String(zohoPo.status || '').toUpperCase();
-                if (cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) {
-                  if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 'OPEN / PARTIALLY RECEIVED';
+                if ((cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) && totOrd > 0 && totRec >= totOrd) {
                   return 'CLOSED / FULLY RECEIVED';
                 }
-                if (cStatus.includes('PARTIAL') || zStatus.includes('PARTIAL')) {
+                if ((cStatus.includes('PARTIAL') || zStatus.includes('PARTIAL')) && totRec > 0) {
                   return 'OPEN / PARTIALLY RECEIVED';
                 }
                 const getStageRank = (st, stType, approver, payDetails, proceedDetails) => {
                   const s = String(st || '').toLowerCase().trim();
                   const stt = String(stType || '').toLowerCase().trim();
                   if (s.includes('rejected') || stt.includes('rejected')) return 7;
-                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) {
-                    if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 5;
-                    return 6;
-                  }
-                  if (s.includes('partially') || stt.includes('partially')) return 5;
+                  if ((s.includes('closed') || s.includes('fully received') || stt.includes('closed')) && totOrd > 0 && totRec >= totOrd) return 6;
+                  if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 5;
+                  if ((s.includes('partially') || stt.includes('partially')) && totRec > 0) return 5;
                   if (s.includes('proceed') || stt.includes('proceed') || Boolean(proceedDetails)) return 4;
                   if (s.includes('payment') || stt.includes('payment') || Boolean(payDetails)) return 3;
                   if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
@@ -108,22 +106,19 @@ export async function getSafeZohoPOs() {
                 }
                 const cStatus = String(cloudMatch.status || '').toUpperCase();
                 const zStatus = String(zohoPo.status || '').toUpperCase();
-                if (cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) {
-                  if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 'partially_received';
+                if ((cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) && totOrd > 0 && totRec >= totOrd) {
                   return 'closed';
                 }
-                if (cStatus.includes('PARTIAL') || zStatus.includes('PARTIAL')) {
+                if ((cStatus.includes('PARTIAL') || zStatus.includes('PARTIAL')) && totRec > 0) {
                   return 'partially_received';
                 }
                 const getStageRank = (st, stType, approver, payDetails, proceedDetails) => {
                   const s = String(st || '').toLowerCase().trim();
                   const stt = String(stType || '').toLowerCase().trim();
                   if (s.includes('rejected') || stt.includes('rejected')) return 7;
-                  if (s.includes('closed') || s.includes('fully received') || stt.includes('closed')) {
-                    if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 5;
-                    return 6;
-                  }
-                  if (s.includes('partially') || stt.includes('partially')) return 5;
+                  if ((s.includes('closed') || s.includes('fully received') || stt.includes('closed')) && totOrd > 0 && totRec >= totOrd) return 6;
+                  if (totOrd > 0 && totRec > 0 && totRec < totOrd) return 5;
+                  if ((s.includes('partially') || stt.includes('partially')) && totRec > 0) return 5;
                   if (s.includes('proceed') || stt.includes('proceed') || Boolean(proceedDetails)) return 4;
                   if (s.includes('payment') || stt.includes('payment') || Boolean(payDetails)) return 3;
                   if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;

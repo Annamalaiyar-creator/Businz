@@ -619,6 +619,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       } catch (_) {}
 
       const bomAllocations = new Map();
+      const dispatchedDeductions = new Map();
       const seenBomIds = new Set();
       if (Array.isArray(bomsList)) {
         bomsList.forEach(b => {
@@ -637,11 +638,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             'awaiting vehicle loading & dispatch'
           ].some(s => st.includes(s));
 
-          // A BOM that is completed or already deducted has physically dispatched goods, so its reservation is RELEASED
-          const isCompletedOrDeducted = Boolean(
-            b.stockDeducted ||
-            b.lifecycleCompleted ||
-            b.fullyCompleted ||
+          // A BOM is vehicle loaded / completed when its vehicle loading is finalized or marked dispatched
+          const isVehicleLoaded = Boolean(
             (b.vehicleLoading && (b.vehicleLoading.fullyCompleted || b.vehicleLoading.loadedAt)) ||
             st === 'completed' ||
             st === 'closed' ||
@@ -652,26 +650,50 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             st.includes('awaiting lr copy')
           );
 
-          if (isSentToDispatch && !isCompletedOrDeducted && !st.includes('cancel') && !st.includes('restored')) {
-            (b.items || []).forEach(it => {
-              const q = parseFloat(it.qty || it.bomQty || 0) || 0;
-              if (q > 0) {
-                const resCode = resolveProductCode(it);
-                const c = String(resCode || it.code || '').toUpperCase().trim();
-                const n = normalizeProductName(it.name || it.description || '');
-                const fp = wordFingerprint(it.name || it.description || '');
-                if (c) bomAllocations.set(c, (bomAllocations.get(c) || 0) + q);
-                if (n) bomAllocations.set(n, (bomAllocations.get(n) || 0) + q);
-                if (fp) bomAllocations.set(fp, (bomAllocations.get(fp) || 0) + q);
+          if (!st.includes('cancel') && !st.includes('restored')) {
+            if (isVehicleLoaded) {
+              // Goods have departed via vehicle loading -> permanently deduct from physical stock
+              (b.items || []).forEach(it => {
+                const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+                if (q > 0) {
+                  const resCode = resolveProductCode(it);
+                  const c = String(resCode || it.code || '').toUpperCase().trim();
+                  const n = normalizeProductName(it.name || it.description || '');
+                  const fp = wordFingerprint(it.name || it.description || '');
+                  if (c) dispatchedDeductions.set(c, (dispatchedDeductions.get(c) || 0) + q);
+                  if (n) dispatchedDeductions.set(n, (dispatchedDeductions.get(n) || 0) + q);
+                  if (fp) dispatchedDeductions.set(fp, (dispatchedDeductions.get(fp) || 0) + q);
 
-                const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
-                  ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
-                if (isMr300) {
-                  bomAllocations.set('MR-300MM', (bomAllocations.get('MR-300MM') || 0) + q);
-                  bomAllocations.set('MR300', (bomAllocations.get('MR300') || 0) + q);
+                  const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
+                    ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
+                  if (isMr300) {
+                    dispatchedDeductions.set('MR-300MM', (dispatchedDeductions.get('MR-300MM') || 0) + q);
+                    dispatchedDeductions.set('MR300', (dispatchedDeductions.get('MR300') || 0) + q);
+                  }
                 }
-              }
-            });
+              });
+            } else if (isSentToDispatch) {
+              // Active BOM order in progress prior to vehicle loading -> held in RESERVED stock
+              (b.items || []).forEach(it => {
+                const q = parseFloat(it.qty || it.bomQty || 0) || 0;
+                if (q > 0) {
+                  const resCode = resolveProductCode(it);
+                  const c = String(resCode || it.code || '').toUpperCase().trim();
+                  const n = normalizeProductName(it.name || it.description || '');
+                  const fp = wordFingerprint(it.name || it.description || '');
+                  if (c) bomAllocations.set(c, (bomAllocations.get(c) || 0) + q);
+                  if (n) bomAllocations.set(n, (bomAllocations.get(n) || 0) + q);
+                  if (fp) bomAllocations.set(fp, (bomAllocations.get(fp) || 0) + q);
+
+                  const isMr300 = c === 'MR-300MM' || c === 'MR300' ||
+                    ((n.includes('mini rail') || n.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(n) && (n.includes('300') || n === 'mini rail'));
+                  if (isMr300) {
+                    bomAllocations.set('MR-300MM', (bomAllocations.get('MR-300MM') || 0) + q);
+                    bomAllocations.set('MR300', (bomAllocations.get('MR300') || 0) + q);
+                  }
+                }
+              });
+            }
           }
         });
       }
@@ -690,25 +712,25 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           isMr300Only ? (bomAllocations.get('MR-300MM') || bomAllocations.get('MR300') || 0) : 0
         );
 
-        const grnQty = Number(m.goodsReceived || 0);
-        let base = parseFloat(m.physicalStock !== undefined ? m.physicalStock : (m.openingStock !== undefined ? m.openingStock : (m.stock !== undefined ? m.stock : 0))) || 0;
+        const dispatched = Math.max(
+          (mCode && dispatchedDeductions.get(mCode)) || 0,
+          (mNorm && dispatchedDeductions.get(mNorm)) || 0,
+          (mFp && dispatchedDeductions.get(mFp)) || 0,
+          isMr300Only ? (dispatchedDeductions.get('MR-300MM') || dispatchedDeductions.get('MR300') || 0) : 0
+        );
 
-        // Authoritative physical warehouse stock is initial opening baseline + all received GRNs
-        const totalPhysical = base + grnQty;
+        const grnQty = Number(m.goodsReceived || 0);
+        let base = parseFloat(m.openingStock !== undefined ? m.openingStock : (m.physicalStock !== undefined ? m.physicalStock : (m.stock !== undefined ? m.stock : 0))) || 0;
+
+        // Authoritative physical stock = (Opening Baseline + Received GRNs) - Dispatched via Vehicle Loading
+        const totalPhysical = Math.max(0, (base + grnQty) - dispatched);
 
         // Reconcile available free stock and reserved allocations
-        let rem;
-        let finalReserved = allocated;
-        if (allocated > 0) {
-          finalReserved = allocated;
-          rem = Math.max(0, totalPhysical - allocated);
-        } else {
-          finalReserved = 0;
-          rem = (m.stock !== undefined && Number(m.stock) >= 0) ? Number(m.stock) : totalPhysical;
-        }
+        const finalReserved = allocated;
+        const rem = Math.max(0, totalPhysical - finalReserved);
 
         m.openingStock = base;
-        m.physicalStock = Math.max(totalPhysical, rem);
+        m.physicalStock = totalPhysical;
         m.stock = rem;
         m.availableStock = rem;
         m.reserved = finalReserved;
@@ -920,6 +942,16 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         boms.forEach(b => {
           const st = String(b?.status || '').toLowerCase();
           if (st.includes('cancel') || st.includes('stock restored')) return;
+          const isVehicleLoaded = Boolean(
+            (b?.vehicleLoading && (b?.vehicleLoading.fullyCompleted || b?.vehicleLoading.loadedAt)) ||
+            st === 'completed' ||
+            st === 'closed' ||
+            st.includes('completed') ||
+            st.includes('closed') ||
+            st.includes('fully dispatched') ||
+            st.includes('delivered') ||
+            st.includes('awaiting lr copy')
+          );
           const isSentToDispatch = Boolean(b?.salesConfirmed) || [
             'sales confirmed - sent to dispatch',
             'sent to production',
@@ -969,11 +1001,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   timestamp: formattedDate,
                   orderTime,
                   seqNum,
-                  type: isSentToDispatch ? 'BOM_DISPATCH' : 'BOM_RESERVATION',
-                  typeName: isSentToDispatch ? 'BOM Dispatch Deduction' : 'BOM Order Allocation',
-                  typeColor: isSentToDispatch ? '#DC2626' : '#D97706',
-                  typeBg: isSentToDispatch ? '#FEF2F2' : '#FFFBEB',
-                  typeBorder: isSentToDispatch ? '#FEE2E2' : '#FEF3C7',
+                  type: isVehicleLoaded ? 'BOM_DISPATCH' : 'BOM_RESERVATION',
+                  typeName: isVehicleLoaded ? 'BOM Dispatch Deduction' : 'BOM Order Allocation (Reserved)',
+                  typeColor: isVehicleLoaded ? '#DC2626' : '#D97706',
+                  typeBg: isVehicleLoaded ? '#FEF2F2' : '#FFFBEB',
+                  typeBorder: isVehicleLoaded ? '#FEE2E2' : '#FEF3C7',
                   referenceDoc: b.bomCode || b.code || b.id || 'BOM Order',
                   itemCode: selectedMat.code,
                   itemName: selectedMat.name,
@@ -985,9 +1017,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   salesPersonFull: displaySalesPerson,
                   sourcePiNo: b.sourcePiNo || '',
                   role: 'Sales Department',
-                  reason: isSentToDispatch
-                    ? `Deducted ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Sales Confirmed - Forwarded to Dispatch). Sales Owner: ${displaySalesPerson}.`
-                    : `Allocated ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code}. Sales Owner: ${displaySalesPerson}.`,
+                  reason: isVehicleLoaded
+                    ? `Deducted ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Vehicle Loading Dispatched). Sales Owner: ${displaySalesPerson}.`
+                    : `Reserved ${(Number(qty) || 0).toLocaleString()} ${it.uom || selectedMat.unit || 'NOS'} for customer order ${b.companyName || b.customerName || 'Direct Client'} under ${b.bomCode || b.code} (Pending Vehicle Loading). Sales Owner: ${displaySalesPerson}.`,
                   source: b.companyName || b.customerName || 'Sales Order',
                   location: selectedMat.store || 'Finished Goods Bay'
                 });

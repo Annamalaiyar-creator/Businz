@@ -182,7 +182,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     const totOrd = Number(po.totalOrderedQty || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.qty || it.quantity || 0), 0) : 0));
     const totRec = Number(po.totalReceivedQty || po.totalReceived || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.previouslyReceived || 0), 0) : 0));
-    if ((totOrd > 0 && totRec > 0 && totRec < totOrd) || s.toUpperCase().includes('PARTIAL') || st.includes('partial')) {
+    if (totOrd > 0 && totRec > 0 && totRec < totOrd) {
+      return 'PARTIALLY_RECEIVED';
+    }
+    if ((s.toUpperCase().includes('PARTIAL') || st.includes('partial')) && totRec > 0) {
       return 'PARTIALLY_RECEIVED';
     }
 
@@ -380,10 +383,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const handleGrnCompleted = (e) => {
       const grn = e?.detail;
       if (grn) {
-        const poRef = String(grn.poRef || grn.poNo || '').toLowerCase();
+        const clean = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+        const poRef = clean(grn.poRef || grn.poNo);
         setPoList(prev => prev.map(p => {
-          const pNo = String(p.poNo || p.id || '').toLowerCase();
-          if (pNo && (pNo === poRef || poRef.includes(pNo) || pNo.includes(poRef))) {
+          const pNo = clean(p.poNo);
+          const pId = clean(p.id);
+          const pZohoId = clean(p.zohoId);
+          if (poRef && (pNo === poRef || pId === poRef || pZohoId === poRef)) {
             const isClosed = String(grn.status || '').toUpperCase().includes('CLOSED') || 
                              String(grn.status || '').toUpperCase().includes('FULLY') || 
                              grn.forceClosePO === true;
@@ -960,6 +966,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       ...poTarget,
       status: 'Payment Processed',
       statusType: 'payment_processed',
+      order_status: 'payment_processed',
       paymentDetails: {
         mode: payModeInput,
         refNo: payRefInput || (isCredit ? 'CREDIT-CONFIRMED' : ''),
@@ -3791,9 +3798,25 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                      PO Date <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
+                      PO Date
                     </label>
-                    <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                    <input 
+                      type="date" 
+                      value={poDate} 
+                      disabled 
+                      readOnly 
+                      style={{ 
+                        height: '38px', 
+                        borderRadius: '8px', 
+                        border: '1px solid #cbd5e1', 
+                        padding: '0 12px', 
+                        fontSize: '13px', 
+                        backgroundColor: '#f8fafc', 
+                        color: '#64748b', 
+                        cursor: 'not-allowed' 
+                      }} 
+                    />
+                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>(Fixed to PO Creation Date)</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>

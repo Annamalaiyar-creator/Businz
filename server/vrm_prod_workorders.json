@@ -1,1 +1,134 @@
-[]
+[
+  {
+    "id": "WO-2",
+    "workOrderNo": "WO-2",
+    "productName": "Mini Rail - 300mm",
+    "plannedQty": 1000,
+    "completedQty": 0,
+    "delayDays": 0,
+    "delayReason": "Normal Production",
+    "status": "APPROVED_CLOSED",
+    "statusColor": "#EA580C",
+    "rawMaterial": "Raw Alu Coil",
+    "customer": "Solar Client",
+    "targetDate": "2026-09-26",
+    "currentStage": "Raw Material Prep",
+    "stage": "Raw Material Prep",
+    "bomCode": "",
+    "date": "2026-09-26",
+    "productionHead": "Senthil Kumar (Production Head)",
+    "finishedProductCode": "Mini Rail - 300mm",
+    "finishedProductName": "Mini Rail - 300mm",
+    "targetQty": 1000,
+    "cutLengthMm": 300,
+    "productItems": [
+      {
+        "id": 1,
+        "productCode": "MR300",
+        "cutLength": "300",
+        "targetQty": "1000"
+      }
+    ],
+    "unit": "Pieces",
+    "recipeId": "RECIPE-MR300",
+    "recipeRatio": "1 Aluminium Length (2414 mm) → 8 Pieces",
+    "rawMaterialCode": "ALU-LEN-2414MM",
+    "rawMaterialName": "Raw Alu Coil",
+    "rawMaterialRequiredQty": 125,
+    "rawMaterialPhysicalToIssue": 125,
+    "rawMaterialUnit": "Length",
+    "materialRequirement": {
+      "items": [
+        {
+          "materialName": "Aluminium Length (2414 mm)",
+          "piecesPerLength": 8,
+          "rawLengthsRequired": 125,
+          "requiredTotalMeters": 301.75
+        }
+      ]
+    },
+    "expectedOutputQty": 1000,
+    "excessTheoreticalQty": 0,
+    "priority": "High",
+    "productionLocation": "CNC Line 01",
+    "assignedEmployee": "Ashok (FE-VRM001)",
+    "expectedStartDate": "2026-09-26",
+    "expectedCompletionDate": "2026-09-26",
+    "instructions": "Produce 1000 Pieces of MR300",
+    "remarks": "",
+    "reservedAt": "2026-09-26 00:54:16",
+    "issuedAt": "2026-09-26 00:54:16",
+    "acceptedAt": "2026-09-26 00:54:35",
+    "startedAt": null,
+    "completedAt": "2026-09-26 00:54:45",
+    "verifiedAt": "2026-09-26 00:55:06",
+    "actualGoodOutput": 1000,
+    "actualRejectedOutput": 0,
+    "actualWastageOutput": 0,
+    "operatorRemarks": "Completed",
+    "completionImages": [],
+    "progressHistory": [
+      {
+        "timestamp": "2026-09-26 00:54:45",
+        "action": "SUBMITTED_COMPLETION",
+        "completedQty": 1000,
+        "rejectedQty": 0,
+        "wastageQty": 0,
+        "remarks": "Completed"
+      }
+    ],
+    "materialIssueHistory": [
+      {
+        "timestamp": "2026-09-26 00:54:16",
+        "qty": 125,
+        "unit": "Length",
+        "issuedTo": "Ashok (FE-VRM001)",
+        "type": "INITIAL_ISSUE"
+      }
+    ],
+    "additionalMaterialRequests": [],
+    "reworkHistory": []
+  },
+  {
+    "id": "WO-1",
+    "date": "2026-09-26",
+    "productionHead": "Senthil Kumar (Production Head)",
+    "finishedProductCode": "MR100",
+    "finishedProductName": "Mini Rail 100 mm",
+    "targetQty": 8,
+    "unit": "Pieces",
+    "recipeId": "RECIPE-MR100",
+    "recipeRatio": "1 Aluminium Length → 24 Pieces",
+    "rawMaterialCode": "ALU-LEN-2414MM",
+    "rawMaterialName": "Aluminium Length (2414 mm)",
+    "rawMaterialRequiredQty": 0.33,
+    "rawMaterialPhysicalToIssue": 1,
+    "rawMaterialUnit": "Length",
+    "expectedOutputQty": 24,
+    "excessTheoreticalQty": 16,
+    "priority": "High",
+    "productionLocation": "CNC Line 01",
+    "assignedEmployee": "Floor Employee A (Karthik)",
+    "expectedStartDate": "2026-09-26",
+    "expectedCompletionDate": "2026-09-26",
+    "instructions": "Cut 1 Aluminium Length (2414 mm) into 24 exact 100mm mini rail pieces. Check burr edges.",
+    "remarks": "Urgent order for Vikram Solar site.",
+    "status": "DRAFT",
+    "reservedAt": null,
+    "issuedAt": null,
+    "acceptedAt": null,
+    "startedAt": null,
+    "completedAt": null,
+    "verifiedAt": null,
+    "actualGoodOutput": 0,
+    "actualRejectedOutput": 0,
+    "actualWastageOutput": 0,
+    "operatorRemarks": "",
+    "completionImages": [],
+    "progressHistory": [],
+    "materialIssueHistory": [],
+    "additionalMaterialRequests": [],
+    "reworkHistory": [],
+    "productItems": []
+  }
+]
