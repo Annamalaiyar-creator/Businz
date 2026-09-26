@@ -8,7 +8,6 @@ import {
   Receipt, ArrowRight, Clock, BarChart3, Database, Zap, Settings, CheckCircle2
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
-import TallySyncModal from './TallySyncModal';
 
 export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', onNavigateTab }) {
   // Period filter states
@@ -17,18 +16,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
   const [toDate, setToDate] = useState('2026-09-04');
   const [financialYear, setFinancialYear] = useState('2026-27');
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Tally live sync state
-  const [tallyOnline, setTallyOnline] = useState(false);
-  const [tallyChecking, setTallyChecking] = useState(true);
-  const [tallyCompany, setTallyCompany] = useState('VRM STRUCTURES INDIA PRIVATE LIMITED');
-  const [liveTallyMetrics, setLiveTallyMetrics] = useState(null);
-  const [isFetchingTallyPnl, setIsFetchingTallyPnl] = useState(false);
-  const [tallySyncToast, setTallySyncToast] = useState(null);
   const [lastSyncedTime, setLastSyncedTime] = useState('Today, 10:42 AM');
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
-  const [showTallyModal, setShowTallyModal] = useState(false);
-  const [tallyModalType, setTallyModalType] = useState('Sales Invoice');
 
   // Quick link active modal
   const [activeQuickReport, setActiveQuickReport] = useState(null);
@@ -37,77 +25,6 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
   // Invoices & PO data
   const [invoices, setInvoices] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-
-  // Check Tally HTTP connection
-  const checkTallyStatus = async () => {
-    setTallyChecking(true);
-    try {
-      const res = await fetch('/api/tally/status', { method: 'GET', signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const data = await res.json();
-        setTallyOnline(Boolean(data.online));
-        if (data.primaryCompany || data.configuredCompany) {
-          setTallyCompany(data.primaryCompany || data.configuredCompany);
-        }
-      } else {
-        setTallyOnline(false);
-      }
-    } catch (_) {
-      setTallyOnline(false);
-    } finally {
-      setTallyChecking(false);
-    }
-  };
-
-  // Fetch Live P&L directly from Tally Prime (Zero files)
-  const fetchLiveTallyPnl = async () => {
-    setIsFetchingTallyPnl(true);
-    try {
-      const res = await fetch(`/api/tally/pnl?company=${encodeURIComponent(tallyCompany)}`);
-      const data = await res.json();
-      if (data.success && data.metrics) {
-        setLiveTallyMetrics(data.metrics);
-        setTallyOnline(true);
-        if (data.company) setTallyCompany(data.company);
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        setLastSyncedTime(`Today, ${timeStr}`);
-        setTallySyncToast({
-          type: 'success',
-          message: `Live Profit & Loss statement synced directly from Tally Prime (${data.company || tallyCompany})`
-        });
-        setTimeout(() => setTallySyncToast(null), 5000);
-      } else {
-        setTallySyncToast({
-          type: 'error',
-          message: `Could not reach Tally on port 9000. Please ensure Tally Prime is running.`
-        });
-        setTimeout(() => setTallySyncToast(null), 5000);
-      }
-    } catch (err) {
-      setTallySyncToast({
-        type: 'error',
-        message: `Connection error: ${err.message}`
-      });
-      setTimeout(() => setTallySyncToast(null), 5000);
-    } finally {
-      setIsFetchingTallyPnl(false);
-    }
-  };
-
-  useEffect(() => {
-    checkTallyStatus();
-    // Auto-sync polling every 45 seconds if enabled
-    const interval = setInterval(() => {
-      if (autoSyncEnabled) {
-        checkTallyStatus();
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        setLastSyncedTime(`Today, ${timeStr}`);
-      }
-    }, 45000);
-    return () => clearInterval(interval);
-  }, [autoSyncEnabled]);
 
   // Load store data
   useEffect(() => {
@@ -126,7 +43,6 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await checkTallyStatus();
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     setLastSyncedTime(`Today, ${timeStr}`);
@@ -153,10 +69,9 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
 
   // Base metrics matching user's screenshot
   const metrics = useMemo(() => {
-    // If live Tally P&L has been synced directly into memory:
-    const baseRevenue = liveTallyMetrics ? liveTallyMetrics.salesRevenue : (21651412.27 * mult);
-    const baseCogs = liveTallyMetrics ? liveTallyMetrics.cogs : (15588352.02 * mult);
-    const grossProfit = liveTallyMetrics ? liveTallyMetrics.grossProfit : (baseRevenue - baseCogs);
+    const baseRevenue = 21651412.27 * mult;
+    const baseCogs = 15588352.02 * mult;
+    const grossProfit = baseRevenue - baseCogs;
     const grossProfitPct = ((grossProfit / (baseRevenue || 1)) * 100).toFixed(1);
 
     const factoryExp = 106742.00 * mult;
@@ -166,9 +81,9 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
     const financeCost = 867.00 * mult;
     const statutoryExp = 85568.00 * mult;
 
-    const opExpenses = liveTallyMetrics ? liveTallyMetrics.operatingExpenses : (factoryExp + officeExp + salesExp + employeeExp + statutoryExp);
+    const opExpenses = factoryExp + officeExp + salesExp + employeeExp + statutoryExp;
     const totalExpenses = baseCogs + opExpenses + financeCost;
-    const netProfit = liveTallyMetrics ? liveTallyMetrics.netProfit : (baseRevenue - totalExpenses);
+    const netProfit = baseRevenue - totalExpenses;
 
     const cashBank = 24500000 * (selectedPeriod === 'Today' ? 1.0 : (1 + (mult * 0.05)));
     const outstanding = 16400000 * (selectedPeriod === 'Today' ? 1.0 : (1 + (mult * 0.03)));
@@ -238,7 +153,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
       totalExpensesStr: formatInr(totalExpenses),
       totalExpensesCr: formatCr(totalExpenses)
     };
-  }, [mult, selectedPeriod, liveTallyMetrics]);
+  }, [mult, selectedPeriod]);
 
   // Expense Breakup items matching unified POStatusOverview design
   const breakupItems = useMemo(() => {
@@ -409,173 +324,6 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
           pointerEvents: 'none'
         }} />
       </div>
-
-      {/* 2. AUTOMATED TALLY PRIME LIVE CONTROL BAR (ZERO XML FILES) */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '14px',
-        border: '1px solid #E2E8F0',
-        padding: '12px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
-        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)'
-      }}>
-        {/* Left Side: Status & Company */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: tallyOnline ? '#ECFDF5' : '#FEF2F2',
-            border: `1px solid ${tallyOnline ? '#A7F3D0' : '#FECACA'}`,
-            padding: '5px 12px',
-            borderRadius: '20px',
-            fontSize: '12px',
-            fontWeight: '800',
-            color: tallyOnline ? '#065F46' : '#991B1B'
-          }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: tallyOnline ? '#10B981' : '#EF4444',
-              display: 'inline-block',
-              boxShadow: tallyOnline ? '0 0 8px #10B981' : 'none'
-            }} />
-            {tallyChecking ? 'Checking Tally...' : tallyOnline ? `Tally Prime Connected` : 'Tally Prime Offline'}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', fontWeight: '600' }}>
-            <span style={{ color: '#0F172A', fontWeight: '800' }}>{tallyCompany}</span>
-            <span style={{ color: '#94A3B8' }}>•</span>
-            <span style={{
-              backgroundColor: '#F0FDFA',
-              color: '#0E7490',
-              border: '1px solid #CCFBF1',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: '700'
-            }}>
-              Port 9000 • Direct HTTP
-            </span>
-            <span style={{ color: '#94A3B8' }}>•</span>
-            <span style={{ fontSize: '11px', color: '#64748B' }}>Last synced: {lastSyncedTime}</span>
-          </div>
-        </div>
-
-        {/* Right Side: Quick Action Triggers */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Fetch Live P&L from Tally */}
-          <button
-            onClick={fetchLiveTallyPnl}
-            disabled={isFetchingTallyPnl}
-            style={{
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: '1px solid #0E7490',
-              backgroundColor: '#ECFEFF',
-              color: '#0E7490',
-              fontSize: '12px',
-              fontWeight: '800',
-              cursor: isFetchingTallyPnl ? 'wait' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease'
-            }}
-            title="Fetch real-time P&L statement directly from Tally Prime into memory"
-          >
-            <RefreshCw size={13} style={{ animation: isFetchingTallyPnl ? 'spin 1s linear infinite' : 'none' }} />
-            {isFetchingTallyPnl ? 'Reading Tally P&L...' : 'Fetch Live P&L'}
-          </button>
-
-          {/* Sync Invoices to Tally */}
-          <button
-            onClick={() => {
-              setTallyModalType('Sales Invoice');
-              setShowTallyModal(true);
-            }}
-            style={{
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: '#0E7490',
-              color: '#FFFFFF',
-              fontSize: '12px',
-              fontWeight: '800',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 6px rgba(14, 116, 144, 0.2)'
-            }}
-            title="Post approved sales vouchers directly to Tally Prime"
-          >
-            <Zap size={13} />
-            Direct Voucher Sync
-          </button>
-
-          {/* Integration Config Link */}
-          {onNavigateTab && (
-            <button
-              onClick={() => onNavigateTab('Integration')}
-              style={{
-                padding: '7px 10px',
-                borderRadius: '8px',
-                border: '1px solid #E2E8F0',
-                backgroundColor: '#FFFFFF',
-                color: '#64748B',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-              title="Configure Tally Host URL & Port"
-            >
-              <Settings size={13} />
-              Settings
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Sync Toast Notification */}
-      {tallySyncToast && (
-        <div style={{
-          backgroundColor: tallySyncToast.type === 'success' ? '#ECFDF5' : '#FEF2F2',
-          border: `1px solid ${tallySyncToast.type === 'success' ? '#A7F3D0' : '#FECACA'}`,
-          color: tallySyncToast.type === 'success' ? '#065F46' : '#991B1B',
-          padding: '10px 16px',
-          borderRadius: '10px',
-          fontSize: '12.5px',
-          fontWeight: '700',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {tallySyncToast.type === 'success' ? (
-              <CheckCircle2 size={16} style={{ color: '#10B981', flexShrink: 0 }} />
-            ) : (
-              <AlertCircle size={16} style={{ color: '#EF4444', flexShrink: 0 }} />
-            )}
-            <span>{tallySyncToast.message}</span>
-          </div>
-          <button
-            onClick={() => setTallySyncToast(null)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 'bold' }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
 
       {/* 3. ROW 1: 6 MODERN KPI CARDS MATCHING UNIFIED DESIGN */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
@@ -1237,7 +985,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
                     </div>
                   </div>
                   <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6' }}>
-                    This statement is synchronized live with the BUSINZ ledger repository and local Tally connector. For audit and filing, export to Excel or push as Day Book entries to TallyPrime.
+                    This statement is synchronized live with the BUSINZ ledger repository. For audit and filing, export to Excel or download the official statement.
                   </p>
                 </div>
               )}
@@ -1285,17 +1033,6 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
             </div>
           </div>
         </div>
-      )}
-
-      {/* TALLY SYNC MODAL INTEGRATION */}
-      {showTallyModal && (
-        <TallySyncModal
-          isOpen={showTallyModal}
-          onClose={() => setShowTallyModal(false)}
-          type={tallyModalType}
-          records={tallyModalType === 'Sales Invoice' ? invoices : purchaseOrders}
-          showAlert={(msg) => alert(msg)}
-        />
       )}
     </div>
   );

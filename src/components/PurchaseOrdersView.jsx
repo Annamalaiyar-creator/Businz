@@ -4,7 +4,6 @@ import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../services/zohoSafeSync';
 import StatusBadge from './StatusBadge';
 import NotificationToast from './NotificationToast';
-import TallySyncModal from './views/TallySyncModal';
 import ModernDateRangePicker from './ModernDateRangePicker';
 
 const PRESET_MATERIALS = [
@@ -157,7 +156,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const [openPresetIdx, setOpenPresetIdx] = useState(null); // Selected item row index opening preset materials dropdown
 
   const [selectedPOs, setSelectedPOs] = useState([]);
-  const [showTallyModal, setShowTallyModal] = useState(false);
 
   const handleSelectAll = (e, items) => {
     if (e.target.checked) {
@@ -2446,36 +2444,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   <FileText size={14} style={{ color: '#059669' }} /> Export / Print PDF
                 </button>
 
-                {/* 7. Export to Tally */}
-                {(isAccounts || isAdminOrTech) && (
-                  <button
-                    onClick={() => {
-                      setSelectedPOs([]);
-                      setShowTallyModal(true);
-                    }}
-                    style={{
-                      backgroundColor: '#FEF3C7',
-                      border: '1px solid #FDE68A',
-                      color: '#92400E',
-                      borderRadius: '10px',
-                      padding: '6px 14px',
-                      fontSize: '12px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 1px 2px rgba(217,119,6,0.1)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                    title="Export selected Purchase Orders to TallyPrime / Tally.ERP 9"
-                  >
-                    <FileCode size={14} style={{ color: '#D97706' }} /> Export to Tally
-                  </button>
-                )}
-
                 <button
                   onClick={() => setSelectedPOs([])}
                   title="Deselect all"
@@ -4664,19 +4632,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         <NotificationToast
           alert={customAlert}
           onClose={() => setCustomAlert(null)}
-        />
-      )}
-
-      {/* TallyPrime Integration Modal */}
-      {showTallyModal && (
-        <TallySyncModal
-          isOpen={showTallyModal}
-          onClose={() => setShowTallyModal(false)}
-          records={(selectedPOs || []).map(poCode => {
-            return (poList || []).find(p => p.poNumber === poCode || p.poNo === poCode || p.code === poCode || p.id === poCode);
-          }).filter(Boolean)}
-          type="Purchase Order"
-          showAlert={showCustomToast}
         />
       )}
     </div>
