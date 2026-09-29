@@ -10,6 +10,7 @@ export default function ProductionTableView({
   pageConfig,
   activeTab,
   userRole,
+  onPrintTaxInvoice,
   filteredRows,
   selectedRows,
   setSelectedRows,
@@ -196,11 +197,11 @@ export default function ProductionTableView({
       </div>
 
       {/* 4. MAIN DATA TABLE (EXACT MATCH FOR PI & PO DESIGN) */}
-      <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+      <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', width: '100%', boxSizing: 'border-box', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
         <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+          <table className="custom-table" style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
             <thead>
-              <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
+              <tr style={{ color: '#334155', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: '700', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
                   <input
                     type="checkbox"
@@ -211,25 +212,30 @@ export default function ProductionTableView({
                 </th>
                 {pageConfig.headers.map((h, i) => {
                   const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
+                  const isCenter = h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status' || h === 'Action';
                   let colWidth = 'auto';
                   let minColWidth = '140px';
-                  if (i === 0) { colWidth = '150px'; minColWidth = '150px'; }
-                  else if (i === 1) { minColWidth = '220px'; }
-                  else if (h === 'Status' || h === 'Fulfillment Status' || h === 'Dispatch Packing Status') { colWidth = '180px'; minColWidth = '180px'; }
-                  else if (isRight) { colWidth = '150px'; minColWidth = '150px'; }
+                  if (i === 0) { colWidth = '160px'; minColWidth = '150px'; }
+                  else if (i === 1) { minColWidth = '200px'; }
+                  else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
+                  else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
                   else if (h.includes('Date')) { colWidth = '130px'; minColWidth = '130px'; }
-                  else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '150px'; }
+                  else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '140px'; }
 
                   return (
                     <th
                       key={h}
                       style={{
-                        padding: '12px 14px',
-                        textAlign: isRight ? 'right' : 'left',
+                        padding: '12px 16px',
+                        textAlign: isRight ? 'right' : (isCenter ? 'center' : 'left'),
                         width: colWidth,
                         minWidth: minColWidth,
                         boxSizing: 'border-box',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        color: '#334155',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                        letterSpacing: '0.01em'
                       }}
                     >
                       {h}
@@ -261,7 +267,8 @@ export default function ProductionTableView({
                     <tr key={row.code || idx} style={{
                       borderBottom: '1px solid #F1F5F9',
                       transition: 'all 0.15s ease',
-                      backgroundColor: isChecked ? '#ECFEFF' : 'transparent'
+                      backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
+                      height: '52px'
                     }} className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}>
                       <td style={{
                         width: '48px',
@@ -281,21 +288,37 @@ export default function ProductionTableView({
                       </td>
                       <td
                         onClick={() => onRowClick(row)}
-                        style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
+                        style={{ padding: '14px 16px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
                         {row.code}
                       </td>
                       <td
                         onClick={() => onRowClick(row)}
-                        style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B', cursor: 'pointer' }}
+                        style={{ padding: '14px 16px', fontWeight: '600', color: '#1E293B', cursor: 'pointer' }}
                       >
                         {row.c2 || row.name}
                       </td>
-                      <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c3 || row.date1}</td>
-                      <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4 || row.date2}</td>
-                      {row.c5 !== undefined && <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: row.c5?.toString()?.includes('₹') ? 'right' : 'left' }}>{row.c5 || row.value}</td>}
+                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500' }}>{row.c3 || row.date1}</td>
+                      <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: '500', whiteSpace: 'nowrap' }}>{row.c4 || row.date2}</td>
+                      {row.c5 !== undefined && (
+                        <td style={{
+                          padding: '14px 16px',
+                          fontWeight: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value') || pageConfig.headers[4]?.includes('Qty') || pageConfig.headers[4]?.includes('Price')) ? '700' : '600',
+                          color: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? '#0F172A' : '#334155',
+                          textAlign: (row.c5?.toString()?.includes('₹') || pageConfig.headers[4]?.includes('Amount') || pageConfig.headers[4]?.includes('Value')) ? 'right' : 'left',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {row.c5 || row.value}
+                        </td>
+                      )}
                       {row.c6 !== undefined && activeTab !== 'Customer Management' && activeTab !== 'Dispatch Orders' && pageConfig.headers.length > 6 && (
-                        <td style={{ padding: '12px 14px', color: '#475569' }}>
+                        <td style={{
+                          padding: '14px 16px',
+                          color: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '#0F172A' : '#475569',
+                          fontWeight: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '700' : '500',
+                          textAlign: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? 'right' : 'left',
+                          whiteSpace: 'nowrap'
+                        }}>
                           {activeTab === 'Invoice Management' ? (
                             <span style={{
                               backgroundColor: (row.c6 === 'Ready' || row.c6 === 'Ready for Payment' || row.c6 === 'Paid') ? '#DCFCE7' : '#FEF3C7',
@@ -315,9 +338,20 @@ export default function ProductionTableView({
                           )}
                         </td>
                       )}
+                      {row.c7 !== undefined && pageConfig.headers.length > 7 && (
+                        <td style={{
+                          padding: '14px 16px',
+                          fontWeight: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '700' : '500',
+                          color: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? '#0F172A' : '#475569',
+                          textAlign: (row.c7?.toString()?.includes('₹') || pageConfig.headers[6]?.includes('Amount') || pageConfig.headers[6]?.includes('Value')) ? 'right' : 'left',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {row.c7}
+                        </td>
+                      )}
                       {(pageConfig.headers.includes('Status') || pageConfig.headers.includes('Dispatch Packing Status') || pageConfig.headers.includes('Fulfillment Status')) && (
-                        <td style={{ padding: '12px 14px', textAlign: 'left' }}>
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                        <td style={{ padding: '14px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
                             <StatusBadge status={row.status} size="sm" />
                             {activeTab === 'Dispatch Orders' && row.packingProgressText && (
                               <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', paddingLeft: '2px', whiteSpace: 'nowrap' }}>
@@ -574,75 +608,6 @@ export default function ProductionTableView({
             );
           })()}
 
-          {/* Cancel BOM Order Button */}
-          {canCancelBom && (() => {
-            const hasCancellable = (selectedRows || []).some(codeVal => {
-              const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === codeVal);
-              return r && !r.cancelled && r.status !== 'CANCELLED' && r.status !== 'Cancelled' && r.status !== 'Cancelled & Stock Restored' && !(typeof r.status === 'string' && r.status.toLowerCase().includes('cancel'));
-            });
-            if (!hasCancellable) return null;
-
-            return (
-              <button
-                onClick={() => {
-                  const targetCode = selectedRows[0];
-                  const targetBom = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === targetCode);
-                  setSelectedRows([]);
-                  if (targetBom) handleCancelBomOrder(targetBom);
-                }}
-                style={{
-                  backgroundColor: '#FEF2F2',
-                  border: '1px solid #FECACA',
-                  color: '#DC2626',
-                  borderRadius: '10px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
-                }}
-                title="Cancel BOM and restore blocked stock back into inventory"
-              >
-                <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
-              </button>
-            );
-          })()}
-
-          {/* Delete Button - Excluded for BOM Orders & Client Specifications per user request */}
-          {!isSuperUser && activeTab !== 'Dispatch Orders' && activeTab !== 'BOM Orders & Client Specifications' && activeTab !== 'Sales BOM' && pageConfig?.title !== 'BOM Orders & Client Specifications' && !String(pageConfig?.title || '').toLowerCase().includes('bom') && (
-            <button
-              onClick={() => {
-                if (window.confirm(`Are you sure you want to delete ${selectedRows.length} selected item(s)?`)) {
-                  setSelectedRows([]);
-                }
-              }}
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                color: '#1E293B',
-                borderRadius: '10px',
-                padding: '6px 14px',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-            >
-              <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
-            </button>
-          )}
-
           {/* View Details Button */}
           <button
             onClick={(e) => {
@@ -682,8 +647,8 @@ export default function ProductionTableView({
             <Eye size={14} style={{ color: '#0E7490' }} /> View Details
           </button>
 
-          {/* View Payment Details Button */}
-          {activeTab !== 'Dispatch Orders' && activeTab !== 'Accounts Verification' && activeTab !== 'Invoice Management' && (
+          {/* View Payment Details Button - Excluded for Dispatch, Accounts, Invoice Management, and Delivery Challans */}
+          {activeTab !== 'Dispatch Orders' && activeTab !== 'Accounts Verification' && activeTab !== 'Invoice Management' && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (
             <button
               onClick={() => {
                 const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
@@ -702,31 +667,41 @@ export default function ProductionTableView({
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #E2E8F0',
                 color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <CreditCard size={14} style={{ color: '#2563EB' }} /> Payment Details
-          </button>
-        )}
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+            >
+              <CreditCard size={14} style={{ color: '#2563EB' }} /> Payment Details
+            </button>
+          )}
 
           {/* Export and Print */}
           <button
             onClick={() => {
-              setSelectedRows([]);
-              window.print();
+              if (activeTab === 'Invoice Management') {
+                const targetCode = selectedRows[0];
+                const rec = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode || r.invNo === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id || b.invNo) === targetCode);
+                if (onPrintTaxInvoice) {
+                  onPrintTaxInvoice(rec || { invNo: targetCode });
+                } else {
+                  window.print();
+                }
+              } else {
+                setSelectedRows([]);
+                window.print();
+              }
             }}
             style={{
               backgroundColor: '#FFFFFF',
@@ -750,6 +725,87 @@ export default function ProductionTableView({
           >
             <Printer size={14} style={{ color: '#059669' }} /> Export &amp; Print
           </button>
+
+          {/* Cancel BOM Order Button - Excluded for Delivery Challans */}
+          {canCancelBom && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (() => {
+            const hasCancellable = (selectedRows || []).some(codeVal => {
+              const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === codeVal);
+              return r && !r.cancelled && r.status !== 'CANCELLED' && r.status !== 'Cancelled' && r.status !== 'Cancelled & Stock Restored' && !(typeof r.status === 'string' && r.status.toLowerCase().includes('cancel'));
+            });
+            if (!hasCancellable) return null;
+
+            return (
+              <button
+                onClick={() => {
+                  const targetCode = selectedRows[0];
+                  const targetBom = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === targetCode);
+                  setSelectedRows([]);
+                  if (targetBom) handleCancelBomOrder(targetBom);
+                }}
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#DC2626',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
+                }}
+                title="Cancel BOM and restore blocked stock back into inventory"
+              >
+                <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
+              </button>
+            );
+          })()}
+
+          {/* Delete Button - Excluded for BOM Orders, Dispatch Orders, Invoice Ledger, and Delivery Challans per user request */}
+          {!isSuperUser &&
+            activeTab !== 'Dispatch Orders' &&
+            activeTab !== 'Invoice Management' &&
+            activeTab !== 'Delivery Challans' &&
+            activeTab !== 'BOM Orders & Client Specifications' &&
+            activeTab !== 'Sales BOM' &&
+            pageConfig?.title !== 'BOM Orders & Client Specifications' &&
+            pageConfig?.title !== 'Invoice Ledger & 3-Way Matching' &&
+            pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' &&
+            !String(pageConfig?.title || '').toLowerCase().includes('bom') &&
+            !String(pageConfig?.title || '').toLowerCase().includes('invoice') &&
+            !String(pageConfig?.title || '').toLowerCase().includes('3-way matching') &&
+            !String(pageConfig?.title || '').toLowerCase().includes('challan') && (
+            <button
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to delete ${selectedRows.length} selected item(s)?`)) {
+                  setSelectedRows([]);
+                }
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#1E293B',
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+            >
+              <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
+            </button>
+          )}
 
           {/* Deselect All */}
           <button

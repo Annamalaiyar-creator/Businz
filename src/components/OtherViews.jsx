@@ -103,17 +103,26 @@ export default function OtherViews(props) {
         {(activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') && <GoodsReceiptNoteView {...props} />}
         {activeTab === 'Upload Invoice' && <InvoiceUploadView {...props} />}
         {activeTab === 'Payments' && (
-          userRole === 'Procurement Head' || userRole === 'Procurement Admin' || userRole?.includes('Procurement') ? (
+          (userRole === 'Procurement Head' || userRole === 'Procurement Admin' || userRole?.includes('Procurement') || userRole === 'Billing' || userRole === 'Invoice Executive') ? (
             <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
-              <p style={{ fontSize: '13px', color: '#64748B' }}>The Payments screen is not available for Procurement Head.</p>
+              <p style={{ fontSize: '13px', color: '#64748B' }}>The Payments screen is not available for your role.</p>
             </div>
           ) : (
             <PaymentsView {...props} />
           )
         )}
         {activeTab === 'Vendor Performance' && <VendorPerformanceView {...props} />}
-        {activeTab === 'Spend Analytics' && <SpendAnalyticsView {...props} />}
+        {activeTab === 'Spend Analytics' && (
+          (userRole === 'Billing' || userRole === 'Invoice Executive') ? (
+            <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
+              <p style={{ fontSize: '13px', color: '#64748B' }}>Spend Analytics is not available for your role.</p>
+            </div>
+          ) : (
+            <SpendAnalyticsView {...props} />
+          )
+        )}
         {activeTab === 'Material Reorder' && <MaterialReorderView {...props} />}
         {activeTab === 'Stock Status' && (
           (userRole === 'Sales Head' || userRole === 'Sales Executive') ? (
@@ -127,7 +136,16 @@ export default function OtherViews(props) {
         )}
         {activeTab === 'Price Comparison' && <PriceComparisonView {...props} />}
         {activeTab === 'Items Directory' && <ItemsDirectoryView {...props} />}
-        {(activeTab === 'Procurement Reports' || activeTab === 'Spend Reports' || activeTab === 'Supplier Reports') && <ProcurementReportsView {...props} />}
+        {(activeTab === 'Procurement Reports' || activeTab === 'Spend Reports' || activeTab === 'Supplier Reports') && (
+          ((userRole === 'Billing' || userRole === 'Invoice Executive') && activeTab === 'Spend Reports') ? (
+            <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
+              <p style={{ fontSize: '13px', color: '#64748B' }}>Spend Reports are not available for your role.</p>
+            </div>
+          ) : (
+            <ProcurementReportsView {...props} />
+          )
+        )}
         {(activeTab === 'Dispatch Dashboard' || (userRole === 'Dispatch Head' && activeTab === 'Dashboard')) && <DispatchDashboardView {...props} />}
 
         {/* Sales CRM Master Engine (Individual Dedicated Tabs) */}

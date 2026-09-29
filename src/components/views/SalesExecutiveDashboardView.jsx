@@ -1,10 +1,31 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowUpRight, Clock, Sparkles, RefreshCw,
   Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, Flame
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+
+// Fast shallow list equality check to prevent unnecessary React re-renders and visual data flickering
+function areItemListsEqual(prev, next, idKey = 'id') {
+  if (prev === next) return true;
+  if (!Array.isArray(prev) || !Array.isArray(next)) return false;
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (a === b) continue;
+    if (!a || !b) return false;
+    const idA = a[idKey] || a.invNo || a.piNo || a.bomCode || a.code || a.customerCode || a.quoteNumber;
+    const idB = b[idKey] || b.invNo || b.piNo || b.bomCode || b.code || b.customerCode || b.quoteNumber;
+    if (idA !== idB) return false;
+    if ((a.updatedAt || a.date || a.status || a.dealValue || a.total || a.grandTotal || a.amount) !==
+        (b.updatedAt || b.date || b.status || b.dealValue || b.total || b.grandTotal || b.amount)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // Safe numeric amount parser
 function parseAmt(val) {
@@ -122,8 +143,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   // Hover states
   const [hoveredTrendMonth, setHoveredTrendMonth] = useState(null);
 
+  // Concurrency guard to prevent racing requests
+  const isFetchingRef = useRef(false);
+
   // Authoritative real-time data loader
   const loadSalesData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       // 1. Fetch Zoho connection status
       fetchWithTimeout('/api/zoho/status', { timeout: 3000 })
@@ -153,7 +179,12 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         fetchCloudStore('proforma_invoice_store', []).catch(() => []),
         fetchWithTimeout('/api/zoho/invoices', { timeout: 8000 })
           .then(r => r.json())
-          .then(j => Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : (j ? [j] : [])))
+          .then(j => {
+            if (Array.isArray(j)) return j;
+            if (Array.isArray(j?.data)) return j.data;
+            if (j && typeof j === 'object' && (j.id || j.invNo)) return [j];
+            return [];
+          })
           .catch(() => fetchCloudStore('invoice_store', [])),
         fetchWithTimeout('/api/zoho/customers', { timeout: 8000 })
           .then(r => r.json())
@@ -187,7 +218,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         }
       });
       const unifiedQuotes = Array.from(quoteMap.values());
-      setQuotations(unifiedQuotes);
+      setQuotations(prev => (unifiedQuotes.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedQuotes) ? prev : unifiedQuotes));
 
       // Merge Opportunities
       const localOpps = getCached('controlroom_crm_opportunities') || [];
@@ -203,7 +234,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         }
       });
       const unifiedOpps = Array.from(oppMap.values());
-      setOpportunities(unifiedOpps);
+      setOpportunities(prev => (unifiedOpps.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedOpps) ? prev : unifiedOpps));
 
       // Merge Leads
       const localLeads = getCached('controlroom_crm_leads') || [];
@@ -218,7 +249,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           leadMap.set(String(id).trim().toLowerCase(), l);
         }
       });
-      setLeads(Array.from(leadMap.values()));
+      const unifiedLeads = Array.from(leadMap.values());
+      setLeads(prev => (unifiedLeads.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedLeads) ? prev : unifiedLeads));
 
       // Merge Followups
       const localFollowups = getCached('controlroom_crm_followups') || [];
@@ -233,7 +265,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           followupMap.set(String(id).trim().toLowerCase(), f);
         }
       });
-      setFollowups(Array.from(followupMap.values()));
+      const unifiedFollowups = Array.from(followupMap.values());
+      setFollowups(prev => (unifiedFollowups.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedFollowups) ? prev : unifiedFollowups));
 
       // Merge Proforma Invoices (sales_pi_store & proforma_invoice_store)
       const localPis = getCached('controlroom_sales_pi_store') || getCached('sales_pi_store') || getCached('proforma_invoice_store') || [];
@@ -245,7 +278,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           if (!piMap.has(k)) piMap.set(k, p);
         }
       });
-      setProformaInvoices(Array.from(piMap.values()));
+      const unifiedPis = Array.from(piMap.values());
+      setProformaInvoices(prev => (unifiedPis.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedPis) ? prev : unifiedPis));
 
       // Merge Invoices
       const localInvoices = getCached('controlroom_invoice_store') || [];
@@ -257,7 +291,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           if (!invMap.has(k)) invMap.set(k, inv);
         }
       });
-      setInvoices(Array.from(invMap.values()));
+      const unifiedInvoices = Array.from(invMap.values());
+      setInvoices(prev => (unifiedInvoices.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedInvoices) ? prev : unifiedInvoices));
 
       // Merge Customers
       const localCustomers = getCached('controlroom_customer_store') || getCached('controlroom_crm_customers') || [];
@@ -269,7 +304,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           if (!custMap.has(k)) custMap.set(k, c);
         }
       });
-      setCustomers(Array.from(custMap.values()));
+      const unifiedCustomers = Array.from(custMap.values());
+      setCustomers(prev => (unifiedCustomers.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedCustomers) ? prev : unifiedCustomers));
 
       // BOMs
       const localBoms = getCached('controlroom_bom_store') || [];
@@ -281,21 +317,30 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           if (!bomMap.has(k)) bomMap.set(k, b);
         }
       });
-      setBoms(Array.from(bomMap.values()));
+      const unifiedBoms = Array.from(bomMap.values());
+      setBoms(prev => (unifiedBoms.length === 0 && prev.length > 0) ? prev : (areItemListsEqual(prev, unifiedBoms) ? prev : unifiedBoms));
 
       setLastSyncedTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('[SalesExecutiveDashboard] Error loading live sales data:', err);
     } finally {
       setIsRefreshing(false);
+      isFetchingRef.current = false;
     }
   }, []);
 
-  // Initial load and live real-time auto-synchronization
+  // Initial load and live real-time auto-synchronization (with debounced burst protection)
   useEffect(() => {
     loadSalesData();
 
-    const handleSync = () => loadSalesData();
+    let debounceTimer = null;
+    const handleSync = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadSalesData();
+      }, 600);
+    };
+
     window.addEventListener('controlroom_storage_update', handleSync);
     window.addEventListener('controlroom_crm_updated', handleSync);
     window.addEventListener('controlroom_pi_updated', handleSync);
@@ -304,6 +349,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     window.addEventListener('storage', handleSync);
 
     return () => {
+      clearTimeout(debounceTimer);
       window.removeEventListener('controlroom_storage_update', handleSync);
       window.removeEventListener('controlroom_crm_updated', handleSync);
       window.removeEventListener('controlroom_pi_updated', handleSync);
@@ -501,7 +547,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         value: formatLakhsCr(qualifiedVal),
         pct: `${offersVal > 0 ? Math.round((qualifiedVal / offersVal) * 100) : 0}%`,
         barColor: '#EC4899',
-        width: `${Math.max(30, Math.min(100, Math.round((qualifiedVal / maxVal) * 100)))}%`
+        width: '88%'
       },
       {
         label: 'PROFORMA INVOICES',
@@ -509,7 +555,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         value: formatLakhsCr(piVal),
         pct: `${offersVal > 0 ? Math.round((piVal / offersVal) * 100) : 0}%`,
         barColor: '#0284C7',
-        width: `${Math.max(25, Math.min(100, Math.round((piVal / maxVal) * 100)))}%`
+        width: '76%'
       },
       {
         label: 'INVOICED',
@@ -517,7 +563,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         value: formatLakhsCr(invVal),
         pct: `${offersVal > 0 ? Math.round((invVal / offersVal) * 100) : 0}%`,
         barColor: '#16A34A',
-        width: `${Math.max(20, Math.min(100, Math.round((invVal / maxVal) * 100)))}%`
+        width: '64%'
       }
     ];
   }, [filteredQuotations, totalQuotesValue, filteredOpportunities, filteredPis, totalPiValue, filteredInvoices, totalInvoicedValue]);
@@ -1123,7 +1169,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
           </div>
 
-          <div style={{ marginTop: '12px', padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '11.5px', color: '#334155', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ marginTop: '12px', padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '11.5px', color: '#334155', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px', boxSizing: 'border-box' }}>
             <Sparkles size={14} style={{ color: '#0E7490' }} />
             <span>
               {targetBalanceVal > 0 ? (
@@ -1138,7 +1184,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         {/* Card B: Sales Funnel */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
               <div style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 MY SALES FUNNEL — {selectedPeriod.toUpperCase()}
               </div>
@@ -1188,18 +1234,19 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           </div>
 
           <div style={{
-            marginTop: '8px',
+            marginTop: '12px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '8px 12px',
+            padding: '10px 14px',
             backgroundColor: '#F8FAFC',
-            borderRadius: '8px',
+            borderRadius: '10px',
             border: '1px solid #E2E8F0',
-            fontSize: '11px',
+            fontSize: '11.5px',
             color: '#334155',
-            flexWrap: 'wrap',
-            gap: '6px'
+            fontWeight: '600',
+            minHeight: '44px',
+            boxSizing: 'border-box'
           }}>
             <span>Offer-to-Invoice conversion: <strong style={{ color: '#0E7490' }}>{conversionRate}%</strong></span>
             <span>•</span>
@@ -1364,6 +1411,23 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </div>
             </div>
           </div>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: '8px',
+            marginTop: '6px',
+            borderTop: '2px solid #E2E8F0',
+            fontSize: '11.5px',
+            fontWeight: '800',
+            color: '#1E3A8A'
+          }}>
+            <div>Total 7-Month Sales</div>
+            <div style={{ textAlign: 'right', color: '#1E3A8A' }}>
+              ₹ {monthlyTrendData.reduce((s, d) => s + d.actual, 0).toFixed(1)} Lakhs
+            </div>
+          </div>
         </div>
 
         {/* Card B: Product Sale Comparison */}
@@ -1437,6 +1501,23 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               })}
             </div>
           </div>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: '8px',
+            marginTop: '6px',
+            borderTop: '2px solid #E2E8F0',
+            fontSize: '11.5px',
+            fontWeight: '800',
+            color: '#1E3A8A'
+          }}>
+            <div>Total Products Billed</div>
+            <div style={{ textAlign: 'right', color: '#1E3A8A' }}>
+              {formatLakhsCr(productPerformance.reduce((s, p) => s + p.actual, 0) || totalInvoicedValue)}
+            </div>
+          </div>
         </div>
 
         {/* Card C: Top 10 Customers Month Sales Contribution */}
@@ -1450,7 +1531,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1.4fr 1fr 1fr',
+              gridTemplateColumns: '1.6fr 1fr 0.8fr',
               paddingBottom: '6px',
               borderBottom: '1px solid #E2E8F0',
               fontSize: '10.5px',
@@ -1480,7 +1561,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                       key={c.rank}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1.4fr 1fr 1fr',
+                        gridTemplateColumns: '1.6fr 1fr 0.8fr',
                         alignItems: 'center',
                         padding: '6px 0',
                         borderBottom: '1px solid #F8FAFC',
@@ -1496,7 +1577,10 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                           backgroundColor: dotColor,
                           flexShrink: 0
                         }} />
-                        <span style={{ fontWeight: '600', color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span 
+                          title={c.name}
+                          style={{ fontWeight: '600', color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        >
                           {c.name}
                         </span>
                       </div>
@@ -1518,7 +1602,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           {topCustomers.length > 0 && (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1.4fr 1fr 1fr',
+              gridTemplateColumns: '1.6fr 1fr 0.8fr',
               alignItems: 'center',
               paddingTop: '8px',
               marginTop: '6px',
@@ -1530,7 +1614,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               <div>Total (Top 10)</div>
               <div style={{ textAlign: 'right', color: '#1E3A8A' }}>{formatLakhsCr(top10TotalVal)}</div>
               <div style={{ textAlign: 'right', color: '#1E3A8A' }}>
-                {totalInvoicedValue > 0 ? ((top10TotalVal / totalInvoicedValue) * 100).toFixed(1) + '%' : '100%'}
+                {topCustomers.length > 0 ? (Math.min(100, topCustomers.reduce((acc, c) => acc + parseFloat(c.share || 0), 0)).toFixed(1) + '%') : '100%'}
               </div>
             </div>
           )}

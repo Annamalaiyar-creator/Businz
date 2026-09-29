@@ -853,6 +853,7 @@ export default function ProductionViewsEngine(props) {
                 setInvoices={setInvoiceList}
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
+                setPrintTaxInvoiceModal={setPrintTaxInvoiceModal}
                 setPreviewDocModal={setPreviewDocModal}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setPendingDcModal={setPendingDcModal}
@@ -1219,6 +1220,7 @@ export default function ProductionViewsEngine(props) {
               pageConfig={pageConfig}
               activeTab={activeTab}
               userRole={userRole}
+              onPrintTaxInvoice={(row) => setPrintTaxInvoiceModal(row)}
               filteredRows={filteredRows}
               selectedRows={selectedRows}
               setSelectedRows={setSelectedRows}

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  RefreshCw, ExternalLink, CheckCircle2, AlertCircle, 
+  ExternalLink, CheckCircle2, AlertCircle, 
   ShieldCheck, ArrowLeftRight, Search, Check, Sparkles, Sliders,
-  Lock, Plus, Trash2, Shield, Info, Globe, MessageSquare, CreditCard,
-  Zap, Bot, Key, Link2, AlertTriangle, X, Plug, Landmark, Building2, Settings
+  Lock, Plus, Trash2, Info, Globe, MessageSquare, CreditCard,
+  Zap, Bot, Key, Link2, AlertTriangle, X, Plug, Building2, Settings
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { getSafeZohoItems, getSafeZohoVendors, getSafeZohoPOs } from '../services/zohoSafeSync';
@@ -18,7 +18,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
   const effectiveRole = userRole || localStorage.getItem('controlroom_user_role') || '';
   const isCeoRole = effectiveRole === 'CEO' || effectiveRole === 'Managing Director' || effectiveRole === 'MD' || effectiveRole.toLowerCase().includes('ceo');
   const isTaRole = effectiveRole === 'Technical Administrator' || effectiveRole === 'Technical Admin' || effectiveRole === 'Developer' || effectiveRole.startsWith('TA') || effectiveRole.toLowerCase().includes('technical admin');
-  const isAccountsRole = effectiveRole.toLowerCase().includes('account') || effectiveRole === 'Accounts Head' || effectiveRole === 'Accounts Executive' || effectiveRole === 'Billing' || effectiveRole === 'Finance & Accounts';
 
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -233,11 +232,11 @@ export default function ZohoIntegrationView({ userRole = '' }) {
 
   // RBAC Action Handlers
   const handleZohoConfigureClick = () => {
-    if (!isCeoRole && !isAccountsRole) {
+    if (!isCeoRole) {
       setPermissionAlert({
-        title: 'Authorization Required',
-        message: 'Only CEO and Accounts personnel have permissions to view credentials or configure the Zoho Books organization connection.',
-        roleRequired: 'CEO / Accounts'
+        title: 'CEO Authorization Required',
+        message: 'Only the CEO is authorized to view credentials or configure the Zoho Books organization connection.',
+        roleRequired: 'CEO Alone'
       });
       return;
     }
@@ -590,6 +589,9 @@ export default function ZohoIntegrationView({ userRole = '' }) {
   ];
 
   const filteredCatalog = fullCatalog.filter(item => {
+    // Zoho Books integration access is strictly for CEO Alone
+    if (item.isZoho && !isCeoRole) return false;
+
     const matchesSearch = !searchQuery ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -598,6 +600,40 @@ export default function ZohoIntegrationView({ userRole = '' }) {
     const matchesCat = selectedCategory === 'All' || item.category.includes(selectedCategory);
     return matchesSearch && matchesCat;
   });
+
+  if (!isCeoRole && !isTaRole) {
+    return (
+      <div style={{
+        padding: '48px 24px',
+        textAlign: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: '16px',
+        border: '1px solid #E2E8F0',
+        maxWidth: '540px',
+        margin: '60px auto'
+      }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '16px',
+          backgroundColor: '#FEF3C7',
+          color: '#D97706',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '16px'
+        }}>
+          <Lock size={28} />
+        </div>
+        <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: '0 0 8px 0' }}>
+          Access Restricted to CEO
+        </h3>
+        <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: '1.6', margin: 0 }}>
+          Zoho Books integration access is restricted strictly to the <strong>CEO Alone</strong>. If you require financial or ERP synchronization changes, please contact the Chief Executive Officer.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%', minWidth: 0, boxSizing: 'border-box', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -631,30 +667,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
             />
           </div>
 
-          {/* Sync All button for Zoho */}
-          <button
-            onClick={handleSyncAll}
-            disabled={syncing}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '10px',
-              padding: '0 14px',
-              height: '40px',
-              fontSize: '13px',
-              fontWeight: '700',
-              color: '#334155',
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-            }}
-          >
-            <RefreshCw style={{ width: '14px', height: '14px', animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-            {syncing ? 'Syncing...' : 'Sync Live'}
-          </button>
-
           {/* Add New Integration Button - Accessible to TA */}
           <button
             onClick={handleAddNewAppClick}
@@ -682,92 +694,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
         </div>
       </div>
 
-      {/* RBAC GOVERNANCE POLICY BANNER */}
-      <div style={{
-        backgroundColor: '#F8FAFC',
-        border: '1px solid #E2E8F0',
-        borderRadius: '14px',
-        padding: '14px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '14px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            backgroundColor: '#EEF2FF',
-            color: '#4F46E5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <Shield size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Security Governance & Role Separation Enforced</span>
-            </div>
-            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-              • <strong style={{ color: '#0F172A' }}>Zoho Books</strong> configuration & disconnect access is restricted strictly to the <strong style={{ color: '#D97706' }}>CEO Login</strong>.
-              <br />
-              • <strong style={{ color: '#0F172A' }}>Meta (WhatsApp / Instagram) & Other APIs</strong> are governed strictly by the <strong style={{ color: '#0284C7' }}>Technical Administrator (TA)</strong>.
-              <br />
-              • All active integrations operate smoothly in the background for all employees across the entire website.
-            </div>
-          </div>
-        </div>
-
-        {/* Current User Session Role Indicator */}
-        <div style={{
-          backgroundColor: isCeoRole ? '#FEF3C7' : isTaRole ? '#E0F2FE' : isAccountsRole ? '#ECFEFF' : '#F1F5F9',
-          border: `1px solid ${isCeoRole ? '#FDE68A' : isTaRole ? '#BAE6FD' : isAccountsRole ? '#A5F3FC' : '#CBD5E1'}`,
-          borderRadius: '10px',
-          padding: '8px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          {isCeoRole ? (
-            <>
-              <ShieldCheck size={18} style={{ color: '#D97706' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '900', color: '#92400E', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#78350F' }}>CEO (Master Access to Zoho)</div>
-              </div>
-            </>
-          ) : isTaRole ? (
-            <>
-              <Settings size={18} style={{ color: '#0284C7' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '900', color: '#0369A1', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#075985' }}>Technical Admin (TA Full API Access)</div>
-              </div>
-            </>
-          ) : isAccountsRole ? (
-            <>
-              <Landmark size={18} style={{ color: '#0E7490' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#155E75' }}>Accounts Authority (Financial Integration Access)</div>
-              </div>
-            </>
-          ) : (
-            <>
-              <Lock size={15} style={{ color: '#64748B' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#334155' }}>{effectiveRole || 'Standard Employee'} (Protected Read-Only)</div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
       {syncMessage && (
         <div style={{ padding: '12px 16px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', color: '#047857', borderRadius: '10px', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CheckCircle2 style={{ width: '16px', height: '16px' }} />
@@ -775,14 +701,14 @@ export default function ZohoIntegrationView({ userRole = '' }) {
         </div>
       )}
 
-      {/* CONNECT ZOHO CREDENTIALS FORM DRAWER / MODAL (CEO & ACCOUNTS) */}
-      {showConfigForm && (isCeoRole || isAccountsRole) && (
+      {/* CONNECT ZOHO CREDENTIALS FORM DRAWER / MODAL (CEO ONLY) */}
+      {showConfigForm && isCeoRole && (
         <div className="section-card" style={{ padding: '24px', backgroundColor: '#FFFBEB', border: '2px solid #F59E0B', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <ShieldCheck size={20} style={{ color: '#D97706' }} />
               <div>
-                <strong style={{ fontSize: '16px', color: '#0F172A' }}>Configure Zoho Books API Connection (CEO &amp; Accounts)</strong>
+                <strong style={{ fontSize: '16px', color: '#0F172A' }}>Configure Zoho Books API Connection (CEO Only)</strong>
                 <span style={{ fontSize: '12px', color: '#92400E', display: 'block', marginTop: '2px' }}>
                   Enter your Zoho Books Organization ID and OAuth Refresh Token. Changes take effect across all organization users.
                 </span>
@@ -886,7 +812,7 @@ export default function ZohoIntegrationView({ userRole = '' }) {
       }}>
         {filteredCatalog.map(app => {
           const isConnected = Boolean(integrationsState[app.id]);
-          const canUserConfigure = app.isZoho ? (isCeoRole || isAccountsRole) : isTaRole;
+          const canUserConfigure = app.isZoho ? isCeoRole : isTaRole;
 
           return (
             <div
@@ -919,14 +845,14 @@ export default function ZohoIntegrationView({ userRole = '' }) {
                         fontWeight: '800',
                         padding: '3px 8px',
                         borderRadius: '6px',
-                        backgroundColor: (isCeoRole || isAccountsRole) ? '#FEF3C7' : '#F1F5F9',
-                        color: (isCeoRole || isAccountsRole) ? '#B45309' : '#64748B',
-                        border: `1px solid ${(isCeoRole || isAccountsRole) ? '#FDE68A' : '#E2E8F0'}`,
+                        backgroundColor: isCeoRole ? '#FEF3C7' : '#F1F5F9',
+                        color: isCeoRole ? '#B45309' : '#64748B',
+                        border: `1px solid ${isCeoRole ? '#FDE68A' : '#E2E8F0'}`,
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '4px'
                       }}>
-                        <ShieldCheck size={11} /> {isCeoRole ? 'CEO Admin' : 'CEO & Accounts'}
+                        <ShieldCheck size={11} /> {isCeoRole ? 'CEO Admin' : 'CEO Alone'}
                       </span>
                     ) : (
                       <span style={{

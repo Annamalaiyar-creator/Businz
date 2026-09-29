@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Plus, Check, Trash2, Eye, Search, X, CheckCircle, ArrowLeft,
   Calendar, Edit3, Filter, RotateCcw, UploadCloud, ChevronDown,
-  Package, Info, Upload, Receipt, Image, Pause, Save, RefreshCw
+  Package, Info, Upload, Receipt, Image, Pause, Save, RefreshCw,
+  ClipboardList, Clock
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
@@ -2666,7 +2667,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   transition: 'all 0.15s ease'
                 }}
               >
-                📋 Audit Ledger Table
+                <ClipboardList size={14} /> Audit Ledger Table
               </button>
               <button
                 type="button"
@@ -2687,7 +2688,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   transition: 'all 0.15s ease'
                 }}
               >
-                ⏱️ Activity Timeline
+                <Clock size={14} /> Activity Timeline
               </button>
             </div>
           </div>

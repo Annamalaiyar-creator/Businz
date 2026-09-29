@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, HelpCircle, ChevronDown, LogOut, Check, RotateCcw, CheckCircle2, ArrowRight, Code, FileCheck, CheckCircle, Menu, Smartphone } from 'lucide-react';
+import { Bell, HelpCircle, ChevronDown, LogOut, Check, RotateCcw, CheckCircle2, ArrowRight, Code, FileCheck, CheckCircle, Menu, Smartphone, Moon, Activity, ChevronRight, Hexagon, Plus } from 'lucide-react';
 
 import { isRoleTargeted, speakNotificationVoice, playPorterOrderAlert, getPorterVoiceCue } from '../services/notificationService';
 
@@ -24,7 +24,9 @@ export const filterCompletedBomNotifications = (notificationsList) => {
         status.includes('awaiting vehicle loading') ||
         status.includes('fully dispatched') ||
         status.includes('closed') ||
-        (b.accountsVerification && b.accountsVerification.verified);
+        status.includes('accounts verified') ||
+        Boolean(b.isAccountsDone) ||
+        Boolean(b.accountsVerification && b.accountsVerification.verified);
       
       if (code && isCompleted) {
         completedBomCodes.add(code);
@@ -84,6 +86,28 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD';
+
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem('businz_dark_mode') === 'true';
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const toggleDarkMode = (e) => {
+    if (e) e.stopPropagation();
+    const nextVal = !darkMode;
+    setDarkMode(nextVal);
+    try {
+      localStorage.setItem('businz_dark_mode', String(nextVal));
+      if (nextVal) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (_) {}
+  };
   
   const [readIds, setReadIds] = useState(() => {
     try {
@@ -573,35 +597,220 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
           </div>
           <ChevronDown className="header-user-chevron" style={{ width: '15px', height: '15px', color: '#FFFFFF', opacity: 0.9 }} />
 
-          {/* Role & Login Menu Popup */}
+          {/* Role & Login Menu Popup (Matching Reference Design) */}
           {showRoleMenu && (
             <div 
               style={{
                 position: 'absolute',
-                top: '46px',
+                top: '48px',
                 right: 0,
                 backgroundColor: '#FFFFFF',
-                borderRadius: '14px',
-                border: '1px solid #E2E8F0',
-                boxShadow: '0 12px 30px -5px rgba(15, 23, 42, 0.2)',
-                width: '240px',
-                padding: '8px',
+                borderRadius: '24px',
+                border: '1px solid #F1F5F9',
+                boxShadow: '0 20px 45px -8px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(0, 0, 0, 0.04)',
+                width: '280px',
+                padding: '20px 18px 14px',
                 zIndex: 99999,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '4px'
+                cursor: 'default',
+                fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif"
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid #F1F5F9' }}>
-                <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{safeName}</div>
-                <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', marginTop: '3px' }}>{userRole}</div>
-                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{userEmail}</div>
+              {/* Top Profile Header (Avatar, Name, Email, PRO Badge) */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                  {/* Stylized Illustrated Avatar */}
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    backgroundColor: '#FED7AA',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 2px 8px rgba(249, 115, 22, 0.2)'
+                  }}>
+                    <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                      <circle cx="22" cy="22" r="22" fill="#E2E8F0" />
+                      <path d="M7 44c0-7 6.5-12 15-12s15 5 15 12" fill="#F97316" />
+                      <path d="M15 32l3.5 6 3.5-6" fill="#0284C7" />
+                      <path d="M25 32l3.5 6 3.5-6" fill="#10B981" />
+                      <circle cx="22" cy="18" r="9" fill="#B45309" />
+                      <path d="M13 16c0-6 4-10 9-10s9 4 9 10c-1-3-4-5-9-5s-8 2-9 5z" fill="#451A03" />
+                      <path d="M14 18c-1 3-2 6-1 8" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M16 17c0 3-1 6 0 8" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M18 16c0 3-0.5 6 0 8" stroke="#FBBF24" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M28 17c0 3 1 6 0 8" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M30 18c1 3 2 6 1 8" stroke="#451A03" strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="19" cy="18" r="1.1" fill="#1E293B" />
+                      <circle cx="25" cy="18" r="1.1" fill="#1E293B" />
+                      <path d="M20 22c1 1 3 1 4 0" stroke="#1E293B" strokeWidth="1" strokeLinecap="round" />
+                    </svg>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontSize: '14.5px', fontWeight: '800', color: '#0F172A', lineHeight: '1.25', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {safeName}
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {userEmail}
+                    </span>
+                  </div>
+                </div>
+
+                {/* PRO Pill Badge */}
+                <div style={{
+                  backgroundColor: '#FFEDD5',
+                  color: '#EA580C',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  padding: '3px 8px',
+                  borderRadius: '8px',
+                  letterSpacing: '0.4px',
+                  flexShrink: 0
+                }}>
+                  PRO
+                </div>
               </div>
 
-              <div style={{ borderTop: '1px solid #F1F5F9', marginTop: '4px', paddingTop: '4px' }}>
+              {/* Dark Mode Row with Toggle Switch */}
+              <div 
+                onClick={toggleDarkMode}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 4px 12px',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Moon size={18} strokeWidth={2} style={{ color: '#475569' }} />
+                  <span style={{ fontSize: '13.5px', fontWeight: '600', color: '#1E293B' }}>Dark Mode</span>
+                </div>
+                {/* Switch Track */}
+                <div style={{
+                  width: '38px',
+                  height: '22px',
+                  borderRadius: '50px',
+                  backgroundColor: darkMode ? '#0E7490' : '#E2E8F0',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  boxSizing: 'border-box',
+                  transition: 'background-color 0.2s ease'
+                }}>
+                  <div style={{
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FFFFFF',
+                    transform: darkMode ? 'translateX(16px)' : 'translateX(0px)',
+                    transition: 'transform 0.2s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.18)'
+                  }} />
+                </div>
+              </div>
 
-                <button
+              {/* Dashed Separator 1 */}
+              <div style={{ borderBottom: '1px dashed #E2E8F0', margin: '2px 0 8px' }} />
+
+              {/* Menu Items (Activity, Integrations, Settings) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                {/* Activity */}
+                <div 
+                  onClick={() => {
+                    setShowRoleMenu(false);
+                    onSelectTab && onSelectTab('Audit');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '9px 10px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    color: '#1E293B',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <Activity size={18} strokeWidth={2} style={{ color: '#475569' }} />
+                  <span>Activity</span>
+                </div>
+
+                {/* Integrations (Soft grey background pill matching screenshot) */}
+                <div 
+                  onClick={() => {
+                    setShowRoleMenu(false);
+                    onSelectTab && onSelectTab('Customers');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '9px 10px',
+                    borderRadius: '12px',
+                    backgroundColor: '#F8FAFC',
+                    cursor: 'pointer',
+                    color: '#1E293B',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="7" r="3" />
+                      <circle cx="6.5" cy="17" r="3" />
+                      <circle cx="17.5" cy="17" r="3" />
+                    </svg>
+                    <span>Integrations</span>
+                  </div>
+                  <ChevronRight size={16} strokeWidth={2} style={{ color: '#64748B' }} />
+                </div>
+
+                {/* Settings */}
+                <div 
+                  onClick={() => {
+                    setShowRoleMenu(false);
+                    onSelectTab && onSelectTab('Settings');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '9px 10px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    color: '#1E293B',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <Hexagon size={18} strokeWidth={2} style={{ color: '#475569' }} />
+                  <span>Settings</span>
+                </div>
+              </div>
+
+              {/* Dashed Separator 2 */}
+              <div style={{ borderBottom: '1px dashed #E2E8F0', margin: '8px 0' }} />
+
+              {/* Actions (+ Add Account, Logout) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <div 
                   onClick={() => {
                     setShowRoleMenu(false);
                     onOpenLoginModal && onOpenLoginModal();
@@ -609,22 +818,67 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#FEF2F2',
-                    color: '#EF4444',
-                    fontSize: '12.5px',
-                    fontWeight: '700',
-                    cursor: 'pointer'
+                    gap: '12px',
+                    padding: '9px 10px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    color: '#1E293B',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    transition: 'background-color 0.15s ease'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
-                  <LogOut style={{ width: '15px', height: '15px' }} />
-                  Sign Out
-                </button>
+                  <Plus size={18} strokeWidth={2} style={{ color: '#475569' }} />
+                  <span>Add Account</span>
+                </div>
+
+                <div 
+                  onClick={() => {
+                    setShowRoleMenu(false);
+                    onOpenLoginModal && onOpenLoginModal();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '9px 10px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    color: '#1E293B',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <LogOut size={18} strokeWidth={2} style={{ color: '#475569' }} />
+                  <span>Logout</span>
+                </div>
               </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '12px 10px 0',
+                fontSize: '11px',
+                color: '#94A3B8',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                <span>v1.5.69</span>
+                <span>·</span>
+                <span 
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => alert('BUSINZ Terms & Conditions\n\nConfidential internal Enterprise Management Platform for VRM Structures.')}
+                >
+                  Terms & Conditions
+                </span>
+              </div>
+
             </div>
           )}
         </div>

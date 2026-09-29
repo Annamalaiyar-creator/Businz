@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -776,36 +776,57 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   // Customer directory lookup with live cloud & Zoho sync for instant auto-complete
   const [customerList, setCustomerList] = useState(() => {
     try {
-      const stored = localStorage.getItem('controlroom_customer_store') || localStorage.getItem('controlroom_crm_customers') || localStorage.getItem('controlroom_customer_list');
+      const stored = localStorage.getItem('businz_crm_customers') ||
+                     localStorage.getItem('controlroom_customer_store') || 
+                     localStorage.getItem('controlroom_crm_customers') || 
+                     localStorage.getItem('controlroom_customer_list');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    return [
-      { code: 'Vikram Solar Pvt Ltd', companyName: 'Vikram Solar Pvt Ltd', c2: 'Vikram Solar Pvt Ltd', gst: '33AABCV1234F1Z5', gstNo: '33AABCV1234F1Z5', contact: 'Rajesh Kannan', contactPerson: 'Rajesh Kannan', phone: '+91 98765 43210', email: 'rajesh@vikramsolar.com', billingAddress: 'Plot 42, SIDCO Industrial Estate, Ambattur', city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' },
-      { code: 'Tata Power Solar Systems Ltd', companyName: 'Tata Power Solar Systems Ltd', c2: 'Tata Power Solar Systems Ltd', gst: '29AAACT2345D1ZA', gstNo: '29AAACT2345D1ZA', contact: 'Karthik Raja', contactPerson: 'Karthik Raja', phone: '+91 98450 12345', email: 'karthik@tatapower.com', billingAddress: '12 Electronic City Phase 1', city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
-      { code: 'Waaree Energies Ltd', companyName: 'Waaree Energies Ltd', c2: 'Waaree Energies Ltd', gst: '24AAACW5678B1Z2', gstNo: '24AAACW5678B1Z2', contact: 'Dharmesh Patel', contactPerson: 'Dharmesh Patel', phone: '+91 97234 56789', email: 'dharmesh@waaree.com', billingAddress: '88 Ring Road, Surat', city: 'Surat', state: 'Gujarat', pincode: '395001' }
-    ];
+    return [];
   });
 
-  // Sync Customers directly from Supabase, Zoho Books & CRM Customers
+  // Sync Customers directly from Zoho Books, CRM Customers & Supabase
   useEffect(() => {
     let isMounted = true;
 
     const syncCustomers = async () => {
       try {
         let merged = [];
-        // 1. Check localStorage first for instant local responsiveness
+        // 1. Check local storage first for instant responsiveness
         try {
-          const raw = localStorage.getItem('controlroom_customer_store') || localStorage.getItem('controlroom_crm_customers') || localStorage.getItem('controlroom_customer_list');
+          const raw = localStorage.getItem('businz_crm_customers') ||
+                      localStorage.getItem('controlroom_customer_store') || 
+                      localStorage.getItem('controlroom_crm_customers') || 
+                      localStorage.getItem('controlroom_customer_list');
           if (raw) {
             const p = JSON.parse(raw);
             if (Array.isArray(p) && p.length > 0) merged = [...p];
           }
         } catch (_) {}
 
-        // 2. Fetch from Supabase Cloud Store
+        // 2. Fetch live from Zoho Books endpoint to ensure all 61+ customers are always loaded
+        try {
+          const zohoRes = await fetch('/api/zoho/customers');
+          if (zohoRes.ok) {
+            const zList = await zohoRes.json();
+            if (Array.isArray(zList) && zList.length > 0) {
+              zList.forEach(zc => {
+                const nameKey = (zc.companyName || zc.name || zc.c2 || zc.code || '').toLowerCase().trim();
+                const idx = merged.findIndex(m => (m.companyName || m.name || m.c2 || m.code || '').toLowerCase().trim() === nameKey);
+                if (idx >= 0) {
+                  merged[idx] = { ...merged[idx], ...zc };
+                } else if (nameKey) {
+                  merged.push(zc);
+                }
+              });
+            }
+          }
+        } catch (_) {}
+
+        // 3. Merge from Supabase Cloud Store
         try {
           const cloudCusts = await fetchCloudStore('customer_store', []);
           if (Array.isArray(cloudCusts) && cloudCusts.length > 0) {
@@ -818,26 +839,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           }
         } catch (_) {}
 
-        // 3. Fallback to Zoho Customers endpoint if list is small
-        if (merged.length < 5) {
-          try {
-            const zohoRes = await fetch('/api/zoho/customers');
-            if (zohoRes.ok) {
-              const zList = await zohoRes.json();
-              if (Array.isArray(zList) && zList.length > 0) {
-                zList.forEach(zc => {
-                  const nameKey = (zc.companyName || zc.name || zc.c2 || zc.code || '').toLowerCase().trim();
-                  if (nameKey && !merged.some(m => (m.companyName || m.name || m.c2 || m.code || '').toLowerCase().trim() === nameKey)) {
-                    merged.push(zc);
-                  }
-                });
-              }
-            }
-          } catch (_) {}
-        }
-
         if (isMounted && merged.length > 0) {
           setCustomerList(merged);
+          try {
+            localStorage.setItem('controlroom_customer_store', JSON.stringify(merged));
+            localStorage.setItem('businz_crm_customers', JSON.stringify(merged));
+          } catch (_) {}
         }
       } catch (err) {
         console.warn('[PI] Customer sync notice:', err);
@@ -865,16 +872,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const handleLocalCustUpdate = () => syncCustomers();
     window.addEventListener('controlroom_customer_store_updated', handleLocalCustUpdate);
     window.addEventListener('controlroom_storage_update', handleLocalCustUpdate);
+    window.addEventListener('controlroom_crm_update', handleLocalCustUpdate);
+    window.addEventListener('businz_crm_update', handleLocalCustUpdate);
+    window.addEventListener('controlroom_customer_update', handleLocalCustUpdate);
     window.addEventListener('storage', handleLocalCustUpdate);
 
     return () => {
       isMounted = false;
-      if (realtimeCustSub && realtimeCustSub.unsubscribe) realtimeCustSub.unsubscribe();
+      if (realtimeCustSub && typeof realtimeCustSub === 'function') realtimeCustSub();
       window.removeEventListener('controlroom_customer_store_updated', handleLocalCustUpdate);
       window.removeEventListener('controlroom_storage_update', handleLocalCustUpdate);
+      window.removeEventListener('controlroom_crm_update', handleLocalCustUpdate);
+      window.removeEventListener('businz_crm_update', handleLocalCustUpdate);
+      window.removeEventListener('controlroom_customer_update', handleLocalCustUpdate);
       window.removeEventListener('storage', handleLocalCustUpdate);
     };
   }, []);
+
 
   // Full 285+ Standardized Products Catalog with Live Central Inventory Stock
   const [itemsList, setItemsList] = useState(() => getFullProductsCatalogWithStock());
@@ -1012,7 +1026,46 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [creditDays, setCreditDays] = useState('');
   const [remarks, setRemarks] = useState('');
 
-  // Customer auto-suggest handler
+  // Customer dropdown toggle & click-outside ref
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target)) {
+        setIsCustomerDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Deduplicated list of all registered customers for the dropdown
+  const uniqueCustomerList = useMemo(() => {
+    return (customerList || []).reduce((acc, c) => {
+      const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
+      if (name && !acc.some(item => (item.companyName || item.name || item.c2 || item.code || '').trim().toLowerCase() === name.toLowerCase())) {
+        acc.push(c);
+      }
+      return acc;
+    }, []);
+  }, [customerList]);
+
+  // Filtered customer suggestions based on user typing
+  const filteredCustomerSuggestions = useMemo(() => {
+    const q = (vendorName || '').toLowerCase().trim();
+    if (!q) return uniqueCustomerList;
+    return uniqueCustomerList.filter(c => {
+      const name = (c.companyName || c.name || c.c2 || c.code || '').toLowerCase();
+      const gst = (c.gst || c.gstNumber || c.gstNo || c.gstin || '').toLowerCase();
+      const city = (c.city || '').toLowerCase();
+      const contact = (c.contact || c.contactPerson || c.primaryContact?.name || '').toLowerCase();
+      const phone = (c.phone || c.mobile || c.primaryContact?.phone || '').toLowerCase();
+      return name.includes(q) || gst.includes(q) || city.includes(q) || contact.includes(q) || phone.includes(q);
+    });
+  }, [uniqueCustomerList, vendorName]);
+
+  // Customer auto-suggest handler with full field population
   const handleSelectCustomer = (cName) => {
     setVendorName(cName);
     const cleanSearch = (cName || '').toLowerCase().trim();
@@ -1027,21 +1080,48 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
 
     if (found) {
-      if (found.gst || found.gstNumber || found.gstNo) setGstNo(found.gst || found.gstNumber || found.gstNo);
-      if (found.contact || found.contactPerson) setContactPerson(found.contact || found.contactPerson);
-      if (found.phone) setPhone(found.phone);
-      if (found.email) setEmail(found.email);
-      if (found.paymentTerms) setPaymentTerms(found.paymentTerms);
-      const street = found.billingAddress || found.street || found.address || '';
+      const gstVal = found.gst || found.gstNumber || found.gstNo || found.gstin || '';
+      if (gstVal) setGstNo(gstVal);
+
+      const contactVal = found.contact || found.contactPerson || found.primaryContact?.name || '';
+      if (contactVal) setContactPerson(contactVal);
+
+      const phoneVal = found.phone || found.mobile || found.primaryContact?.phone || found.primaryContact?.whatsapp || '';
+      if (phoneVal) setPhone(phoneVal);
+
+      const emailVal = found.email || found.primaryContact?.email || '';
+      if (emailVal) setEmail(emailVal);
+
+      const termsVal = found.paymentTerms || '';
+      if (termsVal) setPaymentTerms(termsVal);
+
+      const bAddrObj = found.billingAddressObj || {};
+      const street = found.billingAddress || found.street || found.address || bAddrObj.address || '';
+      const city = found.city || bAddrObj.city || '';
+      const state = found.state || bAddrObj.state || '';
+      const pincode = found.pincode || found.zip || bAddrObj.pincode || '';
+
       if (street) setBillingStreet(street);
-      if (found.city) setBillingCity(found.city);
-      if (found.state) setBillingState(found.state);
-      if (found.pincode) setBillingPincode(found.pincode);
+      if (city) setBillingCity(city);
+      if (state) setBillingState(state);
+      if (pincode) setBillingPincode(pincode);
+
+      const dAddrObj = found.deliveryAddressObj || {};
+      const dStreet = found.deliveryAddress || found.dispatchAddress || dAddrObj.address || street;
+      const dCity = found.dispatchCity || dAddrObj.city || city;
+      const dState = found.dispatchState || dAddrObj.state || state;
+      const dPincode = found.dispatchPincode || dAddrObj.pincode || pincode;
+
       if (sameAsBilling) {
         if (street) setDeliveryStreet(street);
-        if (found.city) setDeliveryCity(found.city);
-        if (found.state) setDeliveryState(found.state);
-        if (found.pincode) setDeliveryPincode(found.pincode);
+        if (city) setDeliveryCity(city);
+        if (state) setDeliveryState(state);
+        if (pincode) setDeliveryPincode(pincode);
+      } else {
+        if (dStreet) setDeliveryStreet(dStreet);
+        if (dCity) setDeliveryCity(dCity);
+        if (dState) setDeliveryState(dState);
+        if (dPincode) setDeliveryPincode(dPincode);
       }
     }
   };
@@ -3353,30 +3433,64 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
               {/* Row 1: Customer Contact details */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                <div>
+                <div ref={customerDropdownRef} style={{ position: 'relative' }}>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Company Name <span style={{ color: '#EF4444' }}>*</span>
                   </label>
-                  <input
-                    id="pi-field-vendorName"
-                    type="text"
-                    list="pi-customers-datalist"
-                    placeholder="Search or enter company..."
-                    value={vendorName}
-                    onChange={(e) => handleSelectCustomer(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      id="pi-field-vendorName"
+                      type="text"
+                      list="pi-customers-datalist"
+                      placeholder="Type or select company..."
+                      value={vendorName}
+                      onChange={(e) => {
+                        handleSelectCustomer(e.target.value);
+                        setIsCustomerDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsCustomerDropdownOpen(true)}
+                      style={{
+                        width: '100%',
+                        height: '42px',
+                        borderRadius: '10px',
+                        border: isCustomerDropdownOpen ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
+                        padding: '0 36px 0 14px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        backgroundColor: '#FFFFFF',
+                        boxShadow: isCustomerDropdownOpen ? '0 0 0 3px rgba(14, 116, 144, 0.1)' : 'none'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerDropdownOpen(prev => !prev)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#64748B'
+                      }}
+                      title="Toggle customer list"
+                    >
+                      <ChevronDown size={16} style={{ transform: isCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+                    </button>
+                  </div>
+
+                  {/* Fallback HTML datalist */}
                   <datalist id="pi-customers-datalist">
-                    {(customerList || []).reduce((acc, c) => {
+                    {uniqueCustomerList.map((c, idx) => {
                       const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
-                      if (name && !acc.some(item => (item.companyName || item.name || item.c2 || item.code || '').trim().toLowerCase() === name.toLowerCase())) {
-                        acc.push(c);
-                      }
-                      return acc;
-                    }, []).map((c, idx) => {
-                      const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
-                      const gst = c.gst || c.gstNumber || c.gstNo;
-                      const contact = c.contact || c.contactPerson;
+                      const gst = c.gst || c.gstNumber || c.gstNo || c.gstin;
+                      const contact = c.contact || c.contactPerson || c.primaryContact?.name;
                       const city = c.city || '';
                       const details = [gst ? `GST: ${gst}` : null, contact ? `Contact: ${contact}` : null, city].filter(Boolean).join(' • ');
                       return (
@@ -3386,6 +3500,110 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       );
                     })}
                   </datalist>
+
+                  {/* Custom Searchable Scrollable Dropdown List with ALL 61+ Customers */}
+                  {isCustomerDropdownOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      border: '1px solid #CBD5E1',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      zIndex: 9999,
+                      maxHeight: '280px',
+                      overflowY: 'auto',
+                      padding: '4px'
+                    }}>
+                      <div style={{
+                        padding: '6px 10px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        color: '#64748B',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '6px',
+                        marginBottom: '4px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>SHOWING {filteredCustomerSuggestions.length} OF {uniqueCustomerList.length} REGISTERED CUSTOMERS</span>
+                        {vendorName && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVendorName('');
+                            }}
+                            style={{ border: 'none', background: 'transparent', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: 0 }}
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+
+                      {filteredCustomerSuggestions.length === 0 ? (
+                        <div style={{ padding: '14px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
+                          No matching customers found for "{vendorName}". You can continue typing to use this new company.
+                        </div>
+                      ) : (
+                        filteredCustomerSuggestions.map((c, idx) => {
+                          const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
+                          const gst = c.gst || c.gstNumber || c.gstNo || c.gstin;
+                          const contact = c.contact || c.contactPerson || c.primaryContact?.name;
+                          const phone = c.phone || c.mobile || c.primaryContact?.phone;
+                          const city = c.city || c.billingAddressObj?.city;
+                          const isSelected = name.toLowerCase() === (vendorName || '').toLowerCase().trim();
+
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                handleSelectCustomer(name);
+                                setIsCustomerDropdownOpen(false);
+                              }}
+                              style={{
+                                padding: '9px 12px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                backgroundColor: isSelected ? '#ECFEFF' : 'transparent',
+                                borderLeft: isSelected ? '3px solid #0E7490' : '3px solid transparent',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                transition: 'background-color 0.1s ease',
+                                gap: '8px'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: isSelected ? '#0E7490' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {name}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                  {contact && <span>👤 {contact}</span>}
+                                  {phone && <span>📞 {phone}</span>}
+                                  {city && <span>📍 {city}</span>}
+                                </div>
+                              </div>
+                              {gst && (
+                                <span style={{ fontSize: '10px', fontWeight: '700', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                  GST: {gst}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

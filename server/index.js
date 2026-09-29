@@ -334,9 +334,22 @@ const toConsumerBomServer = (row) => {
     extraData = { ...row.accounts_verification._extra_data };
   }
 
+  const isAccVerified = row.accounts_verified !== undefined
+    ? Boolean(row.accounts_verified)
+    : Boolean(
+        (row.status && String(row.status).toLowerCase().includes('accounts verified')) ||
+        row.invoice_confirmed ||
+        row.invoice_no
+      );
   const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
     ? { ...row.accounts_verification }
-    : {};
+    : {
+        verified: isAccVerified,
+        verifiedBy: row.accounts_verified_by || '',
+        paymentStatus: row.accounts_payment_status || null,
+        paymentDate: row.accounts_payment_date || null,
+        totalAmount: row.accounts_total_amount !== undefined ? row.accounts_total_amount : null
+      };
   delete cleanAccountsVerification._extra_data;
 
   const parseDoc = (doc) => {
@@ -668,10 +681,11 @@ const loadDatabaseBoms = async () => {
   }
 
   try {
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 1500));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 5000));
+    const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
     const fetchPromise = supabase
       .from('bom_orders')
-      .select('*')
+      .select(BOM_LIST_COLUMNS)
       .neq('customer_name', 'Customer')
       .order('created_at', { ascending: false });
 
@@ -750,7 +764,7 @@ const getDatabaseStore = async (key) => {
   if (cleanKey === 'crm_leads' || cleanKey === 'leads') {
     return await loadDatabaseLeads();
   }
-  if (cleanKey === 'bom_store' || cleanKey === 'boms') {
+  if (cleanKey === 'bom_store' || cleanKey === 'boms' || cleanKey === 'bom_orders') {
     return await loadDatabaseBoms();
   }
 
@@ -777,7 +791,7 @@ const getDatabaseStore = async (key) => {
 
   const employeeKey = key.toUpperCase();
   try {
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase store fetch timeout')), 1500));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase store fetch timeout')), 5000));
     const fetchPromise = supabase
       .from('leaves')
       .select('id, reason, dates, duration')
@@ -2164,6 +2178,29 @@ app.post('/api/store/:key', async (req, res) => {
     } else if (key === 'presets_store' && storeData && typeof storeData === 'object' && !Array.isArray(storeData)) {
       const current = await getDatabaseStore(key);
       finalDataToSave = { ...(current || {}), ...storeData };
+    } else if (storeData && typeof storeData === 'object' && !Array.isArray(storeData) && key !== 'company_branding_store') {
+      const currentData = await getDatabaseStore(key);
+      const list = Array.isArray(currentData) ? [...currentData] : (currentData && typeof currentData === 'object' && Object.keys(currentData).length > 0 ? [currentData] : []);
+      const getId = (item) => {
+        if (!item || typeof item !== 'object') return null;
+        return item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.poNo || item.grnNo || item.vendorCode || item.email || item.name;
+      };
+      const singleId = getId(storeData);
+      const existingIdx = singleId ? list.findIndex(it => getId(it) === singleId) : -1;
+      if (existingIdx !== -1) {
+        list[existingIdx] = { ...list[existingIdx], ...storeData };
+      } else {
+        list.unshift(storeData);
+      }
+      finalDataToSave = list;
+    }
+
+    if (key === 'invoice_store' && Array.isArray(finalDataToSave)) {
+      finalDataToSave.forEach(inv => {
+        if (inv?.vehicleLoading?.lrCopyDoc?.dataUrl && inv.vehicleLoading.lrCopyDoc.dataUrl.length > 50000) {
+          delete inv.vehicleLoading.lrCopyDoc.dataUrl;
+        }
+      });
     }
 
     if ((key === 'raw_materials_store' || key === 'item_store') && Array.isArray(finalDataToSave)) {
@@ -4491,6 +4528,31 @@ app.get('/api/boms/:id', async (req, res) => {
   }
 });
 
+// Single BOM accounts verification read endpoint (Only fetch accounts_verification on-demand for one order)
+app.get('/api/boms/:id/accounts-verification', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const cleanId = String(id).trim();
+    const { data, error } = await supabase
+      .from('bom_orders')
+      .select('accounts_verification')
+      .or(`id.eq.${cleanId},bom_code.eq.${cleanId}`)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    const raw = data?.accounts_verification || {};
+    const clean = (typeof raw === 'object') ? { ...raw } : {};
+    delete clean._extra_data;
+
+    return res.json({ success: true, data: clean });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/reset-all-testing-data', async (req, res) => {
   try {
     // 1. Reset invoice store and sequence (Preserve legacy public.leaves BOM_STORE row 2 for rollback)
@@ -5664,8 +5726,23 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
 
 // Endpoint to GET Sales Invoices from Zoho Books & Local Store
 app.get('/api/zoho/invoices', async (req, res) => {
+  const getCleanLocalInvoices = () => {
+    const raw = supabaseMemoryStore['invoice_store'];
+    const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Object.keys(raw).length > 0 ? [raw] : []);
+    return list.map(inv => {
+      if (!inv || typeof inv !== 'object') return inv;
+      if (inv.vehicleLoading?.lrCopyDoc?.dataUrl && inv.vehicleLoading.lrCopyDoc.dataUrl.length > 50000) {
+        const copy = { ...inv, vehicleLoading: { ...inv.vehicleLoading, lrCopyDoc: { ...inv.vehicleLoading.lrCopyDoc } } };
+        delete copy.vehicleLoading.lrCopyDoc.dataUrl;
+        return copy;
+      }
+      return inv;
+    });
+  };
+
+  const localInvoices = getCleanLocalInvoices();
+
   if (!zohoSession.connected) {
-    const localInvoices = supabaseMemoryStore['invoice_store'] || [];
     return res.json(localInvoices);
   }
 
@@ -5690,10 +5767,9 @@ app.get('/api/zoho/invoices', async (req, res) => {
       zohoId: inv.invoice_id
     }));
 
-    // Merge with local invoice store
-    const localInvoices = supabaseMemoryStore['invoice_store'] || [];
+    // Merge with local invoice store safely
     localInvoices.forEach(li => {
-      const matchIdx = translated.findIndex(t => t.invNo === li.invNo || t.id === li.id || t.zohoId === li.zohoId);
+      const matchIdx = translated.findIndex(t => t.invNo === li.invNo || t.id === li.id || (li.zohoId && t.zohoId === li.zohoId));
       if (matchIdx === -1) {
         translated.unshift(li);
       }
@@ -5701,8 +5777,7 @@ app.get('/api/zoho/invoices', async (req, res) => {
 
     res.json(translated);
   } catch (err) {
-    console.error('Error fetching Zoho Invoices:', err);
-    const localInvoices = supabaseMemoryStore['invoice_store'] || [];
+    console.error('Error fetching Zoho Invoices:', err?.message || err);
     res.json(localInvoices);
   }
 });

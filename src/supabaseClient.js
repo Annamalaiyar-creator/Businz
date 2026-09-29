@@ -59,6 +59,10 @@ rawSupabase.from = (table) => {
 
     const rawSelect = query.select.bind(query);
     query.select = (...args) => {
+      // Egress Protection: If select is wildcard or empty, project only lightweight columns (never heavy _extra_data)
+      if (!args[0] || args[0] === '*' || args[0].trim() === '') {
+        args[0] = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
+      }
       const selectBuilder = rawSelect(...args);
       return selectBuilder.neq('customer_name', 'Customer');
     };
@@ -87,6 +91,15 @@ rawSupabase.from = (table) => {
         return rawInsert(values, options);
       }
       return rawInsert(values, options);
+    };
+
+    const rawSelect = query.select.bind(query);
+    query.select = (...args) => {
+      // Egress Protection: If select is wildcard or empty, project only required invoice columns
+      if (!args[0] || args[0] === '*' || args[0].trim() === '') {
+        args[0] = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+      }
+      return rawSelect(...args);
     };
   }
   return query;

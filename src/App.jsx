@@ -283,6 +283,14 @@ function App() {
     }
   };
 
+  // Ensure Billing / Invoice Executive role cannot land on removed Payments or Spend pages
+  useEffect(() => {
+    if ((userRole === 'Billing' || userRole === 'Invoice Executive') && 
+        (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports')) {
+      handleTabChange('Invoice Management');
+    }
+  }, [userRole, activeTab]);
+
   const toggleSidebar = () => {
     const nextState = !sidebarCollapsed;
     setSidebarCollapsed(nextState);
@@ -554,7 +562,7 @@ function App() {
               }} 
             />
           ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? (
-            <VRMTemplateStudioView onBackToPI={() => handleTabChange('Proforma Invoice')} />
+            <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange('Proforma Invoice')} />
           ) : activeTab === 'Purchase Orders' ? (
             <PurchaseOrdersView 
               userRole={userRole} 

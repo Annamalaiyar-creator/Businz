@@ -26,6 +26,24 @@ import {
 } from '../../services/crmStore';
 import { fetchCloudStore, saveCloudStore, saveCloudOpportunityRow, deleteCloudOpportunityRow } from '../../utils/supabaseDataSync';
 
+// Fast shallow list equality check to prevent unnecessary re-renders and flickering
+function areListsEqual(a, b, idKey = 'id') {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const itemA = a[i];
+    const itemB = b[i];
+    if (itemA === itemB) continue;
+    if (!itemA || !itemB) return false;
+    const idA = itemA[idKey] || itemA.code || itemA.customerCode || itemA.quoteNumber;
+    const idB = itemB[idKey] || itemB.code || itemB.customerCode || itemB.quoteNumber;
+    if (idA !== idB) return false;
+    if ((itemA.updatedAt || itemA.stage || itemA.dealValue || itemA.status) !== (itemB.updatedAt || itemB.stage || itemB.dealValue || itemB.status)) return false;
+  }
+  return true;
+}
+
 export default function SalesCrmEngine({
   userRole = 'Sales Executive',
   activeTab: controlledTab,
@@ -64,6 +82,8 @@ export default function SalesCrmEngine({
   // Live Supabase Cloud + Zoho sync on mount
   useEffect(() => {
     let isMounted = true;
+    let syncDebounceTimer = null;
+
     const syncCloudCrm = async () => {
       try {
         const [cloudCust, cloudLeads, cloudOpps, cloudQuotes] = await Promise.all([
@@ -74,32 +94,37 @@ export default function SalesCrmEngine({
         ]);
 
         if (isMounted) {
-          if (Array.isArray(cloudCust) && cloudCust.length > 0) setCustomers(cloudCust);
-          if (Array.isArray(cloudLeads) && cloudLeads.length > 0) setLeads(cloudLeads);
-          if (Array.isArray(cloudOpps) && cloudOpps.length > 0) setOpportunities(cloudOpps);
-          if (Array.isArray(cloudQuotes) && cloudQuotes.length > 0) setQuotations(cloudQuotes);
+          if (Array.isArray(cloudLeads) && cloudLeads.length > 0) setLeads(prev => areListsEqual(prev, cloudLeads) ? prev : cloudLeads);
+          if (Array.isArray(cloudOpps) && cloudOpps.length > 0) setOpportunities(prev => areListsEqual(prev, cloudOpps) ? prev : cloudOpps);
+          if (Array.isArray(cloudQuotes) && cloudQuotes.length > 0) setQuotations(prev => areListsEqual(prev, cloudQuotes) ? prev : cloudQuotes);
         }
 
-        // Also fetch live Zoho Customers
-        const res = await fetch('/api/zoho/customers');
-        if (res.ok) {
-          const liveList = await res.json();
-          if (isMounted && Array.isArray(liveList) && liveList.length > 0) {
-            setCustomers(prev => {
-              const map = new Map();
-              prev.forEach(c => {
-                const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
-                if (k) map.set(k, c);
-              });
-              liveList.forEach(c => {
-                const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
-                if (k) {
-                  map.set(k, { ...(map.get(k) || {}), ...c });
-                }
-              });
-              const unified = Array.from(map.values());
-              return unified;
-            });
+        // Fetch live Zoho Customers
+        let liveList = [];
+        try {
+          const res = await fetch('/api/zoho/customers');
+          if (res.ok) {
+            const zData = await res.json();
+            if (Array.isArray(zData)) liveList = zData;
+          }
+        } catch (_) {}
+
+        if (isMounted) {
+          // Atomic single update: merge cloud and live Zoho without double-setting state
+          const map = new Map();
+          (cloudCust || []).forEach(c => {
+            const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
+            if (k) map.set(k, c);
+          });
+          liveList.forEach(c => {
+            const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
+            if (k) {
+              map.set(k, { ...(map.get(k) || {}), ...c });
+            }
+          });
+          const unified = Array.from(map.values());
+          if (unified.length > 0) {
+            setCustomers(prev => areListsEqual(prev, unified, 'customerCode') ? prev : unified);
           }
         }
       } catch (err) {
@@ -108,9 +133,10 @@ export default function SalesCrmEngine({
     };
     syncCloudCrm();
 
-    // Instant Real-Time Push Listener for WhatsApp messages & CRM updates
+    // Instant Real-Time Push Listener for WhatsApp messages & CRM updates (debounced)
     const handleCrmPush = (e) => {
-      syncCloudCrm();
+      clearTimeout(syncDebounceTimer);
+      syncDebounceTimer = setTimeout(syncCloudCrm, 600);
       if (e?.detail?.from && e?.detail?.text) {
         const { from, text, timestamp, formattedPhone } = e.detail;
         setConversations(prev => {
@@ -169,38 +195,37 @@ export default function SalesCrmEngine({
 
     window.addEventListener('controlroom_opportunity_update', handleOppRealtime);
     window.addEventListener('controlroom_whatsapp_message', handleCrmPush);
-    window.addEventListener('controlroom_crm_updated', syncCloudCrm);
-    window.addEventListener('controlroom_storage_update', syncCloudCrm);
 
     return () => {
       isMounted = false;
       window.removeEventListener('controlroom_opportunity_update', handleOppRealtime);
       window.removeEventListener('controlroom_whatsapp_message', handleCrmPush);
-      window.removeEventListener('controlroom_crm_updated', syncCloudCrm);
-      window.removeEventListener('controlroom_storage_update', syncCloudCrm);
     };
   }, []);
 
   // Save Handlers
   const handleBatchUpdateCustomers = (customerList) => {
     if (!Array.isArray(customerList) || customerList.length === 0) return;
-    setCustomers(prev => {
-      const map = new Map();
-      prev.forEach(c => {
-        const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
-        if (k) map.set(k, c);
-      });
-      customerList.forEach(c => {
-        const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
-        if (k) {
-          map.set(k, { ...(map.get(k) || {}), ...c });
-        }
-      });
-      const unified = Array.from(map.values());
-      saveCrmStore('customers', unified);
-      saveCloudStore('customer_store', unified);
-      return unified;
+    const map = new Map();
+    (customers || []).forEach(c => {
+      const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
+      if (k) map.set(k, c);
     });
+    customerList.forEach(c => {
+      const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
+      if (k) {
+        map.set(k, { ...(map.get(k) || {}), ...c });
+      }
+    });
+    const unified = Array.from(map.values());
+    setCustomers(unified);
+    saveCrmStore('customers', unified);
+    saveCloudStore('customer_store', unified);
+    try {
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(unified));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(unified));
+      window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: unified }));
+    } catch (e) {}
   };
 
   const handleSaveLead = (lead) => {
@@ -289,7 +314,10 @@ export default function SalesCrmEngine({
     // Also sync to Supabase canonical customers table so BOM creation and all views pick it up immediately
     try {
       saveCloudStore('customer_store', customer);
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(updated));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: customer }));
+      window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: updated }));
     } catch (e) {
       console.warn('Error syncing customer to cloud store:', e);
     }
