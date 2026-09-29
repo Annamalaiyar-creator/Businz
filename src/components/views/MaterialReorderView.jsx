@@ -102,15 +102,7 @@ export default function MaterialReorderView(props) {
     ];
   });
 
-  // Sync customerList with Supabase cloud database
-  const isInitialCustMount = useRef(true);
-  useEffect(() => {
-    if (isInitialCustMount.current) {
-      isInitialCustMount.current = false;
-      return;
-    }
-    saveCloudStore('customer_store', customerList);
-  }, [customerList]);
+
 
   const [customerActionMenuIdx, setCustomerActionMenuIdx] = useState(null);
   const [viewingCustomer, setViewingCustomer] = useState(null);
@@ -1558,9 +1550,8 @@ export default function MaterialReorderView(props) {
     return INITIAL_QUOTATIONS;
   });
 
-  useEffect(() => {
-    saveCloudStore('quotations_store', quotationsList);
-  }, [quotationsList]);
+  // quotationsList auto-save removed to prevent cloud feedback loop
+
 
   useEffect(() => {
     fetchCloudStore('quotations_store', quotationsList).then(data => {
@@ -1703,9 +1694,8 @@ export default function MaterialReorderView(props) {
     return INITIAL_PAYMENTS;
   });
 
-  useEffect(() => {
-    saveCloudStore('payment_store', paymentList);
-  }, [paymentList]);
+  // paymentList auto-save removed to prevent cloud feedback loop
+
 
   // Vendor Performance scorecard
   const vendorPerformance = [
