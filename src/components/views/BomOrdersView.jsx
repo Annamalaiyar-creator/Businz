@@ -163,8 +163,15 @@ export default function BomOrdersView(props) {
               return dateB - dateA;
             });
             const cleaned = sorted.map(stripDataUrlsFromRecord);
-            setBomStore(cleaned);
-            safeSaveBomStoreToLocal(cleaned);
+            setBomStore(prev => {
+              if (Array.isArray(prev) && prev.length === cleaned.length) {
+                try {
+                  if (JSON.stringify(prev) === JSON.stringify(cleaned)) return prev;
+                } catch (_) {}
+              }
+              safeSaveBomStoreToLocal(cleaned);
+              return cleaned;
+            });
           }
         }
 
@@ -183,7 +190,14 @@ export default function BomOrdersView(props) {
               }
             }
             if (Array.isArray(custs) && custs.length > 0) {
-              setCustomerList(custs);
+              setCustomerList(prev => {
+                if (Array.isArray(prev) && prev.length === custs.length) {
+                  try {
+                    if (JSON.stringify(prev) === JSON.stringify(custs)) return prev;
+                  } catch (_) {}
+                }
+                return custs;
+              });
             }
           } catch (_) {}
         })();
@@ -202,8 +216,15 @@ export default function BomOrdersView(props) {
       if (Array.isArray(updatedBoms)) {
         const { list: resolvedList } = resolveBomCollisions(updatedBoms, 658);
         const cleaned = resolvedList.map(stripDataUrlsFromRecord);
-        setBomStore(cleaned);
-        safeSaveBomStoreToLocal(cleaned);
+        setBomStore(prev => {
+          if (Array.isArray(prev) && prev.length === cleaned.length) {
+            try {
+              if (JSON.stringify(prev) === JSON.stringify(cleaned)) return prev;
+            } catch (_) {}
+          }
+          safeSaveBomStoreToLocal(cleaned);
+          return cleaned;
+        });
         setTableLoading(false);
       } else if (updatedBoms && typeof updatedBoms === 'object') {
         if (updatedBoms._deleted && updatedBoms.id) {

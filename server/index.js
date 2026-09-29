@@ -4930,7 +4930,7 @@ app.post('/api/boms', async (req, res) => {
             const mergedBom = map.get(finalCode) || bom;
             const dbRow = toDatabaseBomRowServer(mergedBom);
             if (dbRow) {
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase single BOM upsert timeout')), 2500));
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase single BOM upsert timeout')), 5000));
               const upsertPromise = supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
               const { error: upsertErr } = await Promise.race([upsertPromise, timeoutPromise]);
               if (upsertErr) console.warn('[POST /api/boms] Single row upsert notice:', upsertErr.message);
@@ -4940,7 +4940,7 @@ app.post('/api/boms', async (req, res) => {
           }
 
           try {
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 1500));
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 5000));
             const seqPromise = supabase.from('leaves').update({
               reason: JSON.stringify({ lastNumber: serverBomSequenceCounter, updatedAt: new Date().toISOString() }),
               duration: String(serverBomSequenceCounter),

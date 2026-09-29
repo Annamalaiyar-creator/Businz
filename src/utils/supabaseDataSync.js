@@ -1169,7 +1169,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     // 1. Try local server memory cache first (Zero Supabase PostgREST egress)
     try {
       const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 1200);
+      const tId = setTimeout(() => controller.abort(), 5000);
       const res = await fetch('/api/boms', { signal: controller.signal }).catch(() => null);
       clearTimeout(tId);
       if (res && res.ok) {
@@ -1204,7 +1204,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     // 1. Try local server memory/zoho cache first (Zero Supabase PostgREST egress)
     try {
       const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 1200);
+      const tId = setTimeout(() => controller.abort(), 5000);
       const res = await fetch('/api/zoho/invoices', { signal: controller.signal }).catch(() => null);
       clearTimeout(tId);
       if (res && res.ok) {
@@ -1273,7 +1273,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`/api/store/${storeKey}`, { signal: controller.signal }).catch(() => null);
     clearTimeout(timeoutId);
     if (res && res.ok) {
@@ -1303,7 +1303,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   // For employees_store, fetch directly from Supabase users table (with 1.5s timeout)
   if (storeKey === 'employees_store') {
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 1500));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
       const fetchPromise = supabase.from('users').select('*');
       const { data: dbUsers, error: userErr } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -1932,11 +1932,21 @@ export async function getAndReserveNextBomCode(commit = true) {
 export function subscribeToCloudStore(storeKey, onUpdateCallback) {
   try {
     const employeeKey = storeKey.toUpperCase();
+    let lastEmittedJson = '';
+    const safeEmit = (data) => {
+      if (data === undefined || data === null) return;
+      try {
+        const json = JSON.stringify(data);
+        if (json === lastEmittedJson) return;
+        lastEmittedJson = json;
+      } catch (_) {}
+      onUpdateCallback(data);
+    };
     
     // Window-level broadcast listener for cross-component sync
     const handleLocalUpdate = (e) => {
       if (e?.detail?.storeKey === storeKey && e?.detail?.data !== undefined) {
-        onUpdateCallback(e.detail.data);
+        safeEmit(e.detail.data);
       }
     };
     window.addEventListener('controlroom_store_update', handleLocalUpdate);
@@ -1973,37 +1983,37 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
         async (payload) => {
           if (storeKey === 'employees_store') {
             const list = await fetchCloudStore('employees_store', []);
-            onUpdateCallback(list);
+            safeEmit(list);
           } else if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
             const list = await fetchCloudStore('customer_store', []);
-            onUpdateCallback(list);
+            safeEmit(list);
           } else if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
             const list = await fetchCloudStore('crm_opportunities', []);
-            onUpdateCallback(list);
+            safeEmit(list);
           } else if (isBomStore) {
             // NEVER download the entire table on a Realtime row event!
             if (payload && payload.new) {
               const singleBom = toConsumerBom(payload.new);
               if (singleBom) {
-                onUpdateCallback(singleBom);
+                safeEmit(singleBom);
               }
             } else if (payload && payload.eventType === 'DELETE' && payload.old) {
-              onUpdateCallback({ id: payload.old.id, _deleted: true });
+              safeEmit({ id: payload.old.id, _deleted: true });
             }
           } else if (isInvoiceStore) {
             // NEVER download the entire table on a Realtime row event!
             if (payload && payload.new) {
               const singleInv = toConsumerInvoice(payload.new);
               if (singleInv) {
-                onUpdateCallback(singleInv);
+                safeEmit(singleInv);
               }
             } else if (payload && payload.eventType === 'DELETE' && payload.old) {
-              onUpdateCallback({ id: payload.old.id, _deleted: true });
+              safeEmit({ id: payload.old.id, _deleted: true });
             }
           } else if (payload && payload.new && payload.new.reason) {
             try {
               const parsed = JSON.parse(payload.new.reason);
-              onUpdateCallback(parsed);
+              safeEmit(parsed);
             } catch (_) {}
           }
         }

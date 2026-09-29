@@ -314,14 +314,28 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         return [...mergedIncoming, ...localOnly];
       };
 
+      const updateIfChanged = (incoming) => {
+        setPoList(prev => {
+          const merged = mergeWithPrev(incoming, prev);
+          if (Array.isArray(prev) && prev.length === merged.length) {
+            try {
+              if (JSON.stringify(prev) === JSON.stringify(merged)) {
+                return prev;
+              }
+            } catch (_) {}
+          }
+          return merged;
+        });
+      };
+
       if (Array.isArray(safePOs) && safePOs.length > 0) {
-        setPoList(prev => mergeWithPrev(safePOs, prev));
+        updateIfChanged(safePOs);
       } else {
         const response = await fetchWithTimeout('/api/zoho/purchaseorders', { timeout: 25000 }).catch(() => null);
         if (response && response.ok) {
           const zohoPOs = await response.json().catch(() => []);
           if (Array.isArray(zohoPOs)) {
-            setPoList(prev => mergeWithPrev(zohoPOs, prev));
+            updateIfChanged(zohoPOs);
           }
         }
       }
