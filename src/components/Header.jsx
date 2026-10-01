@@ -334,7 +334,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
         )}
 
         <div className="header-brand-prefix" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: '#BAE6FD', fontWeight: '800', fontSize: '13.5px', letterSpacing: '0.5px' }}>BUSINZ</span>
+          <span style={{ color: '#BAE6FD', fontWeight: '800', fontSize: '13.5px', letterSpacing: '0.5px' }}>Businz</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.35)', fontWeight: '300' }}>|</span>
         </div>
 
@@ -873,7 +873,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
                 <span>·</span>
                 <span 
                   style={{ cursor: 'pointer' }}
-                  onClick={() => alert('BUSINZ Terms & Conditions\n\nConfidential internal Enterprise Management Platform for VRM Structures.')}
+                  onClick={() => alert('Businz Terms & Conditions\n\nConfidential internal Enterprise Management Platform for VRM Structures.')}
                 >
                   Terms & Conditions
                 </span>

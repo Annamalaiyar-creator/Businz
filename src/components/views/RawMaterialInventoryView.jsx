@@ -2568,7 +2568,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
-              <span>BUSINZ</span>
+              <span>Businz</span>
               <span>/</span>
               <span>{isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}</span>
               <span>/</span>
@@ -3022,7 +3022,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
               color: '#64748B'
             }}>
               <span>Showing <strong>{filteredLogs.length}</strong> of <strong>{itemAuditLogs.length}</strong> verified events</span>
-              <span style={{ color: '#0E7490', fontWeight: '700' }}>Authoritative BUSINZ Material Traceability Trail</span>
+              <span style={{ color: '#0E7490', fontWeight: '700' }}>Authoritative Businz Material Traceability Trail</span>
             </div>
           </div>
         ) : (

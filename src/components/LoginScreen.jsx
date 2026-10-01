@@ -552,7 +552,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                 }}>
                   <Asterisk style={{ width: '22px', height: '22px', strokeWidth: 3 }} />
                 </div>
-                <span style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.02em' }}>BUSINZ</span>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.02em' }}>Businz</span>
               </div>
             </div>
 

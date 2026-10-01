@@ -237,7 +237,7 @@ export default function Customer360PageView({
                   alignItems: 'center',
                   gap: '5px'
                 }}>
-                  ✨ BUSINZ ACCOUNT
+                  ✨ Businz Account
                 </span>
               )}
             </div>

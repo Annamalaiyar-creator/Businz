@@ -244,7 +244,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
   // Export to Excel / CSV
   const handleExportExcel = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "BUSINZ FINANCE DASHBOARD REPORT\r\n";
+    csvContent += "Businz Finance Dashboard Report\r\n";
     csvContent += `Period,${selectedPeriod} (${fromDate} to ${toDate})\r\n`;
     csvContent += `Financial Year,${financialYear}\r\n`;
     csvContent += `Generated At,${new Date().toLocaleString()}\r\n\r\n`;
@@ -263,7 +263,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `BUSINZ_Finance_Summary_${selectedPeriod}_${fromDate}.csv`);
+    link.setAttribute("download", `Businz_Finance_Summary_${selectedPeriod}_${fromDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -985,7 +985,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
                     </div>
                   </div>
                   <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6' }}>
-                    This statement is synchronized live with the BUSINZ ledger repository. For audit and filing, export to Excel or download the official statement.
+                    This statement is synchronized live with the Businz ledger repository. For audit and filing, export to Excel or download the official statement.
                   </p>
                 </div>
               )}

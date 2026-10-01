@@ -6597,7 +6597,7 @@ export default function BomOrdersView(props) {
                               </span>
                             </div>
                             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                              Retrieving Bill of Materials & verifying live inventory from BUSINZ Cloud...
+                              Retrieving Bill of Materials & verifying live inventory from Businz Cloud...
                             </span>
                           </div>
                         </div>

@@ -2289,7 +2289,7 @@ export default function VendorPerformanceView(props) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `BUSINZ_Vendor_Performance_Summary_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Businz_Vendor_Performance_Summary_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -5022,7 +5022,7 @@ const requireBusinzSession = async (req, res, next) => {
     }
     return res.status(401).json({
       success: false,
-      error: 'Unauthorized: Active BUSINZ session required (x-session-id)'
+      error: 'Unauthorized: Active Businz session required (x-session-id)'
     });
   }
 
@@ -6535,7 +6535,7 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
 
 // Cancel / Decline Proforma Invoice (Estimate / Quote) in Zoho Books and local stores
 app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], async (req, res) => {
-  const { piNo, zohoEstimateId, reason = 'Cancelled by user in BUSINZ' } = req.body;
+  const { piNo, zohoEstimateId, reason = 'Cancelled by user in Businz' } = req.body;
   const cleanPiNo = String(piNo || '').trim();
 
   if (!cleanPiNo && !zohoEstimateId) {
@@ -6662,8 +6662,8 @@ app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], a
   res.json({
     success: true,
     message: zohoDeclined
-      ? `Proforma Invoice ${cleanPiNo} cancelled in BUSINZ and marked as Declined in Zoho Books!`
-      : `Proforma Invoice ${cleanPiNo} marked as Cancelled in BUSINZ.${zohoError ? ` (Zoho: ${zohoError})` : ''}`,
+      ? `Proforma Invoice ${cleanPiNo} cancelled in Businz and marked as Declined in Zoho Books!`
+      : `Proforma Invoice ${cleanPiNo} marked as Cancelled in Businz.${zohoError ? ` (Zoho: ${zohoError})` : ''}`,
     zohoDeclined,
     zohoError
   });

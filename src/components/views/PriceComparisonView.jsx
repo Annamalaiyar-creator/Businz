@@ -2228,7 +2228,7 @@ export default function PriceComparisonView(props) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `BUSINZ_Historical_Price_Analysis_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Businz_Historical_Price_Analysis_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

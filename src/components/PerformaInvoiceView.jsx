@@ -272,7 +272,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         body: JSON.stringify({
           piNo: cleanPiNo,
           zohoEstimateId: piToCancel.zohoEstimateId,
-          reason: 'Cancelled by user in BUSINZ'
+          reason: 'Cancelled by user in Businz'
         })
       });
       const data = await resp.json();
@@ -2518,7 +2518,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     </span>
                                   </div>
                                   <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                                    Retrieving quotation records from BUSINZ Cloud Storage & Zoho Books...
+                                    Retrieving quotation records from Businz Cloud Storage & Zoho Books...
                                   </span>
                                 </div>
                               </div>
