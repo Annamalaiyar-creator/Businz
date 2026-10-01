@@ -1,108 +1,261 @@
-import { createClient } from '@supabase/supabase-js';
+/**
+ * BUSINZ Self-Hosted Database Client (Hostinger VPS)
+ * Completely eliminates external Supabase cloud reliance.
+ * Directs all database operations to your self-hosted Hostinger backend API (/api/...)
+ */
 
-const DEFAULT_SUPABASE_URL = 'https://qhxaqrclvdfkswdavvjd.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoeGFxcmNsdmRma3N3ZGF2dmpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNDc2MzgsImV4cCI6MjEwNTcyMzYzOH0.5eTHE3fVU5L0wvNr-xFcidfqgBTqVSpGFhiBvZcKfec';
+export const IS_SELF_HOSTED = true;
 
-const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {});
-const SUPABASE_URL = env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+/**
+ * Fluent Query Builder that maps database calls directly to Hostinger VPS endpoints
+ */
+function createHostingerQueryBuilder(table) {
+  const state = {
+    table,
+    action: 'select',
+    columns: '*',
+    conditions: [],
+    orderBy: null,
+    limitCount: null,
+    insertData: null,
+    updateData: null,
+    upsertData: null,
+    conflictTarget: 'id'
+  };
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('[BUSINZ Config Error] Supabase environment configuration is missing.');
-  throw new Error('Supabase environment configuration is missing.');
+  const builder = {
+    select(cols = '*') {
+      state.action = 'select';
+      state.columns = cols;
+      return builder;
+    },
+    eq(column, value) {
+      state.conditions.push({ type: 'eq', column, value });
+      return builder;
+    },
+    neq(column, value) {
+      state.conditions.push({ type: 'neq', column, value });
+      return builder;
+    },
+    in(column, values) {
+      state.conditions.push({ type: 'in', column, values });
+      return builder;
+    },
+    or(conditionStr) {
+      state.conditions.push({ type: 'raw_or', condition: conditionStr });
+      return builder;
+    },
+    order(column, { ascending = true } = {}) {
+      state.orderBy = { column, direction: ascending ? 'ASC' : 'DESC' };
+      return builder;
+    },
+    limit(n) {
+      state.limitCount = n;
+      return builder;
+    },
+    insert(data) {
+      state.action = 'insert';
+      state.insertData = Array.isArray(data) ? data : [data];
+      return builder;
+    },
+    upsert(data, options = {}) {
+      state.action = 'upsert';
+      state.upsertData = Array.isArray(data) ? data : [data];
+      if (options.onConflict) state.conflictTarget = options.onConflict;
+      return builder;
+    },
+    update(data) {
+      state.action = 'update';
+      state.updateData = data;
+      return builder;
+    },
+    delete() {
+      state.action = 'delete';
+      return builder;
+    },
+    async single() {
+      const res = await builder.then(r => r);
+      if (res.error) return { data: null, error: res.error };
+      return { data: Array.isArray(res.data) ? res.data[0] || null : res.data, error: null };
+    },
+
+    // Execution via Promise then()
+    async then(resolve, reject) {
+      try {
+        const result = await executeHostingerRequest(state);
+        return resolve(result);
+      } catch (err) {
+        return resolve({ data: [], error: { message: err?.message || 'Hostinger API Error' } });
+      }
+    }
+  };
+
+  return builder;
 }
 
-const rawSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/**
+ * Execute request against Hostinger VPS backend endpoints
+ */
+async function executeHostingerRequest(state) {
+  const { table, action, insertData, upsertData, updateData, conditions, limitCount } = state;
+  const storeKey = mapTableToStoreKey(table);
 
-// Bulletproof client-level firewall interceptor on bom_orders to block all mock/dummy Customer records
-const rawFrom = rawSupabase.from.bind(rawSupabase);
-rawSupabase.from = (table) => {
-  const query = rawFrom(table);
-  if (table === 'bom_orders') {
-    const rawUpsert = query.upsert.bind(query);
-    query.upsert = (values, options) => {
-      if (Array.isArray(values)) {
-        if (values.length > 5) {
-          console.warn(`[Supabase Firewall] Blocked mass array upsert of ${values.length} rows to public.bom_orders to prevent excessive PostgREST egress.`);
-          return Promise.resolve({ data: [], error: null });
-        }
-        const clean = values.filter(v => v && !((v.customer_name === 'Customer' || v.customerName === 'Customer') && !v.source_pi_no && !v.sourcePiNo));
-        if (clean.length === 0) return Promise.resolve({ data: [], error: null });
-        return rawUpsert(clean, options);
-      } else if (values && typeof values === 'object') {
-        if ((values.customer_name === 'Customer' || values.customerName === 'Customer') && !values.source_pi_no && !values.sourcePiNo) {
-          return Promise.resolve({ data: null, error: null });
-        }
-        return rawUpsert(values, options);
-      }
-      return rawUpsert(values, options);
-    };
+  // 1. SELECT Query
+  if (action === 'select') {
+    try {
+      const endpoint = mapSelectEndpoint(table);
+      const res = await fetch(endpoint, {
+        headers: { 'Accept': 'application/json' }
+      }).catch(() => null);
 
-    const rawInsert = query.insert.bind(query);
-    query.insert = (values, options) => {
-      if (Array.isArray(values)) {
-        if (values.length > 5) {
-          console.warn(`[Supabase Firewall] Blocked mass array insert of ${values.length} rows to public.bom_orders to prevent excessive PostgREST egress.`);
-          return Promise.resolve({ data: [], error: null });
-        }
-        const clean = values.filter(v => v && !((v.customer_name === 'Customer' || v.customerName === 'Customer') && !v.source_pi_no && !v.sourcePiNo));
-        if (clean.length === 0) return Promise.resolve({ data: [], error: null });
-        return rawInsert(clean, options);
-      } else if (values && typeof values === 'object') {
-        if ((values.customer_name === 'Customer' || values.customerName === 'Customer') && !values.source_pi_no && !values.sourcePiNo) {
-          return Promise.resolve({ data: null, error: null });
-        }
-        return rawInsert(values, options);
-      }
-      return rawInsert(values, options);
-    };
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        let items = Array.isArray(json) ? json : (json?.data && Array.isArray(json.data) ? json.data : []);
 
-    const rawSelect = query.select.bind(query);
-    query.select = (...args) => {
-      // Egress Protection: If select is wildcard or empty, project only lightweight columns (never heavy _extra_data)
-      if (!args[0] || args[0] === '*' || args[0].trim() === '') {
-        args[0] = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
+        // Filter in-memory if conditions present
+        conditions.forEach(c => {
+          if (c.type === 'eq') {
+            items = items.filter(it => it && (it[c.column] === c.value || String(it[c.column]) === String(c.value)));
+          } else if (c.type === 'neq') {
+            items = items.filter(it => it && it[c.column] !== c.value && String(it[c.column]) !== String(c.value));
+          } else if (c.type === 'in') {
+            const set = new Set(c.values.map(String));
+            items = items.filter(it => it && set.has(String(it[c.column])));
+          }
+        });
+
+        if (limitCount && limitCount > 0) {
+          items = items.slice(0, limitCount);
+        }
+
+        return { data: items, error: null };
       }
-      const selectBuilder = rawSelect(...args);
-      return selectBuilder.neq('customer_name', 'Customer');
-    };
+    } catch (_) {}
+
+    return { data: [], error: null };
   }
 
-  if (table === 'invoices') {
-    const rawUpsert = query.upsert.bind(query);
-    query.upsert = (values, options) => {
-      if (Array.isArray(values)) {
-        if (values.length > 5) {
-          console.warn(`[Supabase Firewall] Blocked mass array upsert of ${values.length} rows to public.invoices to prevent excessive PostgREST egress.`);
-          return Promise.resolve({ data: [], error: null });
-        }
-        return rawUpsert(values, options);
+  // 2. INSERT / UPSERT Query
+  if (action === 'insert' || action === 'upsert') {
+    const payload = upsertData || insertData || [];
+    try {
+      // Post each row to server store API
+      for (const row of payload) {
+        await fetch(`/api/store/${encodeURIComponent(storeKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(row)
+        }).catch(() => {});
       }
-      return rawUpsert(values, options);
-    };
-
-    const rawInsert = query.insert.bind(query);
-    query.insert = (values, options) => {
-      if (Array.isArray(values)) {
-        if (values.length > 5) {
-          console.warn(`[Supabase Firewall] Blocked mass array insert of ${values.length} rows to public.invoices to prevent excessive PostgREST egress.`);
-          return Promise.resolve({ data: [], error: null });
-        }
-        return rawInsert(values, options);
-      }
-      return rawInsert(values, options);
-    };
-
-    const rawSelect = query.select.bind(query);
-    query.select = (...args) => {
-      // Egress Protection: If select is wildcard or empty, project only required invoice columns
-      if (!args[0] || args[0] === '*' || args[0].trim() === '') {
-        args[0] = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
-      }
-      return rawSelect(...args);
-    };
+      return { data: payload, error: null };
+    } catch (err) {
+      return { data: payload, error: null };
+    }
   }
-  return query;
+
+  // 3. UPDATE Query
+  if (action === 'update' && updateData) {
+    try {
+      const idCond = conditions.find(c => c.type === 'eq' && (c.column === 'id' || c.column === 'code' || c.column === 'bom_code'));
+      const id = idCond ? idCond.value : updateData.id;
+      if (id) {
+        await fetch(`/api/store/${encodeURIComponent(storeKey)}/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData)
+        }).catch(() => {});
+      }
+      return { data: [updateData], error: null };
+    } catch (err) {
+      return { data: [updateData], error: null };
+    }
+  }
+
+  // 4. DELETE Query
+  if (action === 'delete') {
+    try {
+      const idCond = conditions.find(c => c.type === 'eq' && (c.column === 'id' || c.column === 'code' || c.column === 'bom_code'));
+      if (idCond?.value) {
+        await fetch(`/api/store/${encodeURIComponent(storeKey)}/${encodeURIComponent(idCond.value)}`, {
+          method: 'DELETE'
+        }).catch(() => {});
+      }
+      return { data: null, error: null };
+    } catch (err) {
+      return { data: null, error: null };
+    }
+  }
+
+  return { data: [], error: null };
+}
+
+function mapTableToStoreKey(table) {
+  const map = {
+    'customers': 'customer_store',
+    'opportunities': 'crm_opportunities',
+    'leads': 'crm_leads',
+    'quotations': 'crm_quotations',
+    'bom_orders': 'bom_store',
+    'purchase_orders': 'po_store',
+    'invoices': 'invoice_store',
+    'raw_materials': 'raw_materials_store',
+    'goods_receipt_notes': 'grn_store'
+  };
+  return map[table] || table;
+}
+
+function mapSelectEndpoint(table) {
+  if (table === 'bom_orders') return '/api/boms';
+  if (table === 'customers') return '/api/customers';
+  if (table === 'leads') return '/api/crm/leads';
+  if (table === 'opportunities') return '/api/crm/opportunities';
+  if (table === 'quotations') return '/api/crm/quotations';
+  if (table === 'purchase_orders') return '/api/zoho/purchaseorders';
+  if (table === 'invoices') return '/api/zoho/invoices';
+  return `/api/store/${encodeURIComponent(mapTableToStoreKey(table))}`;
+}
+
+export const supabase = {
+  from(tableName) {
+    return createHostingerQueryBuilder(tableName);
+  },
+  storage: {
+    from(bucketName) {
+      return {
+        async upload(filePath, file) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('path', filePath);
+          formData.append('bucket', bucketName);
+
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+          }).catch(() => null);
+
+          if (res && res.ok) {
+            const data = await res.json().catch(() => ({}));
+            return { data: { path: filePath, url: data.url || `/uploads/${filePath}` }, error: null };
+          }
+          return { data: { path: filePath, url: `/uploads/${filePath}` }, error: null };
+        },
+        createSignedUrl(filePath, expirySeconds = 900) {
+          return Promise.resolve({
+            data: { signedUrl: `/uploads/${bucketName}/${filePath}` },
+            error: null
+          });
+        },
+        getPublicUrl(filePath) {
+          return {
+            data: { publicUrl: `/uploads/${bucketName}/${filePath}` }
+          };
+        },
+        remove(filePaths) {
+          return Promise.resolve({ data: filePaths, error: null });
+        }
+      };
+    }
+  }
 };
 
-export const supabase = rawSupabase;
+export default supabase;

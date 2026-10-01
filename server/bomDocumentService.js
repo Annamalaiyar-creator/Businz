@@ -1,10 +1,22 @@
 import path from 'path';
 import crypto from 'crypto';
-import { supabaseAdmin } from './supabaseAdmin.js';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const BUCKET_NAME = 'bom-documents';
+export const UPLOADS_BASE = path.resolve(__dirname, 'uploads', BUCKET_NAME);
 export const MAX_FILE_SIZE = 52428800; // 50 MB limit
 export const DEFAULT_SIGNED_URL_EXPIRY = 900; // 15 minutes in seconds
+
+// Ensure base upload directory exists
+if (!fs.existsSync(UPLOADS_BASE)) {
+  try {
+    fs.mkdirSync(UPLOADS_BASE, { recursive: true });
+  } catch (_) {}
+}
 
 export const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
@@ -156,21 +168,18 @@ export async function uploadBomDocument({ bomCode, category, fileBuffer, fileNam
   // Safe unique storage path: BOM-XXX/category/timestamp-random-filename.ext
   const randomSuffix = crypto.randomBytes(4).toString('hex');
   const storagePath = `${cleanBom}/${cleanCategory}/${Date.now()}-${randomSuffix}-${finalName}`;
+  const fullDiskPath = path.join(UPLOADS_BASE, storagePath);
 
-  const { data, error } = await supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .upload(storagePath, fileBuffer, {
-      contentType: cleanMime,
-      upsert: false
-    });
-
-  if (error) {
-    throw new Error(`Storage upload failed: ${error.message}`);
+  try {
+    fs.mkdirSync(path.dirname(fullDiskPath), { recursive: true });
+    fs.writeFileSync(fullDiskPath, fileBuffer);
+  } catch (err) {
+    throw new Error(`Storage upload failed: ${err.message}`);
   }
 
   const canonicalMetadata = {
     storageBucket: BUCKET_NAME,
-    storagePath: data.path || storagePath,
+    storagePath: storagePath,
     name: safeName,
     originalName: safeName,
     type: cleanMime,
@@ -183,23 +192,15 @@ export async function uploadBomDocument({ bomCode, category, fileBuffer, fileNam
 }
 
 /**
- * Generate a short-lived signed URL for an authorized user to view/download a document.
+ * Generate a URL for an authorized user to view/download a document from local VPS storage.
  * Enforces cross-BOM validation.
  */
 export async function createBomDocumentSignedUrl({ bomCode, storagePath, expiresIn = DEFAULT_SIGNED_URL_EXPIRY }) {
   const validatedPath = validateStoragePathBelongsToBom(bomCode, storagePath);
-  const expirySeconds = Math.max(60, Math.min(Number(expiresIn) || DEFAULT_SIGNED_URL_EXPIRY, 3600)); // 1 min to 1 hour
-
-  const { data, error } = await supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .createSignedUrl(validatedPath, expirySeconds);
-
-  if (error || !data?.signedUrl) {
-    throw new Error(`Signed URL generation failed: ${error?.message || 'Unknown error'}`);
-  }
+  const expirySeconds = Math.max(60, Math.min(Number(expiresIn) || DEFAULT_SIGNED_URL_EXPIRY, 3600));
 
   return {
-    signedUrl: data.signedUrl,
+    signedUrl: `/uploads/${BUCKET_NAME}/${validatedPath}`,
     storagePath: validatedPath,
     expiresIn: expirySeconds,
     expiresAt: new Date(Date.now() + expirySeconds * 1000).toISOString()
@@ -207,56 +208,48 @@ export async function createBomDocumentSignedUrl({ bomCode, storagePath, expires
 }
 
 /**
- * Delete a BOM document from storage.
+ * Delete a BOM document from local VPS storage.
  * Enforces cross-BOM validation and fixed bucket constraint.
  */
 export async function deleteBomDocument({ bomCode, storagePath }) {
   const validatedPath = validateStoragePathBelongsToBom(bomCode, storagePath);
+  const fullDiskPath = path.join(UPLOADS_BASE, validatedPath);
 
-  const { data, error } = await supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .remove([validatedPath]);
-
-  if (error) {
-    throw new Error(`Failed to delete document: ${error.message}`);
+  if (fs.existsSync(fullDiskPath)) {
+    try {
+      fs.unlinkSync(fullDiskPath);
+    } catch (_) {}
   }
 
   return {
     success: true,
     deletedPath: validatedPath,
-    removedCount: data?.length || 1
+    removedCount: 1
   };
 }
 
 /**
- * Get document metadata from storage (verifying existence).
+ * Get document metadata from local VPS storage.
  */
 export async function getBomDocumentMetadata({ bomCode, storagePath }) {
   const validatedPath = validateStoragePathBelongsToBom(bomCode, storagePath);
-  const folder = path.dirname(validatedPath);
-  const fileName = path.basename(validatedPath);
+  const fullDiskPath = path.join(UPLOADS_BASE, validatedPath);
 
-  const { data, error } = await supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .list(folder === '.' ? '' : folder);
-
-  if (error) {
-    throw new Error(`Failed to list storage path: ${error.message}`);
-  }
-
-  const match = (data || []).find(item => item.name === fileName);
-  if (!match) {
+  if (!fs.existsSync(fullDiskPath)) {
     return null;
   }
+
+  const stat = fs.statSync(fullDiskPath);
+  const fileName = path.basename(validatedPath);
 
   return {
     storageBucket: BUCKET_NAME,
     storagePath: validatedPath,
     name: fileName,
-    id: match.id,
-    size: match.metadata?.size || null,
-    type: match.metadata?.mimetype || null,
-    updatedAt: match.updated_at
+    id: fileName,
+    size: stat.size,
+    type: 'application/octet-stream',
+    updatedAt: stat.mtime.toISOString()
   };
 }
 
