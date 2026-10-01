@@ -12,7 +12,8 @@ export default function CrmOpportunitiesView({
   onUpdateOpportunity,
   onCreateOpportunity,
   onDeleteOpportunity,
-  onNavigateTab
+  onNavigateTab,
+  isLoading = false
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStageFilter, setSelectedStageFilter] = useState('All');
@@ -294,7 +295,53 @@ export default function CrmOpportunitiesView({
               </tr>
             </thead>
             <tbody>
-              {filteredOpps.length === 0 ? (
+              {isLoading ? (
+                <>
+                  <tr style={{ backgroundColor: '#F0FDFA' }}>
+                    <td
+                      colSpan={7}
+                      style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div className="businz-spin-ring" />
+                          <div style={{ textAlign: 'left' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490' }}>
+                                Loading Opportunities...
+                              </span>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
+                                <span className="businz-pulse-dot" /> Live Cloud Database Sync
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
+                              Retrieving live opportunities from Businz Cloud...
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  {Array.from({ length: 5 }).map((_, sIdx) => (
+                    <tr key={`opp-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
+                        <input type="checkbox" disabled style={{ opacity: 0.3 }} />
+                      </td>
+                      {Array.from({ length: 6 }).map((_, hIdx) => (
+                        <td key={`opp-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
+                          <div
+                            className="skeleton-shimmer skeleton-text"
+                            style={{
+                              width: hIdx === 0 ? '90px' : (hIdx === 1 ? '65%' : '100px'),
+                              height: '14px'
+                            }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </>
+              ) : filteredOpps.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>

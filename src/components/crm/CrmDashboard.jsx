@@ -18,7 +18,8 @@ export default function CrmDashboard({
   onOpenLead,
   onUpdateOpportunityStage,
   onCreateLead,
-  onCreateOpportunity
+  onCreateOpportunity,
+  isLoading = false
 }) {
   const [pipelineViewMode, setPipelineViewMode] = useState('kanban'); // 'kanban' | 'summary'
 
@@ -86,22 +87,18 @@ export default function CrmDashboard({
 
     const list = Object.values(map);
     if (list.length === 0) {
-      return [
-        { name: 'Vijay', totalDeals: 14, wonDeals: 8, wonValue: 2850000, activeValue: 1650000 },
-        { name: 'Mohith JV', totalDeals: 12, wonDeals: 6, wonValue: 2150000, activeValue: 1420000 },
-        { name: 'Balaji', totalDeals: 8, wonDeals: 4, wonValue: 1450000, activeValue: 980000 }
-      ];
+      return [];
     }
     return list.sort((a, b) => (b.wonValue + b.activeValue) - (a.wonValue + a.activeValue));
   }, [opportunities]);
 
   // Conversion Funnel Metrics
   const funnelStages = useMemo(() => {
-    const stage1 = leads.length || 24;
-    const stage2 = opportunities.filter(o => ['Qualified', 'Requirement Received'].includes(o.stage)).length || 18;
-    const stage3 = opportunities.filter(o => ['BOM / Quotation', 'Quotation Sent'].includes(o.stage)).length || 12;
-    const stage4 = opportunities.filter(o => ['Negotiation', 'Confirmation Pending'].includes(o.stage)).length || 8;
-    const stage5 = wonDealsCount || 5;
+    const stage1 = leads.length;
+    const stage2 = opportunities.filter(o => ['Qualified', 'Requirement Received'].includes(o.stage)).length;
+    const stage3 = opportunities.filter(o => ['BOM / Quotation', 'Quotation Sent'].includes(o.stage)).length;
+    const stage4 = opportunities.filter(o => ['Negotiation', 'Confirmation Pending'].includes(o.stage)).length;
+    const stage5 = wonDealsCount;
 
     return [
       { name: 'Leads & Inquiries', count: stage1, color: '#0284C7', bg: '#E0F2FE' },
@@ -142,6 +139,12 @@ export default function CrmDashboard({
             <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #CCFBF1', padding: '3px 10px', borderRadius: '20px' }}>
               B2B Solar Mounting Systems
             </span>
+            {isLoading && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', backgroundColor: '#F8FAFC', color: '#0E7490', border: '1px solid #BAE6FD', padding: '3px 10px', borderRadius: '20px' }}>
+                <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', border: '2px solid #0E7490', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                Syncing Cloud Database...
+              </span>
+            )}
           </div>
           <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>
             Executive sales pipeline, customer touchpoints, quotation tracking & factory dispatch workflow

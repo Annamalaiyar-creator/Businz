@@ -77,6 +77,7 @@ export default function SalesCrmEngine({
   const [templates, setTemplates] = useState(() => getCrmStore('whatsapp_templates', INITIAL_WHATSAPP_TEMPLATES));
   const [conversations, setConversations] = useState(() => getCrmStore('whatsapp_conversations', INITIAL_WHATSAPP_CONVERSATIONS));
   const [quotations, setQuotations] = useState(() => getCrmStore('quotations', INITIAL_CRM_QUOTATIONS));
+  const [isCloudSyncing, setIsCloudSyncing] = useState(true);
 
   // Live Zoho customers sync on mount
   // Live Supabase Cloud + Zoho sync on mount
@@ -129,6 +130,8 @@ export default function SalesCrmEngine({
         }
       } catch (err) {
         console.warn('Initial Supabase/Zoho CRM sync notice:', err);
+      } finally {
+        if (isMounted) setIsCloudSyncing(false);
       }
     };
     syncCloudCrm();
@@ -503,6 +506,7 @@ export default function SalesCrmEngine({
             opportunities={opportunities}
             followups={followups}
             quotations={quotations}
+            isLoading={isCloudSyncing}
             onNavigateTab={(tab) => {
               if (tab === 'Sales BOM' || tab === 'BOM' || tab === 'Items Directory') {
                 onNavigateTab(tab);
@@ -524,6 +528,7 @@ export default function SalesCrmEngine({
             leads={leads}
             customers={customers}
             userRole={userRole}
+            isLoading={isCloudSyncing}
             onSaveLead={handleSaveLead}
             onConvertLead={handleConvertLead}
             onUpdateLeadStatus={handleUpdateLeadStatus}
@@ -542,6 +547,7 @@ export default function SalesCrmEngine({
             customers={customers}
             opportunities={opportunities}
             quotations={quotations}
+            isLoading={isCloudSyncing}
             onSaveCustomer={handleSaveCustomer}
             onBatchUpdateCustomers={handleBatchUpdateCustomers}
             onNavigateTab={(tab) => {
@@ -556,6 +562,7 @@ export default function SalesCrmEngine({
           <CrmOpportunitiesView
             opportunities={opportunities}
             customers={customers}
+            isLoading={isCloudSyncing}
             onUpdateOpportunity={handleUpdateOpportunity}
             onCreateOpportunity={handleSaveOpportunity}
             onDeleteOpportunity={handleDeleteOpportunity}
@@ -592,6 +599,7 @@ export default function SalesCrmEngine({
           <CrmQuotationsView
             userRole={userRole}
             quotations={quotations}
+            isLoading={isCloudSyncing}
             onSaveQuotation={handleSaveQuotation}
             onNavigateTab={(tab) => {
               if (['Performa Invoice', 'Proforma Invoice', 'Sales BOM', 'BOM', 'Items Directory', 'BOM Orders'].includes(tab) || (onNavigateTab && !['Leads', 'Customers', 'Opportunities', 'Follow-ups', 'WhatsApp', 'Quotations', 'Products', 'Reports', 'Dashboard'].includes(tab))) {
