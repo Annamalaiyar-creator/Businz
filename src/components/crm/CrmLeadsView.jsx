@@ -531,29 +531,6 @@ export default function CrmLeadsView({
             </div>
           )}
 
-          {/* Simulate Inbound Lead Button */}
-          <button
-            onClick={handleSimulateInboundLead}
-            disabled={isSimulating}
-            title="Simulate incoming WhatsApp/Web inquiry with AI auto-extraction"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#F0FDF4',
-              color: '#15803D',
-              border: '1px solid #BBF7D0',
-              padding: '0 14px',
-              height: '40px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: '700',
-              cursor: isSimulating ? 'not-allowed' : 'pointer'
-            }}
-          >
-            <Zap size={14} color="#16A34A" />
-            {isSimulating ? 'Capturing...' : 'Simulate Inbound Lead'}
-          </button>
 
           {/* New Solar Lead Button - Matching Create PI pill with circular icon */}
           <button

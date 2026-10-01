@@ -8,7 +8,7 @@ import {
   Search, HelpCircle, MessageSquare, Rocket, Sparkles, ChevronUp,
   CheckCircle, ClipboardList, Truck, Warehouse, ShieldCheck, Activity, FileCheck,
   Calendar, Wrench, Calculator, RefreshCw, Scale, Building2, BarChart3,
-  Zap, CreditCard, Layers, Briefcase, Palette
+  Zap, CreditCard, Layers, Briefcase, Palette, Factory
 } from 'lucide-react';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
@@ -287,17 +287,24 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'MAIN MENU',
           items: [
-            { label: 'Dashboard', icon: LayoutDashboard },
+            { label: 'Executive Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
             { 
               label: 'Purchase Order Approvals', 
               targetTab: 'Purchase Orders', 
               icon: ShoppingCart, 
               badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined 
-            },
-            { label: 'Proforma Invoice', icon: FileText }
+            }
+          ]
+        },
+        {
+          category: 'SYSTEM & CONFIG',
+          items: [
+            { label: 'Zoho Integration', targetTab: 'Integration', icon: GitBranch },
+            { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' }
           ]
         }
       ];
+      return sections;
     } else {
       sections = [...procurementSections];
     }
