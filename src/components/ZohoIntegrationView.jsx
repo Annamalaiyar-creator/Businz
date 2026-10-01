@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  RefreshCw, ExternalLink, CheckCircle2, AlertCircle, 
+  ExternalLink, CheckCircle2, AlertCircle, 
   ShieldCheck, ArrowLeftRight, Search, Check, Sparkles, Sliders,
-  Lock, Plus, Trash2, Shield, Info, Globe, MessageSquare, CreditCard,
-  Zap, Bot, Key, Link2, AlertTriangle, X, Plug, Landmark, Building2, Settings
+  Lock, Plus, Trash2, Info, Globe, MessageSquare, CreditCard,
+  Zap, Bot, Key, Link2, AlertTriangle, X, Plug, Building2, Settings
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { getSafeZohoItems, getSafeZohoVendors, getSafeZohoPOs } from '../services/zohoSafeSync';
@@ -18,7 +18,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
   const effectiveRole = userRole || localStorage.getItem('controlroom_user_role') || '';
   const isCeoRole = effectiveRole === 'CEO' || effectiveRole === 'Managing Director' || effectiveRole === 'MD' || effectiveRole.toLowerCase().includes('ceo');
   const isTaRole = effectiveRole === 'Technical Administrator' || effectiveRole === 'Technical Admin' || effectiveRole === 'Developer' || effectiveRole.startsWith('TA') || effectiveRole.toLowerCase().includes('technical admin');
-  const isAccountsRole = effectiveRole.toLowerCase().includes('account') || effectiveRole === 'Accounts Head' || effectiveRole === 'Accounts Executive' || effectiveRole === 'Billing' || effectiveRole === 'Finance & Accounts';
 
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -50,28 +49,12 @@ export default function ZohoIntegrationView({ userRole = '' }) {
     } catch (_) {}
     return {
       zoho: true,
-      tally: true,
       meta_whatsapp: true,
       stripe: true,
       zapier: true,
       chatgpt: true
     };
   });
-
-  // Tally Prime Live Configuration State
-  const [tallyConfig, setTallyConfig] = useState(() => {
-    try {
-      const saved = localStorage.getItem('businz_tally_config');
-      if (saved) return JSON.parse(saved);
-    } catch (_) {}
-    return {
-      url: 'http://127.0.0.1:9000',
-      company: 'VRM STRUCTURES INDIA PRIVATE LIMITED'
-    };
-  });
-  const [tallyTestResult, setTallyTestResult] = useState(null);
-  const [isTestingTally, setIsTestingTally] = useState(false);
-  const [isTestingTallyPnl, setIsTestingTallyPnl] = useState(false);
 
   // Custom integrations dynamically added by Technical Administrator (TA)
   const [customApps, setCustomApps] = useState(() => {
@@ -249,11 +232,11 @@ export default function ZohoIntegrationView({ userRole = '' }) {
 
   // RBAC Action Handlers
   const handleZohoConfigureClick = () => {
-    if (!isCeoRole && !isAccountsRole) {
+    if (!isCeoRole) {
       setPermissionAlert({
-        title: 'Authorization Required',
-        message: 'Only CEO and Accounts personnel have permissions to view credentials or configure the Zoho Books organization connection.',
-        roleRequired: 'CEO / Accounts'
+        title: 'CEO Authorization Required',
+        message: 'Only the CEO is authorized to view credentials or configure the Zoho Books organization connection.',
+        roleRequired: 'CEO Alone'
       });
       return;
     }
@@ -398,10 +381,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
   };
 
   const handleThirdPartyConfigureClick = (app) => {
-    if (app.id === 'tally') {
-      setActiveConfigureApp(app);
-      return;
-    }
     if (!isTaRole) {
       setPermissionAlert({
         title: 'Technical Administrator (TA) Required',
@@ -430,9 +409,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
         persistIntegrationsState({ ...integrationsState, zoho: true });
         setStatus(prev => ({ ...prev, connected: true }));
       }
-    } else if (app.id === 'tally') {
-      const nextVal = !integrationsState.tally;
-      persistIntegrationsState({ ...integrationsState, tally: nextVal });
     } else {
       if (!isTaRole) {
         setPermissionAlert({
@@ -542,21 +518,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
       )
     },
     {
-      id: 'tally',
-      name: 'Tally Prime (Automated HTTP)',
-      category: 'Accounting & ERP',
-      desc: '100% automated direct HTTP bridge (Port 9000). Real-time Profit & Loss sync, automated voucher posting with zero XML files.',
-      link: 'http://localhost:9000',
-      isZoho: false,
-      isTally: true,
-      accessRole: 'ALL',
-      icon: (
-        <div style={{ width: '100%', height: '100%', borderRadius: '12px', background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#FFFFFF', fontSize: '18px', boxShadow: '0 2px 8px rgba(14,116,144,0.3)' }}>
-          T
-        </div>
-      )
-    },
-    {
       id: 'meta_whatsapp',
       name: 'Meta Business (WhatsApp & Instagram)',
       category: 'Social & Customer Messaging',
@@ -628,6 +589,9 @@ export default function ZohoIntegrationView({ userRole = '' }) {
   ];
 
   const filteredCatalog = fullCatalog.filter(item => {
+    // Zoho Books integration access is strictly for CEO Alone
+    if (item.isZoho && !isCeoRole) return false;
+
     const matchesSearch = !searchQuery ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -636,6 +600,40 @@ export default function ZohoIntegrationView({ userRole = '' }) {
     const matchesCat = selectedCategory === 'All' || item.category.includes(selectedCategory);
     return matchesSearch && matchesCat;
   });
+
+  if (!isCeoRole && !isTaRole) {
+    return (
+      <div style={{
+        padding: '48px 24px',
+        textAlign: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: '16px',
+        border: '1px solid #E2E8F0',
+        maxWidth: '540px',
+        margin: '60px auto'
+      }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '16px',
+          backgroundColor: '#FEF3C7',
+          color: '#D97706',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '16px'
+        }}>
+          <Lock size={28} />
+        </div>
+        <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: '0 0 8px 0' }}>
+          Access Restricted to CEO
+        </h3>
+        <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: '1.6', margin: 0 }}>
+          Zoho Books integration access is restricted strictly to the <strong>CEO Alone</strong>. If you require financial or ERP synchronization changes, please contact the Chief Executive Officer.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%', minWidth: 0, boxSizing: 'border-box', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -669,30 +667,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
             />
           </div>
 
-          {/* Sync All button for Zoho */}
-          <button
-            onClick={handleSyncAll}
-            disabled={syncing}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '10px',
-              padding: '0 14px',
-              height: '40px',
-              fontSize: '13px',
-              fontWeight: '700',
-              color: '#334155',
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-            }}
-          >
-            <RefreshCw style={{ width: '14px', height: '14px', animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-            {syncing ? 'Syncing...' : 'Sync Live'}
-          </button>
-
           {/* Add New Integration Button - Accessible to TA */}
           <button
             onClick={handleAddNewAppClick}
@@ -720,92 +694,6 @@ export default function ZohoIntegrationView({ userRole = '' }) {
         </div>
       </div>
 
-      {/* RBAC GOVERNANCE POLICY BANNER */}
-      <div style={{
-        backgroundColor: '#F8FAFC',
-        border: '1px solid #E2E8F0',
-        borderRadius: '14px',
-        padding: '14px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '14px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            backgroundColor: '#EEF2FF',
-            color: '#4F46E5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <Shield size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Security Governance & Role Separation Enforced</span>
-            </div>
-            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-              • <strong style={{ color: '#0F172A' }}>Zoho Books</strong> configuration & disconnect access is restricted strictly to the <strong style={{ color: '#D97706' }}>CEO Login</strong>.
-              <br />
-              • <strong style={{ color: '#0F172A' }}>Meta (WhatsApp / Instagram) & Other APIs</strong> are governed strictly by the <strong style={{ color: '#0284C7' }}>Technical Administrator (TA)</strong>.
-              <br />
-              • All active integrations operate smoothly in the background for all employees across the entire website.
-            </div>
-          </div>
-        </div>
-
-        {/* Current User Session Role Indicator */}
-        <div style={{
-          backgroundColor: isCeoRole ? '#FEF3C7' : isTaRole ? '#E0F2FE' : isAccountsRole ? '#ECFEFF' : '#F1F5F9',
-          border: `1px solid ${isCeoRole ? '#FDE68A' : isTaRole ? '#BAE6FD' : isAccountsRole ? '#A5F3FC' : '#CBD5E1'}`,
-          borderRadius: '10px',
-          padding: '8px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          {isCeoRole ? (
-            <>
-              <ShieldCheck size={18} style={{ color: '#D97706' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '900', color: '#92400E', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#78350F' }}>CEO (Master Access to Zoho)</div>
-              </div>
-            </>
-          ) : isTaRole ? (
-            <>
-              <Settings size={18} style={{ color: '#0284C7' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '900', color: '#0369A1', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#075985' }}>Technical Admin (TA Full API Access)</div>
-              </div>
-            </>
-          ) : isAccountsRole ? (
-            <>
-              <Landmark size={18} style={{ color: '#0E7490' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#155E75' }}>Accounts Authority (Tally &amp; Financial Integration Access)</div>
-              </div>
-            </>
-          ) : (
-            <>
-              <Lock size={15} style={{ color: '#64748B' }} />
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Current Session</div>
-                <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#334155' }}>{effectiveRole || 'Standard Employee'} (Protected Read-Only)</div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
       {syncMessage && (
         <div style={{ padding: '12px 16px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', color: '#047857', borderRadius: '10px', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CheckCircle2 style={{ width: '16px', height: '16px' }} />
@@ -813,14 +701,14 @@ export default function ZohoIntegrationView({ userRole = '' }) {
         </div>
       )}
 
-      {/* CONNECT ZOHO CREDENTIALS FORM DRAWER / MODAL (CEO & ACCOUNTS) */}
-      {showConfigForm && (isCeoRole || isAccountsRole) && (
+      {/* CONNECT ZOHO CREDENTIALS FORM DRAWER / MODAL (CEO ONLY) */}
+      {showConfigForm && isCeoRole && (
         <div className="section-card" style={{ padding: '24px', backgroundColor: '#FFFBEB', border: '2px solid #F59E0B', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <ShieldCheck size={20} style={{ color: '#D97706' }} />
               <div>
-                <strong style={{ fontSize: '16px', color: '#0F172A' }}>Configure Zoho Books API Connection (CEO &amp; Accounts)</strong>
+                <strong style={{ fontSize: '16px', color: '#0F172A' }}>Configure Zoho Books API Connection (CEO Only)</strong>
                 <span style={{ fontSize: '12px', color: '#92400E', display: 'block', marginTop: '2px' }}>
                   Enter your Zoho Books Organization ID and OAuth Refresh Token. Changes take effect across all organization users.
                 </span>
@@ -924,9 +812,7 @@ export default function ZohoIntegrationView({ userRole = '' }) {
       }}>
         {filteredCatalog.map(app => {
           const isConnected = Boolean(integrationsState[app.id]);
-          const canUserConfigure = app.id === 'tally' 
-            ? true 
-            : app.isZoho ? (isCeoRole || isAccountsRole) : isTaRole;
+          const canUserConfigure = app.isZoho ? isCeoRole : isTaRole;
 
           return (
             <div
@@ -953,35 +839,20 @@ export default function ZohoIntegrationView({ userRole = '' }) {
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {/* Role Access Indicator Pill */}
-                    {app.id === 'tally' ? (
+                    {app.isZoho ? (
                       <span style={{
                         fontSize: '11px',
                         fontWeight: '800',
                         padding: '3px 8px',
                         borderRadius: '6px',
-                        backgroundColor: '#ECFEFF',
-                        color: '#0E7490',
-                        border: '1px solid #CFFAFE',
+                        backgroundColor: isCeoRole ? '#FEF3C7' : '#F1F5F9',
+                        color: isCeoRole ? '#B45309' : '#64748B',
+                        border: `1px solid ${isCeoRole ? '#FDE68A' : '#E2E8F0'}`,
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '4px'
                       }}>
-                        <Building2 size={11} /> Accounts Authority
-                      </span>
-                    ) : app.isZoho ? (
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: '800',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        backgroundColor: (isCeoRole || isAccountsRole) ? '#FEF3C7' : '#F1F5F9',
-                        color: (isCeoRole || isAccountsRole) ? '#B45309' : '#64748B',
-                        border: `1px solid ${(isCeoRole || isAccountsRole) ? '#FDE68A' : '#E2E8F0'}`,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        <ShieldCheck size={11} /> {isCeoRole ? 'CEO Admin' : 'CEO & Accounts'}
+                        <ShieldCheck size={11} /> {isCeoRole ? 'CEO Admin' : 'CEO Alone'}
                       </span>
                     ) : (
                       <span style={{
@@ -1163,221 +1034,8 @@ export default function ZohoIntegrationView({ userRole = '' }) {
         </div>
       )}
 
-      {/* TALLY PRIME CONFIG MODAL (ACCOUNTS & ADMIN ACCESS) */}
-      {activeConfigureApp && activeConfigureApp.id === 'tally' && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '20px' }}>
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', width: '540px', maxWidth: '95%', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '40px', height: '40px' }}>
-                  {activeConfigureApp.icon}
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>Tally Prime Automated Connector</h4>
-                  <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '800' }}>Direct HTTP Port 9000 • Zero XML Files</span>
-                </div>
-              </div>
-              <button onClick={() => { setActiveConfigureApp(null); setTallyTestResult(null); }} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer', color: '#64748B' }}>✕</button>
-            </div>
-            
-            <p style={{ fontSize: '12.5px', color: '#64748B', margin: 0, lineHeight: '1.5' }}>
-              Connect BUSINZ directly to Tally Prime running on your office machine or server. Vouchers, live Stock balances, and Profit &amp; Loss statements are synchronized directly into memory in milliseconds.
-            </p>
-
-            {/* Config Fields */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px', fontSize: '12.5px' }}>
-                  Tally Prime Server URL / IP:
-                </label>
-                <input 
-                  type="text" 
-                  value={tallyConfig.url}
-                  onChange={(e) => setTallyConfig({ ...tallyConfig, url: e.target.value })}
-                  placeholder="e.g. http://127.0.0.1:9000 or http://192.168.1.50:9000"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }} 
-                />
-                <span style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', display: 'block' }}>
-                  Default is <code>http://127.0.0.1:9000</code>. Ensure TallyPrime F1 ➔ Settings ➔ Connectivity ➔ Port 9000 is enabled.
-                </span>
-              </div>
-
-              <div>
-                <label style={{ fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px', fontSize: '12.5px' }}>
-                  Primary Company Name in Tally:
-                </label>
-                <input 
-                  type="text" 
-                  value={tallyConfig.company}
-                  onChange={(e) => setTallyConfig({ ...tallyConfig, company: e.target.value })}
-                  placeholder="e.g. VRM STRUCTURES INDIA PRIVATE LIMITED"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }} 
-                />
-              </div>
-
-              {/* Action Buttons for Testing */}
-              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                <button
-                  onClick={async () => {
-                    setIsTestingTally(true);
-                    setTallyTestResult(null);
-                    try {
-                      const res = await fetch(`/api/tally/status?url=${encodeURIComponent(tallyConfig.url)}`);
-                      const data = await res.json();
-                      if (data.online) {
-                        setTallyTestResult({
-                          success: true,
-                          message: `Connection Successful! Tally Prime is online on port 9000. Active Company: ${data.primaryCompany || tallyConfig.company}`
-                        });
-                      } else {
-                        setTallyTestResult({
-                          success: false,
-                          message: `Tally is offline on ${tallyConfig.url}. Please open TallyPrime and ensure Port 9000 is enabled in Connectivity settings.`
-                        });
-                      }
-                    } catch (err) {
-                      setTallyTestResult({
-                        success: false,
-                        message: `Could not reach Tally: ${err.message}`
-                      });
-                    } finally {
-                      setIsTestingTally(false);
-                    }
-                  }}
-                  disabled={isTestingTally}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #0E7490',
-                    backgroundColor: '#ECFEFF',
-                    color: '#0E7490',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: isTestingTally ? 'wait' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Plug size={14} />
-                  {isTestingTally ? 'Testing Connection...' : 'Test Live Connection'}
-                </button>
-
-                <button
-                  onClick={async () => {
-                    setIsTestingTallyPnl(true);
-                    setTallyTestResult(null);
-                    try {
-                      const res = await fetch(`/api/tally/pnl?company=${encodeURIComponent(tallyConfig.company)}`);
-                      const data = await res.json();
-                      if (data.success && data.metrics) {
-                        const rev = (data.metrics.salesRevenue / 10000000).toFixed(2);
-                        const np = (data.metrics.netProfit / 100000).toFixed(2);
-                        setTallyTestResult({
-                          success: true,
-                          message: `Live P&L Synced! Revenue: ₹${rev} Cr | Net Profit: ₹${np} L (Direct memory sync, zero files created)`
-                        });
-                      } else {
-                        setTallyTestResult({
-                          success: false,
-                          message: `Could not fetch P&L. Ensure Tally Prime is open with company "${tallyConfig.company}".`
-                        });
-                      }
-                    } catch (err) {
-                      setTallyTestResult({
-                        success: false,
-                        message: `P&L Sync Error: ${err.message}`
-                      });
-                    } finally {
-                      setIsTestingTallyPnl(false);
-                    }
-                  }}
-                  disabled={isTestingTallyPnl}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #10B981',
-                    backgroundColor: '#ECFDF5',
-                    color: '#065F46',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: isTestingTallyPnl ? 'wait' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <RefreshCw size={14} style={{ animation: isTestingTallyPnl ? 'spin 1s linear infinite' : 'none' }} />
-                  {isTestingTallyPnl ? 'Querying Tally P&L...' : 'Test Live P&L Sync'}
-                </button>
-              </div>
-
-              {/* Test Result Box */}
-              {tallyTestResult && (
-                <div style={{
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  backgroundColor: tallyTestResult.success ? '#F0FDF4' : '#FEF2F2',
-                  border: `1px solid ${tallyTestResult.success ? '#BBF7D0' : '#FECACA'}`,
-                  color: tallyTestResult.success ? '#15803D' : '#B91C1C',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  lineHeight: '1.4',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  {tallyTestResult.success ? (
-                    <CheckCircle2 size={16} style={{ color: '#10B981', flexShrink: 0 }} />
-                  ) : (
-                    <AlertCircle size={16} style={{ color: '#EF4444', flexShrink: 0 }} />
-                  )}
-                  <span>{tallyTestResult.message}</span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-              <button 
-                onClick={() => { setActiveConfigureApp(null); setTallyTestResult(null); }} 
-                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: 'white', color: '#475569', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={async () => {
-                  try {
-                    localStorage.setItem('businz_tally_config', JSON.stringify(tallyConfig));
-                    localStorage.setItem('businz_tally_company', tallyConfig.company);
-                    persistIntegrationsState({ ...integrationsState, tally: true });
-                    // Send to backend
-                    await fetch('/api/tally/config', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ url: tallyConfig.url, company: tallyConfig.company })
-                    });
-                    alert(`Tally Prime configuration saved successfully! Active for Accounts.`);
-                  } catch (_) {
-                    alert('Configuration saved locally.');
-                  }
-                  setActiveConfigureApp(null);
-                  setTallyTestResult(null);
-                }} 
-                style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#0E7490', color: 'white', fontSize: '13px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 6px rgba(14,116,144,0.3)' }}
-              >
-                Save &amp; Activate Tally
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* OTHER APP CONFIG MODAL (TA EXCLUSIVE) */}
-      {activeConfigureApp && activeConfigureApp.id !== 'tally' && isTaRole && (
+      {activeConfigureApp && isTaRole && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
           <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', width: '480px', maxWidth: '90%', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

@@ -164,24 +164,25 @@ export default function Customer360PageView({
         minHeight: 'calc(100vh - 120px)'
       }}>
         
-        {/* TOP HEADER: NAVIGATION & QUICK ACTIONS */}
+        {/* TOP HEADER: NAVIGATION & QUICK ACTIONS (BUSINZ DESIGN SYSTEM) */}
         <div style={{
           padding: '16px 24px',
-          backgroundColor: '#0F172A',
-          color: '#FFFFFF',
+          backgroundColor: '#FFFFFF',
+          color: '#0F172A',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          borderBottom: '1px solid #1E293B'
+          borderBottom: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <button
               type="button"
               onClick={onBack}
               style={{
-                background: '#1E293B',
-                border: '1px solid #334155',
-                color: '#F8FAFC',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                color: '#475569',
                 padding: '8px 16px',
                 borderRadius: '8px',
                 fontSize: '13px',
@@ -190,19 +191,20 @@ export default function Customer360PageView({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                transition: 'all 0.2s ease'
+                transition: 'all 0.2s ease',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}
             >
-              <ArrowLeft size={15} /> Back to Customers
+              <ArrowLeft size={15} /> Back to Directory
             </button>
 
-            <div style={{ width: '1px', height: '24px', backgroundColor: '#334155' }} />
+            <div style={{ width: '1px', height: '24px', backgroundColor: '#E2E8F0' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#FFFFFF' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#0F172A' }}>
                 {customer.companyName}
               </h2>
-              <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#1E293B', color: '#94A3B8', border: '1px solid #334155', fontWeight: '700' }}>
+              <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', fontWeight: '700' }}>
                 {customer.customerCode || customer.id}
               </span>
 
@@ -212,9 +214,9 @@ export default function Customer360PageView({
                   fontSize: '11px',
                   padding: '3px 10px',
                   borderRadius: '6px',
-                  backgroundColor: '#581C87',
-                  color: '#E9D5FF',
-                  border: '1px solid #7E22CE',
+                  backgroundColor: '#F3E8FF',
+                  color: '#7E22CE',
+                  border: '1px solid #E9D5FF',
                   fontWeight: '800',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -227,9 +229,9 @@ export default function Customer360PageView({
                   fontSize: '11px',
                   padding: '3px 10px',
                   borderRadius: '6px',
-                  backgroundColor: '#164E63',
-                  color: '#67E8F9',
-                  border: '1px solid #0E7490',
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  border: '1px solid #A5F3FC',
                   fontWeight: '800',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -258,7 +260,7 @@ export default function Customer360PageView({
                 fontSize: '13px',
                 fontWeight: '700',
                 cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)'
+                boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
               }}
             >
               <MessageSquare size={15} /> WhatsApp Chat
@@ -279,7 +281,7 @@ export default function Customer360PageView({
                 fontSize: '13px',
                 fontWeight: '700',
                 cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(14, 116, 144, 0.3)'
+                boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)'
               }}
               title="Modify customer details & synchronize updates directly to Zoho Books"
             >
@@ -296,7 +298,7 @@ export default function Customer360PageView({
           padding: '16px 20px',
           flex: 1,
           minHeight: 'calc(100vh - 180px)',
-          backgroundColor: '#F1F5F9'
+          backgroundColor: '#F8FAFC'
         }}>
 
           {/* ───────────────────────────────────────────────────────── */}
@@ -563,7 +565,7 @@ export default function Customer360PageView({
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', marginBottom: '2px' }}>
                       <span>Tags & Industry</span>
-                      <span style={{ fontSize: '9px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '1px 4px', borderRadius: '4px', fontWeight: '800' }}>✨ CR Add-on</span>
+                      <span style={{ fontSize: '9px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '1px 4px', borderRadius: '4px', fontWeight: '800' }}>✨ Businz CRM</span>
                     </div>
                     <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
                       <span style={{ backgroundColor: '#F1F5F9', color: '#475569', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>{customer.customerType}</span>
@@ -574,7 +576,7 @@ export default function Customer360PageView({
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', marginBottom: '2px' }}>
                       <span>Lead Owner</span>
-                      <span style={{ fontSize: '9px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '1px 4px', borderRadius: '4px', fontWeight: '800' }}>✨ CR Add-on</span>
+                      <span style={{ fontSize: '9px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '1px 4px', borderRadius: '4px', fontWeight: '800' }}>✨ Businz CRM</span>
                     </div>
                     <div style={{ fontWeight: '700', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#0E7490' }}></span>
@@ -593,7 +595,7 @@ export default function Customer360PageView({
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', marginBottom: '2px' }}>
                       <span>Credit Limit & Terms</span>
-                      <span style={{ fontSize: '9px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '1px 4px', borderRadius: '4px', fontWeight: '800' }}>✨ CR Add-on</span>
+                      <span style={{ fontSize: '9px', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '1px 4px', borderRadius: '4px', fontWeight: '800' }}>✨ Businz CRM</span>
                     </div>
                     <div style={{ fontWeight: '700', color: '#059669' }}>
                       ₹ {Number(customer.creditLimit || 2500000).toLocaleString()} • {customer.creditDays || 30} Days
@@ -675,7 +677,7 @@ export default function Customer360PageView({
                     )}
                     {tab === 'Details' && (
                       <span style={{ fontSize: '9px', backgroundColor: '#F3E8FF', color: '#7E22CE', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
-                        Zoho vs CR
+                        Zoho vs Businz
                       </span>
                     )}
                   </button>
@@ -1051,7 +1053,7 @@ export default function Customer360PageView({
                 </div>
               )}
 
-              {/* 8. DETAILS TAB: ZOHO CORE VS CONTROL ROOM ADD-ONS DELINEATION */}
+              {/* 8. DETAILS TAB: ZOHO CORE VS BUSINZ ADD-ONS DELINEATION */}
               {profileTab === 'Details' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

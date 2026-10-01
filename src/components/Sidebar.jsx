@@ -8,7 +8,7 @@ import {
   Search, HelpCircle, MessageSquare, Rocket, Sparkles, ChevronUp,
   CheckCircle, ClipboardList, Truck, Warehouse, ShieldCheck, Activity, FileCheck,
   Calendar, Wrench, Calculator, RefreshCw, Scale, Building2, BarChart3,
-  Zap, CreditCard, Layers, Briefcase, Palette
+  Zap, CreditCard, Layers, Briefcase, Palette, Factory
 } from 'lucide-react';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
@@ -118,12 +118,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         { label: 'Production Reports', icon: BarChart3 },
         { label: 'Efficiency Reports', icon: Zap },
         { label: 'Downtime Analytics', icon: AlertTriangle }
-      ]
-    },
-    {
-      category: 'SYSTEM & CONFIG',
-      items: [
-        { label: 'Integration', targetTab: 'Integration', icon: GitBranch }
       ]
     }
   ];
@@ -272,15 +266,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
-            { label: 'Delivery Challans', icon: FileCheck },
-            { label: 'Payments', icon: Wallet }
-          ]
-        },
-        {
-          category: 'WORKSPACE & REPORTS',
-          items: [
-            { label: 'Spend Analytics', icon: PieChart },
-            { label: 'Spend Reports', icon: TrendingUp }
+            { label: 'Delivery Challans', icon: FileCheck }
           ]
         }
       ];
@@ -301,36 +287,51 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'MAIN MENU',
           items: [
-            { label: 'Dashboard', icon: LayoutDashboard },
+            { label: 'Executive Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
             { 
               label: 'Purchase Order Approvals', 
               targetTab: 'Purchase Orders', 
               icon: ShoppingCart, 
               badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined 
-            },
-            { label: 'Proforma Invoice', icon: FileText }
+            }
+          ]
+        },
+        {
+          category: 'SYSTEM & CONFIG',
+          items: [
+            { label: 'Zoho Integration', targetTab: 'Integration', icon: GitBranch },
+            { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' }
           ]
         }
       ];
+      return sections;
     } else {
       sections = [...procurementSections];
     }
 
     const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director');
+    const isTa = (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA'));
 
-    // Always ensure Zoho Integration, Templates & Backup Vault are accessible under SYSTEM & CONFIG
+    // Zoho Integration is strictly for CEO Alone (or general integrations for TA)
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.targetTab === 'Templates'));
     const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     if (sysSection) {
       if (!hasTemplates && !isCeo) sysSection.items.unshift({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
       if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
+      if (!isCeo && !isTa) {
+        sysSection.items = sysSection.items.filter(i => i.targetTab !== 'Integration');
+      }
     } else {
       const sysItems = [];
       if (!hasTemplates && !isCeo) {
         sysItems.push({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
       }
-      sysItems.push({ label: 'Integration', targetTab: 'Integration', icon: GitBranch });
+      if (isCeo) {
+        sysItems.push({ label: 'Zoho Integration', targetTab: 'Integration', icon: GitBranch });
+      } else if (isTa) {
+        sysItems.push({ label: 'Integration', targetTab: 'Integration', icon: GitBranch });
+      }
       sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
       sections.push({
         category: 'SYSTEM & CONFIG',

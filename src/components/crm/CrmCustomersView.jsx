@@ -171,36 +171,36 @@ export default function CrmCustomersView({
   const [formCust, setFormCust] = useState(initialFormState);
 
   // Sync with Zoho Books on component mount & manual trigger
+  // Sync with Zoho Books on component mount & manual trigger
   const handleSyncWithZoho = async (isManual = false) => {
-    setIsSyncingZoho(true);
-    try {
-      // 1. Push any local CRM customer records lacking zohoContactId to Zoho Books
-      if (Array.isArray(customers) && customers.length > 0) {
-        const unsynced = customers.filter(c => !c.zohoContactId && (c.customerCode || c.companyName));
-        for (const cust of unsynced) {
-          try {
-            await fetch('/api/zoho/customers', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(cust)
-            });
-          } catch (e) {
-            console.warn('Background sync push notice for customer:', cust.customerCode, e.message);
+    // Only perform the heavy POST sync if manually triggered by user clicking 'Sync Zoho Books'
+    if (isManual) {
+      setIsSyncingZoho(true);
+      try {
+        if (Array.isArray(customers) && customers.length > 0) {
+          const unsynced = customers.filter(c => !c.zohoContactId && (c.customerCode || c.companyName));
+          for (const cust of unsynced) {
+            try {
+              await fetch('/api/zoho/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cust)
+              });
+            } catch (e) {
+              console.warn('Manual sync push notice for customer:', cust.customerCode, e.message);
+            }
           }
         }
-      }
 
-      // 2. Retrieve all live synchronized customers from Zoho Books
-      const res = await fetch('/api/zoho/customers');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          if (typeof onBatchUpdateCustomers === 'function') {
-            onBatchUpdateCustomers(data);
-          } else if (typeof onSaveCustomer === 'function') {
-            data.forEach(c => onSaveCustomer(c));
-          }
-          if (isManual) {
+        const res = await fetch('/api/zoho/customers');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            if (typeof onBatchUpdateCustomers === 'function') {
+              onBatchUpdateCustomers(data);
+            } else if (typeof onSaveCustomer === 'function') {
+              data.forEach(c => onSaveCustomer(c));
+            }
             setZohoSyncMessage({
               type: 'success',
               title: 'Zoho Books Synchronized',
@@ -217,24 +217,37 @@ export default function CrmCustomersView({
             });
           }
         }
-      }
-    } catch (err) {
-      console.warn('Zoho customer sync notice:', err.message);
-      if (isManual) {
+      } catch (err) {
+        console.warn('Zoho customer sync notice:', err.message);
         setZohoSyncMessage({
           type: 'error',
           title: 'Zoho Books Sync Notice',
           message: err.message || 'Unable to synchronize customer accounts with Zoho Books.'
         });
+      } finally {
+        setIsSyncingZoho(false);
       }
-    } finally {
-      setIsSyncingZoho(false);
+    } else {
+      // Background sync on mount: only query Zoho if customers list has not been populated yet
+      if (!Array.isArray(customers) || customers.length === 0) {
+        try {
+          const res = await fetch('/api/zoho/customers');
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0 && typeof onBatchUpdateCustomers === 'function') {
+              onBatchUpdateCustomers(data);
+            }
+          }
+        } catch (_) {}
+      }
     }
   };
 
-  // Initial Zoho sync on load
+  // Single mount check: only sync if customers prop is currently empty
   useEffect(() => {
-    handleSyncWithZoho();
+    if (!Array.isArray(customers) || customers.length === 0) {
+      handleSyncWithZoho(false);
+    }
   }, []);
 
   // Real-time duplicate validation
@@ -1087,7 +1100,7 @@ export default function CrmCustomersView({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-            Customer Directory (B2B Solar Accounts)
+            Customer Directory
           </h2>
           <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
             Centralized repository with 11-point 360° account intelligence, credit limits & automatic Zoho Books synchronization
@@ -1095,28 +1108,6 @@ export default function CrmCustomersView({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={() => handleSyncWithZoho(true)}
-            disabled={isSyncingZoho}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              color: '#0E7490',
-              height: '40px',
-              padding: '0 16px',
-              borderRadius: '10px',
-              fontSize: '13px',
-              fontWeight: '700',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              cursor: isSyncingZoho ? 'not-allowed' : 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-            }}
-          >
-            <RefreshCw size={15} className={isSyncingZoho ? 'animate-spin' : ''} />
-            <span>{isSyncingZoho ? 'Syncing Zoho...' : 'Sync Zoho Books'}</span>
-          </button>
 
           <button
             onClick={handleOpenCreatePage}

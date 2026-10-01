@@ -40,6 +40,7 @@ import {
   VRMProformaInvoicePrintSheet,
   DEFAULT_PI_TEMPLATE_SETTINGS
 } from './VRMProformaInvoicePrintTemplate';
+import { VRMTaxInvoicePrintSheet, DEFAULT_OFFICIAL_TAX_INVOICE_DATA } from './VRMTaxInvoicePrintTemplate';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
@@ -64,10 +65,31 @@ const COLOR_PRESETS = [
 const DEFAULT_MULTI_TEMPLATES = {
   pi: [
     {
+      id: 'pi_tax_inv',
+      name: 'Official Tax Invoice (Zoho Books / e-Invoice Layout)',
+      description: 'Official Government e-Invoice format with QR code, IRN, HSN, Place of Supply, and CGST/SGST breakdown.',
+      isDefault: true,
+      lastModified: '17 Aug 2026',
+      settings: {
+        ...DEFAULT_PI_TEMPLATE_SETTINGS,
+        documentTitle: 'TAX INVOICE',
+        accentColor: '#1E3A8A',
+        logoHeight: 54,
+        stampSize: 200,
+        showHsn: true,
+        showRateCol: true,
+        showTaxableCol: true,
+        showGstCol: true,
+        showTotalCol: true,
+        showBankDetails: true,
+        showTerms: true
+      }
+    },
+    {
       id: 'pi_std',
       name: 'Standard GST Proforma',
       description: 'Official GST proforma invoice with HSN, Taxable Value, CGST/SGST/IGST breakdown, and Bank Details.',
-      isDefault: true,
+      isDefault: false,
       lastModified: '11 Sep 2026',
       settings: {
         ...DEFAULT_PI_TEMPLATE_SETTINGS,
@@ -202,63 +224,42 @@ const DEFAULT_MULTI_TEMPLATES = {
 // Sample datasets for live previews
 const SAMPLE_DATASETS = {
   pi: {
-    piNo: 'SPI-2025-101',
-    piDate: new Date().toISOString().split('T')[0],
-    expDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-    vendor: 'Apex Solar Infra Solutions Pvt Ltd',
-    customerName: 'Apex Solar Infra Solutions Pvt Ltd',
-    contactPerson: 'K. Rajesh Kumar (Project Head)',
-    phone: '+91 98401 23456',
-    email: 'procurement@apexsolar.in',
-    gstNo: '33AAAAA9999A1Z9',
-    billingStreet: 'Plot No 48, Guindy Industrial Estate',
-    billingCity: 'Chennai',
+    piNo: 'VRMS/26-27/2309',
+    invNo: 'VRMS/26-27/2309',
+    piDate: '2026-08-17',
+    date: '17-08-2026',
+    terms: 'Due on Receipt',
+    ewayBill: '542055911945',
+    placeOfSupply: 'Tamil Nadu (33)',
+    salesPerson: 'Mohith',
+    vendor: 'VASAN ENTERPRISES',
+    customerName: 'VASAN ENTERPRISES',
+    billingStreet: 'Old No 39B, New No 75, KG Towers, Jawahar Bazaar, Coimbatore Road, canara Bank upstairs',
+    billingCity: 'Karur',
     billingState: 'Tamil Nadu',
-    billingPincode: '600032',
-    sameAsBilling: true,
-    deliveryStreet: 'Plot No 48, Guindy Industrial Estate',
-    deliveryCity: 'Chennai',
+    billingPincode: '639001',
+    billingAddress: 'Old No 39B, New No 75, KG Towers, Jawahar Bazaar,\nCoimbatore Road, canara Bank upstairs,\nKarur 639001\nTamil Nadu\nIndia',
+    gstNo: '33CIQPB3415A1ZX',
+    shippingName: 'Ramesh Sivagnanam',
+    shippingPhone: '+91-9659440090',
+    shippingAltPhone: '9313 6577 5076',
+    shippingAddress: '2/587, THESOOR ROAD,\nPonnur, ,\nTiruvannamalai 604408\nTamil Nadu\nIndia',
+    deliveryStreet: '2/587, THESOOR ROAD, Ponnur',
+    deliveryCity: 'Tiruvannamalai',
     deliveryState: 'Tamil Nadu',
-    deliveryPincode: '600032',
-    paymentTerms: '50% Advance + 50% Before Dispatch',
-    salesPerson: 'ManojRaj (VRM Sales)',
-    transportMode: 'By Road (VRM Logistics)',
-    vehicleNo: 'TN-05-AB-4890',
-    items: [
-      {
-        sNo: 1,
-        name: 'Solar On-Grid Mounting Structure (HDG 80 Micron)',
-        description: 'Hot Dip Galvanized 2x3 Table 2000mm x 2500mm with C-Channels, Railless clamps, and SS-304 fasteners.',
-        hsn: '73089090',
-        qty: 12,
-        uom: 'Sets',
-        rate: 185000,
-        discountPct: 0,
-        gstRate: '18%'
-      },
-      {
-        sNo: 2,
-        name: 'Aluminium Rooftop Mounting Rails 4.2m',
-        description: 'High tensile 6063-T6 architectural grade aluminium rails with anodized surface treatment.',
-        hsn: '76109090',
-        qty: 25,
-        uom: 'Nos',
-        rate: 28500,
-        discountPct: 0,
-        gstRate: '18%'
-      },
-      {
-        sNo: 3,
-        name: 'Mid & End Clamp Fastener Hardware Accessories Kit',
-        description: 'SS-304 Allen bolts, EPDM rubber pads, and grounding earthing clips.',
-        hsn: '73181500',
-        qty: 1,
-        uom: 'Kit',
-        rate: 45000,
-        discountPct: 0,
-        gstRate: '18%'
-      }
-    ]
+    deliveryPincode: '604408',
+    paymentTerms: 'Due on Receipt',
+    bankDetails: {
+      beneficiary: 'VRM Structures India Private Limited',
+      accountNo: '50200031629272',
+      bankName: 'HDFC Bank',
+      branch: 'Kodambakkam',
+      ifsc: 'HDFC0000574'
+    },
+    irn: '4b92904b4d6411f74bba72614aa9c1701423c1b80cfb8c712ed565bc2789db83',
+    ackNo: '152626823842153',
+    ackDate: '2026-08-17 15:19:00',
+    items: DEFAULT_OFFICIAL_TAX_INVOICE_DATA.items
   },
   quotation: {
     piNo: 'VRM-QT-2025-442',
@@ -407,11 +408,14 @@ const compressImageFile = (file, maxDim = 600, quality = 0.85) => {
  * 2. Dedicated Live Customizer with Photoshop-style Color Picker,
  *    300px Logo Sizing, Stamp Sizing, Section/Column Removal & Undo!
  */
-export default function VRMTemplateStudioView({ onBackToPI }) {
+export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
+  const effectiveRole = userRole || localStorage.getItem('controlroom_user_role') || '';
+  const isBillingRole = effectiveRole === 'Billing' || effectiveRole === 'Invoice Executive' || effectiveRole.toLowerCase().includes('billing');
+
   // Navigation Mode: 'hub' | 'editor'
   const [viewMode, setViewMode] = useState('hub');
   const [activeCategory, setActiveCategory] = useState('pi'); // 'pi' | 'quotation' | 'bom'
-  const [activeTemplateId, setActiveTemplateId] = useState('pi_std');
+  const [activeTemplateId, setActiveTemplateId] = useState(() => isBillingRole ? 'pi_tax_inv' : 'pi_std');
 
   // Multi-Templates Store loaded from localStorage
   const [templatesStore, setTemplatesStore] = useState(() => {
@@ -752,13 +756,15 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
   // VIEW 1: TEMPLATES HUB (CARD STYLE OVERVIEW)
   // ==========================================
   if (viewMode === 'hub') {
-    const categories = [
+    const allCategories = [
       {
         key: 'pi',
-        title: 'Proforma Invoice (PI)',
+        title: isBillingRole ? 'Invoice Print Layouts' : 'Proforma Invoice (PI)',
         badgeColor: '#0E7490',
         icon: Receipt,
-        description: 'Customer GST proforma invoices, formal payment requests, advance billing, and dispatch advice.',
+        description: isBillingRole
+          ? 'Customer GST invoices, formal billing documents, tax invoice layouts, and payment receipts.'
+          : 'Customer GST proforma invoices, formal payment requests, advance billing, and dispatch advice.',
         templates: templatesStore.pi || []
       },
       {
@@ -778,6 +784,10 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
         templates: templatesStore.bom || []
       }
     ];
+
+    const categories = isBillingRole 
+      ? allCategories.filter(c => c.key === 'pi') 
+      : allCategories;
 
     const totalCount = categories.reduce((sum, c) => sum + c.templates.length, 0);
 
@@ -823,7 +833,9 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
                   Templates Studio
                 </h1>
                 <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#64748B' }}>
-                  Manage, customize, and save executive print layouts for Proforma Invoices, Quotations, and Bill of Materials.
+                  {isBillingRole
+                    ? 'Manage, customize, and save executive print layouts for Invoices.'
+                    : 'Manage, customize, and save executive print layouts for Proforma Invoices, Quotations, and Bill of Materials.'}
                 </p>
               </div>
             </div>
@@ -841,35 +853,14 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
             }}>
               {totalCount} Total Templates Active
             </span>
-            {onBackToPI && (
-              <button
-                type="button"
-                onClick={onBackToPI}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#334155',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '8px',
-                  padding: '7px 14px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={14} />
-                Back to Proforma Invoice
-              </button>
-            )}
+
           </div>
         </div>
 
-        {/* 3 Main Category Cards Grid */}
+        {/* Category Cards Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gridTemplateColumns: isBillingRole ? 'minmax(360px, 720px)' : 'repeat(auto-fit, minmax(360px, 1fr))',
           gap: '24px'
         }}>
           {categories.map((cat) => {
@@ -929,7 +920,7 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
                       padding: '3px 8px',
                       borderRadius: '12px'
                     }}>
-                      {cat.key.toUpperCase()}
+                      {isBillingRole && cat.key === 'pi' ? 'INVOICE' : cat.key.toUpperCase()}
                     </span>
                   </div>
 
@@ -1169,7 +1160,7 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
               padding: '3px 8px',
               borderRadius: '6px'
             }}>
-              {activeCategory.toUpperCase()}
+              {isBillingRole && activeCategory === 'pi' ? 'INVOICE' : activeCategory.toUpperCase()}
             </span>
             <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
               {activeTemplateObj.name}
@@ -2019,15 +2010,23 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
             minHeight: 'fit-content',
             marginBottom: zoomLevel > 1 ? `${Math.round((zoomLevel - 1) * 1600)}px` : '40px'
           }}>
-            <VRMProformaInvoicePrintSheet
-              id="studio-printable-sheet"
-              piData={activeDataset}
-              settings={currentSettings}
-              isEditable={true}
-              onUpdateSetting={updateSetting}
-              onUpdatePiData={handleUpdatePiData}
-              onElementRemoved={handleElementRemoved}
-            />
+            {(isBillingRole || activeTemplateId === 'pi_tax_inv') ? (
+              <VRMTaxInvoicePrintSheet
+                id="studio-printable-sheet"
+                invoiceData={activeDataset}
+                settings={currentSettings}
+              />
+            ) : (
+              <VRMProformaInvoicePrintSheet
+                id="studio-printable-sheet"
+                piData={activeDataset}
+                settings={currentSettings}
+                isEditable={true}
+                onUpdateSetting={updateSetting}
+                onUpdatePiData={handleUpdatePiData}
+                onElementRemoved={handleElementRemoved}
+              />
+            )}
           </div>
         </div>
 
@@ -2103,7 +2102,7 @@ export default function VRMTemplateStudioView({ onBackToPI }) {
               Save as New Template
             </h3>
             <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: '#64748B' }}>
-              Create a new template variant in <strong>{activeCategory.toUpperCase()}</strong> with current layout and settings.
+              Create a new template variant in <strong>{isBillingRole && activeCategory === 'pi' ? 'INVOICE' : activeCategory.toUpperCase()}</strong> with current layout and settings.
             </p>
 
             <div style={{ marginBottom: '14px' }}>

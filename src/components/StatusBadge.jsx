@@ -112,10 +112,12 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
   if (
     raw === 'completed & dispatched' ||
     raw === 'closed / dispatched' ||
-    raw === 'fully dispatched & delivered'
+    raw === 'fully dispatched & delivered' ||
+    raw === 'delivered' ||
+    raw === 'delivered & closed'
   ) {
     return {
-      label: customLabel || 'Completed & Dispatched',
+      label: customLabel || (raw.includes('closed') ? 'Delivered & Closed' : 'Delivered'),
       bg: '#dcfce7',
       color: '#166534',
       border: '1px solid #86efac',

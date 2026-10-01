@@ -102,15 +102,7 @@ export default function QuotationsView(props) {
     ];
   });
 
-  // Sync customerList with Supabase cloud database
-  const isInitialCustMount = useRef(true);
-  useEffect(() => {
-    if (isInitialCustMount.current) {
-      isInitialCustMount.current = false;
-      return;
-    }
-    saveCloudStore('customer_store', customerList);
-  }, [customerList]);
+
 
   const [customerActionMenuIdx, setCustomerActionMenuIdx] = useState(null);
   const [viewingCustomer, setViewingCustomer] = useState(null);
@@ -1558,9 +1550,8 @@ export default function QuotationsView(props) {
     return INITIAL_QUOTATIONS;
   });
 
-  useEffect(() => {
-    saveCloudStore('quotations_store', quotationsList);
-  }, [quotationsList]);
+  // quotationsList auto-save removed to prevent cloud feedback loop
+
 
   useEffect(() => {
     fetchCloudStore('quotations_store', quotationsList).then(data => {
@@ -1703,9 +1694,8 @@ export default function QuotationsView(props) {
     return INITIAL_PAYMENTS;
   });
 
-  useEffect(() => {
-    saveCloudStore('payment_store', paymentList);
-  }, [paymentList]);
+  // paymentList auto-save removed to prevent cloud feedback loop
+
 
   // Vendor Performance scorecard
   const vendorPerformance = [
@@ -2445,7 +2435,9 @@ export default function QuotationsView(props) {
                     </button>
                     <button
                       onClick={() => {
-                        setQuotationsList(prev => prev.map(q => q.id === editingQuotation.id ? editingQuotation : q));
+                        const updated = quotationsList.map(q => q.id === editingQuotation.id ? editingQuotation : q);
+                        setQuotationsList(updated);
+                        saveCloudStore('quotations_store', updated);
                         setEditingQuotation(null);
                       }}
                       style={{ border: 'none', background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
@@ -2474,7 +2466,9 @@ export default function QuotationsView(props) {
                     </button>
                     <button
                       onClick={() => {
-                        setQuotationsList(prev => prev.filter(q => q.id !== deleteConfirmQuotation.id));
+                        const updated = quotationsList.filter(q => q.id !== deleteConfirmQuotation.id);
+                        setQuotationsList(updated);
+                        saveCloudStore('quotations_store', updated);
                         setDeleteConfirmQuotation(null);
                       }}
                       style={{ border: 'none', background: '#EF4444', color: 'white', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}

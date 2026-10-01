@@ -207,7 +207,7 @@ export default function ProductionViewsEngine(props) {
           if (data.length === 0) {
             setBomStore(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
           } else {
-            setBomStore(() => {
+            setBomStore(prev => {
               const { list: resolvedList } = resolveBomCollisions(data, 658);
               const parseBomSeq = (code) => {
                 const m = String(code || '').match(/BOM-(\d+)/i);
@@ -221,7 +221,15 @@ export default function ProductionViewsEngine(props) {
                 const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
                 return dateB - dateA;
               });
-              return sorted.map(stripDataUrlsFromRecord);
+              const nextList = sorted.map(stripDataUrlsFromRecord);
+              if (Array.isArray(prev) && prev.length === nextList.length) {
+                try {
+                  if (JSON.stringify(prev) === JSON.stringify(nextList)) {
+                    return prev;
+                  }
+                } catch (_) {}
+              }
+              return nextList;
             });
           }
         }
@@ -237,7 +245,14 @@ export default function ProductionViewsEngine(props) {
             }
           }
           if (Array.isArray(custs) && custs.length > 0) {
-            setCustomerList(custs);
+            setCustomerList(prev => {
+              if (Array.isArray(prev) && prev.length === custs.length) {
+                try {
+                  if (JSON.stringify(prev) === JSON.stringify(custs)) return prev;
+                } catch (_) {}
+              }
+              return custs;
+            });
           }
         } catch (_) {}
       } catch (err) {
@@ -853,6 +868,7 @@ export default function ProductionViewsEngine(props) {
                 setInvoices={setInvoiceList}
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
+                setPrintTaxInvoiceModal={setPrintTaxInvoiceModal}
                 setPreviewDocModal={setPreviewDocModal}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setPendingDcModal={setPendingDcModal}
@@ -1219,6 +1235,7 @@ export default function ProductionViewsEngine(props) {
               pageConfig={pageConfig}
               activeTab={activeTab}
               userRole={userRole}
+              onPrintTaxInvoice={(row) => setPrintTaxInvoiceModal(row)}
               filteredRows={filteredRows}
               selectedRows={selectedRows}
               setSelectedRows={setSelectedRows}

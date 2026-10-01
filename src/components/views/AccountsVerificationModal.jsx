@@ -8,6 +8,7 @@ import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurr
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
+import { supabase } from "../../supabaseClient";
 import StatusBadge from "../StatusBadge";
 import { VRMBomPrintSheet } from "../VRMBomPrintTemplate";
 
@@ -95,7 +96,56 @@ export default function AccountsVerificationModal({
     return () => { active = false; };
   }, [accountsVerificationModal]);
 
-  const accVerif = (accountsVerificationModal && accountsVerificationModal.accountsVerification) || {};
+  const [singleOrderVerification, setSingleOrderVerification] = useState(null);
+  const [loadingVerification, setLoadingVerification] = useState(false);
+
+  // Requirement 2: Only fetch accounts_verification when a user opens the accounts verification screen for one single order
+  useEffect(() => {
+    let isMounted = true;
+    if (!accountsVerificationModal) {
+      setSingleOrderVerification(null);
+      return;
+    }
+
+    const orderId = accountsVerificationModal.id || accountsVerificationModal.bomCode || accountsVerificationModal.code;
+    if (!orderId) return;
+
+    setLoadingVerification(true);
+    const fetchSingleOrderAccountsVerification = async () => {
+      try {
+        let result = await supabase
+          .from('bom_orders')
+          .select('accounts_verification')
+          .eq('id', orderId)
+          .maybeSingle();
+
+        if (!result?.data && accountsVerificationModal.bomCode) {
+          result = await supabase
+            .from('bom_orders')
+            .select('accounts_verification')
+            .eq('bom_code', accountsVerificationModal.bomCode)
+            .maybeSingle();
+        }
+
+        if (isMounted && result?.data?.accounts_verification) {
+          const raw = result.data.accounts_verification;
+          const clean = typeof raw === 'object' ? { ...raw } : {};
+          delete clean._extra_data;
+          setSingleOrderVerification(clean);
+        }
+      } catch (err) {
+        console.warn('[AccountsVerificationModal] Single verification fetch notice:', err);
+      } finally {
+        if (isMounted) setLoadingVerification(false);
+      }
+    };
+
+    fetchSingleOrderAccountsVerification();
+
+    return () => { isMounted = false; };
+  }, [accountsVerificationModal?.id, accountsVerificationModal?.bomCode, accountsVerificationModal?.code]);
+
+  const accVerif = singleOrderVerification || (accountsVerificationModal && accountsVerificationModal.accountsVerification) || {};
   const isAlreadyCompleted = Boolean(
     isAccountsViewOnly ||
     accVerif.verified === true ||

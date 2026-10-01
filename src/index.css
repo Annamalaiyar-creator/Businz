@@ -380,6 +380,11 @@ button {
   min-width: 0;
 }
 
+.content-pane.dashboard-view-pane {
+  overflow-x: hidden !important;
+  display: block !important;
+}
+
 .content-pane.templates-view-pane {
   padding: 0 !important;
   margin: 0 !important;
@@ -1432,6 +1437,24 @@ table td {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--spacing-16);
+}
+
+.ceo-kpi-grid-4x2 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-12, 12px);
+}
+
+@media (max-width: 768px) {
+  .ceo-kpi-grid-4x2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ceo-kpi-grid-4x2 {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 .dashboard-grid-3 {

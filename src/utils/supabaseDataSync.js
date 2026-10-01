@@ -1,5 +1,11 @@
 import { supabase } from '../supabaseClient.js';
 
+// Canonical column projection for BOM list/table queries (uses PostgREST JSON paths for small verification fields, strictly excludes heavy _extra_data/documents)
+export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
+
+// Canonical column projection for Invoice list/table queries
+export const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+
 // Preserve local browser caches for zero-data-loss protection per project guidelines
 
 /**
@@ -491,7 +497,7 @@ export async function saveCloudInvoiceRow(invoice) {
     const { data, error } = await supabase
       .from('invoices')
       .upsert(row, { onConflict: 'id' })
-      .select();
+      .select(INVOICE_SUMMARY_COLUMNS);
 
     if (error) {
       console.warn('[SupabaseSync] Single invoice save error:', error.message);
@@ -705,9 +711,22 @@ export function toConsumerBom(row) {
     extraData = { ...row.accounts_verification._extra_data };
   }
 
+  const isAccVerified = row.accounts_verified !== undefined
+    ? Boolean(row.accounts_verified)
+    : Boolean(
+        (row.status && String(row.status).toLowerCase().includes('accounts verified')) ||
+        row.invoice_confirmed ||
+        row.invoice_no
+      );
   const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
     ? { ...row.accounts_verification }
-    : {};
+    : {
+        verified: isAccVerified,
+        verifiedBy: row.accounts_verified_by || '',
+        paymentStatus: row.accounts_payment_status || null,
+        paymentDate: row.accounts_payment_date || null,
+        totalAmount: row.accounts_total_amount !== undefined ? row.accounts_total_amount : null
+      };
   delete cleanAccountsVerification._extra_data;
 
   const parseDoc = (doc) => {
@@ -952,7 +971,7 @@ export async function saveCloudBomRow(bom) {
     const { data, error } = await supabase
       .from('bom_orders')
       .upsert(row, { onConflict: 'id' })
-      .select();
+      .select(BOM_SUMMARY_COLUMNS);
 
     if (error) {
       console.warn('[SupabaseSync] Single BOM save error:', error.message);
@@ -1059,6 +1078,39 @@ export async function fetchCloudBom(bomId) {
 }
 
 /**
+ * Dedicated single-order fetch for accounts_verification only (Rule 2: On-demand single row query)
+ * Executes: .select('accounts_verification').eq('id', orderId).single()
+ */
+export async function fetchBomAccountsVerification(orderId) {
+  if (!orderId) return null;
+  const cleanId = String(orderId).trim();
+  try {
+    let result = await supabase
+      .from('bom_orders')
+      .select('accounts_verification')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    if (!result?.data && (cleanId.startsWith('BOM-') || cleanId.startsWith('bom-'))) {
+      result = await supabase
+        .from('bom_orders')
+        .select('accounts_verification')
+        .eq('bom_code', cleanId)
+        .maybeSingle();
+    }
+
+    if (result?.data?.accounts_verification) {
+      const clean = typeof result.data.accounts_verification === 'object' ? { ...result.data.accounts_verification } : {};
+      delete clean._extra_data;
+      return clean;
+    }
+  } catch (err) {
+    console.warn('[SupabaseSync] fetchBomAccountsVerification error:', err?.message || err);
+  }
+  return null;
+}
+
+/**
  * Fetch a data collection DIRECTLY from Supabase cloud database
  * @param {string} storeKey - Unique identifier (e.g. 'bom_store', 'invoice_store', 'customer_store', 'crm_opportunities')
  * @param {Array|Object} fallbackData - Default initial data if cloud is empty
@@ -1117,7 +1169,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     // 1. Try local server memory cache first (Zero Supabase PostgREST egress)
     try {
       const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 1200);
+      const tId = setTimeout(() => controller.abort(), 5000);
       const res = await fetch('/api/boms', { signal: controller.signal }).catch(() => null);
       clearTimeout(tId);
       if (res && res.ok) {
@@ -1131,7 +1183,6 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     // 2. Direct Supabase query fallback: SELECT ONLY REQUIRED SUMMARY COLUMNS (Lazy load heavy attachments/items)
     try {
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOM orders cloud fetch timeout')), 3000));
-      const BOM_SUMMARY_COLUMNS = 'id, bom_code, code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, grand_total, stock_blocked, invoice_confirmed, created_at, updated_at';
       const fetchPromise = supabase
         .from('bom_orders')
         .select(BOM_SUMMARY_COLUMNS)
@@ -1153,7 +1204,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     // 1. Try local server memory/zoho cache first (Zero Supabase PostgREST egress)
     try {
       const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 1200);
+      const tId = setTimeout(() => controller.abort(), 5000);
       const res = await fetch('/api/zoho/invoices', { signal: controller.signal }).catch(() => null);
       clearTimeout(tId);
       if (res && res.ok) {
@@ -1222,7 +1273,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`/api/store/${storeKey}`, { signal: controller.signal }).catch(() => null);
     clearTimeout(timeoutId);
     if (res && res.ok) {
@@ -1252,7 +1303,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   // For employees_store, fetch directly from Supabase users table (with 1.5s timeout)
   if (storeKey === 'employees_store') {
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 1500));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
       const fetchPromise = supabase.from('users').select('*');
       const { data: dbUsers, error: userErr } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -1881,11 +1932,21 @@ export async function getAndReserveNextBomCode(commit = true) {
 export function subscribeToCloudStore(storeKey, onUpdateCallback) {
   try {
     const employeeKey = storeKey.toUpperCase();
+    let lastEmittedJson = '';
+    const safeEmit = (data) => {
+      if (data === undefined || data === null) return;
+      try {
+        const json = JSON.stringify(data);
+        if (json === lastEmittedJson) return;
+        lastEmittedJson = json;
+      } catch (_) {}
+      onUpdateCallback(data);
+    };
     
     // Window-level broadcast listener for cross-component sync
     const handleLocalUpdate = (e) => {
       if (e?.detail?.storeKey === storeKey && e?.detail?.data !== undefined) {
-        onUpdateCallback(e.detail.data);
+        safeEmit(e.detail.data);
       }
     };
     window.addEventListener('controlroom_store_update', handleLocalUpdate);
@@ -1922,37 +1983,37 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
         async (payload) => {
           if (storeKey === 'employees_store') {
             const list = await fetchCloudStore('employees_store', []);
-            onUpdateCallback(list);
+            safeEmit(list);
           } else if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
             const list = await fetchCloudStore('customer_store', []);
-            onUpdateCallback(list);
+            safeEmit(list);
           } else if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
             const list = await fetchCloudStore('crm_opportunities', []);
-            onUpdateCallback(list);
+            safeEmit(list);
           } else if (isBomStore) {
             // NEVER download the entire table on a Realtime row event!
             if (payload && payload.new) {
               const singleBom = toConsumerBom(payload.new);
               if (singleBom) {
-                onUpdateCallback(singleBom);
+                safeEmit(singleBom);
               }
             } else if (payload && payload.eventType === 'DELETE' && payload.old) {
-              onUpdateCallback({ id: payload.old.id, _deleted: true });
+              safeEmit({ id: payload.old.id, _deleted: true });
             }
           } else if (isInvoiceStore) {
             // NEVER download the entire table on a Realtime row event!
             if (payload && payload.new) {
               const singleInv = toConsumerInvoice(payload.new);
               if (singleInv) {
-                onUpdateCallback(singleInv);
+                safeEmit(singleInv);
               }
             } else if (payload && payload.eventType === 'DELETE' && payload.old) {
-              onUpdateCallback({ id: payload.old.id, _deleted: true });
+              safeEmit({ id: payload.old.id, _deleted: true });
             }
           } else if (payload && payload.new && payload.new.reason) {
             try {
               const parsed = JSON.parse(payload.new.reason);
-              onUpdateCallback(parsed);
+              safeEmit(parsed);
             } catch (_) {}
           }
         }

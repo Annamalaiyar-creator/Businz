@@ -10,7 +10,6 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
-import TallySyncModal from "./TallySyncModal";
 import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
@@ -38,7 +37,6 @@ export default function InvoiceDetailModal({
   const invoiceList = passedInvoiceList || invoices || [];
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
   const inv = viewingInvoiceModal || {};
-  const [showTallyModal, setShowTallyModal] = useState(false);
   const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
@@ -264,28 +262,6 @@ export default function InvoiceDetailModal({
             }}
           >
             <Printer style={{ width: '15px', height: '15px', color: '#475569' }} /> Print
-          </button>
-
-          {/* Tally Sync button */}
-          <button
-            onClick={() => setShowTallyModal(true)}
-            style={{
-              backgroundColor: '#FEF3C7',
-              border: '1px solid #FDE68A',
-              borderRadius: '8px',
-              padding: '0 16px',
-              height: '38px',
-              fontSize: '13px',
-              fontWeight: '800',
-              color: '#92400E',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            title="Export or Sync this invoice to TallyPrime / Tally.ERP 9"
-          >
-            <FileCode style={{ width: '15px', height: '15px', color: '#D97706' }} /> Tally Sync
           </button>
 
           {/* Download button */}
@@ -1924,16 +1900,6 @@ export default function InvoiceDetailModal({
           </div>
         </div>
       </div>
-
-      {/* TallyPrime Integration Modal */}
-      {showTallyModal && (
-        <TallySyncModal
-          isOpen={showTallyModal}
-          onClose={() => setShowTallyModal(false)}
-          records={[inv]}
-          type="Sales Invoice"
-        />
-      )}
 
       {/* Delivery Address Proof & Document Preview Modal */}
       {localDocPreviewModal && (

@@ -283,6 +283,14 @@ function App() {
     }
   };
 
+  // Ensure Billing / Invoice Executive role cannot land on removed Payments or Spend pages
+  useEffect(() => {
+    if ((userRole === 'Billing' || userRole === 'Invoice Executive') && 
+        (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports')) {
+      handleTabChange('Invoice Management');
+    }
+  }, [userRole, activeTab]);
+
   const toggleSidebar = () => {
     const nextState = !sidebarCollapsed;
     setSidebarCollapsed(nextState);
@@ -539,7 +547,7 @@ function App() {
         />
 
         {/* Scrollable Center Content Pane */}
-        <div className={`content-pane procurement-layout ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''}`}>
+        <div className={`content-pane ${(!activeTab.includes('Dashboard')) ? 'procurement-layout' : ''} ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''} ${(activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') ? 'dashboard-view-pane' : ''}`}>
           {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
             <ProductionAdminView activeTab={activeTab} userRole={userRole} />
           ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
@@ -554,7 +562,7 @@ function App() {
               }} 
             />
           ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? (
-            <VRMTemplateStudioView onBackToPI={() => handleTabChange('Proforma Invoice')} />
+            <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange('Proforma Invoice')} />
           ) : activeTab === 'Purchase Orders' ? (
             <PurchaseOrdersView 
               userRole={userRole} 
@@ -587,7 +595,7 @@ function App() {
             />
           ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
             <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : (activeTab === 'Dashboard' && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
+          ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
             <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (
             <DashboardFullReference userRole={userRole} />
