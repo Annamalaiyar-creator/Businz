@@ -61,140 +61,7 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     let existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
     let modified = false;
 
-    const defaultAccounts = [
-      {
-        id: 'EMP-PH-001',
-        employee_name: 'Senthil Kumar',
-        employee_code: 'PH-VRM001',
-        code: 'PH-VRM001',
-        role: 'Production Head',
-        email: 'production@vrm.com',
-        department: 'Production',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-PR-001',
-        employee_name: 'ARUN BOOPATHI M',
-        employee_code: 'PR-VRM001',
-        code: 'PR-VRM001',
-        role: 'Procurement Head',
-        email: 'scm@vrmstructures.in',
-        department: 'Procurement',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-PR-002',
-        employee_name: 'Ar Annamalaiyar',
-        employee_code: 'PR-VRM002',
-        code: 'PR-VRM002',
-        role: 'Procurement Head',
-        email: 'maniskremo@gmail.com',
-        password: '12345',
-        department: 'Procurement',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-BI-002',
-        employee_name: 'Ar.Annamalaiyar',
-        employee_code: 'BI-VRM002',
-        code: 'BI-VRM002',
-        role: 'Billing',
-        email: 'billing@vrmstructures.com',
-        password: '12345',
-        department: 'Billing',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-CEO-001',
-        employee_name: 'Annamalaiyar',
-        employee_code: 'CEO-VRM001',
-        code: 'CEO-VRM001',
-        role: 'CEO',
-        email: 'ceo@vrm.com',
-        department: 'Executive Leadership',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-TA-001',
-        employee_name: 'Annamalaiyar',
-        employee_code: 'TA-VRM001',
-        code: 'TA-VRM001',
-        role: 'Technical Administrator',
-        email: 'admin@vrm.com',
-        department: 'System Engineering',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-AH-001',
-        employee_name: 'Venkatesh',
-        employee_code: 'AH-VRM001',
-        code: 'AH-VRM001',
-        role: 'Accounts Head',
-        email: 'accounts@vrm.com',
-        department: 'Accounts & Finance',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-SH-001',
-        employee_name: 'Vijay',
-        employee_code: 'SH-VRM001',
-        code: 'SH-VRM001',
-        role: 'Sales Head',
-        email: 'sales@vrm.com',
-        department: 'Sales & Business',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-SE-001',
-        employee_name: 'Mohith JV',
-        employee_code: 'SE-VRM001',
-        code: 'SE-VRM001',
-        role: 'Sales Executive',
-        email: 'mohith@vrm.com',
-        department: 'Sales & Business',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EMP-TS-001',
-        employee_name: 'Karthik Raja',
-        employee_code: 'TS-VRM001',
-        code: 'TS-VRM001',
-        role: 'Tech Support',
-        email: 'techsupport@vrm.com',
-        department: 'Technical Support',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      }
-    ];
-
-    defaultAccounts.forEach(acc => {
-      const accNorm = normalizeCode(acc.employee_code);
-      if (!existingEmps.some(e => normalizeCode(e.employee_code || e.code) === accNorm)) {
-        existingEmps.push(acc);
-        modified = true;
-      }
-    });
-
-    if (modified) {
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(existingEmps));
-      const registeredCodes = JSON.parse(localStorage.getItem('controlroom_registered_codes') || '[]');
-      defaultAccounts.forEach(acc => {
-        if (!registeredCodes.includes(acc.employee_code)) {
-          registeredCodes.push(acc.employee_code);
-        }
-      });
-      localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
-    }
-
+    // Zero hardcoded accounts - system relies purely on registered employee accounts
     accountRecord = existingEmps.find(e => {
       const empNorm = normalizeCode(e.employee_code || e.code);
       const codeMatches = cleanEmpCodeNorm && (
@@ -202,101 +69,10 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
         empNorm.includes(cleanEmpCodeNorm) ||
         cleanEmpCodeNorm.includes(empNorm)
       );
-      const emailMatches = cleanUsername && (
-        (e.email || '').toLowerCase() === cleanUsername ||
-        (cleanUsername.includes('maniskremo') && (e.email || '').toLowerCase().includes('maniskremo')) ||
-        (cleanUsername.includes('arun') && (e.employee_name || '').toLowerCase().includes('arun'))
-      );
+      const emailMatches = cleanUsername && (e.email || '').toLowerCase() === cleanUsername;
       return codeMatches || emailMatches;
     });
   } catch(e) {}
-
-  // Built-in fallbacks if storage was wiped
-  if (!accountRecord) {
-    if (cleanEmpCodeNorm === 'PRVRM002' || cleanUsername === 'maniskremo@gmail.com') {
-      accountRecord = {
-        id: 'EMP-PR-002',
-        employee_name: 'Ar Annamalaiyar',
-        employee_code: cleanEmpId || 'PR-VRM002',
-        role: 'Procurement Head',
-        email: cleanUsername || 'maniskremo@gmail.com',
-        password: '12345',
-        department: 'Procurement',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('PR') || cleanUsername === 'scm@vrmstructures.in' || cleanUsername === 'procurement@vrm.com' || cleanUsername.includes('arun')) {
-      accountRecord = {
-        id: 'EMP-PR-001',
-        employee_name: 'ARUN BOOPATHI M',
-        employee_code: cleanEmpId || 'PR-VRM001',
-        role: 'Procurement Head',
-        email: cleanUsername || 'scm@vrmstructures.in',
-        password: '12345',
-        department: 'Procurement',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('PH') || cleanUsername === 'production@vrm.com') {
-      accountRecord = {
-        id: 'EMP-PH-001',
-        employee_name: 'Senthil Kumar',
-        employee_code: cleanEmpId || 'PH-VRM001',
-        role: 'Production Head',
-        email: cleanUsername || 'production@vrm.com',
-        department: 'Production',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('TA') || cleanUsername === 'admin@vrm.com') {
-      accountRecord = {
-        id: 'EMP-TA-001',
-        employee_name: 'Annamalaiyar',
-        employee_code: cleanEmpId || 'TA-VRM001',
-        role: 'Technical Administrator',
-        email: cleanUsername || 'admin@vrm.com',
-        department: 'System Engineering',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('CEO') || cleanUsername === 'ceo@vrm.com') {
-      accountRecord = {
-        id: 'EMP-CEO-001',
-        employee_name: 'Annamalaiyar',
-        employee_code: cleanEmpId || 'CEO-VRM001',
-        role: 'CEO',
-        email: cleanUsername || 'ceo@vrm.com',
-        department: 'Executive Leadership',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('AH') || cleanUsername === 'accounts@vrm.com') {
-      accountRecord = {
-        id: 'EMP-AH-001',
-        employee_name: 'Venkatesh',
-        employee_code: cleanEmpId || 'AH-VRM001',
-        role: 'Accounts Head',
-        email: cleanUsername || 'accounts@vrm.com',
-        department: 'Accounts & Finance',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('SH') || cleanUsername === 'sales@vrm.com') {
-      accountRecord = {
-        id: 'EMP-SH-001',
-        employee_name: 'Vijay',
-        employee_code: cleanEmpId || 'SH-VRM001',
-        role: 'Sales Head',
-        email: cleanUsername || 'sales@vrm.com',
-        department: 'Sales & Business',
-        status: 'Active'
-      };
-    } else if (cleanEmpCodeNorm.startsWith('TS') || cleanUsername === 'techsupport@vrm.com') {
-      accountRecord = {
-        id: 'EMP-TS-001',
-        employee_name: 'Karthik Raja',
-        employee_code: cleanEmpId || 'TS-VRM001',
-        role: 'Tech Support',
-        email: cleanUsername || 'techsupport@vrm.com',
-        department: 'Technical Support',
-        status: 'Active'
-      };
-    }
-  }
 
   if (!accountRecord) {
     return { 
@@ -305,11 +81,9 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     };
   }
 
-  // 2. Validate Password strictly against account password (or standard default 12345)
+  // 2. Validate Password strictly against account password
   if (accountRecord.password) {
-    const isPassValid = cleanPassword === accountRecord.password ||
-      (accountRecord.password === '12345' && (cleanPassword === '12345' || cleanPassword === '123456')) ||
-      (cleanPassword === '12345' || cleanPassword === '123456');
+    const isPassValid = cleanPassword === accountRecord.password;
     if (!isPassValid) {
       return { success: false, error: 'Incorrect Password: The password you entered is invalid. Please try again.' };
     }

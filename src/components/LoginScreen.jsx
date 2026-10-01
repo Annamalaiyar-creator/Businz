@@ -166,6 +166,13 @@ export default function LoginScreen({ onLoginSuccess }) {
 
   // Synchronize registered employees list from server / cloud on component mount
   useEffect(() => {
+    try {
+      const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const clean = emps.filter(e => e.id && !e.id.startsWith('EMP-PH-001') && !e.id.startsWith('EMP-PR-001') && !e.id.startsWith('EMP-PR-002') && !e.id.startsWith('EMP-CEO-001') && !e.id.startsWith('EMP-TA-001') && !e.id.startsWith('EMP-AH-001') && !e.id.startsWith('EMP-SH-001') && !e.id.startsWith('EMP-SE-001') && !e.id.startsWith('EMP-TS-001') && !e.id.startsWith('EMP-BI-002'));
+      if (clean.length !== emps.length) {
+        localStorage.setItem('controlroom_employees_list', JSON.stringify(clean));
+      }
+    } catch (_) {}
     syncEmployeesFromCloud();
   }, []);
 
@@ -173,14 +180,14 @@ export default function LoginScreen({ onLoginSuccess }) {
     setErrorMsg('');
     const code = String(empIdInput || '').trim().toUpperCase();
     if (!code) {
-      setErrorMsg('Please enter an Employee Code to verify (e.g. SE-VRM005, PH-VRM001).');
+      setErrorMsg('Please enter an Employee Code to verify (e.g. CEO-001, SE-001, TA-001, PH-001).');
       return;
     }
 
-    // Format regex: PREFIX-VRM### (e.g. SE-VRM005, TA-VRM001)
+    // Format regex: PREFIX-NUMBER (e.g. CEO-001, SE-001, TA-001, PH-VRM001)
     const parts = code.split('-');
-    if (parts.length !== 2 || !parts[1].startsWith('VRM')) {
-      setErrorMsg('Invalid Employee Code format. Must be PREFIX-VRM### (e.g. SE-VRM005, PH-VRM001, TA-VRM001).');
+    if (parts.length < 2) {
+      setErrorMsg('Invalid Employee Code format. Must be PREFIX-CODE (e.g. CEO-001, SE-001, TA-001, PH-VRM001).');
       setIsCodeVerified(false);
       setDetectedRole(null);
       return;
@@ -330,7 +337,7 @@ export default function LoginScreen({ onLoginSuccess }) {
       const cleanCode = empIdInput.trim().toUpperCase();
       const cleanEmail = usernameInput.trim().toLowerCase();
 
-      const isDeveloperAccount = roleObj.role === 'Technical Administrator' || roleObj.prefix === 'TA' || cleanCode.startsWith('TA-');
+      const isDeveloperAccount = roleObj.role === 'Technical Administrator' || roleObj.prefix === 'TA' || cleanCode.startsWith('TA-') || roleObj.role === 'CEO' || roleObj.prefix === 'CEO' || cleanCode.startsWith('CEO-');
 
       // Check duplicate Employee Code and duplicate Email
       try {
