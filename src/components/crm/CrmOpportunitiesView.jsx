@@ -291,13 +291,12 @@ export default function CrmOpportunitiesView({
                 <th style={{ width: '150px', minWidth: '150px', padding: '12px 14px', fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>Deal Value (₹)</th>
                 <th style={{ width: '220px', minWidth: '220px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Stage & Win Prob</th>
                 <th style={{ width: '160px', minWidth: '160px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Salesperson</th>
-                <th style={{ width: '150px', minWidth: '150px', padding: '12px 14px', fontWeight: 'bold', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredOpps.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
+                  <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <Boxes size={32} style={{ color: '#CBD5E1' }} />
                       <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No opportunities found</span>
@@ -410,31 +409,6 @@ export default function CrmOpportunitiesView({
 
                       <td style={{ padding: '12px 14px', color: '#334155', fontWeight: '600' }}>
                         {opp.assignedSalesperson}
-                      </td>
-
-                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                          <button
-                            onClick={() => handleConvertToBom(opp)}
-                            title="Generate Engineering BOM Order"
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              border: '1px solid #0E7490',
-                              backgroundColor: '#0E7490',
-                              color: '#FFFFFF',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              boxShadow: '0 1px 2px rgba(14, 116, 144, 0.2)'
-                            }}
-                          >
-                            <Layers size={13} /> + Create BOM
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );
