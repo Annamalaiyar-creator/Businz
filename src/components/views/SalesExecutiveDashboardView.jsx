@@ -1439,30 +1439,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </span>
             </div>
 
-            {/* Subtle background gridlines */}
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none', zIndex: 0 }}>
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} style={{ height: '100%', borderRight: '1px dashed #F1F5F9' }}></div>
-                ))}
-              </div>
-
-              {/* Pattern for striped secondary bars */}
-              <svg width="0" height="0" style={{ position: 'absolute' }}>
-                <defs>
-                  <pattern id="diagonalHatch" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                    <line x1="0" y1="0" x2="0" y2="8" stroke="#94A3B8" strokeWidth="2.5" strokeOpacity="0.55" />
-                  </pattern>
-                </defs>
-              </svg>
-
-              {/* List of Products */}
+            {/* List of Products with clean solid progress bars */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {productPerformance.map((p, idx) => {
                 const pct = maxProductVal > 0 ? (p.actual / maxProductVal) * 100 : 0;
-                const isTop = idx === 0;
 
                 return (
-                  <div key={idx} style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                       <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#1E293B' }}>
                         {p.name}
@@ -1472,28 +1455,26 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                       </span>
                     </div>
 
-                    <div style={{ width: '100%', height: '8px', position: 'relative' }}>
-                      {isTop ? (
+                    {/* Uniform Progress Bar with Subtle Background Track */}
+                    <div style={{
+                      width: '100%',
+                      height: '8px',
+                      backgroundColor: '#F1F5F9',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}>
+                      {pct > 0 && (
                         <div
                           style={{
-                            width: `${Math.max(5, pct)}%`,
-                            height: '8px',
+                            width: `${Math.max(3, Math.min(100, pct))}%`,
+                            height: '100%',
                             borderRadius: '4px',
                             background: 'linear-gradient(90deg, #38BDF8 0%, #0284C7 60%, #0369A1 100%)',
-                            boxShadow: '0 2px 6px rgba(2, 132, 199, 0.3)',
-                            transition: 'width 0.3s ease'
+                            boxShadow: pct > 10 ? '0 2px 6px rgba(2, 132, 199, 0.25)' : 'none',
+                            transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
                           }}
                         />
-                      ) : (
-                        <svg width={`${Math.max(5, pct)}%`} height="8" style={{ display: 'block', overflow: 'hidden', borderRadius: '4px' }}>
-                          <rect
-                            width="100%"
-                            height="8"
-                            rx="4"
-                            ry="4"
-                            fill="url(#diagonalHatch)"
-                          />
-                        </svg>
                       )}
                     </div>
                   </div>
