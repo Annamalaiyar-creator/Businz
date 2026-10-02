@@ -6,7 +6,7 @@ import {
   Globe, Shield, Bell, Eye, EyeOff, Search, Filter, Settings,
   FileCode, Layers, FileText, Download, Upload, Zap, PhoneCall,
   ExternalLink, ChevronRight, AlertCircle, Sparkles, X, Check,
-  Radio, BarChart2, RadioTower, Power, LogOut, Code, Info, ShieldCheck
+  Radio, BarChart2, RadioTower, Power, LogOut, Code, Info, ShieldCheck, Trash2
 } from 'lucide-react';
 import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
 import { fetchLiveActiveSessions, revokeSession, revokeAllOtherSessions } from '../services/sessionService';
@@ -166,6 +166,44 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
       console.error('Error fetching employees from cloud:', e);
     } finally {
       setIsLoadingEmployees(false);
+    }
+  };
+
+  const handleDeleteEmployee = async (empCode, empName) => {
+    if (!window.confirm(`Are you sure you want to permanently delete user account ${empCode} (${empName || ''})?`)) {
+      return;
+    }
+    try {
+      const updated = employeesList.filter(e => (e.employee_code || e.code) !== empCode);
+      setEmployeesList(updated);
+      localStorage.setItem('controlroom_employees_list', JSON.stringify(updated));
+      const registeredCodes = updated.map(e => e.employee_code || e.code).filter(Boolean);
+      localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
+      saveCloudStore('employees_store', updated);
+      fetch(`/api/store/employees_store/${empCode}`, { method: 'DELETE' }).catch(() => {});
+      if (showCustomAlert) showCustomAlert(`User account ${empCode} was permanently deleted.`, 'User Deleted', 'success');
+    } catch (e) {
+      console.error('Error deleting employee:', e);
+    }
+  };
+
+  const handlePurgeAllUsers = async () => {
+    if (!window.confirm('⚠️ DANGER: Are you sure you want to delete ALL registered users and employee accounts? The system will be completely fresh and users will need to sign up again.')) {
+      return;
+    }
+    try {
+      setEmployeesList([]);
+      localStorage.setItem('controlroom_employees_list', '[]');
+      localStorage.setItem('controlroom_registered_codes', '[]');
+      saveCloudStore('employees_store', []);
+      fetch('/api/store/employees_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([])
+      }).catch(() => {});
+      if (showCustomAlert) showCustomAlert('All employee accounts have been completely removed. System is reset to 0 accounts.', 'Users Purged', 'success');
+    } catch (e) {
+      console.error('Error purging users:', e);
     }
   };
 
@@ -1102,6 +1140,28 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
 
               <div style={{ backgroundColor: '#1E293B', borderRadius: '10px', border: '1px solid #334155', padding: '16px', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  {employeesList.length > 0 && (
+                    <button
+                      onClick={handlePurgeAllUsers}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid #EF4444',
+                        color: '#F87171',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                      title="Permanently remove all registered employee accounts"
+                    >
+                      <Trash2 size={13} />
+                      Purge All Users
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowAllPasswords(prev => !prev)}
                     style={{
@@ -1263,6 +1323,25 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                                 >
                                   ✕ Reject
                                 </button>
+                                <button
+                                  onClick={() => handleDeleteEmployee(empCode, emp.employee_name || emp.name)}
+                                  style={{
+                                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid #EF4444',
+                                    color: '#F87171',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '11.5px',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                  title="Permanently delete user account"
+                                >
+                                  <Trash2 size={12} /> Delete
+                                </button>
                               </div>
                             ) : (
                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1305,6 +1384,25 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                                   }}
                                 >
                                   {empStatus === 'Disabled' || empStatus === 'Rejected' ? 'Re-enable Access' : 'Disable Access'}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteEmployee(empCode, emp.employee_name || emp.name)}
+                                  style={{ 
+                                    backgroundColor: 'rgba(239, 68, 68, 0.15)', 
+                                    border: '1px solid #EF4444', 
+                                    color: '#F87171', 
+                                    padding: '5px 10px', 
+                                    borderRadius: '5px', 
+                                    fontSize: '11px', 
+                                    fontWeight: '700', 
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                  title="Permanently delete user account"
+                                >
+                                  <Trash2 size={11} /> Delete
                                 </button>
                               </div>
                             )}

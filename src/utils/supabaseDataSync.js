@@ -1279,7 +1279,10 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
     if (res && res.ok) {
       const json = await res.json();
       if (json && json.data !== undefined && json.data !== null) {
-        if (Array.isArray(json.data) && json.data.length > 0) {
+        if (Array.isArray(json.data)) {
+          if (json.data.length === 0) {
+            return [];
+          }
           if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
             return json.data.map(c => toConsumerCustomer(c));
           }
@@ -1392,42 +1395,61 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
   // Direct persistence for employees to Supabase users table
   if (storeKey === 'employees_store' && Array.isArray(storeData)) {
     try {
-      for (const emp of storeData) {
-        if (!emp || !emp.email) continue;
-        const cleanEmail = (emp.email || '').trim().toLowerCase();
-        const cleanCode = emp.employee_code || emp.code || 'FE-VRM001';
-        const cleanRole = emp.role || 'Floor Employee';
-        const cleanStatus = emp.status || 'Pending Approval';
-        const deptMeta = `${cleanCode}:::${cleanRole}:::${cleanStatus}`;
+      if (storeData.length === 0) {
+        // All users purged - clear users table and leaves store
+        try {
+          await supabase.from('users').delete().neq('id', -999999);
+        } catch (_) {}
+      } else {
+        const allowedEmails = storeData.map(e => (e.email || '').trim().toLowerCase()).filter(Boolean);
+        if (allowedEmails.length > 0) {
+          try {
+            const { data: currentUsers } = await supabase.from('users').select('id, email');
+            if (Array.isArray(currentUsers) && currentUsers.length > 0) {
+              const toRemove = currentUsers.filter(u => u.email && !allowedEmails.includes(u.email.toLowerCase()));
+              for (const rem of toRemove) {
+                await supabase.from('users').delete().eq('id', rem.id);
+              }
+            }
+          } catch (_) {}
+        }
+        for (const emp of storeData) {
+          if (!emp || !emp.email) continue;
+          const cleanEmail = (emp.email || '').trim().toLowerCase();
+          const cleanCode = emp.employee_code || emp.code || 'FE-VRM001';
+          const cleanRole = emp.role || 'Floor Employee';
+          const cleanStatus = emp.status || 'Pending Approval';
+          const deptMeta = `${cleanCode}:::${cleanRole}:::${cleanStatus}`;
 
-        const { data: existing } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('email', cleanEmail)
-          .maybeSingle();
+          const { data: existing } = await supabase
+            .from('users')
+            .select('id, email')
+            .eq('email', cleanEmail)
+            .maybeSingle();
 
-        if (existing && existing.id) {
-          await supabase
-            .from('users')
-            .update({
-              name: emp.employee_name || emp.name,
-              password: emp.password || '123456',
-              role: cleanRole,
-              department: deptMeta
-            })
-            .eq('id', existing.id);
-        } else {
-          await supabase
-            .from('users')
-            .insert({
-              name: emp.employee_name || emp.name,
-              email: cleanEmail,
-              password: emp.password || '123456',
-              role: cleanRole,
-              department: deptMeta,
-              annual_leave: 20,
-              sick_leave: 5
-            });
+          if (existing && existing.id) {
+            await supabase
+              .from('users')
+              .update({
+                name: emp.employee_name || emp.name,
+                password: emp.password || '123456',
+                role: cleanRole,
+                department: deptMeta
+              })
+              .eq('id', existing.id);
+          } else {
+            await supabase
+              .from('users')
+              .insert({
+                name: emp.employee_name || emp.name,
+                email: cleanEmail,
+                password: emp.password || '123456',
+                role: cleanRole,
+                department: deptMeta,
+                annual_leave: 20,
+                sick_leave: 5
+              });
+          }
         }
       }
     } catch (err) {

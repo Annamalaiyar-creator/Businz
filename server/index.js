@@ -762,6 +762,21 @@ const getDatabaseStore = async (key) => {
   if (cleanKey === 'bom_store' || cleanKey === 'boms' || cleanKey === 'bom_orders') {
     return await loadDatabaseBoms();
   }
+  if (cleanKey === 'employees_store') {
+    const empDiskPath = getStoreFilePath('employees_store.json');
+    if (fs.existsSync(empDiskPath)) {
+      try {
+        const diskData = JSON.parse(fs.readFileSync(empDiskPath, 'utf8'));
+        if (Array.isArray(diskData)) {
+          supabaseMemoryStore['employees_store'] = diskData;
+          return diskData;
+        }
+      } catch (_) {}
+    }
+    if (Array.isArray(supabaseMemoryStore['employees_store'])) {
+      return supabaseMemoryStore['employees_store'];
+    }
+  }
 
   // 1. Fast sub-millisecond return from authoritative memory cache if populated
   if (supabaseMemoryStore[cleanKey] && (Array.isArray(supabaseMemoryStore[cleanKey]) ? supabaseMemoryStore[cleanKey].length > 0 : Object.keys(supabaseMemoryStore[cleanKey]).length > 0)) {
@@ -1262,6 +1277,10 @@ const saveDatabaseStore = async (key, storeData) => {
       try {
         fs.writeFileSync(getStoreFilePath('workorder_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
         fs.writeFileSync(getStoreFilePath('vrm_prod_workorders.json'), JSON.stringify(storeData, null, 2), 'utf8');
+      } catch (_) {}
+    } else if (cleanKey === 'employees_store' && Array.isArray(storeData)) {
+      try {
+        fs.writeFileSync(getStoreFilePath('employees_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
       } catch (_) {}
     }
   } catch (diskErr) {
@@ -2143,6 +2162,9 @@ app.post('/api/store/:key', async (req, res) => {
     // Smart merge for array collections
     if (Array.isArray(storeData) && storeData.length === 0) {
       finalDataToSave = [];
+    } else if (key === 'employees_store' && Array.isArray(storeData)) {
+      // Direct overwrite for employees_store so deleted accounts are never resurrected
+      finalDataToSave = storeData;
     } else if (Array.isArray(storeData)) {
       const currentData = await getDatabaseStore(key);
       if (Array.isArray(currentData) && currentData.length > 0) {
@@ -2216,6 +2238,26 @@ app.post('/api/store/:key', async (req, res) => {
 
 app.delete('/api/store/:key/:id', async (req, res) => {
   const { key, id } = req.params;
+  if (key === 'employees_store') {
+    try {
+      const current = await getDatabaseStore('employees_store');
+      const list = Array.isArray(current) ? current : [];
+      const cleanTarget = String(id || '').trim().toLowerCase();
+      const updated = list.filter(e => {
+        const c = String(e.employee_code || e.code || '').trim().toLowerCase();
+        const em = String(e.email || '').trim().toLowerCase();
+        const sid = String(e.id || '').trim().toLowerCase();
+        return sid !== cleanTarget && c !== cleanTarget && em !== cleanTarget;
+      });
+      await saveDatabaseStore('employees_store', updated);
+      try {
+        await supabase.from('users').delete().or(`email.eq.${cleanTarget},department.ilike.%${cleanTarget}%`);
+      } catch (_) {}
+      return res.json({ success: true, message: `Employee ${id} deleted successfully`, count: updated.length, data: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
   if (key === 'crm_opportunities' || key === 'opportunities') {
     try {
       // 1. Delete from Supabase public.opportunities

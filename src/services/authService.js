@@ -16,7 +16,7 @@ export const syncEmployeesFromCloud = async () => {
     clearTimeout(timeoutId);
     if (res && res.ok) {
       const json = await res.json();
-      if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+      if (json && json.success && Array.isArray(json.data)) {
         localStorage.setItem('controlroom_employees_list', JSON.stringify(json.data));
         const registeredCodes = json.data.map(e => (e.employee_code || e.code)).filter(Boolean);
         localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
@@ -27,7 +27,7 @@ export const syncEmployeesFromCloud = async () => {
 
   try {
     const list = await fetchCloudStore('employees_store', []);
-    if (Array.isArray(list) && list.length > 0) {
+    if (Array.isArray(list)) {
       localStorage.setItem('controlroom_employees_list', JSON.stringify(list));
       const registeredCodes = list.map(e => (e.employee_code || e.code)).filter(Boolean);
       localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
