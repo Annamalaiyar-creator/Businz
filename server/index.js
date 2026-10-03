@@ -4899,6 +4899,8 @@ app.post('/api/boms', async (req, res) => {
           });
         }
 
+        const shouldUpdate = Boolean(isUpdate || alreadyExists);
+
         // Strict 1-to-1 PI Rule: If BOM for this PI exists, always update that record instead of assigning a new code!
         if (existingPiBom) {
           finalCode = existingPiBom.bomCode || existingPiBom.code || existingPiBom.id;

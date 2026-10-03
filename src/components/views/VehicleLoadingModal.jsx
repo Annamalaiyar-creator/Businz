@@ -9,6 +9,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { getMediaFromCache, saveMediaToCache } from "../../utils/mediaUtils";
+import { stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { notifyDispatchCompletedToSales } from "../../services/notificationService";
 
 function readFileAsDataUrl(file) {
@@ -448,24 +449,31 @@ const handleFinalizeVehicleLoading = () => {
     centralInventoryStore.releaseReservation(bCode);
   } catch (_) {}
 
-  // Update BOM status to Fully Completed or Awaiting LR Copy & persist
+  const updatedBomData = {
+    ...bom,
+    status: nextBomStatus,
+    fullyCompleted: willCloseBom,
+    stockDeducted: true,
+    vehicleLoading: loadingPayload,
+    lrCopyDoc: lrCopyDoc || bom.lrCopyDoc || null,
+    dispatchedAt: bom.dispatchedAt || new Date().toISOString(),
+    completedAt: willCloseBom ? new Date().toISOString() : null
+  };
+
+  // Update BOM status to Fully Completed or Awaiting LR Copy & persist locally and to cloud
   setBomStore(prev => {
-    const updated = prev.map(b => (b.bomCode === bCode || b.code === bCode) ? {
-      ...b,
-      status: nextBomStatus,
-      fullyCompleted: willCloseBom,
-      stockDeducted: true,
-      vehicleLoading: loadingPayload,
-      lrCopyDoc: lrCopyDoc || b.lrCopyDoc || null,
-      dispatchedAt: b.dispatchedAt || new Date().toISOString(),
-      completedAt: willCloseBom ? new Date().toISOString() : null
-    } : b);
+    const updated = (prev || []).map(b => (b.bomCode === bCode || b.code === bCode) ? updatedBomData : b);
     try {
-      const updatedBom = updated.find(b => b.bomCode === bCode || b.code === bCode);
-      if (updatedBom) saveCloudBomRow(updatedBom);
-    } catch (e) { }
+      localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+    } catch (_) {}
     return updated;
   });
+
+  try {
+    saveCloudBomRow(updatedBomData);
+  } catch (e) {
+    console.warn('Error saving BOM row to cloud in VehicleLoadingModal:', e);
+  }
 
   // Update Invoice status & persist
   if (typeof setInvoiceList === 'function') {
@@ -480,6 +488,7 @@ const handleFinalizeVehicleLoading = () => {
       try {
         const targetInvoice = updatedInvoices.find(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo));
         if (targetInvoice) saveCloudInvoiceRow(targetInvoice);
+        localStorage.setItem('controlroom_invoice_store', JSON.stringify(updatedInvoices.map(stripDataUrlsFromRecord)));
       } catch (e) { }
       return updatedInvoices;
     });
@@ -487,8 +496,7 @@ const handleFinalizeVehicleLoading = () => {
 
   window.dispatchEvent(new Event('central_inventory_updated'));
   window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-  window.dispatchEvent(new Event('controlroom_storage_update'));
-  window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData, action: 'upsert' } }));
 
   // Notify Sales Person that dispatch for this BOM is completed
   try {
