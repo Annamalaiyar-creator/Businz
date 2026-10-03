@@ -290,6 +290,15 @@ function App() {
     }
   }, [userRole, activeTab]);
 
+  // Ensure Accounts Head / Accounts Executive role cannot land on removed Spend, Payments, or Delivery Challans pages
+  useEffect(() => {
+    const isAccountsRole = userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts';
+    if (isAccountsRole && 
+        (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports' || activeTab === 'Delivery Challans')) {
+      handleTabChange('Finance Dashboard');
+    }
+  }, [userRole, activeTab]);
+
   const toggleSidebar = () => {
     const nextState = !sidebarCollapsed;
     setSidebarCollapsed(nextState);

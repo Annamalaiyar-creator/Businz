@@ -950,6 +950,16 @@ export default function ProductionViewsEngine(props) {
             );
           }
 
+          // Restrict Delivery Challans for Accounts roles
+          if (activeTab === 'Delivery Challans' && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts')) {
+            return (
+              <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
+                <p style={{ fontSize: '13px', color: '#64748B' }}>Delivery Challans are not available for your role.</p>
+              </div>
+            );
+          }
+
           // Dedicated Custom Renderer for Work Orders matching User Reference Screenshot
           if (activeTab === 'Work Orders') {
             if (showWorkOrderForm) {

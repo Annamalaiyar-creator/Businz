@@ -176,23 +176,14 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           ]
         }
       ];
-    } else if (role === 'Accounts Head' || role === 'Accounts Executive') {
+    } else if (role === 'Accounts Head' || role === 'Accounts Executive' || role === 'Finance & Accounts') {
       sections = [
         {
           category: 'MAIN MENU',
           items: [
             { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'PO Verification', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: ShoppingCart, badge: realAccountsAwaitingPOCount > 0 ? String(realAccountsAwaitingPOCount) : undefined },
-            { label: 'Accounts Verification', icon: CheckCircle },
-            { label: 'Delivery Challans', icon: FileCheck },
-            { label: 'Payments', icon: Wallet }
-          ]
-        },
-        {
-          category: 'WORKSPACE & REPORTS',
-          items: [
-            { label: 'Spend Analytics', icon: PieChart },
-            { label: 'Spend Reports', icon: TrendingUp }
+            { label: 'Accounts Verification', icon: CheckCircle }
           ]
         }
       ];
