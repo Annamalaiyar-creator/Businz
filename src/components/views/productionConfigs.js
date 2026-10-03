@@ -201,6 +201,20 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               const isAccVerifiedOrder = (b) => {
                 const acc = b?.accountsVerification || {};
                 const s = String(b?.status || '').toLowerCase();
+                const isWhileDisp = b?.paymentType === 'Payment While Dispatch' || String(b?.paymentType || '').includes('While Dispatch');
+                const hasProof = Boolean(
+                  b?.paymentProofDoc || 
+                  b?.payments?.proofDocObj || 
+                  b?.payments?.proofDoc || 
+                  b?.balancePaymentProofDoc ||
+                  b?.payments?.balanceProofDocObj ||
+                  b?.payments?.balanceProofDoc ||
+                  b?.proofDoc ||
+                  b?.proofDocData
+                );
+                if (isWhileDisp && !hasProof) {
+                  return false;
+                }
                 return Boolean(
                   acc.verified ||
                   s.includes('accounts verified') ||
@@ -264,10 +278,17 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
                   }
 
-                  const statusText = isVerified ? 'ACCOUNTS VERIFIED' : 'PENDING VERIFICATION';
-                  const stBg = isVerified ? '#DCFCE7' : '#FEF3C7';
-                  const stFg = isVerified ? '#166534' : '#B45309';
-                  const stBorder = isVerified ? '1px solid #BBF7D0' : '1px solid #FDE68A';
+                  const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(
+                    b.paymentProofDoc || b.payments?.proofDocObj || b.payments?.proofDoc || b.balancePaymentProofDoc || b.proofDoc || b.proofDocData
+                  );
+                  const statusText = isVerified 
+                    ? 'ACCOUNTS VERIFIED' 
+                    : isWhileDispPendingProof 
+                      ? 'AWAITING PAYMENT PROOF' 
+                      : 'PENDING VERIFICATION';
+                  const stBg = isVerified ? '#DCFCE7' : isWhileDispPendingProof ? '#FEF2F2' : '#FEF3C7';
+                  const stFg = isVerified ? '#166534' : isWhileDispPendingProof ? '#DC2626' : '#B45309';
+                  const stBorder = isVerified ? '1px solid #BBF7D0' : isWhileDispPendingProof ? '1px solid #FECACA' : '1px solid #FDE68A';
                   const tabGroup = isVerified ? 'Verified' : 'Pending';
 
                   return {

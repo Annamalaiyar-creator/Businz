@@ -351,13 +351,15 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                         ...b,
                         status: 'Payment Uploaded & Verified',
                         paymentProofDoc: metadata,
+                        pendingSalesDispatchPayment: false,
                         payments: {
                           ...b.payments,
                           proofDoc: metadata.name,
                           proofDocObj: metadata,
+                          dispatchPaymentUploaded: paymentStageType === 'Payment While Dispatch' || b.payments?.dispatchPaymentUploaded,
                           advance100Uploaded: paymentStageType === '100% Paid' || paymentStageType === '100% Advance',
                           advance50Uploaded: paymentStageType === '50% Advance' || paymentStageType === 'Partial Advance' || b.payments?.advance50Uploaded,
-                          dispatch50Uploaded: paymentStageType === '50% Dispatch' || paymentStageType === 'Balance Payment' || b.payments?.dispatch50Uploaded,
+                          dispatch50Uploaded: paymentStageType === '50% Dispatch' || paymentStageType === 'Balance Payment' || paymentStageType === 'Payment While Dispatch' || b.payments?.dispatch50Uploaded,
                           net30Uploaded: paymentStageType === 'Credit Payment' || paymentStageType === 'Net 30 Days'
                         }
                       } : b);
