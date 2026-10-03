@@ -108,39 +108,64 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   };
 
 
+  const RAW_MATERIAL_CODES = new Set([
+    'ALU-LEN-2414MM',
+    'RM-ALU-2414',
+    'ALU-BAR-2650MM',
+    'ALU-COIL-1.5',
+    'CC4.8N',
+    'CC3.6',
+    'SR3.6',
+    'LC',
+    'AR100',
+    'AR120',
+    'MID-SEC',
+    'TOP-2M',
+    'BOT-2M',
+    'TOP-1.5M',
+    'BOT-2.4M',
+    'MC35',
+    'MC30',
+    'T10',
+    'UM',
+    'UE',
+    'EC35',
+    'ALB',
+    'T8'
+  ]);
+
   const ALUMINUM_PROFILES = [
-    { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Bay #4 - FG Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Aluminium', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Aluminium', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR100O', name: 'MINI RAIL 100mm (300mm) OLD', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR100N', name: 'MINI RAIL 100mm (300mm) NEW', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR125', name: 'MINI RAIL 125mm (300mm)', cat: 'Aluminium', unit: 'Pieces', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'LC', name: 'Locking Nut (LC)', cat: 'Aluminium', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 0, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR60', name: 'MINI RAIL 60mm (300mm) NEW', cat: '6063T6', category: '6063T6', unit: 'Nos', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MR40', name: 'MINI RAIL 40mm (300mm) NEW', cat: '6063T6', category: '6063T6', unit: 'Nos', lengthMm: '300', cutLength: '300 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 0, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Aluminium', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 0, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Aluminium', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 0, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'TOP-2M', name: 'Top Section 2 Mtr (TOP-2M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'BOT-2M', name: 'Bottom Section 2 Mtr (BOT-2M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'TOP-1.5M', name: 'Top Section 1.5 Mtr (TOP-1.5M)', cat: 'Aluminium', unit: 'Length', lengthMm: '1500', cutLength: '1500 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'BOT-2.4M', name: 'Bottom Section 2.4 Mtr (BOT-2.4M)', cat: 'Aluminium', unit: 'Length', lengthMm: '2400', cutLength: '2400 mm', stock: 0, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MC35', name: 'Mid Clamp 35mm (MC35)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'MC30', name: 'Mid Clamp 30mm (MC30)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '30 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'T10', name: 'T Nut 10mm (T10)', cat: 'Aluminium', unit: 'Length', lengthMm: '2562', cutLength: '10 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'UM', name: 'Mid Clamp Universal (UM)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'UE', name: 'End Clamp 35mm New (UE)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'EC35', name: 'End Clamp 35mm (EC35)', cat: 'Aluminium', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 0, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'ALB', name: 'L Bracket (ALB)', cat: 'Aluminium', unit: 'Length', lengthMm: '2050', cutLength: '2050 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' },
-    { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Aluminium', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 0, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'Out of Stock' }
+    { code: 'ALU-LEN-2414MM', name: 'Aluminium Mother Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '2414 mm', stock: 5000, minLevel: 20, store: 'Bay #1 - Extrusion Yard', hsn: '7604', status: 'In Stock' },
+    { code: 'ALU-BAR-2650MM', name: 'Aluminium Extrusion Bar (2650 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 5000, minLevel: 20, store: 'Bay #1 - Extrusion Yard', hsn: '7604', status: 'In Stock' },
+    { code: 'CC4.8N', name: 'Double C Rail NEW (CC4.8N)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '4800', cutLength: '4800 mm', stock: 5000, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'CC3.6', name: 'Double C Rail (CC3.6)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'SR3.6', name: 'Strut Rail (SR3.6)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3600', cutLength: '3600 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'LC', name: 'Locking Nut / Channel (LC)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '3000', cutLength: '3000 mm', stock: 5000, minLevel: 30, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'AR100', name: 'Adhesive Rail 100mm (AR100)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '100 mm', stock: 5000, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'AR120', name: 'Adhesive Rail 120mm (AR120)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2414', cutLength: '120 mm', stock: 5000, minLevel: 35, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MID-SEC', name: 'Mid Section (MID-SEC)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2730', cutLength: '2730 mm', stock: 5000, minLevel: 25, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'TOP-2M', name: 'Top Section 2 Mtr (TOP-2M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'BOT-2M', name: 'Bottom Section 2 Mtr (BOT-2M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2000', cutLength: '2000 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'TOP-1.5M', name: 'Top Section 1.5 Mtr (TOP-1.5M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '1500', cutLength: '1500 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'BOT-2.4M', name: 'Bottom Section 2.4 Mtr (BOT-2.4M)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2400', cutLength: '2400 mm', stock: 5000, minLevel: 40, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MC35', name: 'Mid Clamp 35mm (MC35)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'MC30', name: 'Mid Clamp 30mm (MC30)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '30 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'T10', name: 'T Nut 10mm (T10)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2562', cutLength: '10 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'UM', name: 'Mid Clamp Universal (UM)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '2650 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'UE', name: 'End Clamp 35mm New (UE)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'EC35', name: 'End Clamp 35mm (EC35)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2650', cutLength: '35 mm', stock: 5000, minLevel: 60, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'ALB', name: 'L Bracket (ALB)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2050', cutLength: '2050 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' },
+    { code: 'T8', name: 'T Nut KMC 8mm (T8)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', lengthMm: '2580', cutLength: '8 mm', stock: 5000, minLevel: 50, store: 'Main Store', hsn: '7604', status: 'In Stock' }
   ];
 
   const initialMaterials = useMemo(() => ALUMINUM_PROFILES.map(p => ({
     ...p,
     lastUpdated: 'Live Store',
     reserved: 0,
-    openingStock: 0,
+    openingStock: 5000,
+    physicalStock: 5000,
+    stock: 5000,
+    availableStock: 5000,
     goodsReceived: 0,
     issuedProd: 0,
     matReturn: 0,
@@ -164,11 +189,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(item => {
+          // Exclude MR-300MM from raw material storage
+          const filteredParsed = parsed.filter(item => {
+            const c = String(item?.code || '').toUpperCase().trim();
+            return c !== 'MR-300MM' && c !== 'MR300MM' && c !== 'MINI RAIL - 300 MM';
+          });
+
+          return filteredParsed.map(item => {
             let openVal = Number(item.openingStock !== undefined ? item.openingStock : 5000);
-            if (isNaN(openVal) || openVal < 0) openVal = 5000;
-            // Clean up any legacy compounding corruption where openingStock grew beyond baseline without manual adjustment
-            if (openVal > 5000 && (!item.stockAdj || item.stockAdj === 0)) openVal = 5000;
+            if (isNaN(openVal) || openVal <= 0) openVal = 5000;
             const recQty = Number(item.goodsReceived || 0);
             const dispatched = Number(item.dispatched || 0);
             const physVal = Math.max(0, (openVal + recQty) - dispatched);
@@ -190,11 +219,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       }
     } catch (_) {}
 
-    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-    const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 1800, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 1800, physicalStock: 1800, availableStock: 1800, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Mother Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+    const defaultAluBar = { code: 'ALU-BAR-2650MM', name: 'Aluminium Extrusion Bar (2650 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2650', minLevel: 20, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
     const matMap = new Map();
     matMap.set('ALU-LEN-2414MM', defaultAluLength);
-    matMap.set('MR-300MM', defaultMiniRail);
+    matMap.set('ALU-BAR-2650MM', defaultAluBar);
 
     // 1. Catalog products baseline (5,000 standard ready baseline for active catalog)
     (VRM_PRODUCTS || []).forEach(p => {
@@ -300,18 +329,24 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           savedMats.forEach(sm => {
             const rawKey = String(sm.code || sm.name).toUpperCase().trim();
             const mapKey = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
+            // MR-300MM is not a raw material and must not be loaded here
+            if (mapKey === 'MR-300MM' || mapKey === 'MR300') return;
             const existing = matMap.get(mapKey) || {};
-            const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
-            const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
+            const isRaw = RAW_MATERIAL_CODES.has(mapKey) || sm.cat === 'Raw Material' || sm.category === 'Raw Material';
+            const rawSmStock = sm.stock !== undefined ? Number(sm.stock) : 5000;
+            const smStock = (isRaw && rawSmStock <= 0 && (!sm.stockAdj || sm.stockAdj === 0)) ? 5000 : rawSmStock;
+            const smOpen = sm.openingStock !== undefined && Number(sm.openingStock) > 0 ? Number(sm.openingStock) : 5000;
             matMap.set(mapKey, {
               ...existing,
               ...sm,
               code: sm.code || existing.code || mapKey,
               name: sm.name || existing.name,
-              cat: isAlu2414 ? 'Raw Material' : (sm.cat || sm.category || existing.cat || 'General'),
-              category: isAlu2414 ? 'Raw Material' : (sm.category || sm.cat || existing.category || 'General'),
+              cat: isRaw ? 'Raw Material' : (sm.cat || sm.category || existing.cat || 'General'),
+              category: isRaw ? 'Raw Material' : (sm.category || sm.cat || existing.category || 'General'),
               stock: smStock,
-              openingStock: sm.openingStock !== undefined ? Number(sm.openingStock) : 0,
+              openingStock: smOpen,
+              physicalStock: Math.max(smStock, Number(sm.physicalStock || smOpen || 5000)),
+              availableStock: smStock,
               status: smStock > 0 ? 'In Stock' : 'Out of Stock'
             });
           });
@@ -390,10 +425,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const deletedCodes = getDeletedMaterialCodes();
       const engineInv = prodModuleEngine.getInventory();
       const matMap = new Map();
-      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
-      const defaultMiniRail = { code: 'MR-300MM', name: 'Mini Rail - 300 mm', cat: 'Aluminium Profiles', category: 'Aluminium Profiles', unit: 'Pieces', stock: 1800, lengthMm: '300', minLevel: 50, status: 'In Stock', store: 'Bay #4 - FG Store', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 1800, physicalStock: 1800, availableStock: 1800, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluLength = { code: 'ALU-LEN-2414MM', name: 'Aluminium Mother Length (2414 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2414', minLevel: 15, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
+      const defaultAluBar = { code: 'ALU-BAR-2650MM', name: 'Aluminium Extrusion Bar (2650 mm)', cat: 'Raw Material', category: 'Raw Material', unit: 'Length', stock: 5000, lengthMm: '2650', minLevel: 20, status: 'In Stock', store: 'Bay #1 - Extrusion Yard', hsn: '7604', lastUpdated: 'Live Store', reserved: 0, openingStock: 5000, physicalStock: 5000, availableStock: 5000, goodsReceived: 0, issuedProd: 0, matReturn: 0, stockAdj: 0 };
       matMap.set('ALU-LEN-2414MM', defaultAluLength);
-      matMap.set('MR-300MM', defaultMiniRail);
+      matMap.set('ALU-BAR-2650MM', defaultAluBar);
       // 1. Catalog products baseline (5,000 standard ready baseline for all catalog products)
       (VRM_PRODUCTS || []).forEach(p => {
         const code = p.code || resolveProductCode(p) || p.name;
@@ -426,14 +461,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         const rawKey = String(m.code).toUpperCase().trim();
         const key = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
         const existing = matMap.get(key) || {};
-        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : 0);
+        const isRaw = RAW_MATERIAL_CODES.has(key) || m.cat === 'Raw Material' || m.category === 'Raw Material';
+        const mStock = m.stock !== undefined ? Number(m.stock) : (existing.stock !== undefined ? Number(existing.stock) : (isRaw ? 5000 : 0));
         matMap.set(key, {
           ...existing,
           ...m,
           code: key,
+          cat: isRaw ? 'Raw Material' : (m.cat || existing.cat),
+          category: isRaw ? 'Raw Material' : (m.category || existing.category),
           stock: mStock,
-          openingStock: existing.openingStock !== undefined ? existing.openingStock : mStock,
-          physicalStock: existing.physicalStock !== undefined ? existing.physicalStock : mStock,
+          openingStock: existing.openingStock !== undefined && Number(existing.openingStock) > 0 ? existing.openingStock : mStock,
+          physicalStock: existing.physicalStock !== undefined && Number(existing.physicalStock) > 0 ? existing.physicalStock : mStock,
           availableStock: mStock,
           status: mStock > 0 ? 'In Stock' : 'Out of Stock'
         });
@@ -448,21 +486,25 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             savedMats.forEach(sm => {
               const rawKey = String(sm.code || sm.name).toUpperCase().trim();
               const mapKey = CANONICAL_PRODUCT_ALIASES[rawKey] || rawKey;
+              // MR-300MM must not be added or processed as a raw material
+              if (mapKey === 'MR-300MM' || mapKey === 'MR300') return;
               const existing = matMap.get(mapKey) || {};
-              const smStock = sm.stock !== undefined ? Number(sm.stock) : 0;
-              const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
+              const isRaw = RAW_MATERIAL_CODES.has(mapKey) || sm.cat === 'Raw Material' || sm.category === 'Raw Material';
+              const rawSmStock = sm.stock !== undefined ? Number(sm.stock) : 5000;
+              const smStock = (isRaw && rawSmStock <= 0 && (!sm.stockAdj || sm.stockAdj === 0)) ? 5000 : rawSmStock;
               let smOpen = sm.openingStock !== undefined ? Number(sm.openingStock) : (existing.openingStock || 5000);
-              if (isNaN(smOpen) || smOpen < 0) smOpen = 5000;
-              if (smOpen > 5000 && (!sm.stockAdj || sm.stockAdj === 0)) smOpen = 5000;
+              if (isNaN(smOpen) || smOpen <= 0) smOpen = 5000;
               matMap.set(mapKey, {
                 ...existing,
                 ...sm,
                 code: existing.code || sm.code || mapKey,
                 name: existing.name || sm.name,
-                cat: isAlu2414 ? 'Raw Material' : (existing.cat || sm.cat || sm.category || existing.category || 'General'),
-                category: isAlu2414 ? 'Raw Material' : (existing.category || sm.category || sm.cat || existing.cat || 'General'),
+                cat: isRaw ? 'Raw Material' : (existing.cat || sm.cat || sm.category || existing.category || 'General'),
+                category: isRaw ? 'Raw Material' : (existing.category || sm.category || sm.cat || existing.cat || 'General'),
                 stock: smStock,
                 openingStock: smOpen,
+                physicalStock: Math.max(smStock, Number(sm.physicalStock || smOpen || 5000)),
+                availableStock: smStock,
                 status: smStock > 0 ? 'In Stock' : 'Out of Stock'
               });
             });
@@ -478,23 +520,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
         const existing = matMap.get(mapKey) || {};
         const engineStock = item.physicalStock !== undefined ? Number(item.physicalStock) : null;
+        const isRaw = RAW_MATERIAL_CODES.has(mapKey) || item.category === 'Raw Material';
         const stockVal = (engineStock !== null && engineStock > 0)
           ? engineStock
-          : (existing.stock !== undefined ? Number(existing.stock) : (engineStock ?? 0));
+          : (existing.stock !== undefined && Number(existing.stock) > 0 ? Number(existing.stock) : (isRaw ? 5000 : (engineStock ?? 0)));
         const minLvl = Number(item.safetyStock || existing.minLevel || 50);
         let statusText = 'In Stock';
         if (stockVal === 0) statusText = 'Out of Stock';
         else if (stockVal <= minLvl) statusText = 'Low Stock';
 
-        const isAlu2414 = mapKey === 'ALU-LEN-2414MM' || mapKey === 'RM-ALU-2414';
         matMap.set(mapKey, {
           ...existing,
           code: existing.code || displayCode || mapKey,
           name: existing.name || item.name,
-          cat: isAlu2414 ? 'Raw Material' : (item.category || existing.cat || 'Finished Goods'),
-          category: isAlu2414 ? 'Raw Material' : (item.category || existing.category || 'Finished Goods'),
+          cat: isRaw ? 'Raw Material' : (item.category || existing.cat || 'Finished Goods'),
+          category: isRaw ? 'Raw Material' : (item.category || existing.category || 'Finished Goods'),
           unit: item.unit || existing.unit || 'Pieces',
           stock: stockVal,
+          availableStock: stockVal,
+          physicalStock: Math.max(stockVal, Number(existing.physicalStock || 5000)),
+          openingStock: existing.openingStock || 5000,
           minLevel: minLvl,
           status: statusText,
           store: item.bayLocation || existing.store || 'Main Store',
@@ -749,8 +794,11 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             );
 
         const grnQty = Number(m.goodsReceived || 0);
+        const isRaw = RAW_MATERIAL_CODES.has(mCode) || m.cat === 'Raw Material' || m.category === 'Raw Material';
         let base = parseFloat(m.openingStock !== undefined ? m.openingStock : 5000);
-        if (isNaN(base) || base < 0) base = 5000;
+        if (isNaN(base) || base <= 0 || (isRaw && base < 5000 && (!m.stockAdj || m.stockAdj === 0))) {
+          base = 5000;
+        }
         if (base > 5000 && (!m.stockAdj || m.stockAdj === 0)) {
           base = 5000;
         }
@@ -1258,12 +1306,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       // Filter out invalid items or blank rows upfront, and unify legacy MR300 into canonical MR-300MM
       if (!mCode || !mName || mCode === '—' || mCodeLower === 'rm-vrm' || mCodeLower === 'mr300') return false;
 
-      // Identify whether an item is raw material strictly based on Category
+      // MR-300MM is a cut finished product and MUST NEVER appear in Raw Material Directory
+      if (isRawMaterialDirectory && (mCodeLower === 'mr-300mm' || mCodeLower === 'mr300')) return false;
+
+      // Identify whether an item is raw material strictly based on Category and RAW_MATERIAL_CODES
       const itemCat = String(m.category || m.cat || '').trim().toLowerCase();
-      const isRawMaterial = itemCat === 'raw material' || itemCat === 'raw materials' || mCodeLower === 'alu-len-2414mm' || mCodeLower === 'rm-alu-2414';
+      const isRawMaterial = itemCat === 'raw material' || itemCat === 'raw materials' || RAW_MATERIAL_CODES.has(String(m.code || '').toUpperCase().trim());
 
       if (isRawMaterialDirectory) {
-        // Raw Material Directory strictly shows ONLY items where Category is 'Raw Material'
+        // Raw Material Directory strictly shows ONLY items where Category is 'Raw Material' or is in RAW_MATERIAL_CODES
         if (!isRawMaterial) return false;
       } else {
         // Inventory Stores strictly shows ALL OTHER categories (NEVER show raw materials)

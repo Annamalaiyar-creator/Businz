@@ -37,6 +37,34 @@ function createHostingerQueryBuilder(table) {
       state.conditions.push({ type: 'neq', column, value });
       return builder;
     },
+    gt(column, value) {
+      state.conditions.push({ type: 'gt', column, value });
+      return builder;
+    },
+    gte(column, value) {
+      state.conditions.push({ type: 'gte', column, value });
+      return builder;
+    },
+    lt(column, value) {
+      state.conditions.push({ type: 'lt', column, value });
+      return builder;
+    },
+    lte(column, value) {
+      state.conditions.push({ type: 'lte', column, value });
+      return builder;
+    },
+    ilike(column, value) {
+      state.conditions.push({ type: 'ilike', column, value });
+      return builder;
+    },
+    like(column, value) {
+      state.conditions.push({ type: 'like', column, value });
+      return builder;
+    },
+    is(column, value) {
+      state.conditions.push({ type: 'is', column, value });
+      return builder;
+    },
     in(column, values) {
       state.conditions.push({ type: 'in', column, values });
       return builder;
@@ -74,6 +102,11 @@ function createHostingerQueryBuilder(table) {
       return builder;
     },
     async single() {
+      const res = await builder.then(r => r);
+      if (res.error) return { data: null, error: res.error };
+      return { data: Array.isArray(res.data) ? res.data[0] || null : res.data, error: null };
+    },
+    async maybeSingle() {
       const res = await builder.then(r => r);
       if (res.error) return { data: null, error: res.error };
       return { data: Array.isArray(res.data) ? res.data[0] || null : res.data, error: null };
@@ -219,6 +252,44 @@ export const supabase = {
   from(tableName) {
     return createHostingerQueryBuilder(tableName);
   },
+  channel(channelName) {
+    const channelObj = {
+      name: channelName,
+      on(event, filter, callback) {
+        const handler = (e) => {
+          if (typeof callback === 'function' && e?.detail) {
+            callback(e.detail);
+          }
+        };
+        if (typeof window !== 'undefined') {
+          window.addEventListener(`db_change_${filter?.table || 'all'}`, handler);
+          window.addEventListener('controlroom_storage_update', handler);
+        }
+        channelObj._handler = handler;
+        channelObj._table = filter?.table;
+        return channelObj;
+      },
+      subscribe(callback) {
+        if (typeof callback === 'function') {
+          callback('SUBSCRIBED');
+        }
+        return channelObj;
+      },
+      unsubscribe() {
+        if (typeof window !== 'undefined' && channelObj._handler) {
+          window.removeEventListener(`db_change_${channelObj._table || 'all'}`, channelObj._handler);
+          window.removeEventListener('controlroom_storage_update', channelObj._handler);
+        }
+      }
+    };
+    return channelObj;
+  },
+  removeChannel(channel) {
+    if (channel && typeof channel.unsubscribe === 'function') {
+      channel.unsubscribe();
+    }
+  },
+  removeAllChannels() {},
   storage: {
     from(bucketName) {
       return {

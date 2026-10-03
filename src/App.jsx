@@ -12,7 +12,6 @@ import PurchaseOrdersView from './components/PurchaseOrdersView';
 import OtherViews from './components/OtherViews';
 import ZohoIntegrationView from './components/ZohoIntegrationView';
 import DashboardFullReference from './components/DashboardFullReference';
-import MaterialCalculationEngine from './components/MaterialCalculationEngine';
 import InventoryAutoConversion from './components/InventoryAutoConversion';
 import CreateWorkOrderPage from './components/CreateWorkOrderPage';
 import VRMTemplateStudioView from './components/VRMTemplateStudioView';
@@ -561,8 +560,8 @@ function App() {
                 handleTabChange('BOM Orders');
               }} 
             />
-          ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? (
-            <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange('Proforma Invoice')} />
+          ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer' || activeTab === 'PO Template') ? (
+            <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : 'Proforma Invoice')} />
           ) : activeTab === 'Purchase Orders' ? (
             <PurchaseOrdersView 
               userRole={userRole} 
@@ -574,8 +573,6 @@ function App() {
             />
           ) : (activeTab === 'Integration' || activeTab === 'Zoho Integration') ? (
             <ZohoIntegrationView userRole={userRole} />
-          ) : activeTab === 'Material Calculation Engine' ? (
-            <MaterialCalculationEngine onBack={() => handleTabChange('BOM')} />
           ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
             <InventoryAutoConversion />
           ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (

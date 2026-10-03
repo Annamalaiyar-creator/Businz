@@ -32,7 +32,8 @@ import {
   ChevronRight,
   Eye,
   Settings2,
-  Copy
+  Copy,
+  ShoppingCart
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -41,9 +42,34 @@ import {
   DEFAULT_PI_TEMPLATE_SETTINGS
 } from './VRMProformaInvoicePrintTemplate';
 import { VRMTaxInvoicePrintSheet, DEFAULT_OFFICIAL_TAX_INVOICE_DATA } from './VRMTaxInvoicePrintTemplate';
+import { VRMBomPrintSheet } from './VRMBomPrintTemplate';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
-import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate } from '../utils/supabaseDataSync';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
+
+// Persistent tracking of deleted template IDs so deletions survive browser reloads
+const getDeletedTemplateIds = () => {
+  try {
+    const raw = localStorage.getItem('vrm_deleted_template_ids');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch (_) {}
+  return new Set();
+};
+
+const markTemplateAsDeleted = (templateId) => {
+  try {
+    const current = getDeletedTemplateIds();
+    current.add(templateId);
+    const arr = Array.from(current);
+    localStorage.setItem('vrm_deleted_template_ids', JSON.stringify(arr));
+    return arr;
+  } catch (_) {
+    return [templateId];
+  }
+};
 
 // 12 Curated Preset Swatches
 const COLOR_PRESETS = [
@@ -173,49 +199,88 @@ const DEFAULT_MULTI_TEMPLATES = {
   ],
   bom: [
     {
-      id: 'bom_eng',
-      name: 'Detailed Engineering BOM',
-      description: 'Structural fabrication bill of materials with member dimensions, zinc micron specs, and component costs.',
+      id: 'bom_std',
+      name: 'Standard Bill of Materials (BOM)',
+      description: 'Streamlined material specification sheet showing VRM address, shipping & billing addresses, sales person name, BOM number, product names, UOM, and quantities.',
       isDefault: true,
-      lastModified: '11 Sep 2026',
+      lastModified: '03 Oct 2026',
       settings: {
         ...DEFAULT_PI_TEMPLATE_SETTINGS,
         documentTitle: 'BILL OF MATERIALS (BOM)',
         docNoLabel: 'BOM No:',
-        dateLabel: 'Release Date:',
-        validUntilLabel: 'Rev Date:',
-        accentColor: '#1E293B', // Charcoal Slate for Engineering
+        dateLabel: 'BOM Date:',
+        accentColor: '#0E7490',
         logoHeight: 56,
-        stampSize: 230,
-        colHeaderDesc: 'Structural Component & Profile Specification',
-        showHsn: true,
-        showUom: true,
-        showRateCol: true,
-        showTotalCol: true
-      }
-    },
-    {
-      id: 'bom_client',
-      name: 'Client Supply BOM (Without Rates)',
-      description: 'Assembly schedule and quantities for site erection and client handoff without internal cost disclosure.',
-      isDefault: false,
-      lastModified: '08 Sep 2026',
-      settings: {
-        ...DEFAULT_PI_TEMPLATE_SETTINGS,
-        documentTitle: 'MATERIAL SCHEDULE (BOM)',
-        docNoLabel: 'Schedule No:',
-        dateLabel: 'Release Date:',
-        accentColor: '#059669', // Emerald Green
-        logoHeight: 56,
-        stampSize: 230,
-        colHeaderDesc: 'Assembly Profile & Hardware Item',
-        showHsn: true,
+        colHeaderDesc: 'Material & Profile Specification',
+        showHsn: false,
         showUom: true,
         showRateCol: false,
         showTaxableCol: false,
         showGstCol: false,
         showTotalCol: false,
-        showTotalInWords: false
+        showTotalInWords: false,
+        showBankDetails: false,
+        showTerms: false,
+        showPaymentTerms: false,
+        showSignatoryStamp: false,
+        showTransportDetails: false,
+        showCustomerAcceptance: false
+      }
+    }
+  ],
+  po: [
+    {
+      id: 'po_std',
+      name: 'Official Vendor Purchase Order (Zoho Books Format)',
+      description: 'Official GST Purchase Order format with PO number, vendor details, line items, rates, taxes, delivery terms, and authorized signatures.',
+      isDefault: true,
+      lastModified: '03 Oct 2026',
+      settings: {
+        ...DEFAULT_PI_TEMPLATE_SETTINGS,
+        documentTitle: 'PURCHASE ORDER',
+        docNoLabel: 'PO Number:',
+        dateLabel: 'PO Date:',
+        validUntilLabel: 'Delivery Date:',
+        colHeaderDesc: 'Item & Material Description',
+        accentColor: '#0E7490',
+        logoHeight: 56,
+        stampSize: 220,
+        showHsn: true,
+        showUom: true,
+        showRateCol: true,
+        showTaxableCol: true,
+        showGstCol: true,
+        showTotalCol: true,
+        showDeliveryAddress: true,
+        showPaymentTerms: true,
+        showTerms: true
+      }
+    },
+    {
+      id: 'po_compact',
+      name: 'Compact Procurement Order',
+      description: 'Condensed PO format optimized for fast vendor material sourcing, raw materials intake, and workshop delivery.',
+      isDefault: false,
+      lastModified: '03 Oct 2026',
+      settings: {
+        ...DEFAULT_PI_TEMPLATE_SETTINGS,
+        documentTitle: 'PURCHASE ORDER',
+        docNoLabel: 'PO Ref:',
+        dateLabel: 'Date:',
+        validUntilLabel: 'Required By:',
+        colHeaderDesc: 'Material Item / Specification',
+        accentColor: '#1E3A8A',
+        logoHeight: 52,
+        stampSize: 200,
+        showHsn: true,
+        showUom: true,
+        showRateCol: true,
+        showTaxableCol: false,
+        showGstCol: true,
+        showTotalCol: true,
+        showDeliveryAddress: true,
+        showPaymentTerms: true,
+        showTerms: true
       }
     }
   ]
@@ -359,6 +424,69 @@ const SAMPLE_DATASETS = {
         gstRate: '18%'
       }
     ]
+  },
+  po: {
+    piNo: 'PO-00042',
+    poNo: 'PO-00042',
+    piDate: new Date().toISOString().split('T')[0],
+    poDate: new Date().toISOString().split('T')[0],
+    expDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+    deliveryDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+    vendor: 'Jindal Steel & Power Ltd',
+    customerName: 'Jindal Steel & Power Ltd',
+    contactPerson: 'K. Rajesh (Industrial Sales)',
+    phone: '+91 98410 44556',
+    email: 'orders.south@jindalsteel.com',
+    gstNo: '33AAACJ1234K1Z2',
+    billingStreet: '1427, GNT Road, Nagappa Industrial Estate, Puzhal',
+    billingCity: 'Chennai',
+    billingState: 'Tamil Nadu',
+    billingPincode: '600066',
+    billingAddress: '1427, GNT Road, Nagappa Industrial Estate, Puzhal\nChennai 600066, Tamil Nadu',
+    deliveryStreet: 'Plot No. 42 & 43, Phase II, SIDCO Industrial Estate, Ambattur',
+    deliveryCity: 'Chennai',
+    deliveryState: 'Tamil Nadu',
+    deliveryPincode: '600058',
+    deliveryAddress: 'Plot No. 42 & 43, Phase II, SIDCO Industrial Estate, Ambattur\nChennai 600058, Tamil Nadu',
+    paymentTerms: 'Net 30 Days',
+    salesPerson: 'Annamalaiyar (Procurement Head)',
+    transportMode: 'Direct Truck Transit (Vendor Scope)',
+    vehicleNo: 'TN-04-AX-9921',
+    items: [
+      {
+        sNo: 1,
+        name: 'Hot Rolled Structural Steel Coil (Grade E250 / IS 2062)',
+        description: 'Prime quality HR coil, width 1250mm, thickness 2.0mm for solar mounting structure roll forming.',
+        hsn: '72083940',
+        qty: 12.5,
+        uom: 'Tons',
+        rate: 54500,
+        discountPct: 0,
+        gstRate: '18%'
+      },
+      {
+        sNo: 2,
+        name: 'Continuous Galvanized Steel Sheet 1.5mm (GSM 275)',
+        description: 'High tensile GP sheet in custom slit widths for C-Channel & Hat Section fabrication.',
+        hsn: '72104900',
+        qty: 8.2,
+        uom: 'Tons',
+        rate: 62000,
+        discountPct: 0,
+        gstRate: '18%'
+      },
+      {
+        sNo: 3,
+        name: 'Hot Dip Galvanized Hex Bolt M12 x 35mm (Grade 8.8)',
+        description: 'ISO 4017 / DIN 933 full thread structural hex bolts with heavy nuts and spring washers.',
+        hsn: '73181500',
+        qty: 2500,
+        uom: 'Nos',
+        rate: 14.5,
+        discountPct: 0,
+        gstRate: '18%'
+      }
+    ]
   }
 };
 
@@ -411,41 +539,70 @@ const compressImageFile = (file, maxDim = 600, quality = 0.85) => {
 export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
   const effectiveRole = userRole || localStorage.getItem('controlroom_user_role') || '';
   const isBillingRole = effectiveRole === 'Billing' || effectiveRole === 'Invoice Executive' || effectiveRole.toLowerCase().includes('billing');
+  const isProcurementRole = effectiveRole === 'Procurement Head' || effectiveRole === 'Procurement Admin' || effectiveRole.toLowerCase().includes('procurement');
 
   // Navigation Mode: 'hub' | 'editor'
   const [viewMode, setViewMode] = useState('hub');
-  const [activeCategory, setActiveCategory] = useState('pi'); // 'pi' | 'quotation' | 'bom'
-  const [activeTemplateId, setActiveTemplateId] = useState(() => isBillingRole ? 'pi_tax_inv' : 'pi_std');
+  const [activeCategory, setActiveCategory] = useState(() => isProcurementRole ? 'po' : 'pi');
+  const [activeTemplateId, setActiveTemplateId] = useState(() => {
+    if (isProcurementRole) return 'po_std';
+    if (isBillingRole) return 'pi_tax_inv';
+    return 'pi_std';
+  });
 
   // Multi-Templates Store loaded from localStorage
   const [templatesStore, setTemplatesStore] = useState(() => {
     try {
+      const deletedIds = getDeletedTemplateIds();
       const saved = localStorage.getItem('vrm_multi_templates_v2');
+      let baseStore = { ...DEFAULT_MULTI_TEMPLATES };
+
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed._deletedIds)) {
+          parsed._deletedIds.forEach(id => deletedIds.add(id));
+        }
+        if (!parsed.po || !Array.isArray(parsed.po) || parsed.po.length === 0) {
+          parsed.po = DEFAULT_MULTI_TEMPLATES.po;
+        }
         Object.keys(parsed).forEach(cat => {
           if (Array.isArray(parsed[cat])) {
-            parsed[cat] = parsed[cat].map(t => {
-              const s = { ...t.settings };
-              if (s.companyName === 'VRM Structures India Pvt Ltd') s.companyName = '';
-              if (s.companyTagline === 'Engineered Solar Mounting Structures & Solutions') s.companyTagline = '';
-              if (s.companyCin === 'U28112TN2020PTC135489') s.companyCin = '';
-              if (s.signatureMode === 'vector' && !s.customSignatureUrl) s.signatureMode = 'none';
-              s.showCompanyName = false;
-              s.showCompanyTagline = false;
-              return { ...t, settings: s };
-            });
+            parsed[cat] = parsed[cat]
+              .filter(t => t && t.id && !deletedIds.has(t.id))
+              .map(t => {
+                const s = { ...t.settings };
+                if (s.companyName === 'VRM Structures India Pvt Ltd') s.companyName = '';
+                if (s.companyTagline === 'Engineered Solar Mounting Structures & Solutions') s.companyTagline = '';
+                if (s.companyCin === 'U28112TN2020PTC135489') s.companyCin = '';
+                if (s.signatureMode === 'vector' && !s.customSignatureUrl) s.signatureMode = 'none';
+                s.showCompanyName = false;
+                s.showCompanyTagline = false;
+                return { ...t, settings: s };
+              });
           }
         });
-        return { ...DEFAULT_MULTI_TEMPLATES, ...parsed };
+        baseStore = { ...baseStore, ...parsed };
       }
+
+      // Filter all categories by deletedIds
+      const cleanStore = {};
+      Object.keys(baseStore).forEach(cat => {
+        if (Array.isArray(baseStore[cat])) {
+          cleanStore[cat] = baseStore[cat].filter(t => t && t.id && !deletedIds.has(t.id));
+        } else {
+          cleanStore[cat] = baseStore[cat];
+        }
+      });
+      cleanStore._deletedIds = Array.from(deletedIds);
+      return cleanStore;
     } catch (e) {}
     return DEFAULT_MULTI_TEMPLATES;
   });
 
   // Current working settings for the active template
   const [currentSettings, setCurrentSettings] = useState(() => {
-    const list = templatesStore.pi || [];
+    const initialCat = isProcurementRole ? 'po' : 'pi';
+    const list = templatesStore[initialCat] || [];
     const def = list.find(t => t.isDefault) || list[0];
     const s = def ? { ...def.settings } : { ...DEFAULT_PI_TEMPLATE_SETTINGS };
     if (s.companyName === 'VRM Structures India Pvt Ltd') s.companyName = '';
@@ -535,8 +692,22 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
 
     // Also fetch cloud templates store
     fetchCloudStore('templates_store', null).then(cloudTmpl => {
-      if (isMounted && cloudTmpl && typeof cloudTmpl === 'object') {
-        setTemplatesStore(prev => ({ ...prev, ...cloudTmpl }));
+      if (isMounted && cloudTmpl && typeof cloudTmpl === 'object' && !Array.isArray(cloudTmpl)) {
+        const deletedIds = getDeletedTemplateIds();
+        if (Array.isArray(cloudTmpl._deletedIds)) {
+          cloudTmpl._deletedIds.forEach(id => deletedIds.add(id));
+        }
+        setTemplatesStore(prev => {
+          const merged = { ...prev };
+          Object.keys(cloudTmpl).forEach(cat => {
+            if (cat === '_deletedIds') return;
+            if (Array.isArray(cloudTmpl[cat])) {
+              merged[cat] = cloudTmpl[cat].filter(t => t && t.id && !deletedIds.has(t.id));
+            }
+          });
+          merged._deletedIds = Array.from(deletedIds);
+          return merged;
+        });
       }
     });
 
@@ -547,11 +718,15 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
   }, []);
 
   // Save store changes to localStorage AND cloud database
-  const persistStore = (newStore) => {
+  const persistStore = (newStore, immediate = false) => {
     setTemplatesStore(newStore);
     try {
       localStorage.setItem('vrm_multi_templates_v2', JSON.stringify(newStore));
-      saveCloudStore('templates_store', newStore);
+      if (immediate) {
+        saveCloudStoreImmediate('templates_store', newStore);
+      } else {
+        saveCloudStore('templates_store', newStore);
+      }
     } catch (e) {
       console.warn('Failed to save templates store to localStorage:', e);
     }
@@ -682,7 +857,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
     setTimeout(() => setSaveNotice(null), 3500);
   };
 
-  // Delete a non-default template
+  // Delete a non-default template permanently
   const handleDeleteTemplate = (categoryKey, templateId, e) => {
     e.stopPropagation();
     const list = templatesStore[categoryKey] || [];
@@ -693,9 +868,23 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
       return;
     }
     if (window.confirm(`Are you sure you want to delete "${target.name}"?`)) {
+      const deletedIds = markTemplateAsDeleted(templateId);
       const updatedList = list.filter(t => t.id !== templateId);
-      const newStore = { ...templatesStore, [categoryKey]: updatedList };
-      persistStore(newStore);
+      const newStore = {
+        ...templatesStore,
+        [categoryKey]: updatedList,
+        _deletedIds: deletedIds
+      };
+
+      if (activeTemplateId === templateId) {
+        const fallback = updatedList.find(t => t.isDefault) || updatedList[0];
+        if (fallback) {
+          setActiveTemplateId(fallback.id);
+          setCurrentSettings({ ...fallback.settings });
+        }
+      }
+
+      persistStore(newStore, true);
     }
   };
 
@@ -758,6 +947,14 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
   if (viewMode === 'hub') {
     const allCategories = [
       {
+        key: 'po',
+        title: 'Purchase Order (PO)',
+        badgeColor: '#0E7490',
+        icon: ShoppingCart,
+        description: 'Official Vendor Purchase Orders, commercial procurement contracts, delivery terms, and GST supplier line items.',
+        templates: templatesStore.po || []
+      },
+      {
         key: 'pi',
         title: isBillingRole ? 'Invoice Print Layouts' : 'Proforma Invoice (PI)',
         badgeColor: '#0E7490',
@@ -785,9 +982,11 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
       }
     ];
 
-    const categories = isBillingRole 
-      ? allCategories.filter(c => c.key === 'pi') 
-      : allCategories;
+    const categories = isProcurementRole
+      ? allCategories.filter(c => c.key === 'po')
+      : isBillingRole 
+        ? allCategories.filter(c => c.key === 'pi') 
+        : allCategories.filter(c => c.key !== 'po');
 
     const totalCount = categories.reduce((sum, c) => sum + c.templates.length, 0);
 
@@ -830,12 +1029,14 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
               </div>
               <div>
                 <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.3px' }}>
-                  Templates Studio
+                  {isProcurementRole ? 'Purchase Order Templates' : 'Templates Studio'}
                 </h1>
                 <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#64748B' }}>
-                  {isBillingRole
-                    ? 'Manage, customize, and save executive print layouts for Invoices.'
-                    : 'Manage, customize, and save executive print layouts for Proforma Invoices, Quotations, and Bill of Materials.'}
+                  {isProcurementRole
+                    ? 'Manage, customize, and save executive print layouts for Purchase Orders.'
+                    : isBillingRole
+                      ? 'Manage, customize, and save executive print layouts for Invoices.'
+                      : 'Manage, customize, and save executive print layouts for Proforma Invoices, Quotations, and Bill of Materials.'}
                 </p>
               </div>
             </div>
@@ -860,7 +1061,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
         {/* Category Cards Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isBillingRole ? 'minmax(360px, 720px)' : 'repeat(auto-fit, minmax(360px, 1fr))',
+          gridTemplateColumns: (isBillingRole || isProcurementRole) ? 'minmax(360px, 720px)' : 'repeat(auto-fit, minmax(360px, 1fr))',
           gap: '24px'
         }}>
           {categories.map((cat) => {
@@ -2015,6 +2216,34 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                 id="studio-printable-sheet"
                 invoiceData={activeDataset}
                 settings={currentSettings}
+              />
+            ) : activeCategory === 'bom' ? (
+              <VRMBomPrintSheet
+                id="studio-printable-sheet"
+                bomData={{
+                  ...activeDataset,
+                  bomCode: activeDataset.piNo || activeDataset.bomCode || 'BOM-2025-089',
+                  date: activeDataset.piDate || activeDataset.date,
+                  salesPerson: activeDataset.salesPerson || 'Mohith JV',
+                  billingAddressObj: activeDataset.billingAddressObj || {
+                    address: activeDataset.billingStreet,
+                    city: activeDataset.billingCity,
+                    state: activeDataset.billingState,
+                    pincode: activeDataset.billingPincode
+                  },
+                  deliveryAddressObj: activeDataset.deliveryAddressObj || {
+                    address: activeDataset.shippingStreet || activeDataset.billingStreet,
+                    city: activeDataset.shippingCity || activeDataset.billingCity,
+                    state: activeDataset.shippingState || activeDataset.billingState,
+                    pincode: activeDataset.shippingPincode || activeDataset.billingPincode
+                  },
+                  items: Array.isArray(activeDataset.items) ? activeDataset.items.map(it => ({
+                    name: it.name,
+                    specs: it.description || it.specs,
+                    uom: it.uom,
+                    qty: it.qty
+                  })) : []
+                }}
               />
             ) : (
               <VRMProformaInvoicePrintSheet

@@ -83,7 +83,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         { label: 'Goods Receipt Note', icon: FileCheck },
         { label: 'Vendor Management', icon: Building2 },
         { label: 'Vendor Performance', icon: Award },
-        { label: 'Material Calculation Engine', icon: Calculator },
         { label: 'Material Reorder', icon: RefreshCw, badge: '3' },
         { label: 'Price Comparison', icon: Scale }
       ]
@@ -216,7 +215,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'BOM Orders', icon: GitBranch },
             { label: 'Proforma Invoice', icon: Receipt },
-            { label: 'Items Directory', icon: Boxes },
             { label: 'Inventory Stores', icon: Warehouse },
             { label: 'Raw Material Directory', icon: Layers }
           ]
@@ -235,8 +233,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'BOM Orders', icon: GitBranch },
-            { label: 'Preset Management', icon: Layers },
-            { label: 'Material Calculation Engine', icon: Calculator }
+            { label: 'Preset Management', icon: Layers }
           ]
         }
       ];
@@ -254,7 +251,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'TOOLS & ENGINE',
           items: [
-            { label: 'Material Calculation Engine', icon: Calculator },
             { label: 'Raw Material Directory', icon: Layers }
           ]
         }
@@ -277,8 +273,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'BOM Orders', icon: GitBranch },
-            { label: 'Customer Management', icon: Users },
-            { label: 'Material Calculation Engine', icon: GitCompare }
+            { label: 'Customer Management', icon: Users }
           ]
         }
       ];
@@ -313,11 +308,16 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const isTa = (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA'));
 
     // Zoho Integration is strictly for CEO Alone (or general integrations for TA)
-    const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.targetTab === 'Templates'));
+    const isProcurementRole = role === 'Procurement Head' || role === 'Procurement Admin' || (role || '').includes('Procurement');
+    const templateLabel = isProcurementRole ? 'PO Template' : 'Templates';
+    const templateIcon = isProcurementRole ? ShoppingCart : Palette;
+    const templateBadge = isProcurementRole ? 'PO' : 'Studio';
+
+    const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.label === 'PO Template' || i.targetTab === 'Templates'));
     const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     if (sysSection) {
-      if (!hasTemplates && !isCeo) sysSection.items.unshift({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
+      if (!hasTemplates && !isCeo) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
       if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
       if (!isCeo && !isTa) {
         sysSection.items = sysSection.items.filter(i => i.targetTab !== 'Integration');
@@ -325,7 +325,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     } else {
       const sysItems = [];
       if (!hasTemplates && !isCeo) {
-        sysItems.push({ label: 'Templates', targetTab: 'Templates', icon: Palette, badge: 'Studio' });
+        sysItems.push({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
       }
       if (isCeo) {
         sysItems.push({ label: 'Zoho Integration', targetTab: 'Integration', icon: GitBranch });
@@ -346,7 +346,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
 
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
-    if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes') return 'Templates';
+    if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes' || tab === 'PO Template') return 'Templates';
     if (tab === 'Zoho Integration' || tab === 'Integration') return 'Integration';
     return tab;
   };

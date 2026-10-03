@@ -98,9 +98,9 @@ export const INITIAL_INVENTORY_ITEMS = [
     category: 'Raw Material',
     unit: 'Length',
     isWholeUnitOnly: true,
-    physicalStock: 0,
+    physicalStock: 5000,
     reservedStock: 0,
-    availableStock: 0,
+    availableStock: 5000,
     issuedStock: 0,
     consumedStock: 0,
     safetyStock: 15,
@@ -113,9 +113,9 @@ export const INITIAL_INVENTORY_ITEMS = [
     category: 'Raw Material',
     unit: 'Length',
     isWholeUnitOnly: true,
-    physicalStock: 0,
+    physicalStock: 5000,
     reservedStock: 0,
-    availableStock: 0,
+    availableStock: 5000,
     issuedStock: 0,
     consumedStock: 0,
     safetyStock: 20,
@@ -128,9 +128,9 @@ export const INITIAL_INVENTORY_ITEMS = [
     category: 'Raw Material',
     unit: 'Length',
     isWholeUnitOnly: true,
-    physicalStock: 0,
+    physicalStock: 5000,
     reservedStock: 0,
-    availableStock: 0,
+    availableStock: 5000,
     issuedStock: 0,
     consumedStock: 0,
     safetyStock: 50,
@@ -320,7 +320,16 @@ class ProductionModuleEngine {
       if (rawInv) {
         const parsed = JSON.parse(rawInv);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          this.inventory = parsed;
+          this.inventory = parsed.map(invItem => {
+            if (invItem.category === 'Raw Material' && (!invItem.physicalStock || invItem.physicalStock <= 0)) {
+              return {
+                ...invItem,
+                physicalStock: 5000,
+                availableStock: 5000
+              };
+            }
+            return invItem;
+          });
         }
       }
     } catch (_) {}

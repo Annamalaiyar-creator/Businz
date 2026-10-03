@@ -255,7 +255,32 @@ export function VRMProformaInvoicePrintSheet({
   if (!piData) return null;
 
   const pi = piData;
-  const cfg = { ...DEFAULT_PI_TEMPLATE_SETTINGS, ...settings };
+  const isBomDocument = Boolean(
+    piData?.category === 'bom' ||
+    settings?.documentTitle?.toUpperCase().includes('BOM') ||
+    piData?.bomCode
+  );
+
+  const cfg = {
+    ...DEFAULT_PI_TEMPLATE_SETTINGS,
+    ...settings,
+    ...(isBomDocument ? {
+      showHsn: false,
+      showRateCol: false,
+      showTaxableCol: false,
+      showGstCol: false,
+      showDiscountCol: false,
+      showTotalCol: false,
+      showTotalInWords: false,
+      showBankDetails: false,
+      showTerms: false,
+      showPaymentTerms: false,
+      showSignatoryStamp: false,
+      showTransportDetails: false,
+      showCustomerAcceptance: false,
+      showSubtotalSummary: false
+    } : {})
+  };
   const accent = cfg.accentColor || '#0E7490';
 
   // Inline Click-to-Edit & Quick-Remove Helper Component
@@ -1786,7 +1811,28 @@ export function VRMProformaInvoicePrintSheet({
           </table>
         </div>
 
+        {/* BOM TOTAL QUANTITY FOOTER */}
+        {isBomDocument && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '10px 16px', borderTop: '2px solid #CBD5E1', backgroundColor: '#F8FAFC' }}>
+            <span style={{ color: '#64748B', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: '16px' }}>Total Quantity:</span>
+            <span style={{ color: accent, fontSize: '13px', fontWeight: '900' }}>
+              {displayItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 0), 0)}
+            </span>
+          </div>
+        )}
+
         {/* 4. TOTAL IN WORDS & CALCULATION SUMMARY */}
+        {isBomDocument ? (
+          <div className="avoid-break" style={{ borderTop: `1.5px solid ${accent}`, paddingTop: '16px', marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ textAlign: 'center', minWidth: '220px' }}>
+              <div style={{ height: '45px' }}></div>
+              <div style={{ borderTop: '1.5px dashed #94A3B8', paddingTop: '6px', width: '100%' }}>
+                <strong style={{ color: '#0F172A', fontSize: '11.5px', display: 'block' }}>For VRM Structures India Pvt Ltd</strong>
+                <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '3px' }}>Authorized Signatory</div>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="avoid-break" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', borderTop: `1.5px solid ${accent}`, backgroundColor: '#FFFFFF' }}>
           {/* LEFT: WORDS + BANK DETAILS + TERMS */}
           <div style={{ padding: '14px 18px', borderRight: '1px solid #CBD5E1' }}>
@@ -2205,6 +2251,7 @@ export function VRMProformaInvoicePrintSheet({
 
           </div>
         </div>
+      )}
 
       </div>
 

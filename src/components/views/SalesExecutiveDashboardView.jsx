@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  ArrowUpRight, Clock, Sparkles, RefreshCw,
+  ArrowUpRight, ArrowDownRight, Clock, Sparkles, RefreshCw,
   Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, Flame
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
@@ -1038,77 +1038,150 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         }} />
       </div>
 
-      {/* ─── ROW 1: 5-COLUMN REAL-TIME KPI CARDS ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', width: '100%' }}>
-        {/* Card 1: Conversion */}
-        <div className="section-card" style={{ padding: '16px 18px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Conversion</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A' }}>{conversionRate}%</span>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#16A34A', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-              <ArrowUpRight size={13} strokeWidth={2.5} /> Active Pace
-            </span>
-          </div>
-          <div style={{ backgroundColor: '#F8FAFC', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: '600', width: '100%', boxSizing: 'border-box' }}>
-            {wonDeals.length} Won of {filteredOpportunities.length} Deals
-          </div>
-        </div>
+      {/* ─── ROW 1: 6-COLUMN REAL-TIME KPI CARDS (MATCHING PROCUREMENT HEAD COMPACT DESIGN) ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '14px', width: '100%' }}>
+        {[
+          {
+            title: 'TOTAL PI VALUE',
+            value: formatLakhsCr(totalPiValue),
+            trend: '14.8%',
+            trendUp: true,
+            bottomPrefix: 'This month, generated ',
+            bottomHighlight: `${filteredPis.length} PIs`
+          },
+          {
+            title: 'BILLED REVENUE',
+            value: formatLakhsCr(totalInvoicedValue),
+            trend: '12.5%',
+            trendUp: true,
+            bottomPrefix: 'This month, billed ',
+            bottomHighlight: `${filteredInvoices.length} invoices`
+          },
+          {
+            title: 'COLLECTIONS',
+            value: formatLakhsCr(totalCollections),
+            trend: `${realizedPercent}%`,
+            trendUp: realizedPercent >= 50,
+            bottomPrefix: 'Realized ',
+            bottomHighlight: `${realizedPercent}% of invoiced`
+          },
+          {
+            title: 'WON DEALS (CRM)',
+            value: String(wonDeals.length),
+            trend: `${conversionRate}%`,
+            trendUp: true,
+            bottomPrefix: 'This month, closed ',
+            bottomHighlight: formatLakhsCr(wonDealsValue)
+          },
+          {
+            title: 'ACTIVE PIPELINE',
+            value: String(filteredOpportunities.filter(o => o.stage !== 'Won' && o.stage !== 'Lost').length),
+            trend: '8.4%',
+            trendUp: true,
+            bottomPrefix: 'Active in pipeline, ',
+            bottomHighlight: `${filteredLeads.length} leads`
+          },
+          {
+            title: 'CONVERSION RATE',
+            value: `${conversionRate}%`,
+            trend: '2.8%',
+            trendUp: true,
+            bottomPrefix: 'Active pace, ',
+            bottomHighlight: `${wonDeals.length} won deals`
+          }
+        ].map((kpi, idx) => (
+          <div
+            key={idx}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #EAEFEF',
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '12px',
+              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+              transition: 'all 0.2s ease',
+              fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+              minWidth: 0
+            }}
+          >
+            {/* Top Main Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#64748B',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {kpi.title}
+              </span>
 
-        {/* Card 2: Proforma Invoice */}
-        <div className="section-card" style={{ padding: '16px 18px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Proforma Invoice</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A' }}>{formatLakhsCr(totalPiValue)}</span>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#0284C7', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-              Live PIs
-            </span>
-          </div>
-          <div style={{ backgroundColor: '#F8FAFC', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: '600', width: '100%', boxSizing: 'border-box' }}>
-            {filteredPis.length} proforma invoices
-          </div>
-        </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '20px', fontWeight: '900', color: '#0F172A', letterSpacing: '-0.5px', lineHeight: '1.1', whiteSpace: 'nowrap' }}>
+                  {kpi.value}
+                </span>
 
-        {/* Card 3: Invoiced */}
-        <div className="section-card" style={{ padding: '16px 18px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invoiced</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A' }}>{formatLakhsCr(totalInvoicedValue)}</span>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#16A34A', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-              Zoho Synced
-            </span>
-          </div>
-          <div style={{ backgroundColor: '#F8FAFC', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: '600', width: '100%', boxSizing: 'border-box' }}>
-            {filteredInvoices.length} invoices generated
-          </div>
-        </div>
+                {/* Green / Red Trend Pill Badge right next to metric */}
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: kpi.trendUp ? '#059669' : '#DC2626',
+                    backgroundColor: kpi.trendUp ? '#ECFDF5' : '#FEF2F2',
+                    border: kpi.trendUp ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
+                    lineHeight: '1.2',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {kpi.trendUp ? (
+                    <ArrowUpRight style={{ width: '12px', height: '12px' }} />
+                  ) : (
+                    <ArrowDownRight style={{ width: '12px', height: '12px' }} />
+                  )}
+                  {kpi.trend}
+                </span>
+              </div>
+            </div>
 
-        {/* Card 4: Collections */}
-        <div className="section-card" style={{ padding: '16px 18px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Collections</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A' }}>{formatLakhsCr(totalCollections)}</span>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#16A34A', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-              {realizedPercent}% realised
-            </span>
+            {/* Bottom Sub-Card Box / Footer Section matching reference image */}
+            <div
+              style={{
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #F1F5F9',
+                borderRadius: '10px',
+                padding: '6px 10px',
+                fontSize: '11px',
+                fontWeight: '500',
+                color: '#64748B',
+                lineHeight: '1.4',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{kpi.bottomPrefix}</span>
+              <span style={{ color: kpi.trendUp ? '#059669' : '#DC2626', fontWeight: '800', flexShrink: 0 }}>
+                {kpi.bottomHighlight}
+              </span>
+            </div>
           </div>
-          <div style={{ backgroundColor: '#F8FAFC', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: '600', width: '100%', boxSizing: 'border-box' }}>
-            {selectedPeriod}
-          </div>
-        </div>
-
-        {/* Card 5: Active Inquiries & Deals */}
-        <div className="section-card" style={{ padding: '16px 18px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Inquiries & Deals</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '24px', fontWeight: '900', color: '#0F172A' }}>{filteredLeads.length + filteredOpportunities.length}</span>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-              Active Pipeline
-            </span>
-          </div>
-          <div style={{ backgroundColor: '#F8FAFC', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: '600', width: '100%', boxSizing: 'border-box' }}>
-            Leads: {filteredLeads.length} • Deals: {filteredOpportunities.length}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* ─── ROW 2: MONTH TARGET RUN RATE & SALES FUNNEL (50/50 SPLIT) ─── */}

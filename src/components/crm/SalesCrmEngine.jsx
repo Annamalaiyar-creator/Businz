@@ -77,6 +77,27 @@ export default function SalesCrmEngine({
   const [templates, setTemplates] = useState(() => getCrmStore('whatsapp_templates', INITIAL_WHATSAPP_TEMPLATES));
   const [conversations, setConversations] = useState(() => getCrmStore('whatsapp_conversations', INITIAL_WHATSAPP_CONVERSATIONS));
   const [quotations, setQuotations] = useState(() => getCrmStore('quotations', INITIAL_CRM_QUOTATIONS));
+  const [proformaInvoices, setProformaInvoices] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('proforma_invoice_store');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [];
+  });
+  const [boms, setBoms] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_bom_store') || localStorage.getItem('bom_orders_store');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [];
+  });
+  const [invoices, setInvoices] = useState(() => {
+    try {
+      const saved = localStorage.getItem('controlroom_invoice_store') || localStorage.getItem('invoices_store');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [];
+  });
   const [isCloudSyncing, setIsCloudSyncing] = useState(true);
 
   // Live Zoho customers sync on mount
@@ -87,17 +108,23 @@ export default function SalesCrmEngine({
 
     const syncCloudCrm = async () => {
       try {
-        const [cloudCust, cloudLeads, cloudOpps, cloudQuotes] = await Promise.all([
+        const [cloudCust, cloudLeads, cloudOpps, cloudQuotes, cloudPIs, cloudBoms, cloudInvs] = await Promise.all([
           fetchCloudStore('customer_store', []),
           fetchCloudStore('crm_leads', []),
           fetchCloudStore('crm_opportunities', []),
-          fetchCloudStore('crm_quotations', [])
+          fetchCloudStore('crm_quotations', []),
+          fetchCloudStore('sales_pi_store', []).catch(() => []),
+          fetchCloudStore('bom_store', []).catch(() => []),
+          fetchCloudStore('invoice_store', []).catch(() => [])
         ]);
 
         if (isMounted) {
           if (Array.isArray(cloudLeads) && cloudLeads.length > 0) setLeads(prev => areListsEqual(prev, cloudLeads) ? prev : cloudLeads);
           if (Array.isArray(cloudOpps) && cloudOpps.length > 0) setOpportunities(prev => areListsEqual(prev, cloudOpps) ? prev : cloudOpps);
           if (Array.isArray(cloudQuotes) && cloudQuotes.length > 0) setQuotations(prev => areListsEqual(prev, cloudQuotes) ? prev : cloudQuotes);
+          if (Array.isArray(cloudPIs) && cloudPIs.length > 0) setProformaInvoices(cloudPIs);
+          if (Array.isArray(cloudBoms) && cloudBoms.length > 0) setBoms(cloudBoms);
+          if (Array.isArray(cloudInvs) && cloudInvs.length > 0) setInvoices(cloudInvs);
         }
 
         // Fetch live Zoho Customers
@@ -626,6 +653,9 @@ export default function SalesCrmEngine({
             leads={leads}
             opportunities={opportunities}
             quotations={quotations}
+            proformaInvoices={proformaInvoices}
+            boms={boms}
+            invoices={invoices}
           />
         )}
       </div>

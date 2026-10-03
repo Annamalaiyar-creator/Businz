@@ -3492,24 +3492,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  onClick={() => onNavigateTab && onNavigateTab('Material Calculation Engine')}
-                  style={{
-                    border: 'none',
-                    backgroundColor: '#D97706',
-                    color: '#FFFFFF',
-                    padding: '5px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  Calculation Engine <ArrowRight size={12} />
-                </button>
-                <button
                   onClick={() => onNavigateTab && onNavigateTab('Preset Management')}
                   style={{
                     border: '1px solid #CBD5E1',
@@ -3582,33 +3564,6 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
           {/* Engineering Tools & Specifications Matrix */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Calculator size={16} color="#D97706" />
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                  Material Calculation Engine
-                </span>
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748B', margin: 0, lineHeight: '1.4' }}>
-                Live formula-driven calculations for coil slitting widths, strip weight, purlin thickness, and HDG zinc coating weight (GSM).
-              </p>
-              <button
-                onClick={() => onNavigateTab && onNavigateTab('Material Calculation Engine')}
-                style={{
-                  marginTop: '8px',
-                  border: '1px solid #FDE68A',
-                  backgroundColor: '#FFFBEB',
-                  color: '#B45309',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                Launch Calculation Engine
-              </button>
-            </div>
 
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #EAEFEF', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -4046,12 +4046,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     const pCat = matched.category || matched.description || item.category;
                                     const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
                                     const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                    let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
+                                    const u = String(rawUom).trim().toUpperCase();
+                                    let resolvedUom = rawUom;
+                                    if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
+                                    else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
+                                    else if (['NUMBERS', 'NUMBER', 'NOS', 'NO'].includes(u)) resolvedUom = 'NOS';
+                                    else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? {
                                       ...mat,
                                       code: pCode || mat.code,
                                       name: pName,
                                       rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
-                                      uom: matched.uom || matched.unit || mat.uom,
+                                      uom: resolvedUom,
                                       category: pCat,
                                       gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
                                     } : mat));
@@ -4078,27 +4085,36 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px' }}>
-                              <input
-                                type="text"
-                                list={`pi-uom-list-${i}`}
-                                placeholder="UOM"
+                              <select
                                 value={item.uom || 'NOS'}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                 }}
-                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                              />
-                              <datalist id={`pi-uom-list-${i}`}>
-                                <option value="NOS" />
-                                <option value="SET" />
-                                <option value="KG" />
-                                <option value="MTR" />
-                                <option value="PCS" />
-                                <option value="BOX" />
-                                <option value="PKT" />
-                                <option value="PAIR" />
-                              </datalist>
+                                style={{
+                                  width: '100%',
+                                  height: '38px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #E2E8F0',
+                                  padding: '0 6px',
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  color: '#0F172A',
+                                  backgroundColor: '#FFFFFF',
+                                  outline: 'none',
+                                  boxSizing: 'border-box',
+                                  cursor: 'pointer',
+                                  textAlign: 'center'
+                                }}
+                              >
+                                <option value="MTR">MTR (Meter)</option>
+                                <option value="PCS">PCS (Pieces)</option>
+                                <option value="NOS">NOS (Numbers)</option>
+                                <option value="SET">SET (Sets)</option>
+                                {item.uom && !['MTR', 'PCS', 'NOS', 'SET'].includes(item.uom) && (
+                                  <option value={item.uom}>{item.uom}</option>
+                                )}
+                              </select>
                             </td>
                             <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
                               <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

@@ -2192,10 +2192,9 @@ app.post('/api/store/:key', async (req, res) => {
 
         finalDataToSave = Array.from(map.values());
       }
-    } else if (key === 'presets_store' && storeData && typeof storeData === 'object' && !Array.isArray(storeData)) {
-      const current = await getDatabaseStore(key);
-      finalDataToSave = { ...(current || {}), ...storeData };
-    } else if (storeData && typeof storeData === 'object' && !Array.isArray(storeData) && key !== 'company_branding_store') {
+    } else if ((key === 'presets_store' || key === 'templates_store' || key === 'company_branding_store') && storeData && typeof storeData === 'object' && !Array.isArray(storeData)) {
+      finalDataToSave = storeData;
+    } else if (storeData && typeof storeData === 'object' && !Array.isArray(storeData) && key !== 'company_branding_store' && key !== 'templates_store') {
       const currentData = await getDatabaseStore(key);
       const list = Array.isArray(currentData) ? [...currentData] : (currentData && typeof currentData === 'object' && Object.keys(currentData).length > 0 ? [currentData] : []);
       const getId = (item) => {
