@@ -490,16 +490,24 @@ export default function LoginScreen({ onLoginSuccess }) {
           position: 'relative',
           overflow: 'hidden'
         }}>
-          {/* Top Star Logo */}
+          {/* Top App Logo */}
           <div style={{ zIndex: 2 }}>
             <div style={{
-              width: '38px',
-              height: '38px',
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              backgroundColor: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+              overflow: 'hidden'
             }}>
-              <Asterisk style={{ width: '32px', height: '32px', color: '#FFFFFF', strokeWidth: 3 }} />
+              <img 
+                src="/businz_logo_clean.png" 
+                alt="Businz Logo" 
+                style={{ width: '34px', height: '34px', objectFit: 'contain' }}
+              />
             </div>
           </div>
 
@@ -540,17 +548,22 @@ export default function LoginScreen({ onLoginSuccess }) {
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '34px',
-                  height: '34px',
+                  width: '36px',
+                  height: '36px',
                   borderRadius: '10px',
-                  backgroundColor: '#4F46E5',
+                  backgroundColor: '#FFFFFF',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#FFFFFF',
-                  boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)'
+                  boxShadow: '0 2px 8px rgba(14, 116, 144, 0.15)',
+                  border: '1px solid #E2E8F0',
+                  overflow: 'hidden'
                 }}>
-                  <Asterisk style={{ width: '22px', height: '22px', strokeWidth: 3 }} />
+                  <img 
+                    src="/businz_logo_clean.png" 
+                    alt="Businz Logo" 
+                    style={{ width: '30px', height: '30px', objectFit: 'contain' }}
+                  />
                 </div>
                 <span style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.02em' }}>Businz</span>
               </div>

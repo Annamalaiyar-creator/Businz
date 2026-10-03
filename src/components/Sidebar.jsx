@@ -434,23 +434,25 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         title={collapsed ? "Click to expand sidebar" : undefined}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-          {/* Dark Hexagon Logo Box matching image */}
+          {/* App Logo */}
           <div style={{
             width: '38px',
             height: '38px',
-            backgroundColor: '#0F172A',
             borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            color: '#FFFFFF',
-            fontWeight: '900',
-            fontSize: '17px',
-            letterSpacing: '-0.5px',
-            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.25)'
+            overflow: 'hidden',
+            backgroundColor: '#FFFFFF',
+            boxShadow: '0 2px 8px rgba(14, 116, 144, 0.15)',
+            border: '1px solid #E2E8F0'
           }}>
-            B.
+            <img 
+              src="/businz_logo_clean.png" 
+              alt="Businz Logo" 
+              style={{ width: '32px', height: '32px', objectFit: 'contain' }}
+            />
           </div>
 
           {!collapsed && (
