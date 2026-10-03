@@ -3441,7 +3441,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <input
                       id="pi-field-vendorName"
                       type="text"
-                      list="pi-customers-datalist"
+                      autoComplete="off"
                       placeholder="Type or select company..."
                       value={vendorName}
                       onChange={(e) => {
@@ -3484,22 +3484,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <ChevronDown size={16} style={{ transform: isCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
                     </button>
                   </div>
-
-                  {/* Fallback HTML datalist */}
-                  <datalist id="pi-customers-datalist">
-                    {uniqueCustomerList.map((c, idx) => {
-                      const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
-                      const gst = c.gst || c.gstNumber || c.gstNo || c.gstin;
-                      const contact = c.contact || c.contactPerson || c.primaryContact?.name;
-                      const city = c.city || '';
-                      const details = [gst ? `GST: ${gst}` : null, contact ? `Contact: ${contact}` : null, city].filter(Boolean).join(' • ');
-                      return (
-                        <option key={idx} value={name}>
-                          {details}
-                        </option>
-                      );
-                    })}
-                  </datalist>
 
                   {/* Custom Searchable Scrollable Dropdown List with ALL 61+ Customers */}
                   {isCustomerDropdownOpen && (

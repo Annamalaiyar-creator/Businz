@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, RotateCcw,
-  CreditCard, AlertCircle, Loader2
+  CreditCard, AlertCircle, Loader2, Clock
 } from "lucide-react";
 import { saveMediaToCache, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -533,6 +533,27 @@ export function ReuploadAddressProofModal({
   const [reuploadProofFile, setReuploadProofFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const reqTime = reuploadAddressProofModal?.addressProofReuploadRequestedAt || reuploadAddressProofModal?.reuploadRequestedAt || reuploadAddressProofModal?.reissueRequestedAt;
+  const [secondsRemaining, setSecondsRemaining] = useState(() => {
+    if (!reqTime) return null;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const diff = ONE_HOUR_MS - (Date.now() - new Date(reqTime).getTime());
+    return Math.max(0, Math.floor(diff / 1000));
+  });
+
+  useEffect(() => {
+    if (!reqTime) return;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const tick = () => {
+      const elapsed = Date.now() - new Date(reqTime).getTime();
+      const left = Math.max(0, Math.floor((ONE_HOUR_MS - elapsed) / 1000));
+      setSecondsRemaining(left);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [reqTime]);
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '28px', maxWidth: '520px', width: '92%', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -555,9 +576,32 @@ export function ReuploadAddressProofModal({
           <div><strong>BOM Reference:</strong> {reuploadAddressProofModal.bomCode}</div>
           <div><strong>Customer:</strong> {reuploadAddressProofModal.customerName}</div>
           <div><strong>Delivery Destination:</strong> {reuploadAddressProofModal.deliveryAddress}</div>
-          {reuploadAddressProofModal.reuploadRequestedAt && (
-            <div style={{ marginTop: '6px', fontSize: '11px', color: '#DC2626', fontWeight: '800' }}>
-              Requested on: {new Date(reuploadAddressProofModal.reuploadRequestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}
+          {reqTime && (
+            <div style={{ marginTop: '6px', fontSize: '11px', color: '#DC2626', fontWeight: '700' }}>
+              Requested on: {new Date(reqTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}
+            </div>
+          )}
+          {secondsRemaining !== null && (
+            <div style={{
+              marginTop: '10px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              backgroundColor: secondsRemaining > 300 ? '#FEE2E2' : '#7F1D1D',
+              color: secondsRemaining > 300 ? '#991B1B' : '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: '800',
+              fontSize: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={15} />
+                <span>Time Remaining to Upload:</span>
+              </div>
+              <span style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                {Math.floor(secondsRemaining / 60)}m {String(secondsRemaining % 60).padStart(2, '0')}s
+                {secondsRemaining === 0 ? ' (Time Expired - Invoice Cancelled)' : ''}
+              </span>
             </div>
           )}
         </div>

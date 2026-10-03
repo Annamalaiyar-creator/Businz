@@ -836,6 +836,60 @@ export default function ProductionViewsEngine(props) {
     };
   }, []);
 
+  // 1-Hour SLA Auto-Cancellation Monitor for Invoices awaiting Address Proof Reissue
+  useEffect(() => {
+    const checkExpiredInvoiceReissues = () => {
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const now = Date.now();
+      const cancelMsg = 'Invoice Cancelled because of the Address Proof is missing are Mismatch';
+      let hasCancellations = false;
+
+      setInvoiceList(prev => {
+        if (!Array.isArray(prev) || prev.length === 0) return prev;
+        let modified = false;
+        const updated = prev.map(inv => {
+          if (['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed', 'Fully Dispatched & Delivered', 'Cancelled'].includes(inv.status)) {
+            return inv;
+          }
+          const isPending = Boolean(
+            inv.addressProofReuploadRequested ||
+            inv.status === 'Address Proof Reissue Requested'
+          );
+          const reqAt = inv.addressProofReuploadRequestedAt || inv.reissueRequestedAt;
+          if (isPending && reqAt && (now - new Date(reqAt).getTime() >= ONE_HOUR_MS)) {
+            hasCancellations = true;
+            modified = true;
+            return {
+              ...inv,
+              status: 'Cancelled',
+              pay: 'Cancelled',
+              cancellationReason: cancelMsg,
+              cancelledAt: new Date().toISOString(),
+              addressProofReuploadRequested: false
+            };
+          }
+          return inv;
+        });
+        return modified ? updated : prev;
+      });
+
+      if (hasCancellations) {
+        try {
+          addLiveNotification({
+            title: 'Invoice Cancelled',
+            message: cancelMsg,
+            type: 'alert'
+          });
+          window.dispatchEvent(new Event('controlroom_storage_update'));
+        } catch (_) {}
+      }
+    };
+
+    const interval = setInterval(checkExpiredInvoiceReissues, 30000);
+    checkExpiredInvoiceReissues();
+    return () => clearInterval(interval);
+  }, []);
+
 
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>

@@ -1120,8 +1120,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   // CANONICAL CUSTOMER READ PATH: Query public.customers directly (Zero leaves table egress)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Customers cloud fetch timeout')), 3000));
-      const fetchPromise = supabase
+      const { data: dbCustomers, error: custErr } = await supabase
         .from('customers')
         .select(`
           id, customer_code, company_name, customer_name, customer_type, industry,
@@ -1132,21 +1131,16 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
         `)
         .order('company_name', { ascending: true });
 
-      const { data: dbCustomers, error: custErr } = await Promise.race([fetchPromise, timeoutPromise]);
-
       if (!custErr && Array.isArray(dbCustomers) && dbCustomers.length > 0) {
         return dbCustomers.map(c => toConsumerCustomer(c));
       }
-    } catch (err) {
-      console.warn('[SupabaseSync] Direct customers fetch fallback notice:', err?.message || err);
-    }
+    } catch (_) {}
   }
 
   // CANONICAL OPPORTUNITIES READ PATH: Query public.opportunities directly (Zero leaves table egress)
   if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Opportunities cloud fetch timeout')), 3000));
-      const fetchPromise = supabase
+      const { data: dbOpps, error: oppErr } = await supabase
         .from('opportunities')
         .select(`
           id, customer_id, company_name, title, deal_value, stage,
@@ -1154,14 +1148,10 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
         `)
         .order('created_at', { ascending: false });
 
-      const { data: dbOpps, error: oppErr } = await Promise.race([fetchPromise, timeoutPromise]);
-
       if (!oppErr && Array.isArray(dbOpps) && dbOpps.length > 0) {
         return dbOpps.map(o => toConsumerOpportunity(o));
       }
-    } catch (err) {
-      console.warn('[SupabaseSync] Direct opportunities fetch fallback notice:', err?.message || err);
-    }
+    } catch (_) {}
   }
 
   // CANONICAL BOM READ PATH: Query via local backend proxy first (Zero PostgREST egress)
@@ -1180,23 +1170,18 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
       }
     } catch (_) {}
 
-    // 2. Direct Supabase query fallback: SELECT ONLY REQUIRED SUMMARY COLUMNS (Lazy load heavy attachments/items)
+    // 2. Direct query fallback: SELECT ONLY REQUIRED SUMMARY COLUMNS (Lazy load heavy attachments/items)
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOM orders cloud fetch timeout')), 3000));
-      const fetchPromise = supabase
+      const { data: dbBoms, error: bomErr } = await supabase
         .from('bom_orders')
         .select(BOM_SUMMARY_COLUMNS)
         .order('created_at', { ascending: false })
         .limit(200);
 
-      const { data: dbBoms, error: bomErr } = await Promise.race([fetchPromise, timeoutPromise]);
-
       if (!bomErr && Array.isArray(dbBoms) && dbBoms.length > 0) {
         return dbBoms.map(b => toConsumerBom(b)).filter(Boolean);
       }
-    } catch (err) {
-      console.warn('[SupabaseSync] Direct BOM fetch fallback notice:', err?.message || err);
-    }
+    } catch (_) {}
   }
 
   // CANONICAL INVOICE READ PATH: Query via local backend proxy first (Zero PostgREST egress)
@@ -1210,29 +1195,24 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
       if (res && res.ok) {
         const json = await res.json().catch(() => null);
         if (json && Array.isArray(json) && json.length > 0) {
-          return json;
+          return json.data || json;
         }
       }
     } catch (_) {}
 
-    // 2. Direct Supabase query fallback: SELECT from public.invoices (with limit 200)
+    // 2. Direct query fallback: SELECT from public.invoices (with limit 200)
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Invoices cloud fetch timeout')), 3000));
       const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
-      const fetchPromise = supabase
+      const { data: dbInvoices, error: invErr } = await supabase
         .from('invoices')
         .select(INVOICE_SUMMARY_COLUMNS)
         .order('created_at', { ascending: false })
         .limit(200);
 
-      const { data: dbInvoices, error: invErr } = await Promise.race([fetchPromise, timeoutPromise]);
-
       if (!invErr && Array.isArray(dbInvoices) && dbInvoices.length > 0) {
         return dbInvoices.map(toConsumerInvoice).filter(Boolean);
       }
-    } catch (err) {
-      console.warn('[SupabaseSync] Invoices direct fetch notice:', err?.message || err);
-    }
+    } catch (_) {}
 
     // 3. Fallback to existing leaves table record if public.invoices not yet populated (Safe rollback)
     try {
@@ -1254,20 +1234,15 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
   // CANONICAL LEADS READ PATH: Query public.leads directly
   if (storeKey === 'crm_leads' || storeKey === 'leads') {
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Leads cloud fetch timeout')), 3000));
-      const fetchPromise = supabase
+      const { data: dbLeads, error: leadErr } = await supabase
         .from('leads')
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data: dbLeads, error: leadErr } = await Promise.race([fetchPromise, timeoutPromise]);
-
       if (!leadErr && Array.isArray(dbLeads) && dbLeads.length > 0) {
         return dbLeads.map(l => toConsumerLead(l));
       }
-    } catch (err) {
-      console.warn('[SupabaseSync] Direct leads fetch fallback notice:', err?.message || err);
-    }
+    } catch (_) {}
   }
 
   // 1. Fetch instantly from local server endpoint /api/store/:key first

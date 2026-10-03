@@ -206,7 +206,7 @@ function mapTableToStoreKey(table) {
 
 function mapSelectEndpoint(table) {
   if (table === 'bom_orders') return '/api/boms';
-  if (table === 'customers') return '/api/customers';
+  if (table === 'customers') return '/api/store/customer_store';
   if (table === 'leads') return '/api/crm/leads';
   if (table === 'opportunities') return '/api/crm/opportunities';
   if (table === 'quotations') return '/api/crm/quotations';

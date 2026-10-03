@@ -564,6 +564,11 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
                 <li>Payment: 100% along with the Purchase Order</li>
                 <li>Delivery: Immediate Dispatch</li>
                 <li>Validity: 3 days</li>
+                {(inv.processedWithoutAddressProof || inv.addressProofWaived || String(inv.terms || '').includes('without the Address Proof') || String(inv.notes || '').includes('without the Address Proof') || String(inv.disclaimerTerm || '').includes('without the Address Proof')) && (
+                  <li style={{ color: '#000000', fontWeight: 'bold', marginTop: '2px' }}>
+                    The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.
+                  </li>
+                )}
               </ol>
             </td>
             <td style={{ width: '45%', padding: '14px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '140px' }}>

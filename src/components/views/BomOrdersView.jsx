@@ -5626,6 +5626,19 @@ export default function BomOrdersView(props) {
                             <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
                           </span>
                         )}
+                        {confirmingBomModal.addressProofReuploadRequested && (() => {
+                          const reqAt = confirmingBomModal.addressProofReuploadRequestedAt || confirmingBomModal.reuploadRequestedAt || confirmingBomModal.reissueRequestedAt;
+                          let mLeft = null;
+                          if (reqAt) {
+                            const ONE_HOUR_MS = 60 * 60 * 1000;
+                            mLeft = Math.max(0, Math.ceil((ONE_HOUR_MS - (Date.now() - new Date(reqAt).getTime())) / 60000));
+                          }
+                          return (
+                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '3px 8px', borderRadius: '12px', border: '1px solid #FCA5A5', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              ⏱️ 1-Hr SLA: {mLeft !== null ? `${mLeft}m remaining` : 'Active'}
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       {confirmingBomModal.deliveryAddressProofDoc && (
@@ -6404,50 +6417,71 @@ export default function BomOrdersView(props) {
       </div>
 
       {/* ADDRESS PROOF RE-UPLOAD REQUEST NOTIFICATION BANNER */}
-      {(bomStore || []).some(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && (
-        <div style={{
-          backgroundColor: '#FEF2F2',
-          border: '1px solid #FCA5A5',
-          borderRadius: '12px',
-          padding: '14px 18px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertCircle size={20} />
-            </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#991B1B' }}>
-                Action Required: Address Proof Re-upload Requested by Accounts / Invoice Desk
+      {(bomStore || []).some(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && (() => {
+        const pendingBoms = (bomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales');
+        const earliestReq = pendingBoms.reduce((acc, b) => {
+          const t = b.addressProofReuploadRequestedAt || b.reuploadRequestedAt || b.reissueRequestedAt;
+          if (!t) return acc;
+          const time = new Date(t).getTime();
+          return acc ? Math.min(acc, time) : time;
+        }, null);
+
+        let minsLeft = null;
+        if (earliestReq) {
+          const ONE_HOUR_MS = 60 * 60 * 1000;
+          minsLeft = Math.max(0, Math.ceil((ONE_HOUR_MS - (Date.now() - earliestReq)) / 60000));
+        }
+
+        return (
+          <div style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertCircle size={20} />
               </div>
-              <div style={{ fontSize: '12px', color: '#B91C1C' }}>
-                Accounts team requested verified address proof document for orders where delivery address differs from billing address. Previous uploads are preserved in document history.
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: '#991B1B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Action Required: Address Proof Re-upload Requested by Accounts ({pendingBoms.length} Order{pendingBoms.length > 1 ? 's' : ''})</span>
+                  {minsLeft !== null && (
+                    <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#DC2626', color: '#FFFFFF', padding: '2px 8px', borderRadius: '12px' }}>
+                      ⏱️ {minsLeft}m SLA Remaining
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '12px', color: '#B91C1C', marginTop: '2px' }}>
+                  Accounts team requested verified address proof document. Sales has 1 hour from reissue request to upload verified proof, otherwise the invoice will be automatically cancelled.
+                </div>
               </div>
             </div>
+            <button
+              onClick={() => { setActiveSubTab('AddressAction'); setCurrentPage(1); }}
+              style={{
+                border: 'none',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              Review Requested Orders ({pendingBoms.length})
+            </button>
           </div>
-          <button
-            onClick={() => { setActiveSubTab('AddressAction'); setCurrentPage(1); }}
-            style={{
-              border: 'none',
-              backgroundColor: '#DC2626',
-              color: '#FFFFFF',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            Review Requested Orders
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2. FILTERS & SEARCH ROW */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between' }}>

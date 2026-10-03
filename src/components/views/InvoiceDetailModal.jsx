@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Check, Eye, FileText, AlertCircle, X, CheckCircle, Clock,
   FileCheck, CheckSquare, XCircle, ChevronLeft, RotateCcw,
   Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode
 } from "lucide-react";
-import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
+import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
@@ -38,6 +38,7 @@ export default function InvoiceDetailModal({
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
   const inv = viewingInvoiceModal || {};
   const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
+  const [selectedProofVersionIdx, setSelectedProofVersionIdx] = useState(null);
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
     ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'))
@@ -58,6 +59,114 @@ export default function InvoiceDetailModal({
     (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
     (b.bomCode && inv.invNo && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
   );
+
+  const handleAutoCancelForMissingProof = useCallback(() => {
+    const nowIso = new Date().toISOString();
+    const targetCode = inv.poNo || inv.code || bomRefText;
+    const cancelMsg = 'Invoice Cancelled because of the Address Proof is missing are Mismatch';
+
+    setViewingInvoiceModal(prev => prev ? {
+      ...prev,
+      status: 'Cancelled',
+      pay: 'Cancelled',
+      cancellationReason: cancelMsg,
+      cancelledAt: nowIso,
+      addressProofReuploadRequested: false
+    } : prev);
+
+    if (setInvoiceList) {
+      setInvoiceList(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        const updatedInvoices = list.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
+          ...item,
+          status: 'Cancelled',
+          pay: 'Cancelled',
+          cancellationReason: cancelMsg,
+          cancelledAt: nowIso,
+          addressProofReuploadRequested: false
+        } : item);
+        try {
+          const cancelledInv = updatedInvoices.find(item => item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode);
+          if (cancelledInv) saveCloudInvoiceRow(cancelledInv);
+        } catch (e) { }
+        return updatedInvoices;
+      });
+    }
+
+    if (setBomStore) {
+      setBomStore(prev => (prev || []).map(b => (
+        b.bomCode === targetCode ||
+        b.salesOrderNo === targetCode ||
+        b.code === targetCode ||
+        (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+      ) ? {
+        ...b,
+        status: 'Invoice Cancelled',
+        invoiceConfirmed: false,
+        cancellationReason: cancelMsg,
+        invoiceCancelledAt: nowIso,
+        addressProofReuploadRequested: false
+      } : b));
+    }
+
+    try {
+      addLiveNotification({
+        title: 'Invoice Cancelled',
+        message: cancelMsg,
+        type: 'alert'
+      });
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (e) { }
+
+    alert(`⚠️ ${cancelMsg}`);
+  }, [inv, bomRefText, setViewingInvoiceModal, setInvoiceList, setBomStore]);
+
+  // Live 1-Hour SLA Countdown Ticker & Auto-Cancellation Monitor for Address Proof Reissue
+  const [reissueSecondsLeft, setReissueSecondsLeft] = useState(() => {
+    const isPending = Boolean(
+      inv.addressProofReuploadRequested ||
+      matchingBom?.addressProofReuploadRequested ||
+      matchingBom?.status === 'Address Proof Requested from Sales' ||
+      inv.status === 'Address Proof Reissue Requested'
+    );
+    const reqAt = inv.addressProofReuploadRequestedAt || inv.reissueRequestedAt || matchingBom?.addressProofReuploadRequestedAt;
+    if (!isPending || !reqAt) return null;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const diff = ONE_HOUR_MS - (Date.now() - new Date(reqAt).getTime());
+    return Math.max(0, Math.floor(diff / 1000));
+  });
+
+  useEffect(() => {
+    if (isConfirmed || inv.status === 'Cancelled') {
+      setReissueSecondsLeft(null);
+      return;
+    }
+    const isPendingReissue = Boolean(
+      inv.addressProofReuploadRequested ||
+      matchingBom?.addressProofReuploadRequested ||
+      matchingBom?.status === 'Address Proof Requested from Sales' ||
+      inv.status === 'Address Proof Reissue Requested'
+    );
+    const reqAt = inv.addressProofReuploadRequestedAt || inv.reissueRequestedAt || matchingBom?.addressProofReuploadRequestedAt;
+    if (!isPendingReissue || !reqAt) {
+      setReissueSecondsLeft(null);
+      return;
+    }
+
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const tick = () => {
+      const elapsed = Date.now() - new Date(reqAt).getTime();
+      const remainingSecs = Math.max(0, Math.floor((ONE_HOUR_MS - elapsed) / 1000));
+      setReissueSecondsLeft(remainingSecs);
+      if (remainingSecs <= 0) {
+        handleAutoCancelForMissingProof();
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [inv.addressProofReuploadRequested, inv.addressProofReuploadRequestedAt, inv.reissueRequestedAt, matchingBom?.addressProofReuploadRequested, matchingBom?.addressProofReuploadRequestedAt, isConfirmed, inv.status, handleAutoCancelForMissingProof]);
 
   // ALWAYS check matchingBom items first so dispatch packing verification state (packed true/false) is source of truth
   const rawItems = (matchingBom && matchingBom.items && matchingBom.items.length > 0)
@@ -400,6 +509,45 @@ export default function InvoiceDetailModal({
           ) : (
             <button
               onClick={() => {
+                // 1. Check if 1 hour has expired on an active reissue request -> Auto-Cancel
+                const isReissuePending = Boolean(
+                  inv.addressProofReuploadRequested ||
+                  matchingBom?.addressProofReuploadRequested ||
+                  matchingBom?.status === 'Address Proof Requested from Sales' ||
+                  inv.status === 'Address Proof Reissue Requested'
+                );
+                const reqAt = inv.addressProofReuploadRequestedAt || inv.reissueRequestedAt || matchingBom?.addressProofReuploadRequestedAt;
+                const ONE_HOUR_MS = 60 * 60 * 1000;
+                if (isReissuePending && reqAt && (Date.now() - new Date(reqAt).getTime() >= ONE_HOUR_MS)) {
+                  handleAutoCancelForMissingProof();
+                  return;
+                }
+
+                // 2. Check address proof requirement for alternate delivery address
+                const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
+                const foundBom = (bomStore || []).find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+                const bAddr = inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
+                const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress || bAddr;
+                const isDifferentAddress = !Boolean(
+                  inv.sameAsBilling ||
+                  matchingBom?.sameAsBilling ||
+                  foundBom?.sameAsBilling ||
+                  (bAddr && dAddr && bAddr.trim().toLowerCase() === dAddr.trim().toLowerCase())
+                );
+                const hasAddressProof = Boolean(inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc);
+
+                let waiveProofDisclaimer = false;
+                if (isDifferentAddress && (!hasAddressProof || isReissuePending)) {
+                  const disclaimerClause = 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.';
+                  const confirmWaive = window.confirm(
+                    `⚠️ Address proof has not been provided by Sales.\n\nUnder company policy, this invoice can ONLY be completed with the following mandatory disclaimer added to Terms & Conditions:\n\n"${disclaimerClause}"\n\nDo you want to proceed and complete the invoice under this condition?`
+                  );
+                  if (!confirmWaive) {
+                    return;
+                  }
+                  waiveProofDisclaimer = true;
+                }
+
                 // 1. Identify items to deduct (if any selected, use selected, otherwise deduct ALL invoice items)
                 const hasExplicitSelection = (itemsList || []).some(item => item.selected === true);
                 const packedItemsToDeduct = hasExplicitSelection
@@ -583,6 +731,7 @@ export default function InvoiceDetailModal({
 
                 // 5. Update Invoice status & persist to localStorage / cloud store
                 const unpackedItems = (itemsList || []).filter(it => it.selected === false);
+                const disclaimerClause = 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.';
                 setInvoiceList(prev => {
                   const updatedInvoices = prev.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
                     ...item,
@@ -592,7 +741,14 @@ export default function InvoiceDetailModal({
                     stockDeducted: true,
                     stockDeductionDate: new Date().toISOString(),
                     packedItemsDeducted: packedItemsToDeduct,
-                    unpackedItemsRemaining: unpackedItems
+                    unpackedItemsRemaining: unpackedItems,
+                    addressProofReuploadRequested: false,
+                    processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(item.processedWithoutAddressProof),
+                    addressProofWaived: waiveProofDisclaimer ? true : Boolean(item.addressProofWaived),
+                    disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : item.disclaimerTerm,
+                    terms: waiveProofDisclaimer
+                      ? ((item.terms ? item.terms + '\n• ' : '') + disclaimerClause)
+                      : item.terms
                   } : item);
                   try {
                     const confirmedInv = updatedInvoices.find(item => (item.invNo === invNoText || item.code === invNoText || item.id === inv.id));
@@ -619,7 +775,11 @@ export default function InvoiceDetailModal({
                     stockDeducted: true,
                     stockDeductionDate: new Date().toISOString(),
                     packedItemsDeducted: packedItemsToDeduct,
-                    unpackedItemsRemaining: unpackedItems
+                    unpackedItemsRemaining: unpackedItems,
+                    addressProofReuploadRequested: false,
+                    processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(b.processedWithoutAddressProof),
+                    addressProofWaived: waiveProofDisclaimer ? true : Boolean(b.addressProofWaived),
+                    disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : b.disclaimerTerm
                   } : b);
 
                   try {
@@ -722,6 +882,10 @@ export default function InvoiceDetailModal({
                   invoiceNotes = `Sales Invoice confirmed for BOM ${bomRefText}.`;
                 }
 
+                if (waiveProofDisclaimer) {
+                  invoiceNotes += `\nTerms: ${disclaimerClause}`;
+                }
+
                 try {
                   fetch('/api/zoho/invoices', {
                     method: 'POST',
@@ -739,7 +903,8 @@ export default function InvoiceDetailModal({
                       presetName: isPresetOrder ? (matchingBom?.presetName || inv.presetName) : undefined,
                       presetGroups: isPresetOrder ? presetGroupsList : undefined,
                       items: zohoItems,
-                      notes: invoiceNotes
+                      notes: invoiceNotes,
+                      terms: waiveProofDisclaimer ? disclaimerClause : (inv.terms || undefined)
                     })
                   })
                     .then(res => res.json())
@@ -982,8 +1147,21 @@ export default function InvoiceDetailModal({
           const unpackedTotal = unpackedItems.reduce((acc, it) => acc + (it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18)), 0);
 
           const targetRef = inv.poNo || inv.code || inv.bomCode || bomRefText;
-          const foundBom = bomStore.find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
-          const rawAddressProof = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
+          const foundBom = (bomStore || []).find(b => (b.bomCode && b.bomCode === targetRef) || (b.code && b.code === targetRef) || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace("BOM-", ""))));
+          const bomDoc = matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc || null;
+          const invDoc = inv.deliveryAddressProofDoc || null;
+          let rawAddressProof = bomDoc || invDoc || null;
+          if (bomDoc && invDoc) {
+            const bomHistCount = Array.isArray(bomDoc.history) ? bomDoc.history.length : 0;
+            const invHistCount = Array.isArray(invDoc.history) ? invDoc.history.length : 0;
+            const bomTime = new Date(bomDoc.uploadedAt || bomDoc.reissuedAt || 0).getTime();
+            const invTime = new Date(invDoc.uploadedAt || invDoc.reissuedAt || 0).getTime();
+            if (bomHistCount > invHistCount || bomTime >= invTime) {
+              rawAddressProof = bomDoc;
+            } else {
+              rawAddressProof = invDoc;
+            }
+          }
           let addressProofDoc = rawAddressProof;
           if (addressProofDoc && !addressProofDoc.dataUrl && addressProofDoc.name) {
             const cached = getMediaFromCache(addressProofDoc.name);
@@ -1213,7 +1391,7 @@ export default function InvoiceDetailModal({
               </div>
 
               {/* COMPACT ADDRESS & INLINE PROOF IMAGE BELOW ITEMS - ONLY IF DIFFERENT ADDRESS */}
-              {!isSameAddress && addressProofDoc && (
+              {!isSameAddress && (
                 <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1227,108 +1405,214 @@ export default function InvoiceDetailModal({
                     </div>
 
                     {/* REISSUE BUTTON FOR ADDRESS PROOF */}
-                    <label style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      backgroundColor: '#EFF6FF',
-                      border: '1px solid #BFDBFE',
-                      color: '#1D4ED8',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s ease'
-                    }} title="Reissue or update address proof document">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode) || (foundBom && foundBom.bomCode);
+                        const salesPersonName = (matchingBom?.salesPerson || matchingBom?.createdBy || inv.salesPerson || foundBom?.salesPerson || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim();
+
+                        const confirmMsg = `Send Address Proof Reissue Request to Sales (${salesPersonName}) for Order ${targetCode}?\n\nNOTE: Sales will have 1 hour to update this Address proof. Otherwise, the invoice will be automatically cancelled with: "Invoice Cancelled because of the Address Proof is missing are Mismatch".`;
+                        if (!window.confirm(confirmMsg)) return;
+
+                        try {
+                          const nowIso = new Date().toISOString();
+
+                          // 1. Update BOM in bomStore so it enters 'Address Proof Requested from Sales' state
+                          let updatedBomRecord = null;
+                          if (setBomStore) {
+                            setBomStore(prev => {
+                              const list = Array.isArray(prev) ? prev : [];
+                              return list.map(b => {
+                                const isMatch = (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || (b.bomCode && inv.invNo && inv.invNo.includes(b.bomCode.replace('BOM-', ''))));
+                                if (isMatch) {
+                                  updatedBomRecord = {
+                                    ...b,
+                                    status: 'Address Proof Requested from Sales',
+                                    addressProofReuploadRequested: true,
+                                    addressProofReuploadRequestedAt: nowIso,
+                                    addressProofReuploadRequestedBy: 'Billing Desk',
+                                    addressProofReissueReason: 'Address proof not clear / invalid. Reissued from Invoice Desk.'
+                                  };
+                                  return updatedBomRecord;
+                                }
+                                return b;
+                              });
+                            });
+                          }
+
+                          // 2. Persist updated BOM to server and cloud
+                          if (updatedBomRecord) {
+                            try {
+                              saveCloudBomRow(updatedBomRecord);
+                              fetch('/api/boms', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bom: stripDataUrlsFromRecord(updatedBomRecord), isUpdate: true })
+                              }).catch(() => {});
+                            } catch (_) {}
+                          }
+
+                          // 3. Update Invoice in modal and list
+                          const updatedInvoiceDoc = {
+                            ...(addressProofDoc || {}),
+                            reissueRequestedAt: nowIso,
+                            reissueRequestedBy: 'Billing Desk'
+                          };
+
+                          setViewingInvoiceModal(prev => prev ? {
+                            ...prev,
+                            status: 'Address Proof Reissue Requested',
+                            addressProofReuploadRequested: true,
+                            addressProofReuploadRequestedAt: nowIso,
+                            deliveryAddressProofDoc: updatedInvoiceDoc
+                          } : prev);
+
+                          if (setInvoiceList) {
+                            setInvoiceList(prev => {
+                              const list = Array.isArray(prev) ? prev : [];
+                              const updated = list.map(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode) ? {
+                                ...i,
+                                status: 'Address Proof Reissue Requested',
+                                addressProofReuploadRequested: true,
+                                addressProofReuploadRequestedAt: nowIso,
+                                deliveryAddressProofDoc: updatedInvoiceDoc
+                              } : i);
+                              try {
+                                const reissuedInv = updated.find(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode));
+                                if (reissuedInv) saveCloudInvoiceRow(reissuedInv);
+                              } catch (e) { }
+                              return updated;
+                            });
+                          }
+
+                          // 4. Trigger Real-time notifications and system events
+                          try {
+                            addLiveNotification({
+                              title: 'Address Proof Reissue Requested (1 Hr SLA)',
+                              message: `Invoice Desk requested verified address proof from Sales (${salesPersonName}) for BOM ${targetCode}. Must be updated within 1 hour.`,
+                              type: 'warning'
+                            });
+                            if (updatedBomRecord) {
+                              window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomRecord } }));
+                            }
+                            window.dispatchEvent(new Event('controlroom_storage_update'));
+                          } catch (_) {}
+
+                          alert(`✅ Reissue request sent to Sales (${salesPersonName}) for order ${targetCode}!\n\nSales has 1 hour to update this Address proof. If not updated within 1 hour, the invoice will be automatically cancelled with "Invoice Cancelled because of the Address Proof is missing are Mismatch".`);
+                        } catch (err) {
+                          alert(`Address proof reissue request failed: ${err.message}`);
+                        }
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#1D4ED8',
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Request Sales person to re-upload verified address proof document (1 Hour SLA)"
+                    >
                       <RotateCcw style={{ width: '13px', height: '13px', color: '#1D4ED8' }} />
                       Reissue
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                        style={{ display: 'none' }}
-                        onChange={async (e) => {
-                          const file = e.target.files && e.target.files[0];
-                          if (file) {
-                            try {
-                              validateClientFile(file);
-                              const targetCode = inv.poNo || inv.invNo || inv.code || (matchingBom && matchingBom.bomCode);
-                              const isBom = targetCode && /^BOM-/i.test(targetCode);
-                              let res;
-                              if (isBom) {
-                                res = await uploadBomDocumentFile({
-                                  file,
-                                  bomCode: targetCode,
-                                  category: 'delivery-proof'
-                                });
-                              } else {
-                                await new Promise((resolve) => {
-                                  compressAndSaveFile(file, (cRes) => {
-                                    res = cRes;
-                                    resolve();
-                                  });
-                                });
-                              }
-                              if (res) {
-                                const nowIso = new Date().toISOString();
-                                const prevHistory = addressProofDoc?.history || (addressProofDoc ? [addressProofDoc] : []);
-                                const updatedDoc = {
-                                  ...res,
-                                  reissuedAt: nowIso,
-                                  reissueReason: 'Reissued from Invoice Desk',
-                                  history: [...prevHistory, { ...res, uploadedAt: nowIso, version: prevHistory.length + 1 }]
-                                };
-
-                                setViewingInvoiceModal(prev => prev ? {
-                                  ...prev,
-                                  deliveryAddressProofDoc: updatedDoc,
-                                  status: 'Address Proof Reissued'
-                                } : prev);
-
-                                setInvoiceList(prev => {
-                                  const updated = prev.map(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode) ? {
-                                    ...i,
-                                    deliveryAddressProofDoc: updatedDoc,
-                                    status: 'Address Proof Reissued',
-                                    addressProofReissuedAt: nowIso
-                                  } : i);
-                                  try {
-                                    const reissuedInv = updated.find(i => (i.poNo === targetCode || i.invNo === inv.invNo || i.code === targetCode));
-                                    if (reissuedInv) saveCloudInvoiceRow(reissuedInv);
-                                  } catch (e) { }
-                                  return updated;
-                                });
-
-                                setBomStore(prev => prev.map(b => (b.bomCode === targetCode || b.salesOrderNo === targetCode || b.code === targetCode) ? {
-                                  ...b,
-                                  deliveryAddressProofDoc: updatedDoc,
-                                  status: 'Address Proof Reissued',
-                                  addressProofReissuedAt: nowIso
-                                } : b));
-
-                                alert(`✅ Address proof has been successfully reissued with: ${res.originalName || res.name || file.name}`);
-                              }
-                            } catch (err) {
-                              alert(`Address proof reissue failed: ${err.message}`);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
+                    </button>
                   </div>
 
+                  {/* Reissue 1-Hour SLA Warning Banner & Disclaimer Status */}
                   {(() => {
-                    const proofName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.originalName || addressProofDoc?.name || "Delivery Address Proof Document");
-                    let proofDataUrl = (typeof addressProofDoc === "string" && addressProofDoc.startsWith("data:"))
-                      ? addressProofDoc
-                      : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || null);
+                    const isReissuePending = Boolean(
+                      inv.addressProofReuploadRequested ||
+                      matchingBom?.addressProofReuploadRequested ||
+                      matchingBom?.status === 'Address Proof Requested from Sales' ||
+                      inv.status === 'Address Proof Reissue Requested'
+                    );
+
+                    if (isReissuePending && reissueSecondsLeft !== null) {
+                      const mins = Math.floor(reissueSecondsLeft / 60);
+                      const secs = reissueSecondsLeft % 60;
+                      const formattedTime = `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+
+                      return (
+                        <div style={{ padding: '12px 16px', borderRadius: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Clock style={{ width: '16px', height: '16px', color: '#DC2626', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '800', color: '#991B1B' }}>
+                                Reissue SLA Active: Sales has 1 hour to update Address Proof — Time Remaining: <span style={{ fontFamily: 'monospace', fontSize: '13px', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #FCA5A5' }}>{formattedTime}</span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '2px' }}>
+                                If not updated within 1 hour, this invoice will be automatically cancelled with: <em>"Invoice Cancelled because of the Address Proof is missing are Mismatch"</em>.
+                              </div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', backgroundColor: '#DC2626', color: '#FFFFFF', padding: '4px 10px', borderRadius: '6px', fontFamily: 'monospace' }}>
+                            ⏱️ {formattedTime}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    if (inv.processedWithoutAddressProof || inv.addressProofWaived) {
+                      return (
+                        <div style={{ padding: '12px 16px', borderRadius: '10px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                          <AlertTriangle style={{ width: '16px', height: '16px', color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: '800', color: '#92400E' }}>
+                              Processed without Address Proof (T&amp;C Clause Applied)
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#78350F', marginTop: '2px', fontWeight: '600' }}>
+                              "The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility."
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return null;
+                  })()}
+
+                  {(() => {
+                    const historyList = (addressProofDoc?.history && addressProofDoc.history.length > 0)
+                      ? addressProofDoc.history
+                      : (addressProofDoc ? [addressProofDoc] : []);
+
+                    const activeDoc = (selectedProofVersionIdx !== null && historyList[selectedProofVersionIdx])
+                      ? historyList[selectedProofVersionIdx]
+                      : addressProofDoc;
+
+                    const proofName = typeof activeDoc === "string" ? activeDoc : (activeDoc?.originalName || activeDoc?.name || "Delivery Address Proof Document");
+                    let proofDataUrl = (typeof activeDoc === "string" && activeDoc.startsWith("data:"))
+                      ? activeDoc
+                      : (activeDoc?.dataUrl || activeDoc?.fileData || activeDoc?.url || null);
 
                     if (!proofDataUrl && proofName) {
                       proofDataUrl = getMediaFromCache(proofName);
                     }
 
-                    const historyList = addressProofDoc?.history || [addressProofDoc];
+                    if (!addressProofDoc) {
+                      return (
+                        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ padding: '14px 16px', borderRadius: '10px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <AlertCircle style={{ width: '18px', height: '18px', color: '#D97706', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '800', color: '#B45309' }}>
+                                Address Proof Document Not Attached by Sales
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#92400E', marginTop: '2px' }}>
+                                This order has a delivery destination different from the billing address. Click <strong>Reissue</strong> above to request Sales to attach the verified address proof (1 hr SLA). Or complete invoice with the mandatory Terms &amp; Conditions liability disclaimer.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1351,7 +1635,7 @@ export default function InvoiceDetailModal({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                           {historyList.length > 1 && (
                             <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              Document Version History ({historyList.length} Uploads Tracked):
+                              Document Version History ({historyList.length} Uploads Tracked - Click to View):
                             </div>
                           )}
 
@@ -1372,15 +1656,38 @@ export default function InvoiceDetailModal({
 
                           {historyList.length > 1 && (
                             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingTop: '6px' }}>
-                              {historyList.map((hDoc, hIdx) => (
-                                <div key={hIdx} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#FFFFFF', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <FileText style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                                  <div>
-                                    <div style={{ fontWeight: '700', color: '#0F172A' }}>Version {hIdx + 1}: {hDoc.name || 'Proof.png'}</div>
-                                    <div style={{ fontSize: '10px', color: '#64748B' }}>{hDoc.uploadedAt ? new Date(hDoc.uploadedAt).toLocaleString('en-GB') : 'Uploaded'}</div>
+                              {historyList.map((hDoc, hIdx) => {
+                                const isSelected = (selectedProofVersionIdx === hIdx) || (selectedProofVersionIdx === null && hIdx === historyList.length - 1);
+                                return (
+                                  <div
+                                    key={hIdx}
+                                    onClick={() => setSelectedProofVersionIdx(hIdx)}
+                                    style={{
+                                      border: isSelected ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
+                                      backgroundColor: isSelected ? '#EFF6FF' : '#FFFFFF',
+                                      borderRadius: '8px',
+                                      padding: '8px 12px',
+                                      fontSize: '11px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title={`Click to view Version ${hIdx + 1}`}
+                                  >
+                                    <FileText style={{ width: '14px', height: '14px', color: isSelected ? '#1D4ED8' : '#2563EB' }} />
+                                    <div>
+                                      <div style={{ fontWeight: '700', color: isSelected ? '#1D4ED8' : '#0F172A' }}>
+                                        Version {hIdx + 1}: {hDoc.name || hDoc.originalName || 'Proof.png'} {hIdx === 0 ? '(Original)' : '(Reissued)'}
+                                      </div>
+                                      <div style={{ fontSize: '10px', color: '#64748B' }}>
+                                        {hDoc.uploadedAt ? new Date(hDoc.uploadedAt).toLocaleString('en-GB') : 'Uploaded'}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
