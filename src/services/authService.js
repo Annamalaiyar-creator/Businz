@@ -13,19 +13,7 @@ export const DEFAULT_CORE_EMPLOYEES = [
     employee_name: "Ar.Annamalaiyar",
     email: "arannamalaiyar@gmail.com",
     password: "Efx@1234",
-    prefix: "TA",
     role: "Technical Administrator",
-    dashboard_type: "Technical Administrator",
-    status: "Active"
-  },
-  {
-    employee_code: "SE-VRM001",
-    employee_name: "Mohit JV",
-    email: "sales.s4@vrmstructures.in",
-    password: "vrm@2018",
-    prefix: "SE",
-    role: "Sales Executive",
-    dashboard_type: "Sales Executive",
     status: "Active"
   },
   {
@@ -33,29 +21,103 @@ export const DEFAULT_CORE_EMPLOYEES = [
     employee_name: "Arun",
     email: "arun@vrmstructures.in",
     password: "arun2002",
-    prefix: "PR",
     role: "Procurement Head",
-    dashboard_type: "Procurement Head",
     status: "Active"
   },
   {
-    employee_code: "PH-VRM001",
-    employee_name: "Senthil Kumar",
-    email: "production@vrm.com",
-    password: "123456",
-    prefix: "PH",
-    role: "Production Head",
-    dashboard_type: "Production Head",
+    employee_code: "PR-VRMOO1",
+    employee_name: "ARUN BOOPATHI M",
+    email: "scm@vrmstructures.in",
+    password: "SCM@2027",
+    role: "Procurement Head",
     status: "Active"
   },
   {
-    employee_code: "CEO-VRM001",
-    employee_name: "Annamalaiyar",
-    email: "ceo@vrm.com",
+    employee_code: "PR-VRM002",
+    employee_name: "Ar Annamalaiyar",
+    email: "maniskremo@gmail.com",
+    password: "12345",
+    role: "Procurement Head",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM001",
+    employee_name: "Mohit JV",
+    email: "sales.s4@vrmstructures.in",
+    password: "vrm@2018",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM002",
+    employee_name: "Sanjai Kumar",
+    email: "sales.s3@vrmstructures.in",
+    password: "Sales@123",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM004",
+    employee_name: "MOHITH J V",
+    email: "mohithjv2005@gmail.com",
+    password: "Mohith@2005",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM005",
+    employee_name: "Kalaiselvi T",
+    email: "sales@vrmstrutures.in",
+    password: "12345",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM006",
+    employee_name: "Vasanth Kumar s",
+    email: "vasanthkumar1234@gmail.com",
+    password: "Vasanth2001@",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM007",
+    employee_name: "Sanjai Kumar",
+    email: "sanjay@vrmstructures.in",
+    password: "sanjai007",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM010",
+    employee_name: "PAVI",
+    email: "velmuruganr@vrmstructures.in",
+    password: "application",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM011",
+    employee_name: "AHILESH",
+    email: "ak@gmail.com",
+    password: "12345",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM012",
+    employee_name: "Hashwin Kaanth",
+    email: "hashwink918@gmail.com",
+    password: "@Kaanth00918",
+    role: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "SH-VRM001",
+    employee_name: "Vijay",
+    email: "sales@vrm.com",
     password: "123456",
-    prefix: "CEO",
-    role: "CEO",
-    dashboard_type: "CEO",
+    role: "Sales Head",
     status: "Active"
   },
   {
@@ -63,9 +125,23 @@ export const DEFAULT_CORE_EMPLOYEES = [
     employee_name: "Manojraj Selvaraj",
     email: "sales.s1@vrmstructures.in",
     password: "Miru@1103",
-    prefix: "SH",
     role: "Sales Head",
-    dashboard_type: "Sales Head",
+    status: "Active"
+  },
+  {
+    employee_code: "CEO-VRM001",
+    employee_name: "Annamalaiyar",
+    email: "ceo@vrm.com",
+    password: "123456",
+    role: "CEO",
+    status: "Active"
+  },
+  {
+    employee_code: "PH-VRM001",
+    employee_name: "Senthil Kumar",
+    email: "production@vrm.com",
+    password: "123456",
+    role: "Production Head",
     status: "Active"
   },
   {
@@ -73,9 +149,47 @@ export const DEFAULT_CORE_EMPLOYEES = [
     employee_name: "Manikandan",
     email: "dispatch@vrmstructures.in",
     password: "123456",
-    prefix: "DH",
     role: "Dispatch Head",
-    dashboard_type: "Dispatch Head",
+    status: "Active"
+  },
+  {
+    employee_code: "AH-VRM001",
+    employee_name: "Venkatesh",
+    email: "accounts@vrm.com",
+    password: "123456",
+    role: "Accounts Head",
+    status: "Active"
+  },
+  {
+    employee_code: "BI-VRM002",
+    employee_name: "Ar.Annamalaiyar",
+    email: "billing@vrmstructures.com",
+    password: "12345",
+    role: "Billing",
+    status: "Active"
+  },
+  {
+    employee_code: "TS-VRM001",
+    employee_name: "Karthik Raja",
+    email: "techsupport@vrm.com",
+    password: "123456",
+    role: "Tech Support",
+    status: "Active"
+  },
+  {
+    employee_code: "TS-VRM002",
+    employee_name: "KalpanaRam",
+    email: "kalpanaram17@vrmstructures.in",
+    password: "Kalpana@1712",
+    role: "Tech Support",
+    status: "Active"
+  },
+  {
+    employee_code: "FE-VRM001",
+    employee_name: "Ashok",
+    email: "flooremployee@gmail.com",
+    password: "12345",
+    role: "Floor Employee",
     status: "Active"
   }
 ];
