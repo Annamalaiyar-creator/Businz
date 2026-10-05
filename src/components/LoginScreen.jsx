@@ -168,7 +168,25 @@ export default function LoginScreen({ onLoginSuccess }) {
   useEffect(() => {
     try {
       const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-      const clean = emps.filter(e => e.id && !e.id.startsWith('EMP-PH-001') && !e.id.startsWith('EMP-PR-001') && !e.id.startsWith('EMP-PR-002') && !e.id.startsWith('EMP-CEO-001') && !e.id.startsWith('EMP-TA-001') && !e.id.startsWith('EMP-AH-001') && !e.id.startsWith('EMP-SH-001') && !e.id.startsWith('EMP-SE-001') && !e.id.startsWith('EMP-TS-001') && !e.id.startsWith('EMP-BI-002'));
+      const clean = emps.filter(e => {
+        if (!e) return false;
+        const idStr = String(e.id || '');
+        if (idStr && (
+          idStr.startsWith('EMP-PH-001') ||
+          idStr.startsWith('EMP-PR-001') ||
+          idStr.startsWith('EMP-PR-002') ||
+          idStr.startsWith('EMP-CEO-001') ||
+          idStr.startsWith('EMP-TA-001') ||
+          idStr.startsWith('EMP-AH-001') ||
+          idStr.startsWith('EMP-SH-001') ||
+          idStr.startsWith('EMP-SE-001') ||
+          idStr.startsWith('EMP-TS-001') ||
+          idStr.startsWith('EMP-BI-002')
+        )) {
+          return false;
+        }
+        return true;
+      });
       if (clean.length !== emps.length) {
         localStorage.setItem('controlroom_employees_list', JSON.stringify(clean));
       }

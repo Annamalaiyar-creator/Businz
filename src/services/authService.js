@@ -7,6 +7,98 @@ import { registerActiveSession, revokeSession } from './sessionService';
  * Dedicated module for handling authentication, credential matching, session persistence, and role resolution.
  */
 
+export const DEFAULT_CORE_EMPLOYEES = [
+  {
+    employee_code: "TA-VRM001",
+    employee_name: "Ar.Annamalaiyar",
+    email: "arannamalaiyar@gmail.com",
+    password: "Efx@1234",
+    prefix: "TA",
+    role: "Technical Administrator",
+    dashboard_type: "Technical Administrator",
+    status: "Active"
+  },
+  {
+    employee_code: "SE-VRM001",
+    employee_name: "Mohit JV",
+    email: "sales.s4@vrmstructures.in",
+    password: "vrm@2018",
+    prefix: "SE",
+    role: "Sales Executive",
+    dashboard_type: "Sales Executive",
+    status: "Active"
+  },
+  {
+    employee_code: "PR-VRM001",
+    employee_name: "Arun",
+    email: "arun@vrmstructures.in",
+    password: "arun2002",
+    prefix: "PR",
+    role: "Procurement Head",
+    dashboard_type: "Procurement Head",
+    status: "Active"
+  },
+  {
+    employee_code: "PH-VRM001",
+    employee_name: "Senthil Kumar",
+    email: "production@vrm.com",
+    password: "123456",
+    prefix: "PH",
+    role: "Production Head",
+    dashboard_type: "Production Head",
+    status: "Active"
+  },
+  {
+    employee_code: "CEO-VRM001",
+    employee_name: "Annamalaiyar",
+    email: "ceo@vrm.com",
+    password: "123456",
+    prefix: "CEO",
+    role: "CEO",
+    dashboard_type: "CEO",
+    status: "Active"
+  },
+  {
+    employee_code: "SH-VRM002",
+    employee_name: "Manojraj Selvaraj",
+    email: "sales.s1@vrmstructures.in",
+    password: "Miru@1103",
+    prefix: "SH",
+    role: "Sales Head",
+    dashboard_type: "Sales Head",
+    status: "Active"
+  },
+  {
+    employee_code: "DH-VRM001",
+    employee_name: "Manikandan",
+    email: "dispatch@vrmstructures.in",
+    password: "123456",
+    prefix: "DH",
+    role: "Dispatch Head",
+    dashboard_type: "Dispatch Head",
+    status: "Active"
+  }
+];
+
+const mergeWithCoreEmployees = (incomingList = []) => {
+  const normalize = (c) => String(c || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+  const empMap = new Map();
+  DEFAULT_CORE_EMPLOYEES.forEach(e => empMap.set(normalize(e.employee_code), e));
+  if (Array.isArray(incomingList)) {
+    incomingList.forEach(e => {
+      if (!e) return;
+      const code = normalize(e.employee_code || e.code);
+      const email = String(e.email || '').trim().toLowerCase();
+      if (code) {
+        empMap.set(code, { ...(empMap.get(code) || {}), ...e });
+      } else if (email) {
+        empMap.set(email, e);
+      }
+    });
+  }
+  return Array.from(empMap.values());
+};
+
 // Synchronous cached memory copy & async cloud fetch
 export const syncEmployeesFromCloud = async () => {
   try {
@@ -16,26 +108,33 @@ export const syncEmployeesFromCloud = async () => {
     clearTimeout(timeoutId);
     if (res && res.ok) {
       const json = await res.json();
-      if (json && json.success && Array.isArray(json.data)) {
-        localStorage.setItem('controlroom_employees_list', JSON.stringify(json.data));
-        const registeredCodes = json.data.map(e => (e.employee_code || e.code)).filter(Boolean);
+      if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const localEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const merged = mergeWithCoreEmployees([...localEmps, ...json.data]);
+        localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
+        const registeredCodes = merged.map(e => (e.employee_code || e.code)).filter(Boolean);
         localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
-        return json.data;
+        return merged;
       }
     }
   } catch (_) {}
 
   try {
     const list = await fetchCloudStore('employees_store', []);
-    if (Array.isArray(list)) {
-      localStorage.setItem('controlroom_employees_list', JSON.stringify(list));
-      const registeredCodes = list.map(e => (e.employee_code || e.code)).filter(Boolean);
+    if (Array.isArray(list) && list.length > 0) {
+      const localEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const merged = mergeWithCoreEmployees([...localEmps, ...list]);
+      localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
+      const registeredCodes = merged.map(e => (e.employee_code || e.code)).filter(Boolean);
       localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
-      return list;
+      return merged;
     }
   } catch(e) {}
 
-  return JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+  const currentLocal = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+  const merged = mergeWithCoreEmployees(currentLocal);
+  localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
+  return merged;
 };
 
 export const authenticateUser = (empId, username, password, selectedRoleObj = null) => {
@@ -54,14 +153,14 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
   const normalizeCode = (c) => String(c || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
   const cleanEmpCodeNorm = normalizeCode(cleanEmpId);
 
-  // 1. Find account strictly from registered employee accounts store
+  // 1. Find account strictly from registered employee accounts store (merged with core)
   let accountRecord = null;
   
   try {
-    let existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-    let modified = false;
+    const currentLocal = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    const existingEmps = mergeWithCoreEmployees(currentLocal);
+    localStorage.setItem('controlroom_employees_list', JSON.stringify(existingEmps));
 
-    // Zero hardcoded accounts - system relies purely on registered employee accounts
     accountRecord = existingEmps.find(e => {
       const empNorm = normalizeCode(e.employee_code || e.code);
       const codeMatches = cleanEmpCodeNorm && (
