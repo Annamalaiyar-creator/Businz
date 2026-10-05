@@ -182,5 +182,17 @@
     "password": "12345",
     "role": "Floor Employee",
     "status": "Active"
+  },
+  {
+    "employee_code": "PH-001",
+    "employee_name": "PURUSHOTHAMAN M",
+    "email": "ph001@gmail.com",
+    "password": "12345",
+    "prefix": "PH",
+    "role": "Production Head",
+    "dashboard_type": "Production Head",
+    "status": "Active",
+    "created_at": "2026-10-05T07:29:24.315Z",
+    "last_login": "2026-10-05T07:29:24.316Z"
   }
 ]

@@ -191,6 +191,14 @@ export const DEFAULT_CORE_EMPLOYEES = [
     password: "12345",
     role: "Floor Employee",
     status: "Active"
+  },
+  {
+    employee_code: "PH-001",
+    employee_name: "PURUSHOTHAMAN M",
+    email: "ph001@gmail.com",
+    password: "12345",
+    role: "Production Head",
+    status: "Active"
   }
 ];
 
