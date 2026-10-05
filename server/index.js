@@ -2168,29 +2168,87 @@ app.post('/api/store/:key', async (req, res) => {
     } else if (Array.isArray(storeData)) {
       const currentData = await getDatabaseStore(key);
       if (Array.isArray(currentData) && currentData.length > 0) {
-        const getId = (item) => {
-          if (!item || typeof item !== 'object') return null;
-          return item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.id || item.poNo || item.invNo || item.grnNo || item.vendorCode || item.email || item.name;
-        };
-
-        const map = new Map();
-        currentData.forEach(item => {
-          const id = getId(item);
-          if (id) map.set(id, item);
-        });
-
-        storeData.forEach(item => {
-          const id = getId(item);
-          if (id) {
-            if (map.has(id)) {
-              map.set(id, { ...map.get(id), ...item });
+        if (key === 'po_store') {
+          const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+          const poMap = new Map();
+          currentData.forEach(p => {
+            const k1 = normalize(p.poNo);
+            const k2 = normalize(p.id);
+            const k3 = normalize(p.zohoId);
+            if (k1) poMap.set(k1, p);
+            if (k2) poMap.set(k2, p);
+            if (k3) poMap.set(k3, p);
+          });
+          storeData.forEach(item => {
+            const k1 = normalize(item.poNo);
+            const k2 = normalize(item.id);
+            const k3 = normalize(item.zohoId);
+            const existing = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || (k3 && poMap.get(k3));
+            if (existing) {
+              const eRank = getPoStageRank(existing);
+              const iRank = getPoStageRank(item);
+              const effPay = item.paymentDetails || existing.paymentDetails;
+              const effProceed = item.proceedDetails || existing.proceedDetails;
+              const effApp = item.approvedBy || existing.approvedBy;
+              let effStatus = (iRank >= eRank ? item.status : existing.status) || item.status || existing.status;
+              let effStatusType = (iRank >= eRank ? item.statusType : existing.statusType) || item.statusType || existing.statusType;
+              if (effProceed && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 4) {
+                effStatus = 'Proceed PO';
+                effStatusType = 'proceed_po';
+              } else if (effPay && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 3) {
+                effStatus = 'Payment Processed';
+                effStatusType = 'payment_processed';
+              } else if (effApp && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 2) {
+                effStatus = 'MD Approved';
+                effStatusType = 'md_approved';
+              }
+              const merged = {
+                ...existing,
+                ...item,
+                status: effStatus,
+                statusType: effStatusType,
+                paymentDetails: effPay,
+                proceedDetails: effProceed,
+                approvedBy: effApp,
+                approvalDate: item.approvalDate || existing.approvalDate,
+                approvalTime: item.approvalTime || existing.approvalTime,
+                approvalRemarks: item.approvalRemarks || existing.approvalRemarks
+              };
+              if (k1) poMap.set(k1, merged);
+              if (k2) poMap.set(k2, merged);
+              if (k3) poMap.set(k3, merged);
             } else {
-              map.set(id, item);
+              if (k1) poMap.set(k1, item);
+              if (k2) poMap.set(k2, item);
+              if (k3) poMap.set(k3, item);
             }
-          }
-        });
+          });
+          finalDataToSave = Array.from(new Set(poMap.values()));
+        } else {
+          const getId = (item) => {
+            if (!item || typeof item !== 'object') return null;
+            return item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.id || item.poNo || item.invNo || item.grnNo || item.vendorCode || item.email || item.name;
+          };
 
-        finalDataToSave = Array.from(map.values());
+          const map = new Map();
+          currentData.forEach(item => {
+            const id = getId(item);
+            if (id) map.set(id, item);
+          });
+
+          storeData.forEach(item => {
+            const id = getId(item);
+            if (id) {
+              if (map.has(id)) {
+                map.set(id, { ...map.get(id), ...item });
+              } else {
+                map.set(id, item);
+              }
+            }
+          });
+
+          finalDataToSave = Array.from(map.values());
+        }
       }
     } else if ((key === 'presets_store' || key === 'templates_store' || key === 'company_branding_store') && storeData && typeof storeData === 'object' && !Array.isArray(storeData)) {
       finalDataToSave = storeData;
@@ -2403,8 +2461,17 @@ const getZohoAccessToken = () => {
   return pendingTokenPromise;
 };
 
+// In-memory reference caches to protect Zoho daily API limits (30-min TTL)
+const ZOHO_CACHE_TTL = 30 * 60 * 1000;
+let zohoVendorsCache = { data: null, timestamp: 0 };
+let zohoItemsCache = { data: null, timestamp: 0 };
+let zohoPurchaseOrdersCache = { data: null, timestamp: 0 };
 
-const fetchZohoVendors = (accessToken) => {
+const fetchZohoVendors = (accessToken, forceRefresh = false) => {
+  if (!forceRefresh && zohoVendorsCache.data && (Date.now() - zohoVendorsCache.timestamp < ZOHO_CACHE_TTL)) {
+    return Promise.resolve(zohoVendorsCache.data);
+  }
+
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'www.zohoapis.in',
@@ -2422,6 +2489,9 @@ const fetchZohoVendors = (accessToken) => {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
+          if (parsed && Array.isArray(parsed.contacts)) {
+            zohoVendorsCache = { data: parsed, timestamp: Date.now() };
+          }
           resolve(parsed);
         } catch (e) {
           reject(e);
@@ -2490,6 +2560,7 @@ app.post('/api/zoho/vendors', async (req, res) => {
 
     let result = await createZohoVendor(accessToken, vendorPayload);
     if (result && (result.code === 0 || result.contact)) {
+      zohoVendorsCache.timestamp = 0;
       return res.json({
         success: true,
         message: 'Vendor created in Zoho Books successfully!',
@@ -2948,7 +3019,7 @@ app.get('/api/zoho/vendors', async (req, res) => {
 
   try {
     const accessToken = await getZohoAccessToken();
-    const data = await fetchZohoVendors(accessToken);
+    const data = await fetchZohoVendors(accessToken, req.query.force === 'true');
     
     if (data && data.contacts && Array.isArray(data.contacts)) {
       const translated = data.contacts.map(c => ({
@@ -3124,6 +3195,7 @@ app.delete('/api/zoho/vendors/:id', async (req, res) => {
     return vId !== targetClean && vCode !== targetClean && vName !== targetClean;
   });
   saveLocalVendors(updatedVendors);
+  zohoVendorsCache.timestamp = 0;
 
   // 2. Delete in Zoho Books if connecte
   if (zohoSession.connected) {
@@ -4243,6 +4315,7 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
         localPOs.unshift(localPOObj);
       }
       saveLocalPOs(localPOs);
+      zohoPurchaseOrdersCache.timestamp = 0;
 
       return res.json({
         success: true,
@@ -5274,6 +5347,12 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
     return res.json(translated);
   }
 
+  const now = Date.now();
+  const forceRefresh = req.query.force === 'true';
+  if (!forceRefresh && zohoPurchaseOrdersCache.data && (now - zohoPurchaseOrdersCache.timestamp < 30000)) {
+    return res.json(zohoPurchaseOrdersCache.data);
+  }
+
   try {
     const accessToken = await getZohoAccessToken();
     const data = await fetchZohoPurchaseOrders(accessToken);
@@ -5303,7 +5382,34 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
             if (match) {
               const pRank = getPoStageRank(p);
               const mRank = getPoStageRank(match);
-              const winner = mRank >= pRank ? { ...p, ...match } : { ...match, ...p };
+              const effPay = p.paymentDetails || match.paymentDetails;
+              const effProceed = p.proceedDetails || match.proceedDetails;
+              const effApp = p.approvedBy || match.approvedBy;
+              let effStatus = (pRank >= mRank ? p.status : match.status) || p.status || match.status;
+              let effStatusType = (pRank >= mRank ? p.statusType : match.statusType) || p.statusType || match.statusType;
+              if (effProceed && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 4) {
+                effStatus = 'Proceed PO';
+                effStatusType = 'proceed_po';
+              } else if (effPay && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 3) {
+                effStatus = 'Payment Processed';
+                effStatusType = 'payment_processed';
+              } else if (effApp && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 2) {
+                effStatus = 'MD Approved';
+                effStatusType = 'md_approved';
+              }
+              const winner = {
+                ...match,
+                ...p,
+                ...(mRank > pRank ? match : {}),
+                status: effStatus,
+                statusType: effStatusType,
+                paymentDetails: effPay,
+                proceedDetails: effProceed,
+                approvedBy: effApp,
+                approvalDate: p.approvalDate || match.approvalDate,
+                approvalTime: p.approvalTime || match.approvalTime,
+                approvalRemarks: p.approvalRemarks || match.approvalRemarks
+              };
               if (k1) map.set(k1, winner);
               if (k2) map.set(k2, winner);
               if (k3) map.set(k3, winner);
@@ -5355,7 +5461,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
                    (rIdClean && (lpIdClean === rIdClean || lpZohoId === rIdClean || lpNoClean === rIdClean));
           });
 
-          if (!matchedLp || !Array.isArray(matchedLp.items) || matchedLp.items.length === 0 || !matchedLp.deliveryAddress || matchedLp.deliveryAddress === '—' || !matchedLp.notes) {
+          if (!matchedLp || !Array.isArray(matchedLp.items) || matchedLp.items.length === 0) {
             try {
               const poDetailRes = await fetchZohoPurchaseOrderDetail(accessToken, rpo.purchaseorder_id);
               if (poDetailRes && poDetailRes.purchaseorder && Array.isArray(poDetailRes.purchaseorder.line_items) && poDetailRes.purchaseorder.line_items.length > 0) {
@@ -5686,6 +5792,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
           }
         } else if (lp.poNo || lp.id) {
           translated.unshift({
+            ...lp,
             id: lp.zohoId || lp.id || lp.poNo,
             poNo: lp.poNo || lp.id,
             zohoId: lp.zohoId || lp.id,
@@ -5716,10 +5823,21 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
             approver: lp.approver || '',
             approvalPriority: lp.approvalPriority || '',
             amount: lp.amount || '₹0.00',
-            status: lp.status || 'OPEN',
-            statusType: lp.statusType || 'approved',
-            grnCount: 0,
-            totalReceived: 0,
+            status: lp.status || 'Draft',
+            statusType: lp.statusType || 'draft',
+            approvedBy: lp.approvedBy,
+            approvalDate: lp.approvalDate,
+            approvalTime: lp.approvalTime,
+            approvalRemarks: lp.approvalRemarks,
+            paymentDetails: lp.paymentDetails,
+            proceedDetails: lp.proceedDetails,
+            totalOrderedQty: lp.totalOrderedQty !== undefined ? lp.totalOrderedQty : 0,
+            totalReceivedQty: lp.totalReceivedQty !== undefined ? lp.totalReceivedQty : 0,
+            totalRemainingQty: lp.totalRemainingQty !== undefined ? lp.totalRemainingQty : 0,
+            receivingProgressPct: lp.receivingProgressPct || '0.0',
+            order_status: lp.order_status,
+            grnCount: lp.grnCount !== undefined ? lp.grnCount : 0,
+            totalReceived: lp.totalReceived !== undefined ? lp.totalReceived : 0,
             items: lp.items || []
           });
         }
@@ -5734,6 +5852,7 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         return parsePoNum(b) - parsePoNum(a);
       });
 
+      zohoPurchaseOrdersCache = { data: sortedTranslated, timestamp: Date.now() };
       res.json(sortedTranslated);
     } else {
       const localPOs = loadLocalPOs();
@@ -8077,7 +8196,11 @@ app.get('/api/zoho/approvals-pending', async (req, res) => {
 
 
 
-const fetchZohoItems = async (accessToken) => {
+const fetchZohoItems = async (accessToken, forceRefresh = false) => {
+  if (!forceRefresh && zohoItemsCache.data && (Date.now() - zohoItemsCache.timestamp < ZOHO_CACHE_TTL)) {
+    return zohoItemsCache.data;
+  }
+
   let allItems = [];
   let page = 1;
   let hasMore = true;
@@ -8120,7 +8243,11 @@ const fetchZohoItems = async (accessToken) => {
     }
   }
 
-  return { items: allItems };
+  const result = { items: allItems };
+  if (allItems.length > 0) {
+    zohoItemsCache = { data: result, timestamp: Date.now() };
+  }
+  return result;
 };
 
 // Real-time synchronization endpoint retrieving live items catalog from Zoho Books
@@ -8130,7 +8257,7 @@ app.get('/api/zoho/items', async (req, res) => {
   try {
     if (zohoSession.connected) {
       const accessToken = await getZohoAccessToken();
-      const data = await fetchZohoItems(accessToken);
+      const data = await fetchZohoItems(accessToken, req.query.force === 'true');
       
       if (data && data.items && Array.isArray(data.items)) {
         // Map local items by Code, SKU, itemId, and name fingerprint to preserve live deducted stock
@@ -8450,6 +8577,7 @@ app.delete('/api/zoho/items/:id', async (req, res) => {
     return iId !== targetClean && iSku !== targetClean && iName !== targetClean;
   });
   saveLocalItems(updatedItems);
+  zohoItemsCache.timestamp = 0;
 
   if (zohoSession.connected) {
     try {
@@ -8601,6 +8729,7 @@ app.put('/api/zoho/items/:id', async (req, res) => {
       return it;
     });
     saveLocalItems(updated);
+    zohoItemsCache.timestamp = 0;
   } catch (e) {}
 
   if (!zohoSession.connected) {
@@ -8733,6 +8862,7 @@ app.post('/api/zoho/items', async (req, res) => {
     const filtered = localItems.filter(i => String(i.itemId || i.id || i.sku).toLowerCase() !== String(itemToSave.itemId || itemToSave.sku || itemToSave.name).toLowerCase());
     const updated = [itemToSave, ...filtered];
     saveLocalItems(updated);
+    zohoItemsCache.timestamp = 0;
   } catch (e) {
     console.error('Failed to save newly created item to item_store:', e);
   }

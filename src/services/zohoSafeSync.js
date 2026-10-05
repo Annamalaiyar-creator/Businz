@@ -33,16 +33,23 @@ export async function getSafeZohoPOs() {
         const merged = data.map(zohoPo => {
           const zNo = normalize(zohoPo.poNo);
           const zId = normalize(zohoPo.id);
+          const zZohoId = normalize(zohoPo.zohoId);
           const cloudMatch = Array.isArray(cloudList) && cloudList.find(c => {
             const cNo = normalize(c.poNo);
             const cId = normalize(c.id);
             const cZohoId = normalize(c.zohoId);
-            return (zNo && (cNo === zNo || cId === zNo)) || (zId && (cId === zId || cZohoId === zId));
+            return (zNo && (cNo === zNo || cId === zNo || cZohoId === zNo)) ||
+                   (zId && (cId === zId || cZohoId === zId || cNo === zId)) ||
+                   (zZohoId && (cZohoId === zZohoId || cId === zZohoId || cNo === zZohoId));
           });
           if (cloudMatch) {
             const preservedItems = (Array.isArray(cloudMatch.items) && cloudMatch.items.length > 0)
               ? cloudMatch.items
               : (Array.isArray(zohoPo.items) && zohoPo.items.length > 0 ? zohoPo.items : []);
+            const effPayDetails = cloudMatch.paymentDetails || zohoPo.paymentDetails;
+            const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
+            const effApprovedBy = cloudMatch.approvedBy || zohoPo.approvedBy;
+
             return {
               ...zohoPo,
               ...cloudMatch,
@@ -82,10 +89,8 @@ export async function getSafeZohoPOs() {
                   if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
                   return 1;
                 };
-                const effPayDetails = cloudMatch.paymentDetails || zohoPo.paymentDetails;
-                const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
-                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy, cloudMatch.paymentDetails, cloudMatch.proceedDetails);
-                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy, zohoPo.paymentDetails, zohoPo.proceedDetails);
+                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, effApprovedBy, effPayDetails, effProceedDetails);
+                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, effApprovedBy, effPayDetails, effProceedDetails);
                 const effectiveRank = Math.max(cRank, zRank);
                 if (effectiveRank === 7) return 'REJECTED';
                 if (effectiveRank === 6) return 'CLOSED / FULLY RECEIVED';
@@ -124,10 +129,8 @@ export async function getSafeZohoPOs() {
                   if (s.includes('md approved') || stt.includes('md_approved') || Boolean(approver)) return 2;
                   return 1;
                 };
-                const effPayDetails = cloudMatch.paymentDetails || zohoPo.paymentDetails;
-                const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
-                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, cloudMatch.approvedBy, cloudMatch.paymentDetails, cloudMatch.proceedDetails);
-                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, zohoPo.approvedBy, zohoPo.paymentDetails, zohoPo.proceedDetails);
+                const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, effApprovedBy, effPayDetails, effProceedDetails);
+                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, effApprovedBy, effPayDetails, effProceedDetails);
                 const effectiveRank = Math.max(cRank, zRank);
                 if (effectiveRank === 7) return 'rejected';
                 if (effectiveRank === 6) return 'closed';
@@ -137,12 +140,12 @@ export async function getSafeZohoPOs() {
                 if (effectiveRank === 2) return 'md_approved';
                 return cloudMatch.statusType || zohoPo.statusType || 'draft';
               })(),
-              approvedBy: cloudMatch.approvedBy || zohoPo.approvedBy,
+              approvedBy: effApprovedBy,
               approvalDate: cloudMatch.approvalDate || zohoPo.approvalDate,
               approvalTime: cloudMatch.approvalTime || zohoPo.approvalTime,
               approvalRemarks: cloudMatch.approvalRemarks || zohoPo.approvalRemarks,
-              proceedDetails: cloudMatch.proceedDetails || zohoPo.proceedDetails,
-              paymentDetails: cloudMatch.paymentDetails || zohoPo.paymentDetails,
+              proceedDetails: effProceedDetails,
+              paymentDetails: effPayDetails,
               grnDetails: cloudMatch.grnDetails || zohoPo.grnDetails,
               totalOrderedQty: cloudMatch.totalOrderedQty !== undefined ? cloudMatch.totalOrderedQty : zohoPo.totalOrderedQty,
               totalReceivedQty: cloudMatch.totalReceivedQty !== undefined ? cloudMatch.totalReceivedQty : zohoPo.totalReceivedQty,
@@ -172,24 +175,26 @@ export async function getSafeZohoPOs() {
 
         // Also preserve any newly created local/cloud POs not yet returned by Zoho list
         if (Array.isArray(cloudList) && cloudList.length > 0) {
-          const mergedPoNos = new Set(merged.map(p => normalize(p.poNo || p.id)));
+          const mergedPoKeys = new Set();
+          merged.forEach(p => {
+            const k1 = normalize(p.poNo);
+            const k2 = normalize(p.id);
+            const k3 = normalize(p.zohoId);
+            if (k1) mergedPoKeys.add(k1);
+            if (k2) mergedPoKeys.add(k2);
+            if (k3) mergedPoKeys.add(k3);
+          });
           cloudList.forEach(c => {
-            const cKey = normalize(c.poNo || c.id);
-            if (cKey && !mergedPoNos.has(cKey)) {
+            const c1 = normalize(c.poNo);
+            const c2 = normalize(c.id);
+            const c3 = normalize(c.zohoId);
+            const alreadyIn = (c1 && mergedPoKeys.has(c1)) || (c2 && mergedPoKeys.has(c2)) || (c3 && mergedPoKeys.has(c3));
+            if (!alreadyIn) {
               merged.push(c);
             }
           });
         }
 
-        // Only save to cloud if we are not erasing items from records that already had items
-        const isSafeToSave = cloudList.every(c => {
-          if (!Array.isArray(c.items) || c.items.length === 0) return true;
-          const m = merged.find(p => normalize(p.poNo) === normalize(c.poNo) || normalize(p.id) === normalize(c.id));
-          return m && Array.isArray(m.items) && m.items.length > 0;
-        });
-        if (isSafeToSave || cloudList.length === 0) {
-          saveCloudStore('po_store', merged);
-        }
         return merged;
       }
     }

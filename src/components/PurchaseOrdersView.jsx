@@ -177,6 +177,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     if (!po) return 'Draft';
     const s = String(po.status || '').trim();
     const st = String(po.statusType || '').toLowerCase();
+    const ost = String(po.order_status || '').toLowerCase();
     if (s === 'REJECTED' || st === 'rejected') return 'REJECTED';
 
     const totOrd = Number(po.totalOrderedQty || (Array.isArray(po.items) ? po.items.reduce((sum, it) => sum + Number(it.qty || it.quantity || 0), 0) : 0));
@@ -189,9 +190,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
 
     if (s.includes('CLOSED') || st === 'closed' || s.includes('FULLY RECEIVED') || (totOrd > 0 && totRec >= totOrd)) return 'CLOSED';
-    if (s.toLowerCase().includes('proceed') || st.includes('proceed') || Boolean(po.proceedDetails)) return 'PROCEED_PO';
-    if (s.toLowerCase().includes('payment') || st.includes('payment') || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
-    if (s === 'MD Approved' || st === 'md_approved' || Boolean(po.approvedBy)) return 'MD_APPROVED';
+    if (s.toLowerCase().includes('proceed') || st.includes('proceed') || ost.includes('proceed') || Boolean(po.proceedDetails)) return 'PROCEED_PO';
+    if (s.toLowerCase().includes('payment') || st.includes('payment') || ost.includes('payment') || Boolean(po.paymentDetails)) return 'PAYMENT_PROCESSED';
+    if (s === 'MD Approved' || st === 'md_approved' || ost.includes('approved') || Boolean(po.approvedBy)) return 'MD_APPROVED';
     return 'Draft';
   };
 
@@ -850,7 +851,6 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         showCustomAlert('Purchase Order saved securely in Businz! (Server sync pending)', 'PO Saved', 'success');
       } finally {
         setIsSubmittingPO(false);
-        fetchZohoPOs();
       }
     };
 
