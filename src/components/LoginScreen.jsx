@@ -475,21 +475,24 @@ export default function LoginScreen({ onLoginSuccess }) {
       boxSizing: 'border-box'
     }}>
       {/* OUTER ELEGANT MODAL CONTAINER MATCHING USER MOCKUP */}
-      <div style={{
-        width: '980px',
-        maxWidth: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: '32px',
-        boxShadow: '0 25px 60px -15px rgba(100, 100, 160, 0.18)',
-        display: 'grid',
-        gridTemplateColumns: '430px 1fr',
-        overflow: 'hidden',
-        minHeight: '620px',
-        border: '1px solid rgba(230, 230, 245, 0.8)'
-      }}>
+      <div 
+        className="login-modal-container"
+        style={{
+          width: '980px',
+          maxWidth: '100%',
+          backgroundColor: '#FFFFFF',
+          borderRadius: '32px',
+          boxShadow: '0 25px 60px -15px rgba(100, 100, 160, 0.18)',
+          display: 'grid',
+          gridTemplateColumns: '430px 1fr',
+          overflow: 'hidden',
+          minHeight: '620px',
+          border: '1px solid rgba(230, 230, 245, 0.8)'
+        }}
+      >
         
         {/* ================= LEFT MESH GRADIENT BANNER PANEL ================= */}
-        <div style={{
+        <div className="login-mesh-panel" style={{
           background: 'linear-gradient(135deg, #0284C7 0%, #2563EB 25%, #4F46E5 50%, #9333EA 75%, #E9D5FF 100%)',
           borderRadius: '24px',
           margin: '16px',
@@ -546,7 +549,7 @@ export default function LoginScreen({ onLoginSuccess }) {
         </div>
 
         {/* ================= RIGHT LOGIN FORM & ROLE SELECTOR ================= */}
-        <div style={{
+        <div className="login-form-container" style={{
           padding: '40px 44px',
           display: 'flex',
           flexDirection: 'column',

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowUpRight, ArrowDownRight, Clock, Sparkles, RefreshCw,
-  Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, Flame
+  Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, Flame, ArrowRight
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
@@ -86,7 +86,10 @@ function isDateInPeriod(dateVal, period) {
 
 // Categorize items by product line
 function categorizeProduct(item) {
-  const text = `${item.name || ''} ${item.description || ''} ${item.code || ''} ${item.category || ''} ${item.structure || ''} ${item.productCategory || ''}`.toLowerCase();
+  const text = `${item.name || ''} ${item.description || ''} ${item.code || ''} ${item.category || ''} ${item.structure || ''} ${item.productCategory || ''} ${item.module || ''}`.toLowerCase();
+  if (text.includes('panel') || text.includes('module') || text.includes('solar panel') || text.includes('pv')) {
+    return 'Solar Panels / Modules';
+  }
   if (text.includes('profile') || text.includes('aluminium') || text.includes('channel') || text.includes('extrusion') || text.includes('rail')) {
     return 'Aluminium Profiles';
   }
@@ -625,6 +628,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   const productPerformance = useMemo(() => {
     const catMap = {
       'Solar Structures': 0,
+      'Solar Panels / Modules': 0,
       'Aluminium Profiles': 0,
       'BOS Kits': 0,
       'Walkway / Handrail': 0,
@@ -677,6 +681,17 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   const maxProductVal = useMemo(() => {
     return Math.max(...productPerformance.map(p => p.actual), 10);
   }, [productPerformance]);
+
+  const handleOpenProductReport = useCallback((category = 'all') => {
+    try {
+      sessionStorage.setItem('businz_reports_initial_tab', 'products');
+      sessionStorage.setItem('businz_reports_initial_category', category);
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('businz_open_reports_tab', {
+      detail: { tab: 'products', category }
+    }));
+    if (onNavigateTab) onNavigateTab('Sales Reports');
+  }, [onNavigateTab]);
 
   // Real Top 10 Customers by actual sales value
   const topCustomers = useMemo(() => {
@@ -1039,7 +1054,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       </div>
 
       {/* ─── ROW 1: 6-COLUMN REAL-TIME KPI CARDS (MATCHING PROCUREMENT HEAD COMPACT DESIGN) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '14px', width: '100%' }}>
+      <div className="sales-kpi-grid-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '14px', width: '100%' }}>
         {[
           {
             title: 'TOTAL PI VALUE',
@@ -1185,7 +1200,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       </div>
 
       {/* ─── ROW 2: MONTH TARGET RUN RATE & SALES FUNNEL (50/50 SPLIT) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
+      <div className="sales-dashboard-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
         {/* Card A: Target Progress & Run Rate */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
@@ -1329,7 +1344,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       </div>
 
       {/* ─── ROW 3: SALES TREND, PRODUCT PERFORMANCE, TOP 10 CUSTOMERS (3 COLUMNS) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
+      <div className="sales-dashboard-grid-3" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
         {/* Card A: Actual vs Target Trend Chart */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
@@ -1503,28 +1518,69 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           </div>
         </div>
 
-        {/* Card B: Product Sale Comparison */}
+        {/* Card B: Product Sale Comparison (Interactive Click-to-Drilldown to Sales Reports) */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
               <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 PRODUCT SALE COMPARISON
               </span>
+              <button
+                onClick={() => handleOpenProductReport('all')}
+                style={{
+                  background: '#ECFEFF',
+                  border: '1px solid #A5F3FC',
+                  color: '#0E7490',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Open detailed product sales report in Sales Reports"
+              >
+                <span>View Full Report</span>
+                <ArrowRight size={12} />
+              </button>
             </div>
 
             {/* List of Products with clean solid progress bars */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {productPerformance.map((p, idx) => {
                 const pct = maxProductVal > 0 ? (p.actual / maxProductVal) * 100 : 0;
 
                 return (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#1E293B' }}>
-                        {p.name}
-                      </span>
-                      <span style={{ fontSize: '10.5px', fontWeight: '600', color: '#94A3B8' }}>
-                        {p.actualStr}
+                  <div
+                    key={idx}
+                    onClick={() => handleOpenProductReport(p.name)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px',
+                      cursor: 'pointer',
+                      padding: '5px 8px',
+                      borderRadius: '8px',
+                      transition: 'background-color 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    title={`Click to view ${p.name} report breakdown in Sales Reports`}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                        <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#1E293B' }}>
+                          {p.name}
+                        </span>
+                        <span style={{ fontSize: '10.5px', fontWeight: '600', color: '#94A3B8' }}>
+                          {p.actualStr}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                        Report ›
                       </span>
                     </div>
 
@@ -1556,20 +1612,31 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
           </div>
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingTop: '8px',
-            marginTop: '6px',
-            borderTop: '2px solid #E2E8F0',
-            fontSize: '11.5px',
-            fontWeight: '800',
-            color: '#1E3A8A'
-          }}>
+          <div
+            onClick={() => handleOpenProductReport('all')}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingTop: '8px',
+              marginTop: '6px',
+              borderTop: '2px solid #E2E8F0',
+              fontSize: '11.5px',
+              fontWeight: '800',
+              color: '#1E3A8A',
+              cursor: 'pointer',
+              padding: '6px 8px',
+              borderRadius: '6px',
+              transition: 'background-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            title="Click to view all products in Sales Reports"
+          >
             <div>Total Products Billed</div>
-            <div style={{ textAlign: 'right', color: '#1E3A8A' }}>
-              {formatLakhsCr(productPerformance.reduce((s, p) => s + p.actual, 0) || totalInvoicedValue)}
+            <div style={{ textAlign: 'right', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>{formatLakhsCr(productPerformance.reduce((s, p) => s + p.actual, 0) || totalInvoicedValue)}</span>
+              <ArrowRight size={12} />
             </div>
           </div>
         </div>
@@ -2294,7 +2361,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         <div style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           TODAY'S SNAPSHOT — {selectedPeriod.toUpperCase()}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '10px', textAlign: 'center' }}>
+        <div className="sales-funnel-grid-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '10px', textAlign: 'center' }}>
           <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', padding: '10px 8px', borderRadius: '10px' }}>
             <span style={{ fontSize: '10.5px', color: '#64748B', display: 'block', fontWeight: '600' }}>New leads</span>
             <strong style={{ fontSize: '18px', color: '#1E293B', fontWeight: '800' }}>{filteredLeads.length}</strong>

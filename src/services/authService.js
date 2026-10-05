@@ -99,10 +99,13 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
   const isCoreOrLeadership = isDeveloper || 
     finalRoleName === 'Procurement Head' || 
     finalRoleName === 'Production Head' || 
+    finalRoleName === 'Dispatch Head' || 
     finalRoleName === 'CEO' || 
     cleanEmpCodeNorm.startsWith('PR') || 
+    cleanEmpCodeNorm.startsWith('DH') || 
     cleanUsername === 'maniskremo@gmail.com' ||
-    cleanUsername === 'scm@vrmstructures.in';
+    cleanUsername === 'scm@vrmstructures.in' ||
+    cleanUsername === 'dispatch@vrmstructures.in';
 
   // Check stored employee status list for access permission
   try {

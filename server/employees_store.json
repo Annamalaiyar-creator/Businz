@@ -1,1 +1,86 @@
-[]
+[
+  {
+    "employee_code": "TA-VRM001",
+    "employee_name": "Ar.Annamalaiyar",
+    "email": "arannamalaiyar@gmail.com",
+    "password": "Efx@1234",
+    "prefix": "TA",
+    "role": "Technical Administrator",
+    "dashboard_type": "Technical Administrator",
+    "status": "Active",
+    "created_at": "2026-09-02T16:38:06.097Z",
+    "last_login": "2026-09-02T16:38:06.097Z"
+  },
+  {
+    "employee_code": "SE-VRM001",
+    "employee_name": "Mohit JV",
+    "email": "sales.s4@vrmstructures.in",
+    "password": "vrm@2018",
+    "prefix": "SE",
+    "role": "Sales Executive",
+    "dashboard_type": "Sales Executive",
+    "status": "Active",
+    "created_at": "2026-09-02T16:43:30.266Z",
+    "last_login": "2026-09-02T16:43:30.266Z"
+  },
+  {
+    "employee_code": "PR-VRM001",
+    "employee_name": "Arun",
+    "email": "arun@vrmstructures.in",
+    "password": "arun2002",
+    "prefix": "PR",
+    "role": "Procurement Head",
+    "dashboard_type": "Procurement Head",
+    "status": "Active",
+    "created_at": "2026-09-02T17:27:06.399Z",
+    "last_login": "2026-09-02T17:27:06.400Z"
+  },
+  {
+    "employee_code": "PH-VRM001",
+    "employee_name": "Senthil Kumar",
+    "email": "production@vrm.com",
+    "password": "123456",
+    "prefix": "PH",
+    "role": "Production Head",
+    "dashboard_type": "Production Head",
+    "status": "Active",
+    "created_at": "2026-09-05T05:59:14.828Z",
+    "last_login": "2026-09-05T05:59:14.828Z"
+  },
+  {
+    "employee_code": "CEO-VRM001",
+    "employee_name": "Annamalaiyar",
+    "email": "ceo@vrm.com",
+    "password": "123456",
+    "prefix": "CEO",
+    "role": "CEO",
+    "dashboard_type": "CEO",
+    "status": "Active",
+    "created_at": "2026-09-05T05:59:14.828Z",
+    "last_login": "2026-09-05T05:59:14.828Z"
+  },
+  {
+    "employee_code": "SH-VRM002",
+    "employee_name": "Manojraj Selvaraj",
+    "email": "sales.s1@vrmstructures.in",
+    "password": "Miru@1103",
+    "prefix": "SH",
+    "role": "Sales Head",
+    "dashboard_type": "Sales Head",
+    "status": "Active",
+    "created_at": "2026-09-05T05:59:14.828Z",
+    "last_login": "2026-09-05T05:59:14.828Z"
+  },
+  {
+    "employee_code": "DH-VRM001",
+    "employee_name": "Manikandan",
+    "email": "dispatch@vrmstructures.in",
+    "password": "123456",
+    "prefix": "DH",
+    "role": "Dispatch Head",
+    "dashboard_type": "Dispatch Head",
+    "status": "Active",
+    "created_at": "2026-09-05T05:59:14.828Z",
+    "last_login": "2026-09-05T05:59:14.828Z"
+  }
+]

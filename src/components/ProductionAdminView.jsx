@@ -731,7 +731,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
     <div ref={containerRef} style={{ fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '100%', boxSizing: 'border-box', paddingTop: '0px' }}>
 
       {/* PERSONALIZED WELCOME BANNER CARD */}
-      <div style={{
+      <div className="production-welcome-banner" style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
@@ -771,7 +771,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', zIndex: 2 }}>
+        <div className="production-welcome-stats" style={{ display: 'flex', alignItems: 'center', gap: '20px', zIndex: 2 }}>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Zoho Integration</div>
             <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
@@ -801,7 +801,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
       </div>
 
       {/* ROW 1: KPI SUMMARY CARDS (5 CARDS FOR DISPATCH / 6 CARDS FOR FLOOR & PRODUCTION) */}
-      <div style={{ display: 'grid', gridTemplateColumns: isDispatchView ? 'repeat(5, minmax(0, 1fr))' : 'repeat(6, minmax(0, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
+      <div className="production-kpi-grid" style={{ display: 'grid', gridTemplateColumns: isDispatchView ? 'repeat(5, minmax(0, 1fr))' : 'repeat(6, minmax(0, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
         {(isFloorView ? [
           {
             title: 'SHIFT TARGET QTY',
@@ -1085,7 +1085,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
       </div>
 
       {/* 2 CONTINUOUS FLEX COLUMNS LAYOUT (ORIGINAL SCRIPT DESIGN) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '12px', width: '100%', boxSizing: 'border-box', alignItems: 'start' }}>
+      <div className="production-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '12px', width: '100%', boxSizing: 'border-box', alignItems: 'start' }}>
 
         {/* ==================== LEFT CONTINUOUS FLEX COLUMN ==================== */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', minWidth: 0 }}>
@@ -1472,7 +1472,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                 DISPATCH PERFORMANCE METRICS <span style={{ color: '#64748B', fontWeight: '600', fontSize: '11px' }}>(THIS MONTH)</span>
               </span>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', textAlign: 'center' }}>
+              <div className="production-subgrid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', textAlign: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <span style={{ fontSize: '9px', color: '#64748B', fontWeight: '700' }}>Avg Loading</span>
                   <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#EFF6FF', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Clock size={14} /></div>
@@ -1505,7 +1505,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '11px', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0', fontFamily: "'DM Sans', sans-serif" }}>
+              <div className="production-subgrid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '11px', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0', fontFamily: "'DM Sans', sans-serif" }}>
                 <div><span style={{ color: '#64748B' }}>Total Dispatches:</span> <strong>352 Orders</strong></div>
                 <div><span style={{ color: '#64748B' }}>On-Time Dispatches:</span> <strong style={{ color: '#16A34A' }}>339 Orders</strong></div>
                 <div><span style={{ color: '#64748B' }}>Delayed Dispatches:</span> <strong style={{ color: '#DC2626' }}>13 Orders</strong></div>
@@ -1599,7 +1599,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
               TODAY'S SNAPSHOT
             </span>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
+            <div className="production-subgrid-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
               <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 6px', textAlign: 'center' }}>
                 <span style={{ fontSize: '9px', color: '#64748B', fontWeight: '700', display: 'block', fontFamily: "'DM Sans', sans-serif" }}>Today's Plan</span>
                 <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: '800', fontFamily: "'DM Sans', sans-serif" }}>253</strong>

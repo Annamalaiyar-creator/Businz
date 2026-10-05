@@ -596,6 +596,9 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
                   onClick={() => {
                     const targetTab = actualTarget === 'Proforma Invoice' ? 'Performa Invoice' : actualTarget;
                     onChangeTab(targetTab, null, item.poTabTarget || null);
+                    if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof onToggle === 'function' && !collapsed) {
+                      onToggle();
+                    }
                   }}
                   onMouseEnter={(e) => {
                     setHoveredItem(item.label);
