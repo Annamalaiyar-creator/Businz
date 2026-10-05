@@ -49,30 +49,7 @@ export async function initPostgresDatabase() {
     isConnected = true;
     console.log('✅ [PostgreSQL] Connected successfully to self-hosted database on Hostinger VPS');
 
-    // Check if tables already exist
-    const checkRes = await client.query(`
-      SELECT to_regclass('public.customers') as customers_exist;
-    `);
-
-    if (!checkRes.rows[0]?.customers_exist) {
-      console.log('📦 [PostgreSQL] Initializing clean database tables from schema...');
-      const schemaPath = path.resolve(__dirname, '../supabase_main_schema.sql');
-      if (fs.existsSync(schemaPath)) {
-        let schemaSql = fs.readFileSync(schemaPath, 'utf8');
-        // Clean out Supabase-specific extensions/policies that are not needed on self-hosted PG
-        schemaSql = schemaSql.replace(/CREATE EXTENSION IF NOT EXISTS "uuid-ossp";/gi, '');
-        schemaSql = schemaSql.replace(/ENABLE ROW LEVEL SECURITY;/gi, '');
-        schemaSql = schemaSql.replace(/CREATE POLICY[^\n;]+;/gi, '');
-        schemaSql = schemaSql.replace(/DROP POLICY[^\n;]+;/gi, '');
-
-        await client.query(schemaSql);
-        console.log('✅ [PostgreSQL] Clean tables created successfully. Zero mock/test data loaded.');
-      }
-    } else {
-      console.log('✅ [PostgreSQL] Tables verified. Database is ready.');
-    }
-
-    // Ensure controlroom_store key-value table exists for VPS persistence
+    // 1. Ensure controlroom_store key-value table exists immediately for VPS persistence
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.controlroom_store (
         key TEXT PRIMARY KEY,
@@ -115,6 +92,33 @@ export async function initPostgresDatabase() {
           } catch (_) {}
         }
       }
+    }
+
+    // 2. Check if normalized relational tables already exist
+    try {
+      const checkRes = await client.query(`
+        SELECT to_regclass('public.customers') as customers_exist;
+      `);
+
+      if (!checkRes.rows[0]?.customers_exist) {
+        console.log('📦 [PostgreSQL] Initializing clean database tables from schema...');
+        const schemaPath = path.resolve(__dirname, '../supabase_main_schema.sql');
+        if (fs.existsSync(schemaPath)) {
+          let schemaSql = fs.readFileSync(schemaPath, 'utf8');
+          // Clean out Supabase-specific extensions/policies that are not needed on self-hosted PG
+          schemaSql = schemaSql.replace(/CREATE EXTENSION IF NOT EXISTS [^;]+;/gi, '');
+          schemaSql = schemaSql.replace(/ALTER TABLE [^;]+ ENABLE ROW LEVEL SECURITY;/gi, '');
+          schemaSql = schemaSql.replace(/DROP POLICY [^;]+;/gi, '');
+          schemaSql = schemaSql.replace(/CREATE POLICY [\s\S]*?;/gi, '');
+
+          await client.query(schemaSql);
+          console.log('✅ [PostgreSQL] Clean relational tables created successfully.');
+        }
+      } else {
+        console.log('✅ [PostgreSQL] Tables verified. Database is ready.');
+      }
+    } catch (schemaErr) {
+      console.warn('⚠️ [PostgreSQL Schema Notice]:', schemaErr.message);
     }
 
     client.release();
