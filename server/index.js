@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import { pool, isDbConnected, initPostgresDatabase, createLocalDbClient } from './db.js';
+import { pool, isDbConnected, initPostgresDatabase, createLocalDbClient, query } from './db.js';
 import * as vrmDataModule from '../src/utils/vrmProductsData.js';
 const VRM_PRODUCTS = vrmDataModule.VRM_PRODUCTS || vrmDataModule.default?.VRM_PRODUCTS || [];
 const wordFingerprint = vrmDataModule.wordFingerprint || vrmDataModule.default?.wordFingerprint || ((w) => String(w || '').toLowerCase().trim());
@@ -762,6 +762,22 @@ const getDatabaseStore = async (key) => {
   if (cleanKey === 'bom_store' || cleanKey === 'boms' || cleanKey === 'bom_orders') {
     return await loadDatabaseBoms();
   }
+  // 0. Primary: Check PostgreSQL controlroom_store on Hostinger VPS
+  if (isDbConnected()) {
+    try {
+      const dbRes = await query('SELECT data FROM controlroom_store WHERE key = $1', [cleanKey]);
+      if (dbRes.rows[0]?.data) {
+        const d = dbRes.rows[0].data;
+        const hasContent = Array.isArray(d) ? d.length > 0 : (d && typeof d === 'object' && Object.keys(d).length > 0);
+        if (hasContent) {
+          supabaseMemoryStore[cleanKey] = d;
+          supabaseMemoryStore[key] = d;
+          return d;
+        }
+      }
+    } catch (_) {}
+  }
+
   if (cleanKey === 'employees_store') {
     const empDiskPath = getStoreFilePath('employees_store.json');
     if (fs.existsSync(empDiskPath)) {
@@ -1282,6 +1298,19 @@ const saveDatabaseStore = async (key, storeData) => {
       try {
         fs.writeFileSync(getStoreFilePath('employees_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
       } catch (_) {}
+    }
+
+    // Persist directly to PostgreSQL database on VPS
+    if (isDbConnected()) {
+      try {
+        await query(`
+          INSERT INTO controlroom_store (key, data, updated_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
+        `, [cleanKey, JSON.stringify(storeData)]);
+      } catch (pgErr) {
+        console.warn(`[saveDatabaseStore PostgreSQL write notice for ${cleanKey}]:`, pgErr?.message);
+      }
     }
   } catch (diskErr) {
     console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);

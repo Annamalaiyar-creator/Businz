@@ -72,6 +72,51 @@ export async function initPostgresDatabase() {
       console.log('✅ [PostgreSQL] Tables verified. Database is ready.');
     }
 
+    // Ensure controlroom_store key-value table exists for VPS persistence
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS public.controlroom_store (
+        key TEXT PRIMARY KEY,
+        data JSONB NOT NULL DEFAULT '[]'::jsonb,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
+    const storesToSeed = [
+      'employees_store',
+      'po_store',
+      'grn_store',
+      'raw_materials_store',
+      'item_store',
+      'workorder_store',
+      'vrm_prod_workorders',
+      'vendor_store',
+      'presets_store',
+      'company_branding_store'
+    ];
+
+    for (const storeKey of storesToSeed) {
+      const checkRes = await client.query(`SELECT key FROM controlroom_store WHERE key = $1`, [storeKey]);
+      if (checkRes.rows.length === 0) {
+        const filePath = path.resolve(__dirname, `${storeKey}.json`);
+        if (fs.existsSync(filePath)) {
+          try {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            const parsed = JSON.parse(raw);
+            const hasData = Array.isArray(parsed) ? parsed.length > 0 : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
+            if (hasData) {
+              await client.query(`
+                INSERT INTO controlroom_store (key, data, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (key) DO NOTHING
+              `, [storeKey, JSON.stringify(parsed)]);
+              console.log(`✅ [PostgreSQL] Seeded ${storeKey} into VPS database`);
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     client.release();
     return true;
   } catch (err) {
