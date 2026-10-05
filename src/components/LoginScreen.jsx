@@ -341,7 +341,13 @@ export default function LoginScreen({ onLoginSuccess }) {
 
       // Check duplicate Employee Code and duplicate Email
       try {
-        const existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        let existingEmps = [];
+        try {
+          existingEmps = await syncEmployeesFromCloud();
+        } catch (_) {}
+        if (!Array.isArray(existingEmps) || existingEmps.length === 0) {
+          existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        }
         const registeredCodes = JSON.parse(localStorage.getItem('controlroom_registered_codes') || '[]');
         
         const existingEmailRecord = existingEmps.find(e => (e.email || '').toLowerCase() === cleanEmail);
@@ -394,6 +400,11 @@ export default function LoginScreen({ onLoginSuccess }) {
         // Immediately persist to server and cloud database so Admin / Developer receives access requests in real-time
         try {
           saveCloudStore('employees_store', updatedEmpsList);
+          fetch('/api/store/employees_store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newEmpAccount)
+          }).catch(() => {});
         } catch (e) {}
       } catch(e) {}
 

@@ -2163,8 +2163,49 @@ app.post('/api/store/:key', async (req, res) => {
     if (Array.isArray(storeData) && storeData.length === 0) {
       finalDataToSave = [];
     } else if (key === 'employees_store' && Array.isArray(storeData)) {
-      // Direct overwrite for employees_store so deleted accounts are never resurrected
-      finalDataToSave = storeData;
+      // Smart merge for employees_store so newly registered accounts never overwrite previously created accounts
+      const currentEmps = await getDatabaseStore('employees_store');
+      const list = Array.isArray(currentEmps) ? currentEmps : [];
+      const normalize = (s) => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+      const empMap = new Map();
+      list.forEach(e => {
+        const c = normalize(e.employee_code || e.code);
+        const em = String(e.email || '').trim().toLowerCase();
+        if (c) empMap.set(c, e);
+        if (em) empMap.set(em, e);
+      });
+      storeData.forEach(item => {
+        const c = normalize(item.employee_code || item.code);
+        const em = String(item.email || '').trim().toLowerCase();
+        const existing = (c && empMap.get(c)) || (em && empMap.get(em));
+        if (existing) {
+          const merged = { ...existing, ...item };
+          if (c) empMap.set(c, merged);
+          if (em) empMap.set(em, merged);
+        } else {
+          if (c) empMap.set(c, item);
+          if (em) empMap.set(em, item);
+        }
+      });
+      finalDataToSave = Array.from(new Set(empMap.values()));
+    } else if (key === 'employees_store' && storeData && typeof storeData === 'object') {
+      const currentEmps = await getDatabaseStore('employees_store');
+      const list = Array.isArray(currentEmps) ? currentEmps : [];
+      const normalize = (s) => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+      const c = normalize(storeData.employee_code || storeData.code);
+      const em = String(storeData.email || '').trim().toLowerCase();
+      let matched = false;
+      const mergedList = list.map(e => {
+        const ec = normalize(e.employee_code || e.code);
+        const eem = String(e.email || '').trim().toLowerCase();
+        if ((c && ec === c) || (em && eem === em)) {
+          matched = true;
+          return { ...e, ...storeData };
+        }
+        return e;
+      });
+      if (!matched) mergedList.push(storeData);
+      finalDataToSave = mergedList;
     } else if (Array.isArray(storeData)) {
       const currentData = await getDatabaseStore(key);
       if (Array.isArray(currentData) && currentData.length > 0) {

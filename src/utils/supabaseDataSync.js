@@ -1381,18 +1381,6 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
           await supabase.from('users').delete().neq('id', -999999);
         } catch (_) {}
       } else {
-        const allowedEmails = storeData.map(e => (e.email || '').trim().toLowerCase()).filter(Boolean);
-        if (allowedEmails.length > 0) {
-          try {
-            const { data: currentUsers } = await supabase.from('users').select('id, email');
-            if (Array.isArray(currentUsers) && currentUsers.length > 0) {
-              const toRemove = currentUsers.filter(u => u.email && !allowedEmails.includes(u.email.toLowerCase()));
-              for (const rem of toRemove) {
-                await supabase.from('users').delete().eq('id', rem.id);
-              }
-            }
-          } catch (_) {}
-        }
         for (const emp of storeData) {
           if (!emp || !emp.email) continue;
           const cleanEmail = (emp.email || '').trim().toLowerCase();
