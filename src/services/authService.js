@@ -47,8 +47,8 @@ export const syncEmployeesFromCloud = async () => {
     if (res && res.ok) {
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
-        const localEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-        const merged = mergeWithCoreEmployees([...localEmps, ...json.data]);
+        // Authoritative: Server database overwrites local cache directly
+        const merged = mergeWithCoreEmployees(json.data);
         localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
         const registeredCodes = merged.map(e => (e.employee_code || e.code)).filter(Boolean);
         localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
@@ -60,8 +60,7 @@ export const syncEmployeesFromCloud = async () => {
   try {
     const list = await fetchCloudStore('employees_store', []);
     if (Array.isArray(list) && list.length > 0) {
-      const localEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-      const merged = mergeWithCoreEmployees([...localEmps, ...list]);
+      const merged = mergeWithCoreEmployees(list);
       localStorage.setItem('controlroom_employees_list', JSON.stringify(merged));
       const registeredCodes = merged.map(e => (e.employee_code || e.code)).filter(Boolean);
       localStorage.setItem('controlroom_registered_codes', JSON.stringify(registeredCodes));
@@ -97,16 +96,16 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
   try {
     const currentLocal = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
     const existingEmps = mergeWithCoreEmployees(currentLocal);
-    localStorage.setItem('controlroom_employees_list', JSON.stringify(existingEmps));
 
     accountRecord = existingEmps.find(e => {
       const empNorm = normalizeCode(e.employee_code || e.code);
-      const codeMatches = cleanEmpCodeNorm && (
-        empNorm === cleanEmpCodeNorm ||
-        empNorm.includes(cleanEmpCodeNorm) ||
-        cleanEmpCodeNorm.includes(empNorm)
-      );
-      const emailMatches = cleanUsername && (e.email || '').toLowerCase() === cleanUsername;
+      const codeMatches = cleanEmpCodeNorm ? empNorm === cleanEmpCodeNorm : false;
+      const emailMatches = cleanUsername ? String(e.email || '').trim().toLowerCase() === cleanUsername : false;
+
+      // If both code and email are provided, both must strictly match the same account
+      if (cleanEmpCodeNorm && cleanUsername) {
+        return codeMatches && emailMatches;
+      }
       return codeMatches || emailMatches;
     });
   } catch(e) {}
