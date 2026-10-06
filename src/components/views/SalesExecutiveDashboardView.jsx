@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowUpRight, ArrowDownRight, Clock, Sparkles, RefreshCw,
-  Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, Flame, ArrowRight
+  Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, CheckCircle2, Flame, ArrowRight, Target
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
@@ -113,8 +113,35 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     } catch { return []; }
   };
 
-  const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || userRole === 'Super Admin' || userRole === 'Admin';
+  const isCeoOrMd = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Technical Administrator' || userRole === 'Super Admin' || userRole === 'Admin';
+  const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || isCeoOrMd;
   const loggedUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : null) || 'Mohit JV';
+
+  // CEO Target State
+  const getCachedObj = (key, fallback = {}) => {
+    try {
+      const val = localStorage.getItem(key);
+      return val ? JSON.parse(val) : fallback;
+    } catch { return fallback; }
+  };
+
+  const [ceoTargetStore, setCeoTargetStore] = useState(() => getCachedObj('controlroom_ceo_target_store', {
+    monthlyCompanyTarget: 18000000,
+    repTargets: {
+      'All': 18000000,
+      'Mohith JV': 18000000,
+      'Mohith J V': 18000000,
+      'Vijay': 35000000,
+      'Ravi Kumar': 14000000,
+      'Pooja Sharma': 12000000,
+      'Amit Verma': 9000000
+    }
+  }));
+
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [targetModalRep, setTargetModalRep] = useState('All');
+  const [targetModalValue, setTargetModalValue] = useState('18000000');
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
 
   // Live Collection States (hydrated immediately from local cache with zero delay)
   const [quotations, setQuotations] = useState(() => getCached('controlroom_crm_quotations'));
@@ -344,12 +371,30 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       }, 600);
     };
 
+    // Also sync CEO targets from backend store
+    fetchWithTimeout('/api/store/ceo_target_store', { timeout: 3000 })
+      .then(r => r.json())
+      .then(res => {
+        if (res?.data && typeof res.data === 'object' && !Array.isArray(res.data) && Object.keys(res.data).length > 0) {
+          setCeoTargetStore(res.data);
+          try { localStorage.setItem('controlroom_ceo_target_store', JSON.stringify(res.data)); } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
     window.addEventListener('controlroom_storage_update', handleSync);
     window.addEventListener('controlroom_crm_updated', handleSync);
     window.addEventListener('controlroom_pi_updated', handleSync);
     window.addEventListener('controlroom_invoice_updated', handleSync);
     window.addEventListener('controlroom_bom_store_updated', handleSync);
     window.addEventListener('storage', handleSync);
+
+    const handleTargetUpdated = (e) => {
+      if (e?.detail && typeof e.detail === 'object') {
+        setCeoTargetStore(e.detail);
+      }
+    };
+    window.addEventListener('controlroom_ceo_targets_updated', handleTargetUpdated);
 
     return () => {
       clearTimeout(debounceTimer);
@@ -359,8 +404,53 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       window.removeEventListener('controlroom_invoice_updated', handleSync);
       window.removeEventListener('controlroom_bom_store_updated', handleSync);
       window.removeEventListener('storage', handleSync);
+      window.removeEventListener('controlroom_ceo_targets_updated', handleTargetUpdated);
     };
   }, [loadSalesData]);
+
+  // Handler for CEO / MD to save monthly targets directly
+  const handleSaveCeoTarget = async (rep, amountNum) => {
+    setIsSavingTarget(true);
+    try {
+      const updatedRepTargets = {
+        ...(ceoTargetStore?.repTargets || {}),
+        [rep]: amountNum
+      };
+      if (rep === 'All') {
+        updatedRepTargets['All'] = amountNum;
+      }
+      const updatedStore = {
+        ...(ceoTargetStore || {}),
+        monthlyCompanyTarget: rep === 'All' ? amountNum : (ceoTargetStore?.monthlyCompanyTarget || 18000000),
+        repTargets: updatedRepTargets,
+        updatedAt: new Date().toISOString(),
+        updatedBy: userRole || 'CEO'
+      };
+
+      setCeoTargetStore(updatedStore);
+      try {
+        localStorage.setItem('controlroom_ceo_target_store', JSON.stringify(updatedStore));
+      } catch (_) {}
+
+      // Broadcast event so CEO dashboard & open tabs update immediately
+      window.dispatchEvent(new CustomEvent('controlroom_ceo_targets_updated', {
+        detail: updatedStore
+      }));
+
+      // Persist to server backend storage
+      await fetch('/api/store/ceo_target_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedStore)
+      }).catch(err => console.warn('Could not post to /api/store/ceo_target_store:', err));
+
+      setShowTargetModal(false);
+    } catch (e) {
+      console.error('Error saving CEO target:', e);
+    } finally {
+      setIsSavingTarget(false);
+    }
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -494,12 +584,29 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   }, [filteredQuotations, filteredInvoices, filteredOpportunities, wonDeals]);
 
   // Month Target Progress calculations
-  // Default target is ₹ 75.0 L (75,00,000) or scaled by total pipeline if larger
+  // Target set by the CEO
   const monthlyTargetNum = useMemo(() => {
-    const defaultBaseline = 7500000;
-    const pipelineEstimate = filteredOpportunities.reduce((s, o) => s + parseAmt(o.dealValue), 0);
-    return Math.max(defaultBaseline, pipelineEstimate > defaultBaseline ? Math.round(pipelineEstimate * 0.8) : defaultBaseline);
-  }, [filteredOpportunities]);
+    const normalize = (s) => String(s || '').toLowerCase().replace(/[-_\s.]/g, '');
+    const repMap = ceoTargetStore?.repTargets || {};
+
+    if (selectedExecutive === 'All') {
+      if (repMap['All']) return Number(repMap['All']) || 18000000;
+      if (ceoTargetStore?.monthlyCompanyTarget) return Number(ceoTargetStore.monthlyCompanyTarget) || 18000000;
+      return 18000000;
+    }
+
+    const normSelected = normalize(selectedExecutive);
+    // Find matching rep target from CEO store
+    for (const [key, val] of Object.entries(repMap)) {
+      if (normalize(key) === normSelected && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+
+    // Fallback to company target set by CEO
+    if (ceoTargetStore?.monthlyCompanyTarget) return Number(ceoTargetStore.monthlyCompanyTarget);
+    return 18000000;
+  }, [ceoTargetStore, selectedExecutive]);
 
   const targetAchievedVal = useMemo(() => {
     return totalInvoicedValue + (wonDealsValue > 0 ? wonDealsValue : 0);
@@ -1204,10 +1311,41 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         {/* Card A: Target Progress & Run Rate */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                MONTH TARGET PROGRESS AND REQUIRED RUN RATE
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  MONTH TARGET PROGRESS AND REQUIRED RUN RATE
+                </span>
+                {isCeoOrMd && (
+                  <button
+                    onClick={() => {
+                      setTargetModalRep(selectedExecutive);
+                      const currentVal = selectedExecutive === 'All'
+                        ? (ceoTargetStore?.repTargets?.['All'] || ceoTargetStore?.monthlyCompanyTarget || 18000000)
+                        : (ceoTargetStore?.repTargets?.[selectedExecutive] || ceoTargetStore?.monthlyCompanyTarget || 18000000);
+                      setTargetModalValue(String(currentVal));
+                      setShowTargetModal(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      color: '#0E7490',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #0E7490',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(14, 116, 144, 0.1)'
+                    }}
+                    title="Change target as CEO / MD"
+                  >
+                    <Edit3 size={11} /> Edit Target
+                  </button>
+                )}
+              </div>
               <span style={{
                 fontSize: '10.5px',
                 fontWeight: '700',
@@ -1237,23 +1375,54 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
 
             {/* Visual Progress Bar */}
-            <div style={{ width: '100%', height: '22px', backgroundColor: '#E2E8F0', borderRadius: '11px', overflow: 'hidden', position: 'relative' }}>
-              <div style={{
-                width: `${Math.max(8, targetAchievedPct)}%`,
-                height: '100%',
-                backgroundColor: targetAchievedPct >= 80 ? '#16A34A' : '#0E7490',
-                borderRadius: '11px',
+            <div
+              title={`${targetAchievedPct}% Achieved (${formatLakhsCr(targetAchievedVal)} of ${formatLakhsCr(monthlyTargetNum)})`}
+              style={{
+                width: '100%',
+                height: '24px',
+                backgroundColor: '#E2E8F0',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                position: 'relative',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                fontSize: '11px',
-                fontWeight: '800',
-                letterSpacing: '0.5px',
-                transition: 'width 0.4s ease'
-              }}>
-                {targetAchievedPct}% achieved
+                alignItems: 'center'
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(100, Math.max(0, targetAchievedPct))}%`,
+                  height: '100%',
+                  backgroundColor: targetAchievedPct >= 80 ? '#16A34A' : '#0E7490',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  letterSpacing: '0.4px',
+                  whiteSpace: 'nowrap',
+                  transition: 'width 0.4s ease',
+                  flexShrink: 0
+                }}
+              >
+                {targetAchievedPct >= 25 && `${targetAchievedPct}% Achieved`}
               </div>
+              {targetAchievedPct < 25 && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: '#0E7490',
+                    letterSpacing: '0.4px',
+                    paddingLeft: '10px',
+                    whiteSpace: 'nowrap',
+                    lineHeight: '24px'
+                  }}
+                >
+                  {targetAchievedPct}% Achieved
+                </span>
+              )}
             </div>
           </div>
 
@@ -1263,7 +1432,9 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               {targetBalanceVal > 0 ? (
                 <>Required daily sales: <strong style={{ color: '#0E7490' }}>{formatLakhsCr(requiredDailySales)}</strong> for remaining {remainingWorkingDays} working days</>
               ) : (
-                <strong style={{ color: '#16A34A' }}>✓ Monthly sales target successfully achieved! Excellent performance.</strong>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#16A34A', fontWeight: '700' }}>
+                  <CheckCircle2 size={14} style={{ color: '#16A34A', flexShrink: 0 }} /> Monthly sales target successfully achieved! Excellent performance.
+                </span>
               )}
             </span>
           </div>
@@ -2277,8 +2448,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {inactiveOpportunities.length === 0 ? (
-                  <div style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', borderRadius: '8px', border: '1px solid #DCFCE7', fontSize: '11.5px', color: '#166534', fontWeight: '600' }}>
-                    ✓ All pipeline opportunities have recent activity within the last 10 days.
+                  <div style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', borderRadius: '8px', border: '1px solid #DCFCE7', fontSize: '11.5px', color: '#166534', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckCircle2 size={13} style={{ color: '#16A34A', flexShrink: 0 }} /> All pipeline opportunities have recent activity within the last 10 days.
                   </div>
                 ) : (
                   inactiveOpportunities.map((item, idx) => (
@@ -2314,8 +2485,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {expiringQuotations.length === 0 ? (
-                  <div style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', borderRadius: '8px', border: '1px solid #DCFCE7', fontSize: '11.5px', color: '#166534', fontWeight: '600' }}>
-                    ✓ No active quotations approaching immediate expiration this week.
+                  <div style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', borderRadius: '8px', border: '1px solid #DCFCE7', fontSize: '11.5px', color: '#166534', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckCircle2 size={13} style={{ color: '#16A34A', flexShrink: 0 }} /> No active quotations approaching immediate expiration this week.
                   </div>
                 ) : (
                   expiringQuotations.map((item, idx) => (
@@ -2504,6 +2675,224 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           >
             <X size={16} />
           </button>
+        </div>
+      )}
+
+      {/* CEO Target Setting Modal */}
+      {showTargetModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '18px',
+            width: '100%',
+            maxWidth: '480px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+            overflow: 'hidden',
+            border: '1px solid #CBD5E1',
+            fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '16px 20px',
+              backgroundColor: '#0E7490',
+              color: '#FFFFFF',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Target size={18} style={{ color: '#FFFFFF' }} /> Set Monthly Sales Target
+                </h3>
+                <span style={{ fontSize: '11px', opacity: 0.9, marginTop: '2px', display: 'block' }}>
+                  Authorized CEO & MD Target Configuration
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTargetModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRadius: '6px'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                  Target Scope / Sales Representative
+                </label>
+                <select
+                  value={targetModalRep}
+                  onChange={(e) => {
+                    const newRep = e.target.value;
+                    setTargetModalRep(newRep);
+                    const currentVal = newRep === 'All'
+                      ? (ceoTargetStore?.repTargets?.['All'] || ceoTargetStore?.monthlyCompanyTarget || 18000000)
+                      : (ceoTargetStore?.repTargets?.[newRep] || ceoTargetStore?.monthlyCompanyTarget || 18000000);
+                    setTargetModalValue(String(currentVal));
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '38px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    padding: '0 12px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#0F172A',
+                    backgroundColor: '#F8FAFC'
+                  }}
+                >
+                  <option value="All">All Sales Reps (Company Monthly Target)</option>
+                  {availableExecutives.filter(e => e !== 'All').map(e => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>
+                    Monthly Target Amount (₹)
+                  </label>
+                  <span style={{ fontSize: '13px', fontWeight: '900', color: '#0E7490' }}>
+                    {formatLakhsCr(parseAmt(targetModalValue))}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  value={targetModalValue}
+                  onChange={(e) => setTargetModalValue(e.target.value)}
+                  placeholder="Enter amount in ₹ (e.g. 18000000)"
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '2px solid #0E7490',
+                    padding: '0 12px',
+                    fontSize: '15px',
+                    fontWeight: '800',
+                    color: '#0F172A',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Quick Presets */}
+              <div>
+                <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
+                  Quick Presets:
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {[
+                    { label: '₹ 50 L', val: 5000000 },
+                    { label: '₹ 75 L', val: 7500000 },
+                    { label: '₹ 1.0 Cr', val: 10000000 },
+                    { label: '₹ 1.4 Cr', val: 14000000 },
+                    { label: '₹ 1.8 Cr', val: 18000000 },
+                    { label: '₹ 2.5 Cr', val: 25000000 },
+                    { label: '₹ 3.5 Cr', val: 35000000 },
+                    { label: '₹ 5.0 Cr', val: 50000000 }
+                  ].map(preset => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setTargetModalValue(String(preset.val))}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        border: Number(targetModalValue) === preset.val ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                        backgroundColor: Number(targetModalValue) === preset.val ? '#ECFEFF' : '#F8FAFC',
+                        color: Number(targetModalValue) === preset.val ? '#0E7490' : '#475569',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 20px',
+              backgroundColor: '#F8FAFC',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowTargetModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingTarget || parseAmt(targetModalValue) <= 0}
+                onClick={() => handleSaveCeoTarget(targetModalRep, parseAmt(targetModalValue))}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  backgroundColor: isSavingTarget ? '#94A3B8' : '#0E7490',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: isSavingTarget ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)'
+                }}
+              >
+                {isSavingTarget ? (
+                  <>
+                    <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} /> Set & Apply Target
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

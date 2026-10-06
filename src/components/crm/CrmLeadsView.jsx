@@ -4,7 +4,7 @@ import {
   CheckCircle2, Clock, AlertCircle, Building2, User, Mail, ExternalLink,
   ChevronRight, RefreshCw, X, ShieldAlert, Sparkles, Tag, Eye, MoreHorizontal,
   FileText, Check, ChevronDown, Zap, Send, TrendingUp, Layers, Award,
-  Trash2, UserCheck, RotateCcw, Download, Printer
+  Trash2, UserCheck, RotateCcw, Download, Printer, MapPin
 } from 'lucide-react';
 
 const STRUCTURE_CATEGORIES = [
@@ -228,7 +228,7 @@ export default function CrmLeadsView({
           assignedSalesperson: effectiveSalesperson
         };
         onSaveLead(leadWithRep);
-        setSimulationToast(`⚡ Inbound lead captured & pre-qualified for ${effectiveSalesperson}: "${leadWithRep.companyName}" (${leadWithRep.requirement})`);
+        setSimulationToast(`Inbound lead captured & pre-qualified for ${effectiveSalesperson}: "${leadWithRep.companyName}" (${leadWithRep.requirement})`);
         setTimeout(() => setSimulationToast(null), 5000);
       }
     } catch (e) {
@@ -400,7 +400,7 @@ export default function CrmLeadsView({
         ...(isAutoQualified ? [{
           id: `TL-${Date.now()}-2`,
           type: 'auto_qualified',
-          title: '⚡ Auto-Qualified by System',
+          title: 'Auto-Qualified by System',
           description: `Project size (${kw} kW) satisfies commercial criteria (>=10 kW).`,
           timestamp: new Date().toISOString()
         }] : [])
@@ -483,8 +483,8 @@ export default function CrmLeadsView({
             <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>
               Sales Leads Directory
             </h2>
-            <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '12px', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #CFFAFE' }}>
-              👤 {effectiveSalesperson}
+            <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '12px', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #CFFAFE', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <User size={12} style={{ color: '#0E7490' }} /> {effectiveSalesperson}
             </span>
           </div>
           <p style={{ fontSize: '13px', color: '#64748B', margin: '3px 0 0 0' }}>
@@ -924,8 +924,8 @@ export default function CrmLeadsView({
                         </div>
                         {lead.location && (
                           <div style={{ marginTop: '3px' }}>
-                            <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-block' }}>
-                              📍 {lead.location}
+                            <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <MapPin size={10} style={{ color: '#0E7490' }} /> {lead.location}
                             </span>
                           </div>
                         )}
@@ -1794,11 +1794,23 @@ export default function CrmLeadsView({
               <div style={{ fontSize: '13px', color: '#0F172A', fontWeight: '700' }}>
                 {selectedLead.contactPerson} ({selectedLead.designation || 'Project Head'})
               </div>
-              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div>📞 Phone: <strong style={{ color: '#0F172A' }}>{selectedLead.phone}</strong></div>
-                <div>💬 WhatsApp: <strong style={{ color: '#0F172A' }}>{selectedLead.whatsapp || selectedLead.phone}</strong></div>
-                <div>✉️ Email: <strong style={{ color: '#0F172A' }}>{selectedLead.email || 'Not specified'}</strong></div>
-                <div>📍 Location: <strong style={{ color: '#0F172A' }}>{selectedLead.location || 'Tamil Nadu'}</strong></div>
+              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Phone size={13} style={{ color: '#0E7490', flexShrink: 0 }} />
+                  <span>Phone: <strong style={{ color: '#0F172A' }}>{selectedLead.phone}</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <MessageSquare size={13} style={{ color: '#16A34A', flexShrink: 0 }} />
+                  <span>WhatsApp: <strong style={{ color: '#0F172A' }}>{selectedLead.whatsapp || selectedLead.phone}</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Mail size={13} style={{ color: '#0E7490', flexShrink: 0 }} />
+                  <span>Email: <strong style={{ color: '#0F172A' }}>{selectedLead.email || 'Not specified'}</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <MapPin size={13} style={{ color: '#0E7490', flexShrink: 0 }} />
+                  <span>Location: <strong style={{ color: '#0F172A' }}>{selectedLead.location || 'Tamil Nadu'}</strong></span>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
                 <a
@@ -1968,8 +1980,9 @@ export default function CrmLeadsView({
                       backgroundColor: item.type?.includes('auto') ? '#10B981' : '#0E7490',
                       border: '2px solid #FFFFFF'
                     }} />
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>
-                      {item.title}
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {item.type?.includes('auto') && <Zap size={13} style={{ color: '#059669', flexShrink: 0 }} />}
+                      {String(item.title || '').replace(/^⚡\s*/, '')}
                     </div>
                     <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
                       {item.description}

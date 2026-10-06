@@ -448,53 +448,21 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               let storedDcs = [];
               try {
                 const rawDc = localStorage.getItem('controlroom_dc_store');
-                if (rawDc) storedDcs = JSON.parse(rawDc);
+                if (rawDc) {
+                  const parsed = JSON.parse(rawDc);
+                  if (Array.isArray(parsed)) {
+                    // Filter out legacy dummy mock seeded data
+                    storedDcs = parsed.filter(d =>
+                      !(d.dcNo === 'DC-2026-0001' && d.customerName === 'Tata Power Solar Systems Ltd') &&
+                      !(d.dcNo === 'DC-2026-0002' && d.customerName === 'Adani Solar Energy')
+                    );
+                    if (storedDcs.length !== parsed.length) {
+                      localStorage.setItem('controlroom_dc_store', JSON.stringify(storedDcs));
+                    }
+                  }
+                }
               } catch (_) {}
               if (!Array.isArray(storedDcs)) storedDcs = [];
-
-              if (storedDcs.length === 0) {
-                storedDcs = [
-                  {
-                    dcNo: 'DC-2026-0001',
-                    code: 'DC-2026-0001',
-                    bomCode: 'BOM-977',
-                    invNo: 'INV-000012',
-                    customerName: 'Tata Power Solar Systems Ltd',
-                    date: '24 Sept 2026',
-                    vehicleNo: 'TN-09-CB-4890',
-                    transporter: 'VRL Logistics Ltd.',
-                    lrNo: 'LR-2026-9812',
-                    mode: 'Road Transport',
-                    status: 'IN TRANSIT',
-                    totalValue: 35400.00,
-                    itemCount: 1,
-                    items: [
-                      { code: 'MR100N', name: 'Mini Rail 100 mm (HDG)', uom: 'Nos', qty: 12, rate: 250, hsn: '76109090' }
-                    ]
-                  },
-                  {
-                    dcNo: 'DC-2026-0002',
-                    code: 'DC-2026-0002',
-                    bomCode: 'BOM-976',
-                    invNo: 'INV-000011',
-                    customerName: 'Adani Solar Energy',
-                    date: '22 Sept 2026',
-                    vehicleNo: 'KA-04-E-8821',
-                    transporter: 'Gati KWE Express',
-                    lrNo: 'LR-2026-9740',
-                    mode: 'Road Transport',
-                    status: 'DELIVERED',
-                    totalValue: 18600.00,
-                    itemCount: 2,
-                    items: [
-                      { code: 'MC30', name: 'Mid Clamp 30 mm (Anodized)', uom: 'Nos', qty: 40, rate: 65, hsn: '76109090' }
-                    ]
-                  }
-                ];
-                try {
-                  localStorage.setItem('controlroom_dc_store', JSON.stringify(storedDcs));
-                } catch (_) {}
-              }
 
               const allDcs = storedDcs;
               return {

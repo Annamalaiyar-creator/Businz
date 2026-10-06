@@ -1586,7 +1586,7 @@ export default function InvoiceUploadView(props) {
 
   // Invoice State
   const [viewingInvoiceModal, setViewingInvoiceModal] = useState(null);
-  const [invoiceModalActiveTab, setInvoiceModalActiveTab] = useState('Invoice Items');
+  const [invoiceModalActiveTab, setInvoiceModalActiveTab] = useState('Invoice Document');
   const [closeInvoiceReasonModal, setCloseInvoiceReasonModal] = useState(null);
   const [closeReasonText, setCloseReasonText] = useState('');
   const [pendingDcModal, setPendingDcModal] = useState(null);

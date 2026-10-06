@@ -13,6 +13,7 @@ import { addLiveNotification } from "../Header";
 import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
+import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -38,6 +39,7 @@ export default function InvoiceDetailModal({
   const setInvoiceList = passedSetInvoiceList || setInvoices || (() => {});
   const inv = viewingInvoiceModal || {};
   const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
+  const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
   const [selectedProofVersionIdx, setSelectedProofVersionIdx] = useState(null);
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
@@ -1198,7 +1200,6 @@ export default function InvoiceDetailModal({
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#F0FDF4', color: '#166534', borderBottom: '1px solid #DCFCE7' }}>
-                        <th style={{ padding: '10px', textAlign: 'center', width: '120px' }}>Status</th>
                         <th style={{ padding: '10px' }}>Product Code</th>
                         <th style={{ padding: '10px' }}>Product Name</th>
                         <th style={{ padding: '10px' }}>Description</th>
@@ -1207,6 +1208,7 @@ export default function InvoiceDetailModal({
                         <th style={{ padding: '10px', textAlign: 'right' }}>Unit Price</th>
                         <th style={{ padding: '10px', textAlign: 'center' }}>Tax (%)</th>
                         <th style={{ padding: '10px', textAlign: 'right' }}>Amount</th>
+                        <th style={{ padding: '10px', textAlign: 'center', width: '120px' }}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1214,11 +1216,6 @@ export default function InvoiceDetailModal({
                         const origIdx = it.originalIndex !== undefined ? it.originalIndex : idx;
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
-                              </span>
-                            </td>
                             <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
                               {it.code || `PRD-00${idx + 1}`}
                             </td>
@@ -1240,11 +1237,13 @@ export default function InvoiceDetailModal({
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
                               {it.tax !== undefined ? it.tax : 18}%
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
                               ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
-                              ₹ {((it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
+                              </span>
                             </td>
                           </tr>
                         );
@@ -1256,10 +1255,11 @@ export default function InvoiceDetailModal({
                         </tr>
                       )}
                       <tr style={{ backgroundColor: '#F0FDF4', fontWeight: '800' }}>
-                        <td colSpan={8} style={{ padding: '10px', textAlign: 'right', color: '#166534' }}>Subtotal (Packed Items)</td>
+                        <td colSpan={7} style={{ padding: '10px', textAlign: 'right', color: '#166534' }}>Subtotal (Packed Items)</td>
                         <td style={{ padding: '10px', textAlign: 'right', color: '#166534', fontSize: '13px' }}>
                           ₹ {packedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
+                        <td></td>
                       </tr>
                     </tbody>
                   </table>
@@ -1290,6 +1290,9 @@ export default function InvoiceDetailModal({
                             deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress || 'Client Delivery Site',
                             items: unpackedItems
                           });
+                          if (typeof setViewingInvoiceModal === 'function') {
+                            setViewingInvoiceModal(null);
+                          }
                         }
                       }}
                       style={{
@@ -1320,7 +1323,6 @@ export default function InvoiceDetailModal({
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#FEF2F2', color: '#991B1B', borderBottom: '1px solid #FEE2E2' }}>
-                        <th style={{ padding: '10px', textAlign: 'center', width: '120px' }}>Status</th>
                         <th style={{ padding: '10px' }}>Product Code</th>
                         <th style={{ padding: '10px' }}>Product Name</th>
                         <th style={{ padding: '10px' }}>Description</th>
@@ -1329,6 +1331,7 @@ export default function InvoiceDetailModal({
                         <th style={{ padding: '10px', textAlign: 'right' }}>Unit Price</th>
                         <th style={{ padding: '10px', textAlign: 'center' }}>Tax (%)</th>
                         <th style={{ padding: '10px', textAlign: 'right' }}>Amount</th>
+                        <th style={{ padding: '10px', textAlign: 'center', width: '120px' }}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1336,11 +1339,6 @@ export default function InvoiceDetailModal({
                         const origIdx = it.originalIndex !== undefined ? it.originalIndex : idx;
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: '#FFF5F5' }}>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <X style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Unpacked
-                              </span>
-                            </td>
                             <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
                               {it.code || `PRD-00${idx + 1}`}
                             </td>
@@ -1362,11 +1360,13 @@ export default function InvoiceDetailModal({
                             <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
                               {it.tax !== undefined ? it.tax : 18}%
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#DC2626' }}>
                               ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#DC2626' }}>
-                              ₹ {((it.amt || ((it.qty || 1) * (it.rate || 0) * 1.18))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <X style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Unpacked
+                              </span>
                             </td>
                           </tr>
                         );
@@ -1379,10 +1379,11 @@ export default function InvoiceDetailModal({
                       )}
                       {unpackedItems.length > 0 && (
                         <tr style={{ backgroundColor: '#FEF2F2', fontWeight: '800' }}>
-                          <td colSpan={8} style={{ padding: '10px', textAlign: 'right', color: '#991B1B' }}>Pending Subtotal (Unpacked Items)</td>
+                          <td colSpan={7} style={{ padding: '10px', textAlign: 'right', color: '#991B1B' }}>Pending Subtotal (Unpacked Items)</td>
                           <td style={{ padding: '10px', textAlign: 'right', color: '#DC2626', fontSize: '13px' }}>
                             ₹ {unpackedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
+                          <td></td>
                         </tr>
                       )}
                     </tbody>
@@ -2142,63 +2143,6 @@ export default function InvoiceDetailModal({
                         <Camera style={{ width: '13px', height: '13px', color: '#0284C7' }} />
                         <span>Packing Photo</span>
                       </button>
-
-                      {/* 3. Packing Video Preview Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (tl.videoUrl) {
-                            setActiveMediaPreviewModal({
-                              type: 'video',
-                              url: tl.videoUrl,
-                              name: `Dispatch Packing Live Video Log — ${bomRefText} (${tl.user})`
-                            });
-                          } else {
-                            // Generate a realistic simulated video presentation slide
-                            const videoCanvas = document.createElement('canvas');
-                            videoCanvas.width = 640;
-                            videoCanvas.height = 360;
-                            const vCtx = videoCanvas.getContext('2d');
-                            vCtx.fillStyle = '#0F172A';
-                            vCtx.fillRect(0, 0, 640, 360);
-                            vCtx.fillStyle = '#1E3A8A';
-                            vCtx.fillRect(20, 20, 600, 60);
-                            vCtx.fillStyle = '#FFFFFF';
-                            vCtx.font = 'bold 18px sans-serif';
-                            vCtx.fillText(`🎥 PACKING VERIFICATION VIDEO: ${bomRefText}`, 40, 56);
-                            vCtx.font = '14px sans-serif';
-                            vCtx.fillStyle = '#94A3B8';
-                            vCtx.fillText(`Recorded by: ${tl.user}`, 40, 130);
-                            vCtx.fillText(`Customer: ${customerText}`, 40, 160);
-                            vCtx.fillText(`Inspection Status: 100% Verified & Sealed for Logistics`, 40, 190);
-                            vCtx.fillStyle = '#22C55E';
-                            vCtx.font = 'bold 16px sans-serif';
-                            vCtx.fillText(`✓ VIDEO AUDIT LOGGED & SIGNED`, 40, 240);
-                            const sampleVidUrl = videoCanvas.toDataURL('image/jpeg');
-                            setActiveMediaPreviewModal({
-                              type: 'image',
-                              url: sampleVidUrl,
-                              name: `Dispatch Packing Video Log — ${bomRefText} (Verified by ${tl.user})`
-                            });
-                          }
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          border: '1px solid #E9D5FF',
-                          backgroundColor: '#FAF5FF',
-                          color: '#7E22CE',
-                          fontSize: '11px',
-                          fontWeight: '800',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Film style={{ width: '13px', height: '13px', color: '#9333EA' }} />
-                        <span>Packing Video</span>
-                      </button>
                     </div>
                   )}
                 </div>
@@ -2213,6 +2157,14 @@ export default function InvoiceDetailModal({
         <DocPreviewModal
           previewDocModal={localDocPreviewModal}
           onClose={() => setLocalDocPreviewModal(null)}
+        />
+      )}
+
+      {/* VRM Tax Invoice Print Modal */}
+      {printTaxInvoiceModal && (
+        <VRMTaxInvoicePrintTemplate
+          invoiceData={printTaxInvoiceModal}
+          onClose={() => setPrintTaxInvoiceModal(null)}
         />
       )}
     </div>

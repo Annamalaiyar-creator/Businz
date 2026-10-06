@@ -1224,6 +1224,20 @@ export default function ProductionViewsEngine(props) {
             );
           }
 
+          // Render Create / View Delivery Challan Page matching PO & PI design inline (sidebar visible)
+          if (pendingDcModal) {
+            return (
+              <DeliveryChallanModal
+                pendingDcModal={pendingDcModal}
+                onClose={() => setPendingDcModal(null)}
+                bomStore={bomStore}
+                setBomStore={setBomStore}
+                invoiceList={invoiceList}
+                setInvoiceList={setInvoiceList}
+              />
+            );
+          }
+
           // Generic Renderer for other Production views
           const defaultConfig = {
             title: activeTab,
@@ -1538,18 +1552,7 @@ export default function ProductionViewsEngine(props) {
         />
       )}
 
-      {/* FULL SCREEN CREATE DC FOR PENDING VIEW */}
-      {/* Pending Delivery Challan (DC) Modal */}
-      {pendingDcModal && (
-        <DeliveryChallanModal
-          pendingDcModal={pendingDcModal}
-          onClose={() => setPendingDcModal(null)}
-          bomStore={bomStore}
-          setBomStore={setBomStore}
-          invoiceList={invoiceList}
-          setInvoiceList={setInvoiceList}
-        />
-      )}
+
 
       {/* ─── CONFIRM INVOICE SUCCESS MODAL WITH STOCK DEDUCTION NOTICE ─── */}
       {/* ─── CONFIRM INVOICE SUCCESS MODAL WITH STOCK DEDUCTION NOTICE ─── */}
