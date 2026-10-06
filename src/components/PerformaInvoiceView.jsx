@@ -426,11 +426,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 }
               });
 
-              return Array.from(mergedMap.values()).map(normalizePiRecord);
+              const finalMerged = Array.from(mergedMap.values()).map(normalizePiRecord);
+              try {
+                localStorage.setItem(storageKey, JSON.stringify(finalMerged));
+                localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(finalMerged));
+              } catch (_) {}
+              return finalMerged;
             });
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ZOHO ESTIMATES FETCH NOTICE]', err);
+      }
     };
 
     loadPiData();
