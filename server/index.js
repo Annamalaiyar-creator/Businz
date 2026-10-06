@@ -6280,10 +6280,17 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
       if (zohoRes && Array.isArray(zohoRes.estimates)) {
         zohoRes.estimates.forEach(est => {
           const numStr = String(est.estimate_number || '');
-          const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 1000000) maxNum = val;
+          // Support VRMS/PI/26-27/XXXX and generic PI-XXXXX
+          const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
+          if (vrmMatch) {
+            const val = parseInt(vrmMatch[1], 10);
+            if (val > maxNum) maxNum = val;
+          } else {
+            const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
+            if (match) {
+              const val = parseInt(match[1], 10);
+              if (val > maxNum && val < 1000000) maxNum = val;
+            }
           }
         });
       }
@@ -6302,10 +6309,16 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
         if (Array.isArray(localPIs)) {
           localPIs.forEach(item => {
             const numStr = String(item.piNo || item.id || '');
-            const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-            if (match) {
-              const val = parseInt(match[1], 10);
-              if (val > maxNum && val < 1000000) maxNum = val;
+            const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
+            if (vrmMatch) {
+              const val = parseInt(vrmMatch[1], 10);
+              if (val > maxNum) maxNum = val;
+            } else {
+              const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
+              if (match) {
+                const val = parseInt(match[1], 10);
+                if (val > maxNum && val < 1000000) maxNum = val;
+              }
             }
           });
         }
@@ -6319,18 +6332,32 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
     if (Array.isArray(list)) {
       list.forEach(item => {
         const numStr = String(item.piNo || item.id || '');
-        const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-        if (match) {
-          const val = parseInt(match[1], 10);
-          if (val > maxNum && val < 1000000) maxNum = val;
+        const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
+        if (vrmMatch) {
+          const val = parseInt(vrmMatch[1], 10);
+          if (val > maxNum) maxNum = val;
+        } else {
+          const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (val > maxNum && val < 1000000) maxNum = val;
+          }
         }
       });
     }
   });
 
-  const nextNum = maxNum + 1;
-  const nextPiNo = 'PI-' + String(nextNum).padStart(5, '0');
-  res.json({ nextPiNo, nextNum });
+  const nextNum = maxNum > 0 ? maxNum + 1 : 2287;
+  // Compute fiscal year string: e.g., 2026-2027 => 26-27
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1; // 1-12
+  const fyStart = curMonth >= 4 ? curYear : curYear - 1;
+  const fyEnd = fyStart + 1;
+  const fyStr = `${String(fyStart).slice(-2)}-${String(fyEnd).slice(-2)}`;
+
+  const nextPiNo = maxNum >= 1000 ? `VRMS/PI/${fyStr}/${nextNum}` : `PI-${String(nextNum).padStart(5, '0')}`;
+  res.json({ nextPiNo, nextNum, fiscalYear: fyStr });
 });
 
 let zohoEstimatesCache = { data: null, timestamp: 0 };

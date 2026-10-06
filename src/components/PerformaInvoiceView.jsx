@@ -1412,25 +1412,29 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   const fetchNextPiNumber = async () => {
     const existingNums = (piList || []).map(p => {
+      const vrmMatch = String(p.piNo || p.id || '').match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || String(p.piNo || p.id || '').match(/\/(\d{3,6})$/);
+      if (vrmMatch) return parseInt(vrmMatch[1], 10);
       const match = String(p.piNo || p.id || '').match(/PI-(\d+)/i);
       return match ? parseInt(match[1], 10) : 0;
     }).filter(n => Number.isFinite(n) && n > 0);
     const localMax = existingNums.length > 0 ? Math.max(0, ...existingNums) : 0;
-    const fallback = `PI-${String(localMax + 1).padStart(5, '0')}`;
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    const fyStart = curMonth >= 4 ? curYear : curYear - 1;
+    const fyStr = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+    const fallback = localMax >= 1000 ? `VRMS/PI/${fyStr}/${localMax + 1}` : `PI-${String(localMax + 1).padStart(5, '0')}`;
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
       const res = await fetch('/api/zoho/next-pi-number', { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
         if (data && data.nextPiNo) {
-          const serverNum = data.nextNum || (parseInt(data.nextPiNo.replace(/[^0-9]/g, ''), 10) || 0);
-          const trueMax = Math.max(localMax, serverNum - 1);
-          const finalNo = 'PI-' + String(trueMax + 1).padStart(5, '0');
-          setPiNumber(finalNo);
-          return finalNo;
+          setPiNumber(data.nextPiNo);
+          return data.nextPiNo;
         }
       }
     } catch (e) {
