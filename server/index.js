@@ -2539,6 +2539,7 @@ let zohoVendorsCache = { data: null, timestamp: 0 };
 let zohoItemsCache = { data: null, timestamp: 0 };
 let zohoPurchaseOrdersCache = { data: null, timestamp: 0 };
 let zohoEstimatesCache = { data: null, timestamp: 0 };
+let zohoEstimatesRateLimitedUntil = 0;
 
 const fetchZohoVendors = (accessToken, forceRefresh = false) => {
   if (!forceRefresh && zohoVendorsCache.data && (Date.now() - zohoVendorsCache.timestamp < ZOHO_CACHE_TTL)) {
@@ -6364,21 +6365,23 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
 });
 
 app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res) => {
+  const p1 = getStoreFilePath('proforma_invoice_store.json');
+  const p2 = getStoreFilePath('sales_pi_store.json');
+  const pExport = getStoreFilePath('zoho_quotes_export.json');
+
   const now = Date.now();
-  if (zohoEstimatesCache.data && (now - zohoEstimatesCache.timestamp < 30000)) {
+  if (zohoEstimatesCache.data && Array.isArray(zohoEstimatesCache.data) && zohoEstimatesCache.data.length > 0 && (now - zohoEstimatesCache.timestamp < 30000)) {
     return res.json(zohoEstimatesCache.data);
   }
 
   let localEstimates = [];
   try {
-    const p1 = getStoreFilePath('proforma_invoice_store.json');
     if (fs.existsSync(p1)) localEstimates = JSON.parse(fs.readFileSync(p1, 'utf8'));
   } catch (_) {}
   try {
-    const p2 = getStoreFilePath('sales_pi_store.json');
     if (fs.existsSync(p2)) {
       const salesData = JSON.parse(fs.readFileSync(p2, 'utf8'));
-      if (Array.isArray(salesData)) {
+      if (Array.isArray(salesData) && salesData.length > 0) {
         const localMap = new Map();
         localEstimates.forEach(x => { if (x && x.piNo) localMap.set(String(x.piNo).toLowerCase(), x); });
         salesData.forEach(s => {
@@ -6396,7 +6399,50 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     }
   } catch (_) {}
 
+  // Check if an exported quotes file from Zoho Books was placed into server/zoho_quotes_export.json
+  try {
+    if (fs.existsSync(pExport)) {
+      const rawExp = JSON.parse(fs.readFileSync(pExport, 'utf8'));
+      const exportList = Array.isArray(rawExp) ? rawExp : (Array.isArray(rawExp.estimates) ? rawExp.estimates : []);
+      if (exportList.length > 0) {
+        const expMap = new Map();
+        localEstimates.forEach(x => { if (x && x.piNo) expMap.set(String(x.piNo).toLowerCase(), x); });
+        exportList.forEach(est => {
+          const piNo = est.estimate_number || est.piNo || est['Estimate Number'] || est['Quote Number'];
+          if (!piNo) return;
+          const k = String(piNo).toLowerCase();
+          if (!expMap.has(k)) {
+            expMap.set(k, {
+              id: est.estimate_id || est.id || piNo,
+              piNo: piNo,
+              piDate: est.date || est.piDate || est['Date'] || '',
+              vendor: est.customer_name || est.vendor || est['Customer Name'] || '',
+              customerName: est.customer_name || est.vendor || est['Customer Name'] || '',
+              customerId: est.customer_id || '',
+              salesPerson: est.salesperson_name || est.salesPerson || est['Salesperson'] || '',
+              salesperson: est.salesperson_name || est.salesPerson || est['Salesperson'] || '',
+              salesPersonCode: est.salesperson_id || '',
+              amount: est.amount || `₹${Number(est.total || est['Total'] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+              total: est.total || est['Total'] || 0,
+              status: est.status === 'invoiced' ? 'Invoiced' : (est.status === 'declined' ? 'Cancelled' : (est.status === 'draft' ? 'Draft' : 'Issued')),
+              statusType: est.status === 'invoiced' ? 'invoiced' : (est.status === 'declined' ? 'cancelled' : (est.status === 'draft' ? 'draft' : 'issued')),
+              zohoSynced: true,
+              zohoEstimateId: String(est.estimate_id || est.id || '').trim(),
+              zohoModule: 'Quotes'
+            });
+          }
+        });
+        localEstimates = Array.from(expMap.values());
+      }
+    }
+  } catch (_) {}
+
   if (!zohoSession.connected) return res.json(localEstimates);
+
+  // If Zoho daily limit is active, back off and serve local data without hammering Zoho
+  if (now < zohoEstimatesRateLimitedUntil) {
+    return res.json(localEstimates);
+  }
 
   try {
     const accessToken = await getZohoAccessToken();
@@ -6420,8 +6466,18 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
           resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
         });
         req.on('error', () => resolve(null));
+        req.setTimeout(8000, () => {
+          try { req.destroy(); } catch (_) {}
+          resolve(null);
+        });
         req.end();
       });
+
+      if (pageData && pageData.code === 45) {
+        console.warn('[ZOHO ESTIMATES WARNING]: Zoho API daily limit of 5,000 calls reached. Backing off for 10 minutes.');
+        zohoEstimatesRateLimitedUntil = Date.now() + 10 * 60 * 1000;
+        break;
+      }
 
       if (pageData && Array.isArray(pageData.estimates) && pageData.estimates.length > 0) {
         allZohoEstimates.push(...pageData.estimates);
@@ -6430,6 +6486,13 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
       } else {
         hasMore = false;
       }
+    }
+
+    if (allZohoEstimates.length === 0) {
+      if (localEstimates.length > 0) {
+        zohoEstimatesCache = { data: localEstimates, timestamp: Date.now() };
+      }
+      return res.json(localEstimates);
     }
 
     const mappedPIs = allZohoEstimates.map(est => ({
@@ -6500,6 +6563,90 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
   } catch (err) {
     console.error('[ZOHO ESTIMATES ERROR]:', err?.message || err);
     res.json(localEstimates);
+  }
+});
+
+// Direct import endpoint to ingest exported Zoho Quotes/Estimates (e.g. from Zoho Books CSV or JSON export)
+app.post('/api/zoho/import-estimates', async (req, res) => {
+  try {
+    const rawEstimates = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.estimates) ? req.body.estimates : []);
+    if (rawEstimates.length === 0) {
+      return res.status(400).json({ success: false, error: 'No estimates array provided in body' });
+    }
+
+    const p1 = getStoreFilePath('proforma_invoice_store.json');
+    const p2 = getStoreFilePath('sales_pi_store.json');
+
+    const mappedPIs = rawEstimates.map(est => ({
+      id: est.estimate_id || est.id || est.estimate_number || est.piNo,
+      piNo: est.estimate_number || est.piNo || est['Estimate Number'] || est['Quote Number'],
+      piDate: est.date || est.piDate || est['Date'] || '',
+      vendor: est.customer_name || est.vendor || est['Customer Name'] || '',
+      customerName: est.customer_name || est.vendor || est['Customer Name'] || '',
+      customerId: est.customer_id || '',
+      salesPerson: est.salesperson_name || est.salesPerson || est['Salesperson'] || '',
+      salesperson: est.salesperson_name || est.salesPerson || est['Salesperson'] || '',
+      salesPersonCode: est.salesperson_id || '',
+      amount: est.amount || `₹${Number(est.total || est['Total'] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      total: Number(est.total || est['Total'] || 0),
+      status: (est.status || '').toLowerCase() === 'invoiced' ? 'Invoiced' : ((est.status || '').toLowerCase() === 'declined' ? 'Cancelled' : ((est.status || '').toLowerCase() === 'draft' ? 'Draft' : 'Issued')),
+      statusType: (est.status || '').toLowerCase() === 'invoiced' ? 'invoiced' : ((est.status || '').toLowerCase() === 'declined' ? 'cancelled' : ((est.status || '').toLowerCase() === 'draft' ? 'draft' : 'issued')),
+      zohoSynced: true,
+      zohoEstimateId: String(est.estimate_id || est.id || '').trim(),
+      zohoModule: 'Quotes'
+    })).filter(x => Boolean(x.piNo));
+
+    supabaseMemoryStore['sales_pi_store'] = mappedPIs;
+    supabaseMemoryStore['proforma_invoice_store'] = mappedPIs;
+    zohoEstimatesCache = { data: mappedPIs, timestamp: Date.now() };
+
+    fs.writeFileSync(p1, JSON.stringify(mappedPIs, null, 2), 'utf8');
+    fs.writeFileSync(p2, JSON.stringify(mappedPIs, null, 2), 'utf8');
+    saveDatabaseStore('sales_pi_store', mappedPIs).catch(() => {});
+    saveDatabaseStore('proforma_invoice_store', mappedPIs).catch(() => {});
+    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: mappedPIs });
+
+    res.json({ success: true, count: mappedPIs.length, message: `Successfully imported ${mappedPIs.length} Zoho Quotes (PIs)` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Diagnostics endpoint to inspect Zoho Books live connection, rate limit and estimates count
+app.get('/api/zoho/debug-estimates', async (req, res) => {
+  try {
+    const accessToken = await getZohoAccessToken();
+    const zohoRes = await new Promise((resolve) => {
+      const options = {
+        hostname: 'www.zohoapis.in',
+        port: 443,
+        path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&per_page=5`,
+        method: 'GET',
+        headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+      };
+      const r = https.request(options, resp => {
+        let b = '';
+        resp.on('data', c => b += c);
+        resp.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { resolve({ parseError: b }); } });
+      });
+      r.on('error', err => resolve({ error: err.message }));
+      r.end();
+    });
+
+    const isRateLimited = zohoRes && zohoRes.code === 45;
+    res.json({
+      connected: zohoSession.connected,
+      orgId: zohoSession.orgId,
+      zohoResponseCode: zohoRes?.code,
+      zohoResponseMessage: zohoRes?.message,
+      isRateLimited,
+      estimatesInSample: (zohoRes?.estimates || []).length,
+      sampleEstimate: zohoRes?.estimates?.[0] || null,
+      cachedCount: (zohoEstimatesCache.data || []).length,
+      rateLimitedUntil: zohoEstimatesRateLimitedUntil > Date.now() ? new Date(zohoEstimatesRateLimitedUntil).toISOString() : null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
