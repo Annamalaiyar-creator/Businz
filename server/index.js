@@ -28,6 +28,14 @@ import {
   validateBusinzSession,
   validateBomCode
 } from './bomDocumentService.js';
+import {
+  getZohoAccessToken as getCentralZohoAccessToken,
+  invalidateZohoAccessToken,
+  zohoRequest,
+  getZohoAuthStats,
+  initZohoTokenStore,
+  configureSessionProvider
+} from './zohoAuthService.js';
 
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
@@ -38,9 +46,12 @@ dotenv.config();
 // In-memory active cache for server stores
 let supabaseMemoryStore = {};
 
-// Initialize self-hosted PostgreSQL database on Hostinger VPS
-initPostgresDatabase().catch(err => {
+// Initialize self-hosted PostgreSQL database on Hostinger VPS and restore Zoho token
+initPostgresDatabase().then(() => {
+  initZohoTokenStore().catch(err => console.warn('[Zoho Auth Init Notice]:', err.message));
+}).catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
+  initZohoTokenStore().catch(err2 => console.warn('[Zoho Auth Init Notice]:', err2.message));
 });
 
 // Self-hosted database client (queries local PostgreSQL directly with fallback to disk)
@@ -1635,6 +1646,14 @@ let zohoSession = {
   organizationName: 'VRM Structures India Pvt Ltd.'
 };
 
+// Wire dynamic session provider to centralized Zoho Auth service
+configureSessionProvider(() => ({
+  refreshToken: zohoSession.apiToken || process.env.ZOHO_REFRESH_TOKEN,
+  clientId: process.env.ZOHO_CLIENT_ID,
+  clientSecret: process.env.ZOHO_CLIENT_SECRET,
+  orgId: zohoSession.orgId
+}));
+
 const saveCredentialsToEnv = (orgId, apiToken, clientId, clientSecret) => {
   try {
     const envPath = path.resolve(process.cwd(), '.env');
@@ -1844,6 +1863,7 @@ app.post('/api/zoho/credentials', (req, res) => {
   zohoSession.apiToken = apiToken.trim();
   zohoSession.accessToken = ''; // Reset token to force immediate re-authentication
   zohoSession.tokenExpiresAt = 0;
+  invalidateZohoAccessToken().catch(console.warn);
   
   process.env.ZOHO_CLIENT_ID = effectiveClientId;
   process.env.ZOHO_CLIENT_SECRET = effectiveClientSecret;
@@ -1857,6 +1877,7 @@ app.post('/api/zoho/credentials', (req, res) => {
 
 // 3. Disconnect from Zoho
 app.post('/api/zoho/disconnect', (req, res) => {
+  invalidateZohoAccessToken().catch(console.warn);
   zohoSession = {
     connected: false,
     orgId: '',
@@ -2461,77 +2482,19 @@ app.delete('/api/store/:key/:id', async (req, res) => {
   return res.status(400).json({ success: false, error: `Deletion not supported for store key: ${key}` });
 });
 
-let pendingTokenPromise = null;
-
-const getZohoAccessToken = () => {
-  const now = Date.now();
-  // If we already have a valid access token (with a 5-minute buffer), resolve immediately
-  if (zohoSession.accessToken && zohoSession.tokenExpiresAt > now + 300000) {
-    return Promise.resolve(zohoSession.accessToken);
-  }
-
-  if (pendingTokenPromise) {
-    return pendingTokenPromise;
-  }
-
-  pendingTokenPromise = new Promise((resolve, reject) => {
-    const postData = new URLSearchParams({
-      refresh_token: zohoSession.apiToken,
-      client_id: process.env.ZOHO_CLIENT_ID,
-      client_secret: process.env.ZOHO_CLIENT_SECRET,
-      grant_type: 'refresh_token'
-    }).toString();
-
-    const options = {
-      hostname: 'accounts.zoho.in',
-      port: 443,
-      path: '/oauth/v2/token',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.access_token) {
-            zohoSession.accessToken = parsed.access_token;
-            // Cache token and set expiration timestamp
-            zohoSession.tokenExpiresAt = Date.now() + (parsed.expires_in || 3600) * 1000;
-            try {
-              fs.writeFileSync(path.join(__dirname, 'zoho_token_cache.json'), JSON.stringify({
-                accessToken: zohoSession.accessToken,
-                tokenExpiresAt: zohoSession.tokenExpiresAt
-              }), 'utf8');
-            } catch (_) {}
-            resolve(parsed.access_token);
-          } else {
-            reject(new Error(parsed.error || 'No access token returned.'));
-          }
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.setTimeout(4000, () => {
-      try { req.destroy(); } catch (_) {}
-      reject(new Error('Zoho token request timed out'));
-    });
-    req.write(postData);
-    req.end();
-  }).finally(() => {
-    pendingTokenPromise = null;
-  });
-
-  return pendingTokenPromise;
+// Centralized Zoho OAuth Token Provider with Concurrency Lock, 5-min Safety Buffer & Durable Storage
+const getZohoAccessToken = async (forceRefresh = false) => {
+  const token = await getCentralZohoAccessToken(forceRefresh);
+  const authStats = getZohoAuthStats();
+  zohoSession.accessToken = token;
+  zohoSession.tokenExpiresAt = authStats.tokenExpiresAt;
+  return token;
 };
+
+// Safe operational metrics endpoint (Audit & Health check, zero secrets exposed)
+app.get('/api/zoho/auth-stats', (req, res) => {
+  res.json(getZohoAuthStats());
+});
 
 // In-memory reference caches to protect Zoho daily API limits (24-hour TTL)
 const ZOHO_CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -2541,76 +2504,29 @@ let zohoPurchaseOrdersCache = { data: null, timestamp: 0 };
 let zohoEstimatesCache = { data: null, timestamp: 0 };
 let zohoEstimatesRateLimitedUntil = 0;
 
-const fetchZohoVendors = (accessToken, forceRefresh = false) => {
+const fetchZohoVendors = async (accessToken, forceRefresh = false) => {
   if (!forceRefresh && zohoVendorsCache.data && (Date.now() - zohoVendorsCache.timestamp < ZOHO_CACHE_TTL)) {
-    return Promise.resolve(zohoVendorsCache.data);
+    return zohoVendorsCache.data;
   }
 
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&contact_type=vendor`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed && Array.isArray(parsed.contacts)) {
-            zohoVendorsCache = { data: parsed, timestamp: Date.now() };
-          }
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.end();
+  const response = await zohoRequest({
+    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&contact_type=vendor`,
+    method: 'GET'
   });
+
+  if (response.ok && response.data && Array.isArray(response.data.contacts)) {
+    zohoVendorsCache = { data: response.data, timestamp: Date.now() };
+  }
+  return response.data || { contacts: [] };
 };
 
 // Helper to create a new Vendor contact in Zoho Books
-const createZohoVendor = (accessToken, vendorPayload) => {
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify(vendorPayload);
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.write(postData);
-    req.end();
-  });
+const createZohoVendor = async (accessToken, vendorPayload) => {
+  const response = await zohoRequest({
+    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
+    method: 'POST'
+  }, vendorPayload);
+  return response.data;
 };
 
 // Endpoint to create a new vendor in Zoho Books
@@ -2653,69 +2569,21 @@ app.post('/api/zoho/vendors', async (req, res) => {
 });
 
 // Helper to fetch customer contacts from Zoho Books
-const fetchZohoCustomers = (accessToken) => {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&contact_type=customer`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.end();
+const fetchZohoCustomers = async (accessToken) => {
+  const response = await zohoRequest({
+    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&contact_type=customer`,
+    method: 'GET'
   });
+  return response.data;
 };
 
 // Helper to create a new Customer contact in Zoho Books
-const createZohoCustomer = (accessToken, customerPayload) => {
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify(customerPayload);
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.write(postData);
-    req.end();
-  });
+const createZohoCustomer = async (accessToken, customerPayload) => {
+  const response = await zohoRequest({
+    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
+    method: 'POST'
+  }, customerPayload);
+  return response.data;
 };
 
 // Endpoint to create a new customer in Zoho Books
