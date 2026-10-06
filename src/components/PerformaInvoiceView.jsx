@@ -437,8 +437,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     // Live Realtime sync directly from Supabase Database
     const sub = subscribeToCloudStore('sales_pi_store', (latest) => {
-      if (Array.isArray(latest)) {
-        setPiList(latest.map(normalizePiRecord));
+      if (Array.isArray(latest) && latest.length > 0) {
+        setPiList(prevList => {
+          const merged = new Map();
+          (prevList || []).forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), p); });
+          latest.forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p)); });
+          return Array.from(merged.values());
+        });
         setTableLoading(false);
       }
     });
