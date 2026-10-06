@@ -11,7 +11,8 @@ export default function DeliveryChallanModal({
   bomStore = [],
   setBomStore = () => {},
   invoiceList = [],
-  setInvoiceList = () => {}
+  setInvoiceList = () => {},
+  userRole = 'Billing'
 }) {
   const isExistingDc = Boolean(
     pendingDcModal && !pendingDcModal.isNew && (pendingDcModal.dcNo || (pendingDcModal.code && String(pendingDcModal.code).startsWith('DC-')))
@@ -20,6 +21,64 @@ export default function DeliveryChallanModal({
     pendingDcModal && !isExistingDc && !pendingDcModal.isNew && (pendingDcModal.invNo || pendingDcModal.invoiceNo)
   );
   const initialInv = pendingDcModal || {};
+
+  const isBillingUser = useMemo(() => {
+    const roleFromStorage = localStorage.getItem('controlroom_logged_user_role') || '';
+    const nameFromStorage = localStorage.getItem('controlroom_logged_user_name') || '';
+    const r = `${userRole} ${roleFromStorage} ${nameFromStorage}`.toLowerCase();
+    return r.includes('billing') || r.includes('invoice') || r.includes('account') || r.includes('finance') || r.includes('admin') || r.includes('ceo') || r.includes('md');
+  }, [userRole]);
+
+  // DC Mode: "against_invoice" vs "direct_customer"
+  const [dcMode, setDcMode] = useState(() => {
+    if (isLinkedInvoice) return 'against_invoice';
+    if (initialInv.dcMode === 'direct_customer' || initialInv.challanType === 'Direct Delivery Challan') return 'direct_customer';
+    if (initialInv.dcMode === 'against_invoice' || initialInv.challanType === 'Against Invoice') return 'against_invoice';
+    return isBillingUser ? 'against_invoice' : 'direct_customer';
+  });
+
+  // Collect existing customers from BOMs and customer directory for direct DC creation
+  const existingCustomers = useMemo(() => {
+    const setMap = new Map();
+    (bomStore || []).forEach(b => {
+      const name = (b.customerName || b.vendor || b.clientName || '').trim();
+      const addr = (b.deliveryAddress || b.c6 || b.billingAddress || '').trim();
+      const bomCode = b.bomCode || b.code || '';
+      if (name && !setMap.has(name.toLowerCase())) {
+        setMap.set(name.toLowerCase(), { name, address: addr, bomCode });
+      }
+    });
+    try {
+      const rawCust = localStorage.getItem('controlroom_customer_store');
+      if (rawCust) {
+        const parsed = JSON.parse(rawCust);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(c => {
+            const name = (c.name || c.companyName || c.contact_name || '').trim();
+            const addr = (c.billingAddress || c.address || '').trim();
+            if (name && !setMap.has(name.toLowerCase())) {
+              setMap.set(name.toLowerCase(), { name, address: addr, bomCode: '' });
+            }
+          });
+        }
+      }
+    } catch (_) {}
+    return Array.from(setMap.values());
+  }, [bomStore]);
+
+  // Customer change handler with auto-fill
+  const handleCustomerChange = (val) => {
+    setCustomerName(val);
+    const matched = existingCustomers.find(c => c.name.toLowerCase() === val.toLowerCase());
+    if (matched) {
+      if (matched.address && (!deliveryAddr || deliveryAddr === 'Client Delivery Site')) {
+        setDeliveryAddr(matched.address);
+      }
+      if (matched.bomCode && (!bomRef || bomRef === 'N/A')) {
+        setBomRef(matched.bomCode);
+      }
+    }
+  };
 
   // Helper to generate sequential next DC Number
   const getNextDcNumber = () => {
@@ -283,7 +342,9 @@ export default function DeliveryChallanModal({
   const selectedGoodsList = itemsWithDcQty.filter((_, idx) => selectedItems.includes(idx));
   const totalTransitValuation = selectedGoodsList.reduce((acc, it) => acc + ((Number(it.dcQty) || 1) * (Number(it.rate) || 0)), 0);
 
-  const effectiveInvRef = selectedInvNo || customInvNo || (isExistingDc ? initialInv.invNo : '');
+  const effectiveInvRef = isExistingDc
+    ? (initialInv.invNo && initialInv.invNo !== 'N/A' ? initialInv.invNo : '')
+    : (dcMode === 'against_invoice' ? (selectedInvNo || customInvNo || '') : '');
   const effectiveBomRef = bomRef || (isExistingDc ? initialInv.bomCode : '');
 
   const handleSaveAndGenerateDc = () => {
@@ -294,6 +355,10 @@ export default function DeliveryChallanModal({
     const blankItem = selectedGoodsList.find(it => !String(it.name || '').trim() && !String(it.code || '').trim());
     if (blankItem) {
       alert("⚠️ Please provide a Product Name or Code for all selected items!");
+      return;
+    }
+    if (dcMode === 'against_invoice' && !effectiveInvRef.trim()) {
+      alert("⚠️ Please select an Originating Invoice for 'Against Invoice' DC mode, or switch to 'Direct to Customer' mode!");
       return;
     }
     if (!customerName.trim()) {
@@ -309,6 +374,8 @@ export default function DeliveryChallanModal({
     const newDc = {
       dcNo: generatedDcNo,
       code: generatedDcNo,
+      dcMode: dcMode,
+      challanType: dcMode === 'against_invoice' ? 'Against Invoice' : 'Direct Delivery Challan',
       bomCode: effectiveBomRef || 'N/A',
       invNo: effectiveInvRef || 'N/A',
       customerName: customerName.trim(),
@@ -442,6 +509,15 @@ export default function DeliveryChallanModal({
         {(VRM_PRODUCTS || []).map((p, idx) => (
           <option key={`${p.code || idx}`} value={p.name}>
             {p.code} — {p.name} ({p.uom || 'NOS'})
+          </option>
+        ))}
+      </datalist>
+
+      {/* HTML Datalist for Customer suggestions in Direct DC mode */}
+      <datalist id="dc-customer-suggestions">
+        {existingCustomers.map((c, idx) => (
+          <option key={`${c.name}-${idx}`} value={c.name}>
+            {c.name} {c.address ? `— ${c.address.slice(0, 45)}...` : ''}
           </option>
         ))}
       </datalist>
@@ -638,24 +714,93 @@ export default function DeliveryChallanModal({
           flexDirection: 'column',
           gap: '20px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              backgroundColor: '#0E7490',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '13px',
-              fontWeight: '800'
-            }}>
-              1
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                backgroundColor: '#0E7490',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '13px',
+                fontWeight: '800'
+              }}>
+                1
+              </div>
+              <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                DELIVERY CHALLAN & CUSTOMER DETAILS
+              </h3>
             </div>
-            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              DELIVERY CHALLAN & CUSTOMER DETAILS
-            </h3>
+
+            {/* Mode Switcher: Billing Login can choose Against Invoice or Direct to Customer; others do Direct */}
+            {!isExistingDc && (
+              isBillingUser ? (
+                <div style={{
+                  display: 'inline-flex',
+                  backgroundColor: '#F1F5F9',
+                  padding: '4px',
+                  borderRadius: '12px',
+                  border: '1px solid #CBD5E1',
+                  gap: '4px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setDcMode('against_invoice')}
+                    style={{
+                      border: 'none',
+                      background: dcMode === 'against_invoice' ? '#0E7490' : 'transparent',
+                      color: dcMode === 'against_invoice' ? '#FFFFFF' : '#475569',
+                      padding: '7px 16px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: dcMode === 'against_invoice' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
+                    }}
+                  >
+                    Against Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDcMode('direct_customer');
+                      setSelectedInvNo('');
+                      setCustomInvNo('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: dcMode === 'direct_customer' ? '#0E7490' : 'transparent',
+                      color: dcMode === 'direct_customer' ? '#FFFFFF' : '#475569',
+                      padding: '7px 16px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: dcMode === 'direct_customer' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none'
+                    }}
+                  >
+                    Direct to Customer
+                  </button>
+                </div>
+              ) : (
+                <span style={{
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  border: '1px solid #A5F3FC',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  fontWeight: '800'
+                }}>
+                  Direct to Customer (Rule 55)
+                </span>
+              )
+            )}
           </div>
 
           {/* 4-column Grid */}
@@ -688,7 +833,7 @@ export default function DeliveryChallanModal({
 
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Originating Invoice Ref
+                Originating Invoice Ref {dcMode === 'against_invoice' && <span style={{ color: '#EF4444' }}>*</span>}
               </label>
               {isExistingDc ? (
                 <input
@@ -698,14 +843,14 @@ export default function DeliveryChallanModal({
                   disabled
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#475569', backgroundColor: '#F8FAFC', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
                 />
-              ) : (
+              ) : dcMode === 'against_invoice' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <select
                     value={selectedInvNo}
                     onChange={(e) => handleSelectInvoice(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #0E7490', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
                   >
-                    <option value="">-- Direct Delivery Challan (No Invoice) --</option>
+                    <option value="">-- Select Originating Invoice --</option>
                     {(invoiceList || []).filter(i => (i.invNo || i.invoiceNo || i.code)).map(invItem => {
                       const no = invItem.invNo || invItem.invoiceNo || invItem.code;
                       const cust = invItem.customerName || invItem.vendor || invItem.c2 || 'Customer';
@@ -721,10 +866,25 @@ export default function DeliveryChallanModal({
                       type="text"
                       value={customInvNo}
                       onChange={(e) => setCustomInvNo(e.target.value)}
-                      placeholder="Custom Invoice Ref (optional)..."
-                      style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '12px', color: '#334155', outline: 'none', boxSizing: 'border-box' }}
+                      placeholder="Or enter custom Invoice Ref (e.g. INV-0042)..."
+                      style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#334155', outline: 'none', boxSizing: 'border-box' }}
                     />
                   )}
+                </div>
+              ) : (
+                <div style={{
+                  height: '42px',
+                  borderRadius: '10px',
+                  border: '1px dashed #CBD5E1',
+                  backgroundColor: '#F8FAFC',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0 12px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  color: '#64748B'
+                }}>
+                  Direct Dispatch (No Invoice Required)
                 </div>
               )}
             </div>
@@ -752,10 +912,11 @@ export default function DeliveryChallanModal({
               </label>
               <input
                 type="text"
+                list="dc-customer-suggestions"
                 disabled={isExistingDc}
                 value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Enter Customer / Consignee Name..."
+                onChange={(e) => handleCustomerChange(e.target.value)}
+                placeholder="Type or select customer name..."
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
               />
             </div>

@@ -1234,6 +1234,7 @@ export default function ProductionViewsEngine(props) {
                 setBomStore={setBomStore}
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
+                userRole={userRole}
               />
             );
           }
