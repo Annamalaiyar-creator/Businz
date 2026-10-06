@@ -651,57 +651,6 @@ export default function DeliveryChallanModal({
           </div>
         </div>
 
-        {/* NON-CHARGEABLE / RULE 55 CGST HIGHLIGHT BANNER */}
-        <div style={{
-          backgroundColor: '#F0FDF4',
-          border: '1px solid #BBF7D0',
-          borderRadius: '14px',
-          padding: '14px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: '#DCFCE7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#16A34A',
-              flexShrink: 0
-            }}>
-              <Info style={{ width: '20px', height: '20px' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534', letterSpacing: '0.3px' }}>
-                NON-CHARGEABLE DELIVERY CHALLAN (RULE 55 CGST RULES, 2017)
-              </div>
-              <div style={{ fontSize: '12px', color: '#15803D', marginTop: '2px' }}>
-                {effectiveInvRef ? (
-                  <>Subsequent goods transit for backordered / pending quantities. Goods have already been billed under <strong>Invoice #{effectiveInvRef}</strong>. No payment will be collected from customer (₹0.00 Financial Amount).</>
-                ) : (
-                  <>Statutory Delivery Challan issued for subsequent goods transit not by way of supply (Rule 55 CGST). No payment consideration is collected on this challan (₹0.00 Financial Amount).</>
-                )}
-              </div>
-            </div>
-          </div>
-          <div style={{
-            backgroundColor: '#DCFCE7',
-            padding: '6px 14px',
-            borderRadius: '20px',
-            fontSize: '12px',
-            fontWeight: '800',
-            color: '#166534',
-            whiteSpace: 'nowrap',
-            border: '1px solid #86EFAC'
-          }}>
-            Payment Status: Already Settled (₹0 Due)
-          </div>
-        </div>
 
         {/* SECTION 1: CHALLAN & CUSTOMER INFORMATION */}
         <div style={{
@@ -964,7 +913,7 @@ export default function DeliveryChallanModal({
               2
             </div>
             <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              TRANSPORT & LOGISTICS DETAILS (RULE 55)
+              TRANSPORT & LOGISTICS DETAILS
             </h3>
           </div>
 
