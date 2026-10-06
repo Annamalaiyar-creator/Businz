@@ -2533,8 +2533,8 @@ const getZohoAccessToken = () => {
   return pendingTokenPromise;
 };
 
-// In-memory reference caches to protect Zoho daily API limits (30-min TTL)
-const ZOHO_CACHE_TTL = 30 * 60 * 1000;
+// In-memory reference caches to protect Zoho daily API limits (24-hour TTL)
+const ZOHO_CACHE_TTL = 24 * 60 * 60 * 1000;
 let zohoVendorsCache = { data: null, timestamp: 0 };
 let zohoItemsCache = { data: null, timestamp: 0 };
 let zohoPurchaseOrdersCache = { data: null, timestamp: 0 };
@@ -3529,7 +3529,7 @@ const fetchZohoPurchaseOrders = async (accessToken) => {
   let page = 1;
   let hasMore = true;
 
-  while (hasMore) {
+  while (hasMore && page <= 3) {
     const pageData = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'www.zohoapis.in',
@@ -3556,6 +3556,11 @@ const fetchZohoPurchaseOrders = async (accessToken) => {
       req.on('error', (e) => reject(e));
       req.end();
     });
+
+    if (pageData && pageData.code === 45) {
+      console.warn('[ZOHO POs]: Daily rate limit reached. Halting pagination.');
+      break;
+    }
 
     if (pageData && Array.isArray(pageData.purchaseorders)) {
       allOrders = allOrders.concat(pageData.purchaseorders);
@@ -5423,7 +5428,14 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
 
   const now = Date.now();
   const forceRefresh = req.query.force === 'true';
-  if (!forceRefresh && zohoPurchaseOrdersCache.data && (now - zohoPurchaseOrdersCache.timestamp < 30000)) {
+
+  let localPOs = loadLocalPOs();
+
+  // Credit Protection Mandate: By default, serve 100% from local Hostinger VPS store. Zero Zoho API calls!
+  if (!forceRefresh && Array.isArray(localPOs) && localPOs.length > 0) {
+    return res.json(localPOs);
+  }
+  if (!forceRefresh && zohoPurchaseOrdersCache.data && Array.isArray(zohoPurchaseOrdersCache.data) && zohoPurchaseOrdersCache.data.length > 0) {
     return res.json(zohoPurchaseOrdersCache.data);
   }
 
@@ -5435,7 +5447,6 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
       const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
 
       // Permanently ensure local server store is merged with Supabase cloud store
-      let localPOs = loadLocalPOs();
       try {
         const cloudPOs = await getDatabaseStore('po_store');
         if (Array.isArray(cloudPOs) && cloudPOs.length > 0) {
@@ -5518,96 +5529,6 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
         }
       } catch (err) {
         console.warn('Notice: Error merging cloud GRN store in GET /api/zoho/purchaseorders:', err?.message);
-      }
-      
-      // Auto-enrich up to 5 recent Zoho POs that are missing line items in local store
-      try {
-        let hasNewEnrichedItems = false;
-        const recentToCheck = data.purchaseorders.slice(0, 5);
-        for (const rpo of recentToCheck) {
-          const rNoClean = normalize(rpo.purchaseorder_number);
-          const rIdClean = normalize(rpo.purchaseorder_id);
-          const matchedLp = localPOs.find(p => {
-            const lpNoClean = normalize(p.poNo);
-            const lpIdClean = normalize(p.id);
-            const lpZohoId = normalize(p.zohoId);
-            return (rNoClean && (lpNoClean === rNoClean || lpIdClean === rNoClean)) ||
-                   (rIdClean && (lpIdClean === rIdClean || lpZohoId === rIdClean || lpNoClean === rIdClean));
-          });
-
-          if (!matchedLp || !Array.isArray(matchedLp.items) || matchedLp.items.length === 0) {
-            try {
-              const poDetailRes = await fetchZohoPurchaseOrderDetail(accessToken, rpo.purchaseorder_id);
-              if (poDetailRes && poDetailRes.purchaseorder && Array.isArray(poDetailRes.purchaseorder.line_items) && poDetailRes.purchaseorder.line_items.length > 0) {
-                const zpo = poDetailRes.purchaseorder;
-                const fetchedItems = zpo.line_items.map(li => ({
-                  name: li.name || li.item_name || 'Material Item',
-                  sku: li.sku || '',
-                  description: li.description || '',
-                  account: li.account_name || 'Raw Material',
-                  qty: Number(li.quantity || 1),
-                  unit: li.unit || 'NOS',
-                  rate: Number(li.rate || 0),
-                  tax: Number(li.tax_percentage || 18),
-                  previouslyReceived: 0,
-                  remainingQty: Number(li.quantity || 1)
-                }));
-
-                const buildAddrStr = (addrObj) => {
-                  if (!addrObj) return '';
-                  if (typeof addrObj === 'string') return addrObj;
-                  const parts = [
-                    addrObj.address,
-                    addrObj.address1,
-                    addrObj.street2,
-                    addrObj.city,
-                    addrObj.state,
-                    addrObj.zip,
-                    addrObj.country
-                  ].filter(p => p && String(p).trim().length > 0);
-                  return parts.join(', ');
-                };
-
-                const delAddr = buildAddrStr(zpo.delivery_address);
-                const billAddr = buildAddrStr(zpo.billing_address);
-
-                if (matchedLp) {
-                  matchedLp.items = (Array.isArray(matchedLp.items) && matchedLp.items.length > 0) ? matchedLp.items : fetchedItems;
-                  matchedLp.zohoId = rpo.purchaseorder_id;
-                  if (!matchedLp.deliveryAddress || matchedLp.deliveryAddress === '—') matchedLp.deliveryAddress = delAddr || '—';
-                  if (!matchedLp.billingAddress || matchedLp.billingAddress === '—') matchedLp.billingAddress = billAddr || '—';
-                  if (!matchedLp.notes && zpo.notes) matchedLp.notes = zpo.notes;
-                  if (!matchedLp.terms && zpo.terms) matchedLp.terms = zpo.terms;
-                  if (!matchedLp.deliveryDate && zpo.delivery_date) matchedLp.deliveryDate = zpo.delivery_date;
-                  if (!matchedLp.paymentTerms && zpo.payment_terms_label) matchedLp.paymentTerms = zpo.payment_terms_label;
-                } else {
-                  localPOs.unshift({
-                    id: rpo.purchaseorder_id,
-                    poNo: rpo.purchaseorder_number,
-                    zohoId: rpo.purchaseorder_id,
-                    vendor: rpo.vendor_name || 'Vendor',
-                    poDate: rpo.date,
-                    deliveryDate: zpo.delivery_date || '',
-                    paymentTerms: zpo.payment_terms_label || 'Due on Receipt',
-                    deliveryAddress: delAddr || '—',
-                    billingAddress: billAddr || '—',
-                    notes: zpo.notes || '',
-                    terms: zpo.terms || '',
-                    amount: `₹ ${Number(rpo.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-                    status: 'Draft',
-                    items: fetchedItems
-                  });
-                }
-                hasNewEnrichedItems = true;
-              }
-            } catch (_) {}
-          }
-        }
-        if (hasNewEnrichedItems) {
-          saveLocalPOs(localPOs);
-        }
-      } catch (e) {
-        console.warn('PO enrichment notice:', e.message);
       }
 
       const translated = data.purchaseorders.map(po => {
@@ -5927,6 +5848,8 @@ app.get('/api/zoho/purchaseorders', async (req, res) => {
       });
 
       zohoPurchaseOrdersCache = { data: sortedTranslated, timestamp: Date.now() };
+      saveLocalPOs(sortedTranslated);
+      saveDatabaseStore('po_store', sortedTranslated).catch(() => {});
       res.json(sortedTranslated);
     } else {
       const localPOs = loadLocalPOs();
@@ -6370,7 +6293,9 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
   const pExport = getStoreFilePath('zoho_quotes_export.json');
 
   const now = Date.now();
-  if (zohoEstimatesCache.data && Array.isArray(zohoEstimatesCache.data) && zohoEstimatesCache.data.length > 0 && (now - zohoEstimatesCache.timestamp < 30000)) {
+  const forceRefresh = req.query.force === 'true';
+
+  if (!forceRefresh && zohoEstimatesCache.data && Array.isArray(zohoEstimatesCache.data) && zohoEstimatesCache.data.length > 0 && (now - zohoEstimatesCache.timestamp < ZOHO_CACHE_TTL)) {
     return res.json(zohoEstimatesCache.data);
   }
 
@@ -6437,6 +6362,11 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     }
   } catch (_) {}
 
+  // Credit Protection Mandate: If local VPS database already has estimates and force is NOT set, serve immediately! Zero Zoho API calls!
+  if (!forceRefresh && localEstimates.length > 0) {
+    return res.json(localEstimates);
+  }
+
   if (!zohoSession.connected) return res.json(localEstimates);
 
   // If Zoho daily limit is active, back off and serve local data without hammering Zoho
@@ -6450,8 +6380,9 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     let page = 1;
     let hasMore = true;
 
-    // Fetch pages of Zoho Estimates/Quotes
-    while (hasMore && page <= 25) {
+    // Fetch pages of Zoho Estimates/Quotes (by default latest 200 quotes - page 1; full pagination only when ?all=true)
+    const maxPages = req.query.all === 'true' ? 25 : 1;
+    while (hasMore && page <= maxPages) {
       const pageData = await new Promise((resolve) => {
         const options = {
           hostname: 'www.zohoapis.in',
