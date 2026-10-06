@@ -1114,7 +1114,7 @@
     "name": "Long Rail 3000 mm",
     "cat": "Finished Goods",
     "unit": "Pieces",
-    "stock": 5000,
+    "stock": 4992,
     "minLevel": 20,
     "status": "In Stock",
     "store": "Bay #4 - FG Store",
@@ -1123,8 +1123,8 @@
     "parentName": "Finished Product",
     "category": "Finished Goods",
     "openingStock": 5000,
-    "physicalStock": 5000,
-    "availableStock": 5000,
+    "physicalStock": 4992,
+    "availableStock": 4992,
     "stockOnHand": 5000,
     "reserved": 0,
     "blockedForBom": 0,
@@ -1132,7 +1132,7 @@
     "issuedProd": 0,
     "matReturn": 0,
     "stockAdj": 0,
-    "available": 5000,
+    "available": 4992,
     "onHand": 5000,
     "reservedStock": 0
   },
@@ -1525,7 +1525,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366930",
@@ -1546,7 +1551,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366962",
@@ -1567,7 +1577,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366970",
@@ -1588,7 +1603,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366410",
@@ -1609,7 +1629,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366402",
@@ -1630,7 +1655,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366722",
@@ -1651,7 +1681,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366730",
@@ -1672,7 +1707,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000033196",
@@ -1693,7 +1733,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366642",
@@ -1714,7 +1759,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366650",
@@ -1735,7 +1785,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366602",
@@ -1756,7 +1811,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366850",
@@ -1777,7 +1837,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368122",
@@ -1798,7 +1863,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368146",
@@ -1819,7 +1889,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366906",
@@ -1840,7 +1915,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366250",
@@ -1861,7 +1941,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366258",
@@ -1882,7 +1967,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366938",
@@ -1903,7 +1993,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366946",
@@ -1924,7 +2019,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366978",
@@ -1945,7 +2045,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366986",
@@ -1966,7 +2071,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367418",
@@ -1987,7 +2097,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367338",
@@ -2008,7 +2123,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367426",
@@ -2029,7 +2149,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367346",
@@ -2050,7 +2175,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367354",
@@ -2071,7 +2201,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367362",
@@ -2092,7 +2227,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367298",
@@ -2113,7 +2253,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367370",
@@ -2134,7 +2279,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367282",
@@ -2155,7 +2305,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367290",
@@ -2176,7 +2331,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367378",
@@ -2197,7 +2357,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367386",
@@ -2218,7 +2383,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367306",
@@ -2239,7 +2409,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367394",
@@ -2260,7 +2435,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367314",
@@ -2281,7 +2461,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367402",
@@ -2302,7 +2487,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367410",
@@ -2323,7 +2513,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367322",
@@ -2344,7 +2539,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367330",
@@ -2365,7 +2565,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367082",
@@ -2386,7 +2591,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367098",
@@ -2407,7 +2617,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367090",
@@ -2428,7 +2643,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367074",
@@ -2449,7 +2669,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367250",
@@ -2470,7 +2695,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367154",
@@ -2491,7 +2721,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367258",
@@ -2512,7 +2747,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367266",
@@ -2533,7 +2773,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367162",
@@ -2554,7 +2799,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367274",
@@ -2575,7 +2825,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367170",
@@ -2596,7 +2851,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367178",
@@ -2617,7 +2877,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367186",
@@ -2638,7 +2903,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367194",
@@ -2659,7 +2929,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367106",
@@ -2680,7 +2955,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367202",
@@ -2701,7 +2981,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367210",
@@ -2722,7 +3007,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367114",
@@ -2743,7 +3033,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367218",
@@ -2764,7 +3059,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367122",
@@ -2785,7 +3085,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367130",
@@ -2806,7 +3111,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367226",
@@ -2827,7 +3137,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367138",
@@ -2848,7 +3163,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367234",
@@ -2869,7 +3189,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367146",
@@ -2890,7 +3215,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367242",
@@ -2911,7 +3241,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367874",
@@ -2932,7 +3267,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366450",
@@ -2953,7 +3293,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366442",
@@ -2974,7 +3319,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366434",
@@ -2995,7 +3345,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366418",
@@ -3016,7 +3371,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366426",
@@ -3037,7 +3397,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366898",
@@ -3058,7 +3423,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366914",
@@ -3079,7 +3449,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367002",
@@ -3100,7 +3475,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366954",
@@ -3121,7 +3501,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366994",
@@ -3142,7 +3527,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366530",
@@ -3163,7 +3553,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366506",
@@ -3184,7 +3579,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366570",
@@ -3205,7 +3605,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366586",
@@ -3226,7 +3631,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366562",
@@ -3247,7 +3657,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366578",
@@ -3268,7 +3683,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366890",
@@ -3289,7 +3709,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366810",
@@ -3310,7 +3735,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366818",
@@ -3331,7 +3761,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367826",
@@ -3352,7 +3787,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367746",
@@ -3373,7 +3813,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367834",
@@ -3394,7 +3839,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367754",
@@ -3415,7 +3865,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367762",
@@ -3436,7 +3891,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367770",
@@ -3457,7 +3917,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367842",
@@ -3478,7 +3943,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367778",
@@ -3499,7 +3969,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367674",
@@ -3520,7 +3995,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367690",
@@ -3541,7 +4021,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367850",
@@ -3562,7 +4047,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367682",
@@ -3583,7 +4073,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367698",
@@ -3604,7 +4099,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367786",
@@ -3625,7 +4125,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367794",
@@ -3646,7 +4151,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367706",
@@ -3667,7 +4177,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367722",
@@ -3688,7 +4203,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367802",
@@ -3709,7 +4229,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367714",
@@ -3730,7 +4255,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367730",
@@ -3751,7 +4281,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367810",
@@ -3772,7 +4307,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367818",
@@ -3793,7 +4333,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367738",
@@ -3814,7 +4359,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368162",
@@ -3835,7 +4385,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366826",
@@ -3856,7 +4411,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366834",
@@ -3877,7 +4437,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367466",
@@ -3898,7 +4463,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367458",
@@ -3919,7 +4489,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366594",
@@ -3940,7 +4515,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366554",
@@ -3961,7 +4541,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366122",
@@ -3982,7 +4567,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366130",
@@ -4003,7 +4593,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366138",
@@ -4024,7 +4619,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366146",
@@ -4045,7 +4645,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366154",
@@ -4066,7 +4671,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366162",
@@ -4087,7 +4697,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366170",
@@ -4108,7 +4723,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366178",
@@ -4129,7 +4749,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366098",
@@ -4150,7 +4775,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366106",
@@ -4171,7 +4801,12 @@
     "category": "HDG",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366114",
@@ -4192,7 +4827,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366882",
@@ -4213,7 +4853,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366490",
@@ -4234,7 +4879,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366498",
@@ -4255,7 +4905,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367866",
@@ -4276,7 +4931,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366842",
@@ -4297,7 +4957,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368154",
@@ -4318,7 +4983,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366522",
@@ -4339,7 +5009,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366514",
@@ -4360,7 +5035,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000033187",
@@ -4381,7 +5061,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366354",
@@ -4402,7 +5087,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366378",
@@ -4423,7 +5113,12 @@
     "category": "6063T6",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367058",
@@ -4444,7 +5139,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367066",
@@ -4465,7 +5165,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366394",
@@ -4486,7 +5191,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366362",
@@ -4507,7 +5217,12 @@
     "category": "6063T6",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366370",
@@ -4528,7 +5243,12 @@
     "category": "6063T6",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366386",
@@ -4549,7 +5269,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367882",
@@ -4570,7 +5295,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367890",
@@ -4591,7 +5321,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367898",
@@ -4612,7 +5347,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367906",
@@ -4633,7 +5373,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367914",
@@ -4654,7 +5399,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367922",
@@ -4675,7 +5425,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367930",
@@ -4696,7 +5451,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367938",
@@ -4717,7 +5477,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367946",
@@ -4738,7 +5503,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367954",
@@ -4759,7 +5529,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367962",
@@ -4780,7 +5555,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368018",
@@ -4801,7 +5581,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367970",
@@ -4822,7 +5607,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367978",
@@ -4843,7 +5633,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367986",
@@ -4864,7 +5659,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367994",
@@ -4885,7 +5685,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368002",
@@ -4906,7 +5711,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368010",
@@ -4927,7 +5737,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368138",
@@ -4948,7 +5763,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367490",
@@ -4969,7 +5789,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367650",
@@ -4990,7 +5815,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367570",
@@ -5011,7 +5841,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367658",
@@ -5032,7 +5867,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367666",
@@ -5053,7 +5893,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367578",
@@ -5074,7 +5919,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367586",
@@ -5095,7 +5945,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367594",
@@ -5116,7 +5971,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367602",
@@ -5137,7 +5997,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367506",
@@ -5158,7 +6023,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367498",
@@ -5179,7 +6049,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367522",
@@ -5200,7 +6075,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367618",
@@ -5221,7 +6101,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367514",
@@ -5242,7 +6127,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367626",
@@ -5263,7 +6153,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367530",
@@ -5284,7 +6179,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367538",
@@ -5305,7 +6205,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367634",
@@ -5326,7 +6231,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367546",
@@ -5347,7 +6257,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367554",
@@ -5368,7 +6283,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367642",
@@ -5389,7 +6309,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367562",
@@ -5410,7 +6335,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367610",
@@ -5431,7 +6361,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366322",
@@ -5452,7 +6387,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366330",
@@ -5473,7 +6413,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366338",
@@ -5494,7 +6439,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366346",
@@ -5515,7 +6465,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366266",
@@ -5536,7 +6491,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366274",
@@ -5557,7 +6517,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366282",
@@ -5578,7 +6543,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366290",
@@ -5599,7 +6569,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366298",
@@ -5620,7 +6595,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366306",
@@ -5641,7 +6621,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366314",
@@ -5662,7 +6647,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366618",
@@ -5683,7 +6673,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366610",
@@ -5704,7 +6699,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366218",
@@ -5725,7 +6725,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366186",
@@ -5746,7 +6751,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366226",
@@ -5767,7 +6777,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366194",
@@ -5788,7 +6803,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366234",
@@ -5809,7 +6829,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366202",
@@ -5830,7 +6855,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366242",
@@ -5851,7 +6881,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366210",
@@ -5872,7 +6907,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366626",
@@ -5893,7 +6933,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366634",
@@ -5914,7 +6959,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368026",
@@ -5935,7 +6985,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368034",
@@ -5956,7 +7011,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368042",
@@ -5977,7 +7037,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368130",
@@ -5998,7 +7063,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368170",
@@ -6019,7 +7089,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366874",
@@ -6040,7 +7115,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366858",
@@ -6061,7 +7141,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366866",
@@ -6082,7 +7167,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367858",
@@ -6103,7 +7193,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367434",
@@ -6124,7 +7219,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367442",
@@ -6145,7 +7245,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367450",
@@ -6166,7 +7271,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367482",
@@ -6187,7 +7297,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367474",
@@ -6208,7 +7323,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366738",
@@ -6229,7 +7349,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366746",
@@ -6250,7 +7375,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366658",
@@ -6271,7 +7401,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366802",
@@ -6292,7 +7427,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366674",
@@ -6313,7 +7453,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366682",
@@ -6334,7 +7479,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366706",
@@ -6355,7 +7505,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366778",
@@ -6376,7 +7531,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366786",
@@ -6397,7 +7557,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366714",
@@ -6418,7 +7583,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366770",
@@ -6439,7 +7609,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366754",
@@ -6460,7 +7635,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366762",
@@ -6481,7 +7661,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366794",
@@ -6502,7 +7687,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366690",
@@ -6523,7 +7713,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366698",
@@ -6544,7 +7739,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366666",
@@ -6565,7 +7765,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366466",
@@ -6586,7 +7791,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366458",
@@ -6607,7 +7817,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368050",
@@ -6628,7 +7843,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368058",
@@ -6649,7 +7869,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368066",
@@ -6670,7 +7895,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366538",
@@ -6691,7 +7921,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366546",
@@ -6712,7 +7947,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367042",
@@ -6733,7 +7973,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367026",
@@ -6754,7 +7999,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367034",
@@ -6775,7 +8025,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367018",
@@ -6796,7 +8051,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367010",
@@ -6817,7 +8077,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000367050",
@@ -6838,7 +8103,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366482",
@@ -6859,7 +8129,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000366474",
@@ -6880,7 +8155,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368074",
@@ -6901,7 +8181,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368082",
@@ -6922,7 +8207,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368090",
@@ -6943,7 +8233,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368098",
@@ -6964,7 +8259,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368114",
@@ -6985,7 +8285,12 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   },
   {
     "id": "4080449000000368106",
@@ -7006,6 +8311,11 @@
     "category": "General",
     "stock": 5000,
     "openingStock": 5000,
-    "reorderLevel": 100
+    "reorderLevel": 100,
+    "physicalStock": 5000,
+    "availableStock": 5000,
+    "reserved": 0,
+    "available": 5000,
+    "onHand": 5000
   }
 ]

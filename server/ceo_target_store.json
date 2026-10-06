@@ -1,0 +1,15 @@
+{
+  "monthlyCompanyTarget": 18000000,
+  "updatedAt": "2026-10-06T00:00:00.000Z",
+  "updatedBy": "CEO",
+  "notes": "Official Monthly Sales Target set by CEO",
+  "repTargets": {
+    "All": 18000000,
+    "Mohith JV": 18000000,
+    "Mohith J V": 18000000,
+    "Vijay": 35000000,
+    "Ravi Kumar": 14000000,
+    "Pooja Sharma": 12000000,
+    "Amit Verma": 9000000
+  }
+}

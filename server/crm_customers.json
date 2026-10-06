@@ -1,5 +1,87 @@
 [
   {
+    "id": "CUST-VRM-155",
+    "customerCode": "CUST-VRM-155",
+    "customerName": "New Customer",
+    "companyName": "",
+    "customerType": "EPC Contractor",
+    "industry": "Solar Energy / Utility Scale",
+    "gstNumber": "",
+    "panNumber": "",
+    "address": "",
+    "city": "Chennai",
+    "state": "Tamil Nadu",
+    "pincode": "600001",
+    "dispatchAddress": "",
+    "dispatchCity": "Chennai",
+    "dispatchState": "Tamil Nadu",
+    "dispatchPincode": "600001",
+    "sameAsBilling": true,
+    "creditLimit": 2500000,
+    "creditDays": 30,
+    "paymentTerms": "50% Advance + 50% Dispatch",
+    "assignedSalesperson": "Sales Rep",
+    "source": "VRM Website Form",
+    "primaryContact": {
+      "name": "",
+      "designation": "Project Head",
+      "phone": "+91 98220 88990",
+      "whatsapp": "+91 98220 88990",
+      "email": "deepak.patel@greenwattengineeringpvtltd.com"
+    },
+    "code": "New Customer",
+    "c2": "New Customer",
+    "c3": "",
+    "c4": "+91 98220 88990",
+    "c5": "deepak.patel@greenwattengineeringpvtltd.com",
+    "c6": "",
+    "billingAddressObj": {
+      "address": "",
+      "city": "Chennai",
+      "state": "Tamil Nadu",
+      "pincode": "600001"
+    },
+    "c7": "",
+    "deliveryAddressObj": {
+      "address": "",
+      "city": "Chennai",
+      "state": "Tamil Nadu",
+      "pincode": "600001"
+    },
+    "status": "Active",
+    "createdAt": "2026-10-06T01:30:26.751Z",
+    "customer_code": "CUST-VRM-155",
+    "company_name": "Customer",
+    "customer_name": "Customer",
+    "customer_type": "EPC Contractor",
+    "gst_number": "—",
+    "pan_number": "—",
+    "billing_address": "",
+    "billing_address_obj": {},
+    "dispatch_address": "",
+    "dispatch_city": "",
+    "dispatch_state": "",
+    "dispatch_pincode": "",
+    "delivery_address_obj": {},
+    "same_as_billing": false,
+    "credit_limit": 2500000,
+    "credit_days": 30,
+    "payment_terms": "50% Advance + 50% Dispatch",
+    "assigned_salesperson": "Sales Rep",
+    "zoho_contact_id": null,
+    "primary_contact": {
+      "name": "",
+      "designation": "Project Head",
+      "phone": "+91 98220 88990",
+      "whatsapp": "+91 98220 88990",
+      "email": "deepak.patel@greenwattengineeringpvtltd.com"
+    },
+    "email": "—",
+    "phone": "—",
+    "notes": "",
+    "updated_at": "2026-10-06T01:30:27.056Z"
+  },
+  {
     "id": "CUST-3758",
     "customerCode": "CUST-3758",
     "companyName": "Customer",
@@ -91,13 +173,13 @@
     "zoho_contact_id": "4080449000000363758",
     "primary_contact": {
       "name": "Customer",
-      "email": "",
+      "designation": "Procurement Head",
       "phone": "",
       "whatsapp": "",
-      "designation": "Procurement Head"
+      "email": ""
     },
     "created_at": "2026-09-23T12:41:24.79339+00:00",
-    "updated_at": "2026-10-01T07:35:42.146+00:00"
+    "updated_at": "2026-10-06T01:30:27.055Z"
   },
   {
     "id": "CUST-2001",
@@ -162,7 +244,7 @@
     "updatedAt": "2026-09-29T04:35:21.093+00:00",
     "customer_code": "CUST-2001",
     "company_name": "Customer",
-    "customer_name": "AK SMART AUTOMATIONS",
+    "customer_name": "Test Client PI",
     "customer_type": "Customer",
     "gst_number": "—",
     "pan_number": "—",
@@ -188,16 +270,16 @@
     "credit_days": 30,
     "payment_terms": "Due on Receipt",
     "assigned_salesperson": "Sales Rep",
-    "zoho_contact_id": "4080449000000372001",
+    "zoho_contact_id": "4080449000000402001",
     "primary_contact": {
       "name": "Customer",
-      "email": "",
+      "designation": "Procurement Head",
       "phone": "",
       "whatsapp": "",
-      "designation": "Procurement Head"
+      "email": ""
     },
     "created_at": "2026-09-23T12:41:24.863131+00:00",
-    "updated_at": "2026-10-01T07:35:42.146+00:00"
+    "updated_at": "2026-10-06T01:30:27.055Z"
   },
   {
     "id": "CUST-7007",

@@ -129,6 +129,7 @@
     "materialIssueHistory": [],
     "additionalMaterialRequests": [],
     "reworkHistory": [],
-    "productItems": []
+    "productItems": [],
+    "cutLengthMm": 300
   }
 ]
