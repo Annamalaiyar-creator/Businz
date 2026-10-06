@@ -1592,12 +1592,12 @@ app.get('/api/media/find/:name', (req, res) => {
 });
 
 const loadCredentialsFromEnv = () => {
-  const DEFAULT_ORG_ID = '60082137608';
-  const DEFAULT_REFRESH_TOKEN = '1000.69cd7dbd3da3ab8f107f8addf5e9e04c.87b4757d889f6ebd95a1bf897147a1c7';
-  const DEFAULT_CLIENT_ID = '1000.9U5BAN338075M5HBI3U8K1VBNKUU8K';
-  const DEFAULT_CLIENT_SECRET = 'e82079a5165e3b2e75fdc602f3e08fd38489d75f13';
+  const DEFAULT_ORG_ID = process.env.ZOHO_ORG_ID || '60020613233';
+  const DEFAULT_REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN || '1000.72a818ee439bb2de32b531f9dc5588ee.bf37bcc95e83b89d487c42fb342042ca';
+  const DEFAULT_CLIENT_ID = process.env.ZOHO_CLIENT_ID || '1000.GLVQL7WI3FS3N0YC5F8VPP59OL73OH';
+  const DEFAULT_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || '12442de238386baed5a051d7036d71540c4ff90db4';
 
-  // Force active ARMS AI Zoho credentials
+  // Active VRM Structures Zoho credentials
   process.env.ZOHO_CLIENT_ID = DEFAULT_CLIENT_ID;
   process.env.ZOHO_CLIENT_SECRET = DEFAULT_CLIENT_SECRET;
   process.env.ZOHO_ORG_ID = DEFAULT_ORG_ID;
@@ -1632,7 +1632,7 @@ let zohoSession = {
   apiToken: initialCreds.apiToken,
   accessToken: cachedToken,
   tokenExpiresAt: cachedExpiresAt,
-  organizationName: 'ARMS AI'
+  organizationName: 'VRM Structures India Pvt Ltd.'
 };
 
 const saveCredentialsToEnv = (orgId, apiToken, clientId, clientSecret) => {
@@ -6437,6 +6437,7 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     zohoEstimatesCache = { data: finalEstimates, timestamp: Date.now() };
     res.json(finalEstimates);
   } catch (err) {
+    console.error('[ZOHO ESTIMATES ERROR]:', err?.message || err);
     res.json(localEstimates);
   }
 });
