@@ -6467,14 +6467,17 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     const finalEstimates = Array.from(piMap.values());
     zohoEstimatesCache = { data: finalEstimates, timestamp: Date.now() };
 
-    // Update in-memory stores so cloud store fetches also return them immediately
+    // Update in-memory and database stores so cloud store fetches also return them immediately
     supabaseMemoryStore['sales_pi_store'] = finalEstimates;
     supabaseMemoryStore['proforma_invoice_store'] = finalEstimates;
 
     try {
       if (finalEstimates.length > 0) {
+        saveDatabaseStore('sales_pi_store', finalEstimates).catch(() => {});
+        saveDatabaseStore('proforma_invoice_store', finalEstimates).catch(() => {});
         fs.writeFileSync(p1, JSON.stringify(finalEstimates, null, 2), 'utf8');
         fs.writeFileSync(p2, JSON.stringify(finalEstimates, null, 2), 'utf8');
+        broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: finalEstimates });
       }
     } catch (_) {}
 
