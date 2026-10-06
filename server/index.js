@@ -2171,10 +2171,12 @@ app.get('/api/realtime-events', (req, res) => {
   });
 });
 
-// Generic Data Store endpoints backed 100% by Supabase Cloud Database
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   try {
+    if ((key === 'sales_pi_store' || key === 'proforma_invoice_store') && zohoEstimatesCache.data && Array.isArray(zohoEstimatesCache.data) && zohoEstimatesCache.data.length > 0) {
+      return res.json({ success: true, data: zohoEstimatesCache.data });
+    }
     const data = await getDatabaseStore(key);
     res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
@@ -2536,6 +2538,7 @@ const ZOHO_CACHE_TTL = 30 * 60 * 1000;
 let zohoVendorsCache = { data: null, timestamp: 0 };
 let zohoItemsCache = { data: null, timestamp: 0 };
 let zohoPurchaseOrdersCache = { data: null, timestamp: 0 };
+let zohoEstimatesCache = { data: null, timestamp: 0 };
 
 const fetchZohoVendors = (accessToken, forceRefresh = false) => {
   if (!forceRefresh && zohoVendorsCache.data && (Date.now() - zohoVendorsCache.timestamp < ZOHO_CACHE_TTL)) {
@@ -6360,8 +6363,6 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
   res.json({ nextPiNo, nextNum, fiscalYear: fyStr });
 });
 
-let zohoEstimatesCache = { data: null, timestamp: 0 };
-
 app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res) => {
   const now = Date.now();
   if (zohoEstimatesCache.data && (now - zohoEstimatesCache.timestamp < 30000)) {
@@ -6469,6 +6470,13 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     // Update in-memory stores so cloud store fetches also return them immediately
     supabaseMemoryStore['sales_pi_store'] = finalEstimates;
     supabaseMemoryStore['proforma_invoice_store'] = finalEstimates;
+
+    try {
+      if (finalEstimates.length > 0) {
+        fs.writeFileSync(p1, JSON.stringify(finalEstimates, null, 2), 'utf8');
+        fs.writeFileSync(p2, JSON.stringify(finalEstimates, null, 2), 'utf8');
+      }
+    } catch (_) {}
 
     res.json(finalEstimates);
   } catch (err) {
