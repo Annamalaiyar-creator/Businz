@@ -2935,7 +2935,13 @@ app.post('/api/zoho/customers', async (req, res) => {
 
 // Real-time synchronization endpoint retrieving live customers from Zoho Books
 app.get('/api/zoho/customers', async (req, res) => {
+  const forceRefresh = req.query.force === 'true';
   const localCustomers = loadLocalCustomers();
+
+  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
+  if (!forceRefresh && Array.isArray(localCustomers) && localCustomers.length > 0) {
+    return res.json(localCustomers);
+  }
 
   if (!zohoSession.connected) {
     return res.json(localCustomers);
@@ -3085,7 +3091,13 @@ app.get('/api/zoho/customers', async (req, res) => {
 
 // Real-time synchronization endpoint retrieving live vendors from Zoho Books
 app.get('/api/zoho/vendors', async (req, res) => {
+  const forceRefresh = req.query.force === 'true';
   const localVendors = loadLocalVendors();
+
+  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
+  if (!forceRefresh && Array.isArray(localVendors) && localVendors.length > 0) {
+    return res.json(localVendors);
+  }
 
   if (!zohoSession.connected) {
     return res.json(localVendors);
@@ -5896,6 +5908,13 @@ app.get('/api/zoho/invoices', async (req, res) => {
 
   const localInvoices = getCleanLocalInvoices();
 
+  const forceRefresh = req.query.force === 'true';
+
+  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
+  if (!forceRefresh && Array.isArray(localInvoices) && localInvoices.length > 0) {
+    return res.json(localInvoices);
+  }
+
   if (!zohoSession.connected) {
     return res.json(localInvoices);
   }
@@ -7038,11 +7057,17 @@ app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], a
 
 // Delivery Challans endpoints
 app.get('/api/zoho/deliverychallans', async (req, res) => {
+  const forceRefresh = req.query.force === 'true';
   let localDCs = [];
   try {
     const p = getStoreFilePath('dc_store.json');
     if (fs.existsSync(p)) localDCs = JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch (_) {}
+
+  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
+  if (!forceRefresh && Array.isArray(localDCs) && localDCs.length > 0) {
+    return res.json(localDCs);
+  }
 
   if (!zohoSession.connected) return res.json(localDCs);
 
@@ -8462,7 +8487,13 @@ const fetchZohoItems = async (accessToken, forceRefresh = false) => {
 
 // Real-time synchronization endpoint retrieving live items catalog from Zoho Books
 app.get('/api/zoho/items', async (req, res) => {
+  const forceRefresh = req.query.force === 'true';
   const localItems = loadLocalItems();
+
+  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
+  if (!forceRefresh && Array.isArray(localItems) && localItems.length > 0) {
+    return res.json(localItems);
+  }
 
   try {
     if (zohoSession.connected) {
