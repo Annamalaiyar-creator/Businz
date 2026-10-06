@@ -6465,6 +6465,11 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
 
     const finalEstimates = Array.from(piMap.values());
     zohoEstimatesCache = { data: finalEstimates, timestamp: Date.now() };
+
+    // Update in-memory stores so cloud store fetches also return them immediately
+    supabaseMemoryStore['sales_pi_store'] = finalEstimates;
+    supabaseMemoryStore['proforma_invoice_store'] = finalEstimates;
+
     res.json(finalEstimates);
   } catch (err) {
     console.error('[ZOHO ESTIMATES ERROR]:', err?.message || err);

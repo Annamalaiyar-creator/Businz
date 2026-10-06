@@ -180,12 +180,14 @@ function App() {
   useEffect(() => {
     initRealtimeSync();
     try {
-      if (localStorage.getItem('controlroom_prod_cutover_stock_zero_20261006') !== 'true') {
+      if (localStorage.getItem('controlroom_prod_cutover_stock_zero_20261006_v2') !== 'true') {
         const wipeKeys = [
           'controlroom_bom_store',
           'controlroom_sales_pi_store',
           'controlroom_proforma_invoice_store',
           'controlroom_procurement_pi_store',
+          'sales_pi_store',
+          'proforma_invoice_store',
           'controlroom_po_store',
           'controlroom_grn_store',
           'controlroom_invoice_store',
@@ -214,7 +216,7 @@ function App() {
         wipeKeys.forEach(k => {
           try { localStorage.removeItem(k); } catch (_) {}
         });
-        localStorage.setItem('controlroom_prod_cutover_stock_zero_20261006', 'true');
+        localStorage.setItem('controlroom_prod_cutover_stock_zero_20261006_v2', 'true');
       }
     } catch (_) {}
   }, []);
