@@ -6400,24 +6400,39 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
 
   try {
     const accessToken = await getZohoAccessToken();
-    const zohoRes = await new Promise((resolve) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&per_page=200&sort_column=created_time&sort_order=D`,
-        method: 'GET',
-        headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-      };
-      const req = https.request(options, (resp) => {
-        let d = '';
-        resp.on('data', c => d += c);
-        resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-      });
-      req.on('error', () => resolve(null));
-      req.end();
-    });
+    let allZohoEstimates = [];
+    let page = 1;
+    let hasMore = true;
 
-    const mappedPIs = ((zohoRes && zohoRes.estimates) || []).map(est => ({
+    // Fetch pages of Zoho Estimates/Quotes
+    while (hasMore && page <= 25) {
+      const pageData = await new Promise((resolve) => {
+        const options = {
+          hostname: 'www.zohoapis.in',
+          port: 443,
+          path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&page=${page}&per_page=200&sort_column=created_time&sort_order=D`,
+          method: 'GET',
+          headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+        };
+        const req = https.request(options, (resp) => {
+          let d = '';
+          resp.on('data', c => d += c);
+          resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
+        });
+        req.on('error', () => resolve(null));
+        req.end();
+      });
+
+      if (pageData && Array.isArray(pageData.estimates) && pageData.estimates.length > 0) {
+        allZohoEstimates.push(...pageData.estimates);
+        hasMore = Boolean(pageData.page_context && pageData.page_context.has_more_page);
+        page += 1;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    const mappedPIs = allZohoEstimates.map(est => ({
       id: est.estimate_id || est.id,
       piNo: est.estimate_number,
       piDate: est.date,
