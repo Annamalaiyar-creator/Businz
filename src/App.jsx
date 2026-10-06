@@ -180,7 +180,7 @@ function App() {
   useEffect(() => {
     initRealtimeSync();
     try {
-      if (localStorage.getItem('controlroom_prod_cutover_20261006') !== 'true') {
+      if (localStorage.getItem('controlroom_prod_cutover_stock_zero_20261006') !== 'true') {
         const wipeKeys = [
           'controlroom_bom_store',
           'controlroom_sales_pi_store',
@@ -204,12 +204,17 @@ function App() {
           'controlroom_pending_reorder_po',
           'controlroom_notifications_store',
           'controlroom_read_notification_ids',
-          'controlroom_dismissed_alerts'
+          'controlroom_dismissed_alerts',
+          'controlroom_central_items_v2',
+          'controlroom_items_list',
+          'controlroom_raw_materials_store',
+          'controlroom_inventory_items',
+          'controlroom_vrm_prod_inventory'
         ];
         wipeKeys.forEach(k => {
           try { localStorage.removeItem(k); } catch (_) {}
         });
-        localStorage.setItem('controlroom_prod_cutover_20261006', 'true');
+        localStorage.setItem('controlroom_prod_cutover_stock_zero_20261006', 'true');
       }
     } catch (_) {}
   }, []);
