@@ -49,14 +49,21 @@ const normalizePiRecord = (item) => {
   // Strict 1-to-1 Safeguard: PI-00061 is the sole owner of BOM-659.
   // Any other PIs (PI-00063, PI-00064, PI-00065, PI-00066) with accidental BOM-659 must be sanitized to Issued.
   const pNo = String(normalized.piNo || normalized.id || '').trim().toUpperCase();
-  const bomCode = String(normalized.convertedBomCode || normalized.convertedBomNo || '').trim().toUpperCase();
-  if (bomCode === 'BOM-659' && pNo !== 'PI-00061') {
+  const bomCode = String(
+    normalized.convertedBomCode || 
+    normalized.convertedBomNo || 
+    normalized.converted_bom_code || 
+    normalized.converted_bom_no || ''
+  ).trim().toUpperCase();
+  if ((bomCode === 'BOM-659' || bomCode === '659') && pNo !== 'PI-00061') {
     normalized.status = 'Issued';
     normalized.statusType = 'issued';
     normalized.convertedToBom = false;
     normalized.isConverted = false;
     normalized.convertedBomCode = null;
     normalized.convertedBomNo = null;
+    normalized.converted_bom_code = null;
+    normalized.converted_bom_no = null;
   }
   return normalized;
 };
@@ -195,7 +202,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const piNum = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
     if (!piNum) return [];
 
-    const explicitCode = String(pi.convertedBomNo || pi.convertedBomCode || '').trim().toLowerCase();
+    const explicitCode = String(
+      pi.convertedBomNo || 
+      pi.convertedBomCode || 
+      pi.converted_bom_no || 
+      pi.converted_bom_code || ''
+    ).trim().toLowerCase();
 
     const matches = (bomList || []).filter(b => {
       if (!b) return false;
@@ -205,6 +217,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const sPi = String(b.sourcePiNo || b.source_pi_no || '').trim().toLowerCase();
       const bCode = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
 
+      // STRICT HARD BARRIER: BOM-659 belongs strictly and exclusively to PI-00061.
+      if (bCode === 'bom-659' && piNum !== 'pi-00061') {
+        return false;
+      }
+
       // 1. Strict 1-to-1 match by source PI number (highest authority)
       if (sPi && sPi === piNum) return true;
 
@@ -213,6 +230,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       // 3. Fallback only if BOM has NO sourcePiNo recorded, but explicit convertedBomCode matches
       if (!sPi && explicitCode && bCode && bCode === explicitCode) {
+        if (bCode === 'bom-659') return false;
         // Double check customer name if available to avoid cross-customer cross-linking
         const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
         const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
@@ -588,7 +606,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       targetExistingBom = (bomList || []).find(b => {
         if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
         const sPi = String(b.sourcePiNo || b.piNo || '').trim().toLowerCase();
-        if (pNo && sPi === pNo) return true;
+        const bCode = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+        // BOM-659 belongs strictly to PI-00061
+        if (bCode === 'bom-659' && pNo !== 'pi-00061') return false;
         // Never claim a BOM that is already owned by a different PI
         if (sPi && pNo && sPi !== pNo) return false;
         if (pi.convertedBomNo && (b.bomCode === pi.convertedBomNo || b.id === pi.convertedBomNo)) return true;

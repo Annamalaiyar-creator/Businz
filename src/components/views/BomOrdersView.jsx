@@ -1001,7 +1001,7 @@ export default function BomOrdersView(props) {
         const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
         return match ? parseInt(match[1], 10) : 0;
       }).filter(n => Number.isFinite(n) && n > 0);
-      const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 662;
+      const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
       const initialCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
       setNewBomCode(initialCode);
 
@@ -4633,7 +4633,7 @@ export default function BomOrdersView(props) {
                               const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
                               return match ? parseInt(match[1], 10) : 0;
                             }).filter(n => Number.isFinite(n) && n > 0);
-                            const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 655;
+                            const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
                             finalAssignedCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
                           }
                         }

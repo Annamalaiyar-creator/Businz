@@ -1844,6 +1844,7 @@ export default function CreateBomFormPage(props) {
                       id: finalCode,
                       bomCode: finalCode,
                       code: finalCode,
+                      sourcePiNo: props.newBomSourcePiNo || props.sourcePiNo || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('controlroom_pending_pi_to_bom') || '{}').sourcePiNo : null) || null,
                       date: new Date().toISOString().split('T')[0],
                       customerName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || 'Customer Order',
                       companyName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || '-',
@@ -1925,6 +1926,12 @@ export default function CreateBomFormPage(props) {
                         }
                       } catch (err) {
                         console.error('Error reserving atomic BOM code:', err);
+                        const existingNums = (props.bomStore || []).map(b => {
+                          const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
+                          return match ? parseInt(match[1], 10) : 0;
+                        }).filter(n => Number.isFinite(n) && n > 0);
+                        const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
+                        finalAssignedCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
                       }
                     }
                     sanitizedNewBom.bomCode = finalAssignedCode;
