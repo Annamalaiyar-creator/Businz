@@ -208,7 +208,7 @@ export default function ProductionViewsEngine(props) {
             setBomStore(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
           } else {
             setBomStore(prev => {
-              const { list: resolvedList } = resolveBomCollisions(data, 658);
+              const { list: resolvedList } = resolveBomCollisions(data, 662);
               // Protect workflow progression: never let a stale server record revert a completed/dispatched status
               const prevMap = new Map((prev || []).map(b => [b.bomCode || b.code || b.id, b]));
               const mergedList = resolvedList.map(item => {

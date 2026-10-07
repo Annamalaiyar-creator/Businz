@@ -72,7 +72,7 @@ export default function BomOrdersView(props) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const { list: resolvedList } = resolveBomCollisions(parsed, 658);
+          const { list: resolvedList } = resolveBomCollisions(parsed, 662);
           if (resolvedList.length !== parsed.length) {
             localStorage.setItem('controlroom_bom_store', JSON.stringify(resolvedList.map(stripDataUrlsFromRecord)));
           }
@@ -149,7 +149,7 @@ export default function BomOrdersView(props) {
           if (data.length === 0) {
             setBomStore([]);
           } else {
-            const { list: resolvedList } = resolveBomCollisions(data, 658);
+            const { list: resolvedList } = resolveBomCollisions(data, 662);
             const parseBomSeq = (code) => {
               const m = String(code || '').match(/BOM-(\d+)/i);
               return m ? parseInt(m[1], 10) : 0;
@@ -214,7 +214,7 @@ export default function BomOrdersView(props) {
     // Real-time live subscription directly from Supabase Database (receives single record payloads)
     const realtimeSub = subscribeToCloudStore('bom_store', (updatedBoms) => {
       if (Array.isArray(updatedBoms)) {
-        const { list: resolvedList } = resolveBomCollisions(updatedBoms, 658);
+        const { list: resolvedList } = resolveBomCollisions(updatedBoms, 662);
         const cleaned = resolvedList.map(stripDataUrlsFromRecord);
         setBomStore(prev => {
           if (Array.isArray(prev) && prev.length === cleaned.length) {
@@ -1001,7 +1001,7 @@ export default function BomOrdersView(props) {
         const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
         return match ? parseInt(match[1], 10) : 0;
       }).filter(n => Number.isFinite(n) && n > 0);
-      const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 658;
+      const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 662;
       const initialCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
       setNewBomCode(initialCode);
 
@@ -4715,7 +4715,7 @@ export default function BomOrdersView(props) {
                           return true;
                         });
                         const combined = [sanitizedNewBom, ...filtered];
-                        const { list: updatedList } = resolveBomCollisions(combined, 658);
+                        const { list: updatedList } = resolveBomCollisions(combined, 662);
                         setBomStore(updatedList);
 
                         // Safe browser localStorage backup per Rule 5 (local UI convenience only)

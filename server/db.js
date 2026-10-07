@@ -88,6 +88,7 @@ export async function initPostgresDatabase() {
 
     // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
     const storesToSeed = [
+      'bom_store',
       'employees_store',
       'po_store',
       'grn_store',
