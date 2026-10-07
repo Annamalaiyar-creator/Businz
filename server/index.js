@@ -3167,13 +3167,13 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
   return new Promise((resolve, reject) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let maxNum = 662;
+        let maxNum = 663;
 
         // 1. Authoritative: Query PostgreSQL directly for the absolute highest existing BOM sequence
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_bom
               FROM public.bom_orders
               WHERE bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3182,7 +3182,7 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_pi_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_pi_bom
               FROM public.proforma_invoices
               WHERE converted_bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3352,7 +3352,13 @@ async function repairBomSequences() {
             convertedBomNo: assigned
           };
         }
-      } else if (pi.convertedBomCode === 'BOM-659' || pi.convertedBomNo === 'BOM-659') {
+      } else if (
+        pi.convertedBomCode === 'BOM-659' || 
+        pi.convertedBomNo === 'BOM-659' || 
+        pi.converted_bom_code === 'BOM-659' || 
+        pi.converted_bom_no === 'BOM-659' ||
+        (['PI-00063', 'PI-00064', 'PI-00065', 'PI-00066'].includes(pNo) && (pi.convertedBomCode === 'BOM-659' || pi.converted_bom_code === 'BOM-659' || !pi.convertedBomCode))
+      ) {
         piUpdatedCount++;
         piListChanged = true;
         return {
@@ -3361,7 +3367,9 @@ async function repairBomSequences() {
           statusType: 'issued',
           convertedToBom: false,
           convertedBomCode: null,
-          convertedBomNo: null
+          convertedBomNo: null,
+          converted_bom_code: null,
+          converted_bom_no: null
         };
       }
       return pi;
@@ -3370,11 +3378,13 @@ async function repairBomSequences() {
     if (piListChanged) {
       if (isDbConnected()) {
         await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
+        await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'proforma_invoice_store'`, [JSON.stringify(piList)]).catch(() => null);
       }
       try {
         fs.writeFileSync(getStoreFilePath('sales_pi_store.json'), JSON.stringify(piList, null, 2), 'utf8');
       } catch (_) {}
       supabaseMemoryStore['sales_pi_store'] = piList;
+      supabaseMemoryStore['proforma_invoice_store'] = piList;
     }
   }
 
@@ -3506,7 +3516,7 @@ async function repairBomSequences() {
   }
 
   // 4. Update sequence counter
-  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, 662);
+  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, 663);
 
   // 5. Reload memory cache & broadcast updates
   await loadDatabaseBoms(true);
