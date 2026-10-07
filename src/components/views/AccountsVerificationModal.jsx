@@ -366,6 +366,11 @@ export default function AccountsVerificationModal({
       try {
         saveCloudInvoiceRow(newInvEntry);
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+        fetch('/api/store/invoice_store', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(stripDataUrlsFromRecord(newInvEntry))
+        }).catch(() => {});
       } catch (e) { }
       return updated;
     });

@@ -463,8 +463,6 @@ const toConsumerBomServer = (row) => {
 
 const toDatabaseBomRowServer = (item) => {
   if (!item || typeof item !== 'object') return null;
-  const custName = (item.customerName || item.customer_name || item.vendor || '').trim();
-  if (custName === 'Customer' && !item.sourcePiNo && !item.source_pi_no) return null;
 
   const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
   const bomCode = item.bomCode || item.code || id;
@@ -3429,12 +3427,6 @@ app.post('/api/boms', async (req, res) => {
         let { bom, isNew, isUpdate } = req.body;
         if (!bom) {
           res.status(400).json({ success: false, message: 'Valid bom record required' });
-          return resolveOuter();
-        }
-
-        const cName = (bom.customerName || bom.customer_name || bom.vendor || '').trim();
-        if (cName === 'Customer' && !bom.sourcePiNo && !bom.source_pi_no) {
-          res.status(400).json({ success: false, message: 'Invalid dummy order rejected' });
           return resolveOuter();
         }
 
