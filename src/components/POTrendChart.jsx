@@ -1,20 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, ChevronRight } from 'lucide-react';
 
-export default function POTrendChart({ sidebarCollapsed }) {
+export default function POTrendChart({ purchaseOrders = [], sidebarCollapsed }) {
   const canvasRef = useRef(null);
   const [filter, setFilter] = useState('Month');
-  const [activeIndex, setActiveIndex] = useState(5);
+  const [activeIndex, setActiveIndex] = useState(6);
 
-  const tooltipData = [
-    { date: 'Jan 2026', val: '₹2.81 Cr (62 POs)' },
-    { date: 'Feb 2026', val: '₹3.12 Cr (64 POs)' },
-    { date: 'Mar 2026', val: '₹3.45 Cr (68 POs)' },
-    { date: 'Apr 2026', val: '₹4.02 Cr (75 POs)' },
-    { date: 'May 2026', val: '₹3.76 Cr (70 POs)' },
-    { date: 'Jun 2026', val: '₹3.68 Cr (71 POs)' },
-    { date: 'Jul 2026', val: '₹4.28 Cr (86 POs)' }
-  ];
+  const safeOrders = Array.isArray(purchaseOrders) ? purchaseOrders : [];
+  const monthLabels = ['Jan-26', 'Feb-26', 'Mar-26', 'Apr-26', 'May-26', 'Jun-26', 'Jul-26'];
+
+  const monthlyValues = monthLabels.map(m => {
+    const matching = safeOrders.filter(po => {
+      const d = String(po.poDate || po.date || '').toLowerCase();
+      return d.includes(m.toLowerCase().slice(0, 3));
+    });
+    const sum = matching.reduce((acc, po) => {
+      return acc + (Number(String(po.amount || po.total || 0).replace(/[^0-9.]+/g, '')) || 0);
+    }, 0);
+    const crValue = sum > 0 ? (sum / 10000000) : 0;
+    return {
+      date: m,
+      crValue,
+      val: `₹${sum.toLocaleString('en-IN')} (${matching.length} POs)`
+    };
+  });
+
+  const tooltipData = monthlyValues;
 
   const handleMouseMove = (e) => {
     const canvas = canvasRef.current;
@@ -94,8 +105,8 @@ export default function POTrendChart({ sidebarCollapsed }) {
       ctx.fillText(m, x, height - 10);
     });
 
-    const dataValues = [2.81, 3.12, 3.45, 4.02, 3.76, 3.68, 4.28];
-    const maxVal = 5;
+    const dataValues = monthlyValues.map(m => m.crValue);
+    const maxVal = Math.max(5, ...dataValues);
 
     const points = dataValues.map((val, i) => {
       return {

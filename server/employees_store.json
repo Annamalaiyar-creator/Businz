@@ -4,31 +4,9 @@
     "employee_name": "Ar.Annamalaiyar",
     "email": "arannamalaiyar@gmail.com",
     "password": "Efx@1234",
+    "prefix": "TA",
     "role": "Technical Administrator",
+    "dashboard_type": "Technical Administrator",
     "status": "Active"
-  },
-  {
-    "employee_code": "BI-001",
-    "employee_name": "Billing",
-    "email": "billing@vrmstructures.com",
-    "password": "12345",
-    "prefix": "BI",
-    "role": "Billing",
-    "dashboard_type": "Billing",
-    "status": "Active",
-    "created_at": "2026-10-05T08:48:22.988Z",
-    "last_login": "2026-10-05T08:48:22.988Z"
-  },
-  {
-    "employee_code": "SE-001",
-    "employee_name": "Sales",
-    "email": "sales@gmail.com",
-    "password": "12345",
-    "prefix": "SE",
-    "role": "Sales Executive",
-    "dashboard_type": "Sales Executive",
-    "status": "Pending Approval",
-    "created_at": "2026-10-06T01:17:53.947Z",
-    "last_login": "2026-10-06T01:17:53.947Z"
   }
 ]

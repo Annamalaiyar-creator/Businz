@@ -14,6 +14,7 @@ import POTrendChart from '../POTrendChart';
 import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
+import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
 
 
 export default function VendorManagementView(props) {
@@ -1047,6 +1048,56 @@ export default function VendorManagementView(props) {
     } finally {
       setVendorLoading(false);
     }
+  };
+
+  // Vendor Bulk Import Modal State & Handlers (Zoho Books Style)
+  const [isUploadVendorModalOpen, setIsUploadVendorModalOpen] = useState(false);
+
+  const VENDOR_IMPORT_FIELDS = useMemo(() => [
+    { key: 'name', label: 'Vendor / Company Name', required: true, hint: 'e.g. Apex Industrial Supplies Pvt Ltd', guessPatterns: [/^vendor\s*name/i, /^company\s*name/i, /^vendor/i, /^company/i, /^supplier/i, /^name/i] },
+    { key: 'contact', label: 'Primary Contact Person', required: false, hint: 'Key contact person or manager', guessPatterns: [/^contact\s*person/i, /^primary\s*contact/i, /^contact\s*name/i, /^contact/i] },
+    { key: 'phone', label: 'Phone / Mobile', required: true, hint: '10-digit primary phone or WhatsApp', guessPatterns: [/^phone/i, /^mobile/i, /^contact\s*number/i, /^tel/i, /^cell/i] },
+    { key: 'email', label: 'Email Address', required: false, hint: 'Official billing/communication email', guessPatterns: [/^email/i, /^e-mail/i, /^mail/i] },
+    { key: 'gstin', label: 'GSTIN / Tax ID', required: false, hint: '15-digit GST identification number', guessPatterns: [/^gstin/i, /^gst\s*number/i, /^gst\s*no/i, /^gst/i] },
+    { key: 'pan', label: 'PAN Number', required: false, hint: '10-character PAN number', guessPatterns: [/^pan\s*number/i, /^pan\s*no/i, /^pan/i] },
+    { key: 'type', label: 'Vendor Type', required: false, hint: 'Manufacturer, Supplier, Trader', guessPatterns: [/^vendor\s*type/i, /^type/i, /^category/i] },
+    { key: 'cat', label: 'Category / Nature of Supply', required: false, hint: 'e.g. Steel & Metals, Fasteners, Cables', guessPatterns: [/^category/i, /^cat/i, /^material/i] },
+    { key: 'terms', label: 'Payment Terms', required: false, hint: 'e.g. Net 30 Days, 50% Advance', guessPatterns: [/^payment\s*terms/i, /^terms/i, /^credit/i] },
+    { key: 'address', label: 'Address', required: false, hint: 'Factory or office street address', guessPatterns: [/^address/i, /^street/i, /^location/i] },
+    { key: 'city', label: 'City', required: false, hint: 'City or town', guessPatterns: [/^city/i, /^district/i] },
+    { key: 'state', label: 'State', required: false, hint: 'State / province', guessPatterns: [/^state/i] },
+    { key: 'pincode', label: 'Pincode / ZIP', required: false, hint: 'Postal PIN code', guessPatterns: [/^pincode/i, /^pin\s*code/i, /^zip/i] }
+  ], []);
+
+  const VENDOR_SAMPLE_ROWS = useMemo(() => [
+    {
+      "Vendor Name": "Apex Steel & Alloys Pvt Ltd",
+      "Contact Person": "Ramesh Kumar",
+      "Phone": "9840123456",
+      "Email": "sales@apexsteel.in",
+      "GSTIN": "33AABCA1234D1Z5",
+      "PAN": "AABCA1234D",
+      "Vendor Type": "Manufacturer",
+      "Category": "Steel & Metals",
+      "Payment Terms": "Net 30 Days",
+      "Address": "Plot 45, SIPCOT Industrial Park",
+      "City": "Chennai",
+      "State": "Tamil Nadu",
+      "Pincode": "602105"
+    }
+  ], []);
+
+  const handleBulkImportVendors = async (mappedRows) => {
+    const res = await fetch('/api/vendors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mappedRows)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to import vendors');
+    }
+    await loadVendorsFromBackend();
   };
 
   useEffect(() => {
@@ -2093,44 +2144,72 @@ export default function VendorManagementView(props) {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setShowForm(true)}
-                    style={{
-                      backgroundColor: '#0E7490',
-                      border: 'none',
-                      color: 'white',
-                      height: '40px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '0 6px 0 20px',
-                      borderRadius: '50px',
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                      boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
-                      transition: 'all 0.2s ease',
-                      letterSpacing: '0.2px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                  >
-                    <span>Onboard Vendor</span>
-                    <div style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      backgroundColor: '#FFFFFF',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#0E7490',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                    }}>
-                      <ArrowRight size={16} strokeWidth={2.5} />
-                    </div>
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsUploadVendorModalOpen(true)}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1.5px solid #0E7490',
+                        color: '#0E7490',
+                        height: '40px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '0 16px',
+                        borderRadius: '50px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 3px rgba(14, 116, 144, 0.15)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDFA'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                    >
+                      <UploadCloud size={16} strokeWidth={2.5} />
+                      <span>Upload Vendor</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowForm(true)}
+                      style={{
+                        backgroundColor: '#0E7490',
+                        border: 'none',
+                        color: 'white',
+                        height: '40px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '0 6px 0 20px',
+                        borderRadius: '50px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
+                        transition: 'all 0.2s ease',
+                        letterSpacing: '0.2px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                    >
+                      <span>Onboard Vendor</span>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        backgroundColor: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#0E7490',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}>
+                        <ArrowRight size={16} strokeWidth={2.5} />
+                      </div>
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -3319,6 +3398,19 @@ export default function VendorManagementView(props) {
                 </div>
               </div>
             )}
+
+            {/* Zoho-Style Bulk Vendor Import Modal */}
+            <ZohoStyleBulkImportModal
+              isOpen={isUploadVendorModalOpen}
+              onClose={() => setIsUploadVendorModalOpen(false)}
+              title="Import Vendors (Zoho-Style Column Mapping)"
+              subtitle="Upload an Excel or CSV file and map your columns directly to BUSINZ vendor fields"
+              entityName="Vendors"
+              fields={VENDOR_IMPORT_FIELDS}
+              sampleTemplateRows={VENDOR_SAMPLE_ROWS}
+              sampleFileName="BUSINZ_Vendor_Import_Template.xlsx"
+              onImport={handleBulkImportVendors}
+            />
           </div>
         );
       })()}

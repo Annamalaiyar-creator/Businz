@@ -1297,6 +1297,9 @@ const saveDatabaseStore = async (key, storeData) => {
     } else if (cleanKey === 'item_store' && Array.isArray(storeData)) {
       const itemPath = getStoreFilePath('item_store.json');
       fs.writeFileSync(itemPath, JSON.stringify(storeData, null, 2), 'utf8');
+    } else if (cleanKey === 'vendor_store' && Array.isArray(storeData)) {
+      const vendPath = getStoreFilePath('vendor_store.json');
+      fs.writeFileSync(vendPath, JSON.stringify(storeData, null, 2), 'utf8');
     } else if (cleanKey === 'po_store' && Array.isArray(storeData)) {
       const poPath = getStoreFilePath('po_store.json');
       fs.writeFileSync(poPath, JSON.stringify(storeData, null, 2), 'utf8');
@@ -1337,6 +1340,8 @@ const saveDatabaseStore = async (key, storeData) => {
       broadcastRealtimeEvent('inventory_updated', { rawMaterials: storeData });
     } else if (cleanKey === 'item_store' || cleanKey === 'vrm_prod_inventory') {
       broadcastRealtimeEvent('item_store_updated', { items: storeData });
+    } else if (cleanKey === 'vendor_store') {
+      broadcastRealtimeEvent('vendor_store_updated', { vendors: storeData });
     } else if (cleanKey === 'bom_store') {
       broadcastRealtimeEvent('bom_updated', { bomList: storeData });
     }
@@ -2281,6 +2286,72 @@ app.delete('/api/store/:key/:id', async (req, res) => {
 app.post('/api/vendors', async (req, res) => {
   try {
     const localVendors = loadLocalVendors();
+
+    if (Array.isArray(req.body)) {
+      const incomingList = req.body;
+      const createdVendors = [];
+      let currentVendors = [...localVendors];
+
+      for (let i = 0; i < incomingList.length; i++) {
+        const item = incomingList[i];
+        const vName = String(item.name || item.companyName || `Vendor ${i + 1}`).trim();
+        const vId = item.id || item.code || item.vendorCode || `VEND-${100 + currentVendors.length + 1}`;
+
+        const vRecord = {
+          id: vId,
+          code: item.code || vId,
+          name: vName,
+          companyName: item.companyName || vName,
+          type: item.type || 'Supplier',
+          contact: item.contact || item.contactPerson || '—',
+          phone: item.phone && item.phone !== '—' ? item.phone : '—',
+          mobile: item.mobile && item.mobile !== '—' ? item.mobile : (item.phone || '—'),
+          email: item.email && item.email !== '—' ? item.email : '—',
+          cat: item.cat || item.category || 'General Vendor',
+          status: item.status || 'Active',
+          spend: item.spend || '—',
+          payable: item.payable || '₹0.00',
+          terms: item.terms || item.paymentTerms || 'Due on Receipt',
+          gstin: item.gstin || item.gstNo || item.gstNumber || '—',
+          gstTreatment: item.gstTreatment || '—',
+          sourceOfSupply: item.sourceOfSupply || '—',
+          pan: item.pan || item.pan_no || '—',
+          currency: item.currency || item.currency_code || 'INR',
+          website: item.website || '—',
+          address: item.address || '',
+          city: item.city || '',
+          state: item.state || '',
+          pincode: item.pincode || '',
+          createdAt: item.createdAt || new Date().toISOString()
+        };
+
+        const targetId = String(vRecord.id).toLowerCase().trim();
+        const targetName = vName.toLowerCase().trim();
+        const exIdx = currentVendors.findIndex(v => {
+          const vId = String(v.id || '').toLowerCase().trim();
+          const vCode = String(v.code || '').toLowerCase().trim();
+          const vNameEx = String(v.name || v.companyName || '').toLowerCase().trim();
+          return (targetId && (vId === targetId || vCode === targetId)) || (targetName && vNameEx === targetName);
+        });
+
+        if (exIdx !== -1) {
+          currentVendors[exIdx] = { ...currentVendors[exIdx], ...vRecord };
+        } else {
+          currentVendors = [vRecord, ...currentVendors];
+        }
+        createdVendors.push(vRecord);
+      }
+
+      saveLocalVendors(currentVendors);
+
+      return res.json({
+        success: true,
+        message: `Successfully registered ${createdVendors.length} vendors in BUSINZ!`,
+        count: createdVendors.length,
+        vendors: createdVendors
+      });
+    }
+
     const incoming = req.body || {};
     const vendorName = String(incoming.name || incoming.companyName || 'New Vendor').trim();
     const vendorId = incoming.id || incoming.code || incoming.vendorCode || `VEND-${100 + localVendors.length + 1}`;
@@ -2354,74 +2425,91 @@ app.post('/api/vendors', async (req, res) => {
 // Endpoint to create a new customer in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.post('/api/customers', async (req, res) => {
   const localCustomers = loadLocalCustomers();
-  const incoming = req.body;
+  const isBulk = Array.isArray(req.body);
+  const incomingList = isBulk ? req.body : [req.body];
 
-  // Build local customer record
-  const customerId = incoming.customerCode || incoming.id || `CUST-VRM-${100 + localCustomers.length + 1}`;
-  const localCustomerRecord = {
-    id: customerId,
-    customerCode: customerId,
-    customerName: incoming.customerName || incoming.companyName || incoming.name || 'New Customer',
-    companyName: incoming.companyName || incoming.customerName || incoming.name || 'New Customer',
-    customerType: incoming.customerType || 'EPC Contractor',
-    industry: incoming.industry || '',
-    gstNumber: incoming.gstNumber || incoming.gstin || '',
-    panNumber: incoming.panNumber || incoming.pan || '',
-    address: incoming.address || incoming.streetAddress || '',
-    city: incoming.city || '',
-    state: incoming.state || '',
-    pincode: incoming.pincode || '',
-    dispatchAddress: incoming.dispatchAddress || incoming.address || '',
-    dispatchCity: incoming.dispatchCity || incoming.city || '',
-    dispatchState: incoming.dispatchState || incoming.state || '',
-    dispatchPincode: incoming.dispatchPincode || incoming.pincode || '',
-    sameAsBilling: incoming.sameAsBilling !== undefined ? incoming.sameAsBilling : true,
-    creditLimit: incoming.creditLimit || 2500000,
-    creditDays: incoming.creditDays || 30,
-    paymentTerms: incoming.paymentTerms || '50% Advance + 50% Dispatch',
-    assignedSalesperson: incoming.assignedSalesperson || 'Mohith JV',
-    source: incoming.source || 'Direct',
-    primaryContact: incoming.primaryContact || {
-      name: incoming.contactPerson || incoming.contactName || '',
-      phone: incoming.phone || incoming.mobile || '',
-      whatsapp: incoming.whatsapp || incoming.phone || incoming.mobile || '',
-      email: incoming.email || ''
-    },
-    code: incoming.code || incoming.customerName || incoming.companyName || 'New Customer',
-    c2: incoming.c2 || incoming.companyName || incoming.customerName || 'New Customer',
-    c3: incoming.c3 || (incoming.primaryContact && incoming.primaryContact.name) || incoming.contactPerson || '',
-    c4: incoming.c4 || (incoming.primaryContact && incoming.primaryContact.phone) || incoming.phone || incoming.mobile || '',
-    c5: incoming.c5 || (incoming.primaryContact && incoming.primaryContact.email) || incoming.email || '',
-    c6: incoming.c6 || incoming.billingAddress || incoming.address || '',
-    billingAddressObj: incoming.billingAddressObj || {
-      address: incoming.address || '',
+  if (incomingList.length === 0) {
+    return res.status(400).json({ success: false, error: 'No customer data provided.' });
+  }
+
+  const existingMap = new Map();
+  localCustomers.forEach(c => {
+    const k = String(c.customerCode || c.id || '').trim().toLowerCase();
+    if (k) existingMap.set(k, c);
+  });
+
+  const savedRecords = [];
+  let nextCounter = localCustomers.length + 1;
+
+  incomingList.forEach(incoming => {
+    if (!incoming || typeof incoming !== 'object') return;
+    const customerId = incoming.customerCode || incoming.id || `CUST-VRM-${100 + nextCounter++}`;
+    const localCustomerRecord = {
+      id: customerId,
+      customerCode: customerId,
+      customerName: incoming.customerName || incoming.companyName || incoming.name || 'New Customer',
+      companyName: incoming.companyName || incoming.customerName || incoming.name || 'New Customer',
+      customerType: incoming.customerType || 'EPC Contractor',
+      industry: incoming.industry || '',
+      gstNumber: incoming.gstNumber || incoming.gstin || '',
+      panNumber: incoming.panNumber || incoming.pan || '',
+      address: incoming.address || incoming.streetAddress || '',
       city: incoming.city || '',
       state: incoming.state || '',
-      pincode: incoming.pincode || ''
-    },
-    c7: incoming.c7 || incoming.deliveryAddress || incoming.dispatchAddress || incoming.address || '',
-    deliveryAddressObj: incoming.deliveryAddressObj || {
-      address: incoming.dispatchAddress || incoming.address || '',
-      city: incoming.dispatchCity || incoming.city || '',
-      state: incoming.dispatchState || incoming.state || '',
-      pincode: incoming.dispatchPincode || incoming.pincode || ''
-    },
-    status: incoming.status || 'ACTIVE',
-    createdAt: new Date().toISOString()
-  };
+      pincode: incoming.pincode || '',
+      dispatchAddress: incoming.dispatchAddress || incoming.address || '',
+      dispatchCity: incoming.dispatchCity || incoming.city || '',
+      dispatchState: incoming.dispatchState || incoming.state || '',
+      dispatchPincode: incoming.dispatchPincode || incoming.pincode || '',
+      sameAsBilling: incoming.sameAsBilling !== undefined ? incoming.sameAsBilling : true,
+      creditLimit: incoming.creditLimit || 2500000,
+      creditDays: incoming.creditDays || 30,
+      paymentTerms: incoming.paymentTerms || '50% Advance + 50% Dispatch',
+      assignedSalesperson: incoming.assignedSalesperson || 'Mohith JV',
+      source: incoming.source || 'Direct',
+      primaryContact: incoming.primaryContact || {
+        name: incoming.contactPerson || incoming.contactName || '',
+        phone: incoming.phone || incoming.mobile || '',
+        whatsapp: incoming.whatsapp || incoming.phone || incoming.mobile || '',
+        email: incoming.email || ''
+      },
+      code: incoming.code || incoming.customerName || incoming.companyName || 'New Customer',
+      c2: incoming.c2 || incoming.companyName || incoming.customerName || 'New Customer',
+      c3: incoming.c3 || (incoming.primaryContact && incoming.primaryContact.name) || incoming.contactPerson || '',
+      c4: incoming.c4 || (incoming.primaryContact && incoming.primaryContact.phone) || incoming.phone || incoming.mobile || '',
+      c5: incoming.c5 || (incoming.primaryContact && incoming.primaryContact.email) || incoming.email || '',
+      c6: incoming.c6 || incoming.billingAddress || incoming.address || '',
+      billingAddressObj: incoming.billingAddressObj || {
+        address: incoming.address || '',
+        city: incoming.city || '',
+        state: incoming.state || '',
+        pincode: incoming.pincode || ''
+      },
+      c7: incoming.c7 || incoming.deliveryAddress || incoming.dispatchAddress || incoming.address || '',
+      deliveryAddressObj: incoming.deliveryAddressObj || {
+        address: incoming.dispatchAddress || incoming.address || '',
+        city: incoming.dispatchCity || incoming.city || '',
+        state: incoming.dispatchState || incoming.state || '',
+        pincode: incoming.dispatchPincode || incoming.pincode || ''
+      },
+      status: incoming.status || 'ACTIVE',
+      createdAt: incoming.createdAt || new Date().toISOString()
+    };
 
-  // 1. Immediately persist to disk storage & Supabase (Never delete customers sharing same companyName)
-  const updatedCustomers = [
-    localCustomerRecord,
-    ...localCustomers.filter(c => (c.customerCode || c.id) !== localCustomerRecord.customerCode)
-  ];
+    const k = String(customerId).trim().toLowerCase();
+    existingMap.set(k, { ...(existingMap.get(k) || {}), ...localCustomerRecord });
+    savedRecords.push(localCustomerRecord);
+  });
+
+  const updatedCustomers = Array.from(existingMap.values());
   saveLocalCustomers(updatedCustomers);
 
-  // Return authoritative BUSINZ customer record with zero remote calls
   return res.json({
     success: true,
-    message: 'Customer registered in BUSINZ successfully!',
-    customer: localCustomerRecord
+    message: isBulk ? `Successfully registered ${savedRecords.length} customers in BUSINZ!` : 'Customer registered in BUSINZ successfully!',
+    count: savedRecords.length,
+    customer: isBulk ? savedRecords[0] : savedRecords[0],
+    customers: savedRecords
   });
 });
 
@@ -5356,38 +5444,94 @@ app.put('/api/items/:id', async (req, res) => {
 
 // Endpoint to create a new product in BUSINZ Authoritative Store (Native BUSINZ Store)
 app.post('/api/items', async (req, res) => {
-  const newItemId = req.body.itemId || req.body.id || ('ITEM-' + Date.now());
-  const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
-  const itemToSave = {
-    itemId: newItemId,
-    id: newItemId,
-    name: req.body.name,
-    rate: Number(req.body.rate) || 0,
-    sku: req.body.sku || '—',
-    status: reqStatus,
-    description: req.body.description || '—',
-    unit: req.body.unit || 'NOS',
-    purchaseRate: Number(req.body.purchaseRate) || 0,
-    purchaseDescription: req.body.purchaseDescription || '—',
-    productType: req.body.productType || 'goods',
-    stock: req.body.stock !== undefined ? Number(req.body.stock) : 0,
-    createdAt: req.body.createdAt || new Date().toISOString()
-  };
-
   try {
     const localItems = loadLocalItems();
+
+    if (Array.isArray(req.body)) {
+      const incomingList = req.body;
+      const createdItems = [];
+      let currentItems = [...localItems];
+
+      incomingList.forEach((it, idx) => {
+        const newItemId = it.itemId || it.id || it.sku || `ITEM-${Date.now()}-${idx + 1}`;
+        const reqStatus = (it.status && String(it.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
+        const itemRecord = {
+          itemId: newItemId,
+          id: newItemId,
+          name: String(it.name || it.description || newItemId).trim(),
+          rate: Number(it.rate || it.price || 0) || 0,
+          sku: String(it.sku || it.itemCode || newItemId).trim(),
+          status: reqStatus,
+          description: it.description || '—',
+          unit: it.unit || it.uom || 'NOS',
+          purchaseRate: Number(it.purchaseRate || 0) || 0,
+          purchaseDescription: it.purchaseDescription || '—',
+          productType: it.productType || it.cat || 'goods',
+          category: it.category || it.cat || 'General',
+          stock: it.stock !== undefined ? Number(it.stock) : 0,
+          createdAt: it.createdAt || new Date().toISOString()
+        };
+
+        const targetId = String(itemRecord.itemId).toLowerCase().trim();
+        const targetSku = String(itemRecord.sku).toLowerCase().trim();
+        const targetName = String(itemRecord.name).toLowerCase().trim();
+
+        const exIdx = currentItems.findIndex(i => {
+          const iId = String(i.itemId || i.id || '').toLowerCase().trim();
+          const iSku = String(i.sku || '').toLowerCase().trim();
+          const iName = String(i.name || '').toLowerCase().trim();
+          return (targetSku && iSku === targetSku) || (targetId && iId === targetId) || (targetName && iName === targetName);
+        });
+
+        if (exIdx !== -1) {
+          currentItems[exIdx] = { ...currentItems[exIdx], ...itemRecord };
+        } else {
+          currentItems = [itemRecord, ...currentItems];
+        }
+        createdItems.push(itemRecord);
+      });
+
+      saveLocalItems(currentItems);
+
+      return res.json({
+        success: true,
+        count: createdItems.length,
+        items: createdItems,
+        message: `Successfully registered ${createdItems.length} items in BUSINZ!`
+      });
+    }
+
+    const newItemId = req.body.itemId || req.body.id || ('ITEM-' + Date.now());
+    const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
+    const itemToSave = {
+      itemId: newItemId,
+      id: newItemId,
+      name: req.body.name,
+      rate: Number(req.body.rate) || 0,
+      sku: req.body.sku || '—',
+      status: reqStatus,
+      description: req.body.description || '—',
+      unit: req.body.unit || 'NOS',
+      purchaseRate: Number(req.body.purchaseRate) || 0,
+      purchaseDescription: req.body.purchaseDescription || '—',
+      productType: req.body.productType || 'goods',
+      stock: req.body.stock !== undefined ? Number(req.body.stock) : 0,
+      createdAt: req.body.createdAt || new Date().toISOString()
+    };
+
     const filtered = localItems.filter(i => String(i.itemId || i.id || i.sku).toLowerCase() !== String(itemToSave.itemId || itemToSave.sku || itemToSave.name).toLowerCase());
     const updated = [itemToSave, ...filtered];
     saveLocalItems(updated);
+
+    return res.json({ 
+      success: true, 
+      item: itemToSave, 
+      message: 'Item saved successfully in BUSINZ.'
+    });
   } catch (e) {
     console.error('Failed to save newly created item to item_store:', e);
+    return res.status(500).json({ error: 'Failed to save item: ' + e.message });
   }
-
-  return res.json({ 
-    success: true, 
-    item: itemToSave, 
-    message: 'Item saved successfully in BUSINZ.'
-  });
 });
 
 // Universal Stock Reset Endpoint: Resets all stock to 0, wipes allocations, and sets each item to exactly 5,000

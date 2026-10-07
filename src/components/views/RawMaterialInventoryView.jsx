@@ -9,6 +9,44 @@ import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
 import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from '../../utils/vrmProductsData';
 import { fetchCloudStore, subscribeToCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
+import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
+
+const RAW_MATERIAL_IMPORT_FIELDS = [
+  { key: 'code', label: 'Material / Item Code', required: true, description: 'Unique material code or SKU (e.g. RM-AL-6063)' },
+  { key: 'name', label: 'Material Description', required: true, description: 'Full description or title of the material' },
+  { key: 'cat', label: 'Category', required: false, description: 'Classification (e.g. Raw Material, Fasteners, Consumables)' },
+  { key: 'unit', label: 'Unit / UOM', required: false, description: 'Measurement unit (e.g. NOS, KG, MTR, PCS)' },
+  { key: 'stock', label: 'Physical Stock', required: true, description: 'Current available on-hand stock quantity' },
+  { key: 'minLevel', label: 'Safety Stock / Min Level', required: false, description: 'Minimum re-order threshold level' },
+  { key: 'store', label: 'Store Location / Bay', required: false, description: 'Storage bin, rack, or bay location' },
+  { key: 'hsn', label: 'HSN / SAC Code', required: false, description: 'Harmonized system tariff code' },
+  { key: 'lengthMm', label: 'Length (mm)', required: false, description: 'Standard bar length in mm, if applicable' }
+];
+
+const RAW_MATERIAL_SAMPLE_ROWS = [
+  {
+    'Material / Item Code': 'RM-AL-6063-T6',
+    'Material Description': 'Aluminium Extrusion Profile 6063 T6 (50x25x2mm)',
+    'Category': 'Raw Material',
+    'Unit / UOM': 'MTR',
+    'Physical Stock': 450,
+    'Safety Stock / Min Level': 50,
+    'Store Location / Bay': 'Rack A-01',
+    'HSN / SAC Code': '7604',
+    'Length (mm)': 6000
+  },
+  {
+    'Material / Item Code': 'RM-MS-PLT-10',
+    'Material Description': 'Mild Steel Hot Rolled Plate 10mm IS2062',
+    'Category': 'Raw Material',
+    'Unit / UOM': 'KG',
+    'Physical Stock': 1200,
+    'Safety Stock / Min Level': 200,
+    'Store Location / Bay': 'Bay 2',
+    'HSN / SAC Code': '7208',
+    'Length (mm)': ''
+  }
+];
 
 const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
   const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
@@ -1496,6 +1534,115 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFilesQueue, setUploadFilesQueue] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleBulkImportRawMaterials = (mappedMaterials) => {
+    try {
+      const isRawDir = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
+      const imported = mappedMaterials.map((row, idx) => {
+        const code = String(row.code || `MAT-${Date.now()}-${idx + 1}`).trim();
+        const name = String(row.name || code).trim();
+        const cat = String(row.cat || (isRawDir ? 'Raw Material' : 'Inventory Goods')).trim();
+        const unit = String(row.unit || 'NOS').trim();
+        const stock = Number(row.stock) || 0;
+        const minLevel = Number(row.minLevel) || 50;
+        const store = String(row.store || 'Main Store').trim();
+        const hsn = String(row.hsn || '7604').trim();
+        const lengthMm = row.lengthMm ? String(row.lengthMm).replace(/[^0-9.]+/g, '') : undefined;
+
+        let status = 'In Stock';
+        if (stock === 0) status = 'Out of Stock';
+        else if (stock <= minLevel) status = 'Low Stock';
+
+        return {
+          code,
+          name,
+          cat,
+          unit,
+          stock,
+          minLevel,
+          lengthMm,
+          store,
+          hsn,
+          status,
+          lastUpdated: 'Imported with Zoho Mapping',
+          reserved: 0,
+          openingStock: stock,
+          goodsReceived: 0,
+          issuedProd: 0,
+          matReturn: 0,
+          stockAdj: 0
+        };
+      }).filter(m => m.code && m.name);
+
+      if (imported.length === 0) {
+        if (typeof showCustomAlert === 'function') {
+          showCustomAlert('No valid records found in import data. Material Code and Description are required.', 'Import Warning', 'warning');
+        } else {
+          alert('No valid records found in import data. Material Code and Description are required.');
+        }
+        return;
+      }
+
+      setMaterials(prev => {
+        const existingMap = new Map();
+        (prev || []).forEach(item => existingMap.set(item.code, item));
+        imported.forEach(item => existingMap.set(item.code, item));
+        const combined = Array.from(existingMap.values());
+        try {
+          localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(combined));
+        } catch (_) {}
+        try {
+          saveCloudStore('raw_materials_store', combined);
+        } catch (_) {}
+        return combined;
+      });
+
+      // Synchronize with prodModuleEngine
+      try {
+        const inv = prodModuleEngine.getInventory();
+        imported.forEach(item => {
+          const existingIdx = inv.findIndex(i => i.code === item.code);
+          if (existingIdx >= 0) {
+            inv[existingIdx].physicalStock = item.stock;
+            inv[existingIdx].availableStock = Math.max(0, item.stock - (inv[existingIdx].reservedStock || 0));
+          } else {
+            inv.push({
+              code: item.code,
+              name: item.name,
+              category: item.cat,
+              unit: item.unit,
+              physicalStock: item.stock,
+              reservedStock: 0,
+              availableStock: item.stock,
+              issuedStock: 0,
+              consumedStock: 0,
+              safetyStock: item.minLevel,
+              unitRate: 500,
+              bayLocation: item.store
+            });
+          }
+        });
+        prodModuleEngine.saveToStorage();
+      } catch (e) {
+        console.warn('prodModuleEngine sync notice:', e);
+      }
+
+      setShowUploadModal(false);
+      if (typeof showCustomAlert === 'function') {
+        showCustomAlert(`✅ Successfully imported and mapped ${imported.length} items!`, 'Import Completed', 'success');
+      } else {
+        alert(`✅ Successfully imported and mapped ${imported.length} items!`);
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      if (typeof showCustomAlert === 'function') {
+        showCustomAlert(`❌ Import error: ${err.message}`, 'Import Failed', 'error');
+      } else {
+        alert(`❌ Import error: ${err.message}`);
+      }
+    }
+  };
+
 
   // Helper to format file size cleanly
   const formatFileSize = (bytes) => {
@@ -4036,360 +4183,19 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         </div>
       )}
 
-      {/* 7. UPLOAD FILES MODAL (MATCHING USER REFERENCE DESIGN EXACTLY) */}
-      {showUploadModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.45)',
-          backdropFilter: 'blur(3px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 999999,
-          fontFamily: "'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif",
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '24px',
-            padding: '24px',
-            maxWidth: '480px',
-            width: '92%',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04)',
-            boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px'
-          }}>
+      {/* 7. ZOHO-STYLE BULK IMPORT MODAL FOR RAW MATERIALS & INVENTORY STORES */}
+      <ZohoStyleBulkImportModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        title={activeTab === 'Raw Material Directory' ? "Import Raw Materials (Zoho-Style Column Mapping)" : "Import Inventory Items (Zoho-Style Column Mapping)"}
+        subtitle="Upload an Excel or CSV file and map spreadsheet columns directly to BUSINZ inventory fields"
+        entityName={activeTab === 'Raw Material Directory' ? "Raw Materials" : "Inventory Items"}
+        fields={RAW_MATERIAL_IMPORT_FIELDS}
+        sampleTemplateRows={RAW_MATERIAL_SAMPLE_ROWS}
+        sampleFileName={activeTab === 'Raw Material Directory' ? "BUSINZ_Raw_Materials_Import_Template.xlsx" : "BUSINZ_Inventory_Stores_Import_Template.xlsx"}
+        onImport={handleBulkImportRawMaterials}
+      />
 
-            {/* Header matching image: [Upload Icon Box]  Upload Files  /  Select files to upload  [X Close button] */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '12px',
-                  border: '1px solid #F1F5F9',
-                  backgroundColor: '#F8FAFC',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#0F172A',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                }}>
-                  <Upload size={20} strokeWidth={2.2} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                    Upload Files
-                  </h3>
-                  <p style={{ fontSize: '13px', color: '#64748B', margin: '2px 0 0 0', fontWeight: '500' }}>
-                    Select files to upload
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowUploadModal(false)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#64748B',
-                  cursor: 'pointer',
-                  padding: '6px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#0F172A'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748B'; }}
-              >
-                <X size={18} strokeWidth={2.2} />
-              </button>
-            </div>
-
-            {/* Drag and drop dropzone with dashed border matching image */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragOver(true);
-              }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragOver(false);
-                if (e.dataTransfer && e.dataTransfer.files) {
-                  handleFilesSelected(e.dataTransfer.files);
-                }
-              }}
-              onClick={() => fileInputRef.current && fileInputRef.current.click()}
-              style={{
-                border: isDragOver ? '2px dashed #0E7490' : '1.5px dashed #CBD5E1',
-                borderRadius: '16px',
-                backgroundColor: isDragOver ? '#F0FDFA' : '#F8FAFC',
-                padding: '20px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {/* Cloud upload icon inside white card */}
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '12px',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#475569',
-                flexShrink: 0,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-              }}>
-                <UploadCloud size={20} strokeWidth={2.2} />
-              </div>
-
-              <div>
-                <div style={{ fontSize: '13.5px', color: '#1E293B', fontWeight: '600' }}>
-                  Drag and drop file(s) or <span style={{ color: '#4F46E5', fontWeight: '700' }}>choose file(s)</span>
-                </div>
-                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>
-                  Max 25MB each, Only XLSX, CSV, ZIP, PDF, or IMAGES.
-                </div>
-              </div>
-            </div>
-
-            {/* File Upload List Cards matching image design */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto', paddingRight: '2px' }}>
-              {uploadFilesQueue.length === 0 ? (
-                <div style={{
-                  padding: '16px',
-                  textAlign: 'center',
-                  borderRadius: '14px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #F1F5F9',
-                  fontSize: '12.5px',
-                  color: '#94A3B8'
-                }}>
-                  No files added yet. Drop your Excel or CSV files here to import.
-                </div>
-              ) : (
-                uploadFilesQueue.map((item) => {
-                  const ext = item.name.split('.').pop().toLowerCase();
-                  const isZip = ext === 'zip' || ext === 'rar' || ext === '7z';
-                  const isExcel = ext === 'xlsx' || ext === 'xls' || ext === 'csv';
-                  const isHeic = ext === 'heic' || ext === 'png' || ext === 'jpg' || ext === 'jpeg';
-
-                  // Badge color configs matching user image
-                  const badgeBg = isZip ? '#FF9800' : isExcel ? '#10B981' : isHeic ? '#2563EB' : '#64748B';
-                  const badgeText = ext.toUpperCase().slice(0, 4);
-
-                  return (
-                    <div
-                      key={item.id}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '16px',
-                        padding: '12px 14px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        {/* Left File Type Badge Icon */}
-                        <div style={{
-                          width: '36px',
-                          height: '42px',
-                          borderRadius: '8px',
-                          backgroundColor: badgeBg,
-                          color: '#FFFFFF',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                        }}>
-                          <span style={{ fontSize: '9px', fontWeight: '800', letterSpacing: '0.5px' }}>{badgeText}</span>
-                        </div>
-
-                        {/* Center Info: File Name, Status, and Size */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: '13.5px',
-                            fontWeight: '700',
-                            color: '#0F172A',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {item.name}
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', marginTop: '3px' }}>
-                            {item.status === 'completed' ? (
-                              <>
-                                <div style={{
-                                  width: '14px',
-                                  height: '14px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#10B981',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: '#FFFFFF'
-                                }}>
-                                  <Check size={9} strokeWidth={3} />
-                                </div>
-                                <span style={{ color: '#475569', fontWeight: '600' }}>Completed</span>
-                                <span style={{ color: '#94A3B8' }}>•</span>
-                                <span style={{ color: '#94A3B8' }}>{formatFileSize(item.size)}</span>
-                                {item.count && (
-                                  <span style={{ color: '#0E7490', fontWeight: '700', marginLeft: '4px' }}>
-                                    ({item.count} items imported)
-                                  </span>
-                                )}
-                              </>
-                            ) : item.status === 'error' ? (
-                              <span style={{ color: '#EF4444', fontWeight: '600' }}>
-                                {item.errorMsg || 'Failed to import'}
-                              </span>
-                            ) : (
-                              <>
-                                <span style={{ color: '#6366F1', fontWeight: '600' }}>Uploading</span>
-                                <div style={{
-                                  width: '12px',
-                                  height: '12px',
-                                  borderRadius: '50%',
-                                  border: '2px solid #C7D2FE',
-                                  borderTopColor: '#6366F1',
-                                  animation: 'spin 0.8s linear infinite'
-                                }} />
-                                <span style={{ color: '#6366F1', fontWeight: '600' }}>{item.progress}%</span>
-                                <span style={{ color: '#94A3B8' }}>•</span>
-                                <span style={{ color: '#94A3B8' }}>{formatFileSize(item.size)}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right Action Icons: Trash for completed / Pause-cancel for in progress */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {item.status === 'completed' ? (
-                            <button
-                              type="button"
-                              onClick={() => setUploadFilesQueue(prev => prev.filter(f => f.id !== item.id))}
-                              title="Remove file"
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#EF4444',
-                                cursor: 'pointer',
-                                padding: '6px',
-                                borderRadius: '6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                            >
-                              <Trash2 size={15} strokeWidth={2} />
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                title="Pause"
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#64748B',
-                                  cursor: 'pointer',
-                                  padding: '4px'
-                                }}
-                              >
-                                <Pause size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setUploadFilesQueue(prev => prev.filter(f => f.id !== item.id))}
-                                title="Cancel"
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#64748B',
-                                  cursor: 'pointer',
-                                  padding: '4px'
-                                }}
-                              >
-                                <X size={14} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Progress bar matching image */}
-                      {item.status === 'uploading' && (
-                        <div style={{
-                          width: '100%',
-                          height: '4px',
-                          borderRadius: '4px',
-                          backgroundColor: '#E2E8F0',
-                          overflow: 'hidden',
-                          marginTop: '2px'
-                        }}>
-                          <div style={{
-                            width: `${item.progress}%`,
-                            height: '100%',
-                            backgroundColor: '#6366F1',
-                            borderRadius: '4px',
-                            transition: 'width 0.3s ease'
-                          }} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Done / Close footer button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-              <button
-                type="button"
-                onClick={() => setShowUploadModal(false)}
-                style={{
-                  backgroundColor: '#0E7490',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  borderRadius: '10px',
-                  padding: '8px 20px',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(14, 116, 144, 0.3)'
-                }}
-              >
-                Done
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

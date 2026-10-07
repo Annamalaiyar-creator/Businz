@@ -3,58 +3,10 @@ import { SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 
 export default function RecentPurchaseOrders({ purchaseOrders: realPurchaseOrders = [], isLoading = false }) {
-  const [selectedPOs, setSelectedPOs] = useState(['ARMS/PO/26-07-086']);
-
-  const defaultPurchaseOrders = [
-    {
-      poNo: 'ARMS/PO/26-07-086',
-      vendor: 'AKEYEM SONS',
-      poDate: '23-Jul-26',
-      deliveryDate: '28-Jul-26',
-      amount: '₹52,48,000',
-      status: 'Scheduled',
-      statusType: 'scheduled'
-    },
-    {
-      poNo: 'ARMS/PO/26-07-085',
-      vendor: 'ARUMUGA STEEL',
-      poDate: '22-Jul-26',
-      deliveryDate: '27-Jul-26',
-      amount: '₹28,75,600',
-      status: 'On The Way',
-      statusType: 'ontheway'
-    },
-    {
-      poNo: 'ARMS/PO/26-07-084',
-      vendor: 'VAIBOV POLES',
-      poDate: '21-Jul-26',
-      deliveryDate: '30-Jul-26',
-      amount: '₹14,20,000',
-      status: 'Pending',
-      statusType: 'pending'
-    },
-    {
-      poNo: 'ARMS/PO/26-07-083',
-      vendor: 'JINDAL STEEL',
-      poDate: '20-Jul-26',
-      deliveryDate: '25-Jul-26',
-      amount: '₹88,90,400',
-      status: 'Scheduled',
-      statusType: 'scheduled'
-    },
-    {
-      poNo: 'ARMS/PO/26-07-082',
-      vendor: 'TATA STEEL LTD',
-      poDate: '19-Jul-26',
-      deliveryDate: '24-Jul-26',
-      amount: '₹64,15,000',
-      status: 'On The Way',
-      statusType: 'ontheway'
-    }
-  ];
+  const [selectedPOs, setSelectedPOs] = useState([]);
 
   const safeRealOrders = Array.isArray(realPurchaseOrders) ? realPurchaseOrders : [];
-  const purchaseOrders = safeRealOrders.length > 0 ? safeRealOrders.slice(0, 5) : defaultPurchaseOrders;
+  const purchaseOrders = safeRealOrders.slice(0, 5);
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -125,6 +77,12 @@ export default function RecentPurchaseOrders({ purchaseOrders: realPurchaseOrder
                   <td style={{ padding: '8px 12px' }}><div className="skeleton-shimmer skeleton-text" style={{ width: '60px', height: '16px', borderRadius: '8px' }} /></td>
                 </tr>
               ))
+            ) : purchaseOrders.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: '28px 12px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
+                  No recent purchase orders created yet.
+                </td>
+              </tr>
             ) : (
               purchaseOrders.map((po, idx) => {
                 return (

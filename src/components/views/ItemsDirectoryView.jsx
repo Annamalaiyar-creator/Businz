@@ -11,10 +11,47 @@ import {
 } from 'lucide-react';
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
+import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
 import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
+const ITEM_IMPORT_FIELDS = [
+  { key: 'name', label: 'Item Name', required: true, description: 'Product or item title (Zoho: Item Name)' },
+  { key: 'sku', label: 'SKU / Part Number', required: false, description: 'Unique Stock Keeping Unit or item code' },
+  { key: 'rate', label: 'Selling Rate (₹)', required: false, description: 'Sales price per unit' },
+  { key: 'purchaseRate', label: 'Cost / Purchase Rate (₹)', required: false, description: 'Purchase cost per unit' },
+  { key: 'unit', label: 'Unit / UOM', required: false, description: 'Unit of measure (e.g. NOS, KG, MTR, PCS)' },
+  { key: 'description', label: 'Sales Description', required: false, description: 'Notes or description shown on sales invoices' },
+  { key: 'purchaseDescription', label: 'Purchase Description', required: false, description: 'Specifications for Purchase Orders' },
+  { key: 'productType', label: 'Product Type', required: false, description: 'goods or service' },
+  { key: 'status', label: 'Status', required: false, description: 'Active or Inactive' }
+];
+
+const ITEM_SAMPLE_ROWS = [
+  {
+    'Item Name': 'Mild Steel Hex Bolt M10x50',
+    'SKU / Part Number': 'BLT-MS-1050',
+    'Selling Rate (₹)': 45,
+    'Cost / Purchase Rate (₹)': 32,
+    'Unit / UOM': 'NOS',
+    'Sales Description': 'High tensile grade 8.8 hex head bolt',
+    'Purchase Description': 'Mild steel electroplated zinc passivated',
+    'Product Type': 'goods',
+    'Status': 'Active'
+  },
+  {
+    'Item Name': 'Industrial Ball Bearing 6205-2RS',
+    'SKU / Part Number': 'BRG-6205-2RS',
+    'Selling Rate (₹)': 280,
+    'Cost / Purchase Rate (₹)': 210,
+    'Unit / UOM': 'NOS',
+    'Sales Description': 'Deep groove rubber sealed ball bearing',
+    'Purchase Description': 'Standard C3 clearance, chromium steel',
+    'Product Type': 'goods',
+    'Status': 'Active'
+  }
+];
 
 export default function ItemsDirectoryView(props) {
   const {
@@ -1172,6 +1209,59 @@ export default function ItemsDirectoryView(props) {
   const [selectedItemCategory, setSelectedItemCategory] = useState('All Categories');
   const [selectedItemStatus, setSelectedItemStatus] = useState('All Status');
   const [itemsLoading, setItemsLoading] = useState(true);
+  const [isUploadItemModalOpen, setIsUploadItemModalOpen] = useState(false);
+
+  const handleBulkImportItems = async (mappedItems) => {
+    try {
+      const sanitized = mappedItems.map(item => ({
+        name: (item.name || '').toString().trim(),
+        sku: (item.sku || '').toString().trim(),
+        rate: Number(item.rate) || 0,
+        purchaseRate: Number(item.purchaseRate) || 0,
+        unit: (item.unit || 'NOS').toString().trim().toUpperCase(),
+        description: (item.description || '').toString().trim(),
+        purchaseDescription: (item.purchaseDescription || '').toString().trim(),
+        productType: (item.productType || 'goods').toString().trim().toLowerCase(),
+        status: (item.status || 'Active').toString().trim()
+      })).filter(i => i.name);
+
+      if (sanitized.length === 0) {
+        alert('No valid items found to import. Item Name is required for all imported rows.');
+        return;
+      }
+
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sanitized)
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+
+      const data = await res.json().catch(() => ({}));
+      const importedList = Array.isArray(data.items) ? data.items : (data.item ? [data.item] : sanitized);
+
+      setItemsList(prev => {
+        const map = new Map();
+        (prev || []).forEach(it => map.set(it.itemId || it.sku || it.name, it));
+        importedList.forEach(it => map.set(it.itemId || it.sku || it.name, it));
+        const updated = Array.from(map.values());
+        try {
+          saveCloudStore('item_store', updated);
+        } catch (_) {}
+        return updated;
+      });
+
+      fetchItemsFromBackend(true);
+      setIsUploadItemModalOpen(false);
+      alert(`✅ Successfully imported ${sanitized.length} items with field mappings!`);
+    } catch (err) {
+      console.error('Failed to import items:', err);
+      alert(`❌ Failed to import items: ${err.message}`);
+    }
+  };
 
   const fetchItemsFromBackend = useCallback(async (forceRefresh = false) => {
     try {
@@ -2431,6 +2521,31 @@ export default function ItemsDirectoryView(props) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <button
+                    onClick={() => setIsUploadItemModalOpen(true)}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #0E7490',
+                      color: '#0E7490',
+                      height: '40px',
+                      padding: '0 16px',
+                      borderRadius: '50px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ECFEFF'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+                  >
+                    <UploadCloud size={16} />
+                    <span>Upload Items</span>
+                  </button>
+
+                  <button
                     onClick={() => {
                       setNewItemData({
                         name: '',
@@ -3055,6 +3170,19 @@ export default function ItemsDirectoryView(props) {
               </div>
             </div>
           )}
+
+          {/* Zoho-Style Bulk Items Import Modal */}
+          <ZohoStyleBulkImportModal
+            isOpen={isUploadItemModalOpen}
+            onClose={() => setIsUploadItemModalOpen(false)}
+            title="Import Items (Zoho-Style Column Mapping)"
+            subtitle="Upload your item catalog Excel or CSV and map columns directly into BUSINZ"
+            entityName="Items"
+            fields={ITEM_IMPORT_FIELDS}
+            sampleTemplateRows={ITEM_SAMPLE_ROWS}
+            sampleFileName="BUSINZ_Items_Import_Template.xlsx"
+            onImport={handleBulkImportItems}
+          />
         </div>
       )}
 
