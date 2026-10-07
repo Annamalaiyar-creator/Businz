@@ -293,7 +293,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-  const isRestrictedSalesUser = userRole === 'Sales Executive';
+  const isRestrictedSalesUser = Boolean(
+    userRole &&
+    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+  );
 
   const getEffectiveSalesPerson = () => {
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null') return currentEmpName;

@@ -497,19 +497,20 @@ export default function BomOrdersView(props) {
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
-  // Role check: Only individual Sales Executives are isolated to their own BOMs.
-  // Management & Fulfillment roles (Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Production Head, Floor Supervisor, Dispatch Head, Procurement Head, Billing) see all BOMs.
-  const isRestrictedSalesUser = userRole === 'Sales Executive';
+  // Role check: Only individual Sales personnel are isolated to their own BOMs.
+  // Management & Fulfillment roles (Dispatch Head, Dispatch, Production Head, Floor Supervisor, Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Procurement Head, Billing) see all BOMs.
+  const isRestrictedSalesUser = Boolean(
+    userRole &&
+    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+  );
 
   const visibleBomStore = React.useMemo(() => {
     const rawList = (bomStore || []).filter(Boolean);
     if (!isRestrictedSalesUser) return rawList;
 
-    const curCode = (currentEmpId || (userRole === 'Sales Executive' ? 'SE-VRM001' : '')).toUpperCase();
-    let effectiveCurName = (currentEmpName || defaultSalesPersonName || '').trim();
-    if (!effectiveCurName || effectiveCurName.toLowerCase() === 'sales executive') {
-      effectiveCurName = 'Mohith JV';
-    }
+    const curCode = (currentEmpId || '').toUpperCase();
+    const effectiveCurName = (currentEmpName || (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : '') || '').trim();
     const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
     const curEmail = currentLoggedEmail;
 
@@ -550,20 +551,11 @@ export default function BomOrdersView(props) {
       if (curName) {
         if (spName && (spName === curName || spName.includes(curName) || curName.includes(spName))) return true;
         if (creatorName && (creatorName === curName || creatorName.includes(curName) || curName.includes(creatorName))) return true;
-        if (curName.includes('mohit') && (spName.includes('mohit') || creatorName.includes('mohit') || spCode === 'SE-VRM001' || spCode === 'SE-VRM004')) return true;
-      }
-
-      // If user is Mohit JV / default sales executive, also allow records created by SE-VRM001 or Mohit
-      if ((curName.includes('mohit') || curCode === 'SE-VRM001' || userRole === 'Sales Executive') && (spCode === 'SE-VRM001' || spName.includes('mohit') || creatorName.includes('mohit'))) {
-        return true;
       }
 
       if (curEmail && (b.salesPersonEmail || b.email || '').toLowerCase() === curEmail) {
         return true;
       }
-
-      // Allow viewing company-wide, legacy, or unassigned BOMs
-      if (!spCode && !spName && !creatorName) return true;
 
       return false;
     });
