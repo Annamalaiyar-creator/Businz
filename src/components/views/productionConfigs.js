@@ -573,7 +573,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     else if (code === 'BOM-661') resolvedCustomer = 'VRM Energy Consultancy Services Private Limited';
                     else if (code === 'BOM-662') resolvedCustomer = 'Teorainn Solar Pvt Ltd';
                   }
-                  const customerDisplayName = resolvedCustomer || 'Teorainn Solar Pvt Ltd';
+                  const customerDisplayName = resolvedCustomer || 'Customer Order';
 
                   const isDispatchUser = (name) => {
                     if (!name) return false;

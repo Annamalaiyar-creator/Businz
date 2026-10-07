@@ -1929,7 +1929,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     const endpoint = commit ? '/api/boms/reserve-code' : '/api/boms/next-code';
     const method = commit ? 'POST' : 'GET';
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const apiRes = await fetch(endpoint, {
       method,
       headers: { 'Content-Type': 'application/json' },

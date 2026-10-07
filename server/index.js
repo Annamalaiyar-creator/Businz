@@ -3810,7 +3810,11 @@ app.post('/api/boms', async (req, res) => {
   return new Promise((resolveOuter) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let { bom, isNew, isUpdate } = req.body;
+        let { bom, isNew, isUpdate } = req.body || {};
+        if (!bom && (req.body?.bomCode || req.body?.code || req.body?.id)) {
+          bom = req.body;
+          isUpdate = true;
+        }
         if (!bom) {
           res.status(400).json({ success: false, message: 'Valid bom record required' });
           return resolveOuter();
@@ -7008,6 +7012,9 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       return res.sendFile(path.join(distPath, 'index.html'));
     }
     next();
