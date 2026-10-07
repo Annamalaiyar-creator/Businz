@@ -3165,12 +3165,12 @@ async function repairBomSequences() {
     }
   } catch (_) {}
 
-  // Explicit sequential alignment mapping for converted PIs
+  // Explicit sequential alignment mapping matching existing converted PIs
   const targetMap = {
-    'PI-00059': { bomCode: 'BOM-659', defaultCustomer: 'VRM Energy Consultancy Services Private Limited', defaultAmount: 28320 },
-    'PI-00060': { bomCode: 'BOM-660', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 14160 },
-    'PI-00061': { bomCode: 'BOM-661', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 28320 },
-    'PI-00062': { bomCode: 'BOM-662', defaultCustomer: 'URBAN ENGINEER CONSULTANCY (OPC) PRIVATE LIMITED', defaultAmount: 169920 }
+    'PI-00061': { bomCode: 'BOM-659', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 28320 },
+    'PI-00062': { bomCode: 'BOM-660', defaultCustomer: 'URBAN ENGINEER CONSULTANCY (OPC) PRIVATE LIMITED', defaultAmount: 169920 },
+    'PI-00059': { bomCode: 'BOM-661', defaultCustomer: 'VRM Energy Consultancy Services Private Limited', defaultAmount: 28320 },
+    'PI-00060': { bomCode: 'BOM-662', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 14160 }
   };
 
   let piUpdatedCount = 0;
@@ -3226,7 +3226,7 @@ async function repairBomSequences() {
       const grandTotal = Number(piData?.total || piData?.grandTotal || info.defaultAmount || 0);
       const subTotal = Number(piData?.subtotal || piData?.unitValue || Math.round(grandTotal / 1.18));
       const items = Array.isArray(piData?.items) && piData.items.length > 0 ? JSON.stringify(piData.items) : '[]';
-      const salesPerson = piData?.salesPerson || piData?.salesperson || 'Sales Executive';
+      const salesPerson = (piData?.salesPerson || piData?.salesperson || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim();
 
       const existingBom = await query(`
         SELECT id, bom_code, source_pi_no FROM public.bom_orders 
@@ -3237,15 +3237,20 @@ async function repairBomSequences() {
         await query(`
           INSERT INTO public.bom_orders (
             id, bom_code, code, source_pi_no, customer_name, company_name, 
-            grand_total, sub_total, sales_person, status, items, date, created_at, updated_at
+            grand_total, sub_total, sales_person, status, items, dispatch_packing, date, created_at, updated_at
           ) VALUES (
             $1, $1, $1, $2, $3, $3, 
-            $4, $5, $6, 'Draft', $7::jsonb, CURRENT_DATE, NOW(), NOW()
+            $4, $5, $6, 'Draft', $7::jsonb, $7::jsonb, CURRENT_DATE, NOW(), NOW()
           ) ON CONFLICT (id) DO UPDATE SET
             bom_code = EXCLUDED.bom_code,
             source_pi_no = EXCLUDED.source_pi_no,
             customer_name = EXCLUDED.customer_name,
+            company_name = EXCLUDED.company_name,
             grand_total = EXCLUDED.grand_total,
+            sub_total = EXCLUDED.sub_total,
+            sales_person = EXCLUDED.sales_person,
+            items = EXCLUDED.items,
+            dispatch_packing = EXCLUDED.dispatch_packing,
             updated_at = NOW()
         `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
         bomUpdatedCount++;
@@ -3255,12 +3260,16 @@ async function repairBomSequences() {
           SET bom_code = $1,
               code = $1,
               source_pi_no = $2,
-              customer_name = COALESCE(NULLIF(customer_name, ''), $3),
-              company_name = COALESCE(NULLIF(company_name, ''), $3),
+              customer_name = CASE WHEN customer_name IS NULL OR customer_name = '' OR customer_name = 'Customer' OR customer_name = '-' THEN $3 ELSE customer_name END,
+              company_name = CASE WHEN company_name IS NULL OR company_name = '' OR company_name = 'Customer' OR company_name = '-' THEN $3 ELSE company_name END,
               grand_total = CASE WHEN grand_total IS NULL OR grand_total = 0 THEN $4 ELSE grand_total END,
+              sub_total = CASE WHEN sub_total IS NULL OR sub_total = 0 THEN $5 ELSE sub_total END,
+              sales_person = CASE WHEN sales_person IS NULL OR sales_person = '' OR sales_person = 'Anu' OR sales_person = 'Sales Department' THEN $6 ELSE sales_person END,
+              items = CASE WHEN items IS NULL OR jsonb_array_length(items) = 0 THEN $7::jsonb ELSE items END,
+              dispatch_packing = CASE WHEN dispatch_packing IS NULL OR jsonb_array_length(dispatch_packing) = 0 THEN $7::jsonb ELSE dispatch_packing END,
               updated_at = NOW()
-          WHERE id = $1 OR source_pi_no = $2
-        `, [info.bomCode, piNo, custName, grandTotal]);
+          WHERE id = $1 OR bom_code = $1 OR source_pi_no = $2
+        `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
       }
     } catch (e) {
       console.warn(`[repairBomSequences notice for ${piNo}]:`, e.message);

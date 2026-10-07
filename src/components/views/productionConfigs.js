@@ -400,13 +400,34 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   const dateB = new Date(b?.salesConfirmedAt || b?.date || b?.createdAt || 0).getTime() || 0;
                   return dateB - dateA;
                 }).map(b => {
-                  const itemsArray = (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
+                  // Resolve source PI for fallback data if BOM has missing fields
+                  let matchedPi = null;
+                  try {
+                    const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
+                    const bCode = b.bomCode || b.code || b.id;
+                    const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
+                    if (rawPi) {
+                      const pis = JSON.parse(rawPi);
+                      if (Array.isArray(pis)) {
+                        matchedPi = pis.find(p => p && (
+                          (piNum && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum)) ||
+                          (bCode && (p.convertedBomCode === bCode || p.convertedBomNo === bCode))
+                        )) || null;
+                      }
+                    }
+                  } catch (_) {}
+
+                  let itemsArray = (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
                     ? b.dispatchPacking
                     : (Array.isArray(b.items) && b.items.length > 0)
                       ? b.items
                       : (Array.isArray(b.lineItems) && b.lineItems.length > 0)
                         ? b.lineItems
                         : [];
+
+                  if (itemsArray.length === 0 && matchedPi && Array.isArray(matchedPi.items) && matchedPi.items.length > 0) {
+                    itemsArray = matchedPi.items;
+                  }
                   const totalItemsCount = itemsArray.length;
                   const isOrderPacked = isPackedOrder(b);
                   const packedCount = (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
@@ -500,11 +521,18 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     packingProgressText = 'Items Pending Packing';
                   }
 
-                  const customerDisplayName = (b.customerName && b.customerName !== 'Customer' && b.customerName !== '-')
+                  let resolvedCustomer = (b.customerName && b.customerName !== 'Customer' && b.customerName !== '-')
                     ? b.customerName
                     : (b.companyName && b.companyName !== '-')
                       ? b.companyName
-                      : (b.vendor || b.clientName || b.customer || 'Customer Order');
+                      : (b.vendor || b.clientName || b.customer || '');
+
+                  if (!resolvedCustomer || resolvedCustomer === 'Customer' || resolvedCustomer === 'Customer Order') {
+                    if (matchedPi) {
+                      resolvedCustomer = matchedPi.companyName || matchedPi.customerName || matchedPi.vendor || '';
+                    }
+                  }
+                  const customerDisplayName = resolvedCustomer || 'Customer Order';
 
                   const isDispatchUser = (name) => {
                     if (!name) return false;
@@ -516,27 +544,18 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   if (!rawSales || rawSales === 'Sales Department' || isDispatchUser(rawSales)) {
                     if (b.createdBy && !isDispatchUser(b.createdBy)) {
                       rawSales = b.createdBy;
-                    } else if (b.sourcePiNo || b.source_pi_no || b.piNo) {
-                      try {
-                        const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
-                        const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
-                        if (rawPi) {
-                          const pis = JSON.parse(rawPi);
-                          if (Array.isArray(pis)) {
-                            const matchedPi = pis.find(p => p && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum));
-                            if (matchedPi && (matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy)) {
-                              rawSales = matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy;
-                            }
-                          }
-                        }
-                      } catch (_) {}
+                    } else if (matchedPi && (matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy)) {
+                      rawSales = matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy;
                     }
                   }
-                  const salesPersonName = (rawSales && !isDispatchUser(rawSales) ? rawSales : (b.createdBy && !isDispatchUser(b.createdBy) ? b.createdBy : (b.salesPerson || 'Sales Department'))).trim();
+                  const salesPersonName = (rawSales && !isDispatchUser(rawSales) ? rawSales : (b.createdBy && !isDispatchUser(b.createdBy) ? b.createdBy : 'Sales Executive')).trim();
                   
                   let totalAmt = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
-                  if (!totalAmt && itemsArray.length > 0) {
-                    totalAmt = itemsArray.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
+                  if (!totalAmt && matchedPi) {
+                    totalAmt = Number(matchedPi.grandTotal || matchedPi.total || matchedPi.amount || 0);
+                  }
+                  if (!totalAmt && effectiveItems.length > 0) {
+                    totalAmt = effectiveItems.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
                   }
                   const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
