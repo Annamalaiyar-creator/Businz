@@ -384,7 +384,10 @@ const toConsumerBomServer = (row) => {
   const email = row.email || '';
   const billingAddr = row.billing_address || '';
   const deliveryAddr = row.delivery_address || '';
-  const salesRep = row.sales_person || '';
+  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || '';
+  const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
+  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || '';
+  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || '';
 
   return {
     ...extraData,
@@ -425,10 +428,11 @@ const toConsumerBomServer = (row) => {
     salesConfirmed: Boolean(row.sales_confirmed),
     salesConfirmedAt: row.sales_confirmed_at || null,
     salesPerson: salesRep,
-    salesPersonCode: row.sales_person_code || extraData.salesPersonCode || '',
+    salesPersonCode: salesPersonCode,
     c8: salesRep,
-    createdBy: row.created_by || '',
-    createdById: row.created_by_id || extraData.createdById || '',
+    createdBy: createdBy,
+    createdById: createdById,
+    dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     items: Array.isArray(row.items) ? row.items : [],
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
     dispatchPacking: (Array.isArray(row.dispatch_packing) || (row.dispatch_packing && typeof row.dispatch_packing === 'object')) ? row.dispatch_packing : [],
@@ -657,11 +661,10 @@ const toDatabaseBomRowServer = (item) => {
     remarks: item.remarks || '',
     status: item.status || 'Draft',
     sales_confirmed: Boolean(item.salesConfirmed),
-    sales_confirmed_at: sanitizeTimestamp(item.salesConfirmedAt),
-    sales_person: item.salesPerson || item.c8 || '',
-    sales_person_code: item.salesPersonCode || extraData.salesPersonCode || '',
-    created_by: item.createdBy || '',
-    created_by_id: item.createdById || extraData.createdById || '',
+    sales_person: item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
+    sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
+    created_by: item.createdBy || item.created_by || item.salesPerson || item.sales_person || '',
+    created_by_id: item.createdById || item.created_by_id || item.salesPersonCode || item.sales_person_code || extraData.createdById || '',
     items: Array.isArray(item.items) ? item.items : [],
     payments: cleanPayments,
     dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
@@ -693,11 +696,10 @@ const loadDatabaseBoms = async () => {
 
   try {
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 5000));
-    const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
+    const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
     const fetchPromise = supabase
       .from('bom_orders')
       .select(BOM_LIST_COLUMNS)
-      .neq('customer_name', 'Customer')
       .order('created_at', { ascending: false });
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);

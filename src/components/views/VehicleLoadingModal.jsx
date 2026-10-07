@@ -519,7 +519,7 @@ const handleFinalizeVehicleLoading = () => {
     bomCode: bCode,
     invoiceNo: invNo,
     customer: custName,
-    salesPerson: (bom.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim(),
+    salesPerson: (bom.salesPerson || bom.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
     deliveryAddress: delAddr,
     packedCount: packedItems.length,
     vehicleLoading: loadingPayload,
@@ -570,7 +570,7 @@ return (
               </span>
             </div>
             <p style={{ fontSize: '12px', color: '#94A3B8', margin: '3px 0 0 0' }}>
-              Customer: <strong style={{ color: '#FFFFFF' }}>{custName}</strong> • Sales Creator: <strong style={{ color: '#38BDF8' }}>👤 {(bom.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Destination: <span>{delAddr}</span>
+              Customer: <strong style={{ color: '#FFFFFF' }}>{custName}</strong> • Sales Creator: <strong style={{ color: '#38BDF8' }}>👤 {(bom.salesPerson || bom.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Destination: <span>{delAddr}</span>
             </p>
           </div>
         </div>

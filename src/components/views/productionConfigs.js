@@ -486,7 +486,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   }
 
                   const customerDisplayName = b.customerName || b.companyName || b.vendor || b.clientName || 'Customer Order';
-                  const salesPersonName = (b.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim();
+                  const salesPersonName = (b.salesPerson || b.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim();
                   
                   let totalAmt = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
                   if (!totalAmt && itemsArray.length > 0) {

@@ -330,7 +330,8 @@ export default function AccountsVerificationModal({
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       vendor: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
       customerName: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
-      salesPerson: (verifiedBOM.salesPerson || verifiedBOM.createdBy || localStorage.getItem('controlroom_logged_user_name') || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim(),
+      salesPerson: (verifiedBOM.salesPerson || verifiedBOM.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
+      salesPersonCode: verifiedBOM.salesPersonCode || verifiedBOM.createdById || '',
       poNo: targetCode,
       bomCode: targetCode,
       grnNo: 'GRN-VERIFIED',
@@ -440,7 +441,7 @@ export default function AccountsVerificationModal({
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
               <span>•</span>
-              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {((accountsVerificationModal.salesPerson || accountsVerificationModal.c4 || 'Mohith JV')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
+              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
               <span>•</span>
               <span>Payment Terms: <strong style={{ color: '#FFFFFF' }}>{payTypeText}</strong></span>
             </div>

@@ -1036,7 +1036,7 @@ export default function InvoiceDetailModal({
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Sales Person</div>
-              <strong style={{ color: '#0E7490' }}>👤 {((inv.salesPerson || matchingBom?.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV')).replace(/\s*\([^)]*\)/g, '').trim()}</strong>
+              <strong style={{ color: '#0E7490' }}>👤 {((inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong>
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Due Date</div>

@@ -1359,7 +1359,7 @@ export default function BomOrdersView(props) {
         c3: b.customerName || b.companyName || 'Customer Order',
         salesPerson: (() => {
           const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-          if (!sp) return defaultSalesPersonName;
+          if (!sp) return 'Sales Department';
           return sp;
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
@@ -5163,7 +5163,7 @@ export default function BomOrdersView(props) {
                     deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
                     items: finalizedItems,
                     dispatchPacking: packingItems,
-                    salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim(),
+                    salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
                     status: 'Sales Confirmed - Sent to Dispatch',
                     salesConfirmed: true,
                     salesConfirmedAt: new Date().toISOString(),
@@ -6767,7 +6767,7 @@ export default function BomOrdersView(props) {
                       <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
                       <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
                         <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          👤 {(row.salesPerson || row.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+                          👤 {(row.salesPerson || row.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
@@ -7266,7 +7266,7 @@ export default function BomOrdersView(props) {
               <div>
                 <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block' }}>Sales Creator</span>
                 <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
-                  👤 {(quickPreviewRecord.salesPerson || quickPreviewRecord.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+                  👤 {(quickPreviewRecord.salesPerson || quickPreviewRecord.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
                 </strong>
               </div>
               <div>
@@ -7936,7 +7936,7 @@ export default function BomOrdersView(props) {
               }}>
                 <strong>⚠️ Why are you cancelling this BOM?</strong>
                 <br />
-                The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || bomCancelPromptModal.createdBy || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
+                The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || bomCancelPromptModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
               </div>
 
               <div>

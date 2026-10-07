@@ -126,11 +126,7 @@ export default function ProductionViewsEngine(props) {
     try {
       const local = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
       if (Array.isArray(local) && local.length > 0) {
-        const cleaned = local.filter(b => b && !((b.customerName === 'Customer' || b.customer_name === 'Customer' || b.vendor === 'Customer') && !b.sourcePiNo && !b.source_pi_no));
-        if (cleaned.length !== local.length) {
-          localStorage.setItem('controlroom_bom_store', JSON.stringify(cleaned));
-        }
-        return cleaned;
+        return local;
       }
     } catch (_) {}
     return [];
@@ -1300,15 +1296,25 @@ export default function ProductionViewsEngine(props) {
             const rStatus = (r.status || '').toLowerCase();
             const rTabGroup = (r.tabGroup || '').toLowerCase();
 
-            const matchesTab = subTab === 'all' ||
-              subTab === 'all boms' ||
-              subTab === 'all orders' ||
-              subTab === 'all accounts orders' ||
+            const cleanSub = subTab.replace(/[^a-z0-9]/g, '');
+            const cleanStatus = rStatus.replace(/[^a-z0-9]/g, '');
+            const cleanGroup = rTabGroup.replace(/[^a-z0-9]/g, '');
+
+            const matchesTab = cleanSub === 'all' ||
+              cleanSub === 'allboms' ||
+              cleanSub === 'allorders' ||
+              cleanSub === 'allaccountsorders' ||
+              cleanGroup === cleanSub ||
               rTabGroup === subTab ||
-              (subTab.includes('pending') && (rStatus.includes('pending') || rTabGroup.includes('pending') || rStatus.includes('draft'))) ||
-              (subTab.includes('verified') && (rStatus.includes('verified') || rTabGroup.includes('verified'))) ||
-              (subTab.includes('draft') && rStatus.includes('draft')) ||
-              (subTab.includes('sent') && (rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')));
+              (cleanSub.includes('pending') && (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))) ||
+              (cleanSub.includes('partially') && (cleanStatus.includes('partial') || cleanGroup.includes('partial'))) ||
+              (cleanSub.includes('packed') && (cleanStatus.includes('packed') || cleanGroup.includes('packed') || cleanStatus.includes('verified'))) ||
+              (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||
+              (cleanSub.includes('lr') && (cleanStatus.includes('lr') || cleanGroup.includes('lr'))) ||
+              ((cleanSub.includes('closed') || cleanSub.includes('dispatched')) && (cleanStatus.includes('closed') || cleanStatus.includes('dispatched') || cleanStatus.includes('completed') || cleanGroup.includes('closed') || r.fullyCompleted)) ||
+              (cleanSub.includes('cancel') && (cleanStatus.includes('cancel') || cleanGroup.includes('cancel') || r.cancelled)) ||
+              (cleanSub.includes('draft') && cleanStatus.includes('draft')) ||
+              (cleanSub.includes('sent') && (cleanStatus.includes('sent') || cleanStatus.includes('confirm') || cleanStatus.includes('production')));
 
             return matchesSearch && matchesDate && matchesTab;
           });
