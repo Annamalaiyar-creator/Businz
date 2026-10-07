@@ -3352,6 +3352,17 @@ async function repairBomSequences() {
             convertedBomNo: assigned
           };
         }
+      } else if (pi.convertedBomCode === 'BOM-659' || pi.convertedBomNo === 'BOM-659') {
+        piUpdatedCount++;
+        piListChanged = true;
+        return {
+          ...pi,
+          status: 'Issued',
+          statusType: 'issued',
+          convertedToBom: false,
+          convertedBomCode: null,
+          convertedBomNo: null
+        };
       }
       return pi;
     });
@@ -3410,6 +3421,19 @@ async function repairBomSequences() {
 
   // 3. Ensure public.proforma_invoices and public.bom_orders tables in PostgreSQL are updated
   if (isDbConnected()) {
+    try {
+      await query(`
+        UPDATE public.proforma_invoices
+        SET converted_bom_code = NULL,
+            converted_to_bom = false,
+            status = 'Issued',
+            updated_at = NOW()
+        WHERE (converted_bom_code = 'BOM-659' OR converted_bom_no = 'BOM-659')
+          AND pi_no != 'PI-00061'
+          AND id != 'PI-00061'
+      `);
+    } catch (_) {}
+
     for (const [piNo, info] of Object.entries(targetMap)) {
       try {
         await query(`
