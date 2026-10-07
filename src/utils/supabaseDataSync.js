@@ -1701,13 +1701,20 @@ export function saveCloudStore(storeKey, storeData) {
 export function getWorkflowRank(b) {
   if (!b) return 0;
   const s = String(b.status || '').toLowerCase();
-  if (s.includes('invoice confirmed') || s.includes('closed') || s.includes('completed')) return 60;
-  if (s.includes('awaiting lr copy') || s.includes('dispatched')) return 55;
-  if (s.includes('passed to invoice') || s.includes('accounts verified')) return 50;
-  if (s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 40;
-  if (s.includes('packed') || s.includes('awaiting accounts')) return 30;
+  if (b.cancelled || s.includes('cancel')) return -1;
+  // Final completed / closed
+  if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
+  // Vehicle loaded & dispatched, awaiting LR receipt from transporter
+  if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
+  // Invoice confirmed & ready for vehicle loading
+  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
+  // Accounts verified & forwarded to billing
+  if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
+  // Goods packing in dispatch
+  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts')) return 30;
   if (s.includes('partially packed')) return 20;
-  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production')) return 10;
+  // Sales confirmed BOM
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
   return 1;
 }
 
@@ -1738,7 +1745,19 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
       const existing = resolvedList[idx];
       const existingRank = getWorkflowRank(existing);
       const newRank = getWorkflowRank(b);
-      resolvedList[idx] = newRank >= existingRank ? { ...existing, ...b } : { ...b, ...existing };
+      resolvedList[idx] = newRank >= existingRank ? {
+        ...existing,
+        ...b,
+        vehicleLoading: b.vehicleLoading || existing.vehicleLoading || null,
+        lrCopyDoc: b.lrCopyDoc || existing.lrCopyDoc || null,
+        fullyCompleted: b.fullyCompleted !== undefined ? b.fullyCompleted : existing.fullyCompleted
+      } : {
+        ...b,
+        ...existing,
+        vehicleLoading: existing.vehicleLoading || b.vehicleLoading || null,
+        lrCopyDoc: existing.lrCopyDoc || b.lrCopyDoc || null,
+        fullyCompleted: existing.fullyCompleted !== undefined ? existing.fullyCompleted : b.fullyCompleted
+      };
       continue;
     }
 
@@ -1749,12 +1768,24 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
       const existingRank = getWorkflowRank(existing);
       const newRank = getWorkflowRank(b);
 
-      if (newRank > existingRank) {
+      if (newRank >= existingRank) {
         seenCodes.delete(String(existing.bomCode || existing.code || existing.id || '').trim());
-        resolvedList[idx] = { ...existing, ...b };
+        resolvedList[idx] = {
+          ...existing,
+          ...b,
+          vehicleLoading: b.vehicleLoading || existing.vehicleLoading || null,
+          lrCopyDoc: b.lrCopyDoc || existing.lrCopyDoc || null,
+          fullyCompleted: b.fullyCompleted !== undefined ? b.fullyCompleted : existing.fullyCompleted
+        };
         seenCodes.set(code, idx);
       } else {
-        resolvedList[idx] = { ...b, ...existing };
+        resolvedList[idx] = {
+          ...b,
+          ...existing,
+          vehicleLoading: existing.vehicleLoading || b.vehicleLoading || null,
+          lrCopyDoc: existing.lrCopyDoc || b.lrCopyDoc || null,
+          fullyCompleted: existing.fullyCompleted !== undefined ? existing.fullyCompleted : b.fullyCompleted
+        };
       }
       continue;
     }

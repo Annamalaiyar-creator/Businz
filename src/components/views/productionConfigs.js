@@ -352,10 +352,38 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 return Boolean(s.includes('partially packed') || (packedCount > 0 && dp.length > packedCount));
               };
 
+              const isClosedOrder = (b) => {
+                if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
+                const s = String(b.status || '').toLowerCase();
+                const hasPhotos = Boolean(Array.isArray(b.vehicleLoading?.photos) && b.vehicleLoading.photos.length > 0);
+                const hasVehicle = Boolean(b.vehicleLoading?.vehicleNo || b.vehicleNo);
+                const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup'));
+                const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct';
+
+                if (s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return true;
+                if (b.fullyCompleted && !s.includes('awaiting lr')) return true;
+                // If loading photos/vehicle exist and LR copy is attached (or direct handover)
+                if ((hasPhotos || hasVehicle || b.vehicleLoading?.loadedAt) && (hasLr || isDirect)) return true;
+                return false;
+              };
+
+              const isAwaitingLrOrder = (b) => {
+                if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
+                if (isClosedOrder(b)) return false;
+                const s = String(b.status || '').toLowerCase();
+                if (s.includes('awaiting lr') || s.includes('dispatched - awaiting lr copy')) return true;
+                const hasPhotos = Boolean(Array.isArray(b.vehicleLoading?.photos) && b.vehicleLoading.photos.length > 0);
+                const hasVehicle = Boolean(b.vehicleLoading?.vehicleNo || b.vehicleNo);
+                const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup'));
+                // If vehicle has been loaded/dispatched but LR is still missing
+                if ((hasPhotos || hasVehicle || b.vehicleLoading?.loadedAt) && !hasLr) return true;
+                return false;
+              };
+
               const isOrderAwaitingLoading = (b) => {
                 if (!b || b.status === 'Draft' || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
-                if (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || b.status === 'Fully Dispatched & Delivered' || b.fullyCompleted) return false;
-                if (b.status === 'Dispatched - Awaiting LR Copy') return false;
+                if (isClosedOrder(b)) return false;
+                if (isAwaitingLrOrder(b)) return false;
 
                 const isFullyPacked = isPackedOrder(b);
 
@@ -367,7 +395,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   b.status === 'Accounts Verified & Passed to Invoice' ||
                   b.isAccountsDone ||
                   b.accountsVerification?.verified ||
-                  (b.invoiceNo && b.status !== 'Closed') ||
+                  (b.invoiceNo && !isClosedOrder(b)) ||
                   (isFullyPacked && (b.isAccountsDone || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified || b.invoiceConfirmed || b.invoiceNo))
                 );
               };
@@ -379,12 +407,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
                 tabs: [
                   { id: 'All', label: 'All Orders', count: (bomStore || []).filter(Boolean).length, bg: '#F1F5F9', fg: '#334155' },
-                  { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
-                  { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => isPartiallyPackedOrder(b) && !['Closed', 'CLOSED', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
-                  { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => isPackedOrder(b) && !['Closed', 'CLOSED', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !isOrderAwaitingLoading(b)).length, bg: '#DCFCE7', fg: '#166534' },
+                  { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
+                  { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => isPartiallyPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => isPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b)).length, bg: '#DCFCE7', fg: '#166534' },
                   { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => isOrderAwaitingLoading(b)).length, bg: '#DBEAFE', fg: '#1E40AF' },
-                  { id: 'AwaitingLrCopy', label: 'Awaiting LR Copy', count: (bomStore || []).filter(b => b && b.status === 'Dispatched - Awaiting LR Copy' && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
-                  { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || (b.fullyCompleted && b.status !== 'Dispatched - Awaiting LR Copy') || b.status === 'Fully Dispatched & Delivered') && !b.cancelled).length, bg: '#F1F5F9', fg: '#475569' },
+                  { id: 'AwaitingLrCopy', label: 'Awaiting LR Copy', count: (bomStore || []).filter(b => isAwaitingLrOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => isClosedOrder(b)).length, bg: '#F1F5F9', fg: '#475569' },
                   { id: 'Cancelled', label: 'Cancelled', count: (bomStore || []).filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
@@ -435,8 +463,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     : (isOrderPacked ? totalItemsCount : 0);
                   const isFullyPacked = isOrderPacked || (totalItemsCount > 0 && packedCount === totalItemsCount);
                   const isPartiallyPacked = !isFullyPacked && (isPartiallyPackedOrder(b) || (packedCount > 0 && packedCount < totalItemsCount));
-                  const isAwaitingLr = b.status === 'Dispatched - Awaiting LR Copy';
-                  const isClosed = (b.status === 'Closed' || b.status === 'CLOSED' || b.status === 'Completed' || (b.fullyCompleted && !isAwaitingLr) || b.status === 'Fully Dispatched & Delivered') && !isAwaitingLr;
+                  const isAwaitingLr = isAwaitingLrOrder(b);
+                  const isClosed = isClosedOrder(b);
                   const isCancelled = Boolean(b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored');
                   const isAwaitingLoad = isOrderAwaitingLoading(b);
 

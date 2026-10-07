@@ -468,6 +468,11 @@ const toConsumerBomServer = (row) => {
     dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
+    vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
+    lrCopyDoc: row.lr_copy_doc || extraData.lrCopyDoc || null,
+    fullyCompleted: Boolean(extraData.fullyCompleted || row.status === 'Completed' || row.status === 'Closed' || row.status === 'Fully Dispatched & Delivered'),
+    dispatchedAt: row.dispatched_at || extraData.dispatchedAt || null,
+    completedAt: row.completed_at || extraData.completedAt || null,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
   };
