@@ -28,7 +28,7 @@ import { UploadPaymentModal, UpdatePaymentModal, ReuploadAddressProofModal } fro
 import { CompletedBomSummaryModal, ActiveMediaPreviewModal, PreviewAddressProofModal, DispatchChecklistPreviewModal, ViewingProofDocModal, BomCancelPromptModal } from './DispatchAndPreviewModals';
 import { buildProductionConfigs } from './productionConfigs';
 import { CloseInvoiceReasonModal, ConfirmInvoiceSuccessModal } from './InvoiceModals';
-import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, getWorkflowRank } from '../../utils/supabaseDataSync';
 import { getItems, getVendors } from '../../services/businzDataService';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
@@ -190,7 +190,7 @@ export default function ProductionViewsEngine(props) {
       try {
         let data = null;
         try {
-          const apiRes = await fetch('/api/boms');
+          const apiRes = await fetch('/api/boms?refresh=true');
           if (apiRes.ok) {
             const json = await apiRes.json();
             if (json && Array.isArray(json.data)) {
@@ -209,11 +209,33 @@ export default function ProductionViewsEngine(props) {
           } else {
             setBomStore(prev => {
               const { list: resolvedList } = resolveBomCollisions(data, 658);
+              // Protect workflow progression: never let a stale server record revert a completed/dispatched status
+              const prevMap = new Map((prev || []).map(b => [b.bomCode || b.code || b.id, b]));
+              const mergedList = resolvedList.map(item => {
+                const k = item.bomCode || item.code || item.id;
+                const prevItem = prevMap.get(k);
+                if (!prevItem) return item;
+                const prevRank = getWorkflowRank(prevItem);
+                const newRank = getWorkflowRank(item);
+                if (prevRank > newRank) {
+                  return {
+                    ...item,
+                    ...prevItem,
+                    status: prevItem.status,
+                    fullyCompleted: prevItem.fullyCompleted,
+                    vehicleLoading: prevItem.vehicleLoading || item.vehicleLoading,
+                    salesPerson: prevItem.salesPerson || item.salesPerson,
+                    salesPersonCode: prevItem.salesPersonCode || item.salesPersonCode
+                  };
+                }
+                return item;
+              });
+
               const parseBomSeq = (code) => {
                 const m = String(code || '').match(/BOM-(\d+)/i);
                 return m ? parseInt(m[1], 10) : 0;
               };
-              const sorted = resolvedList.sort((a, b) => {
+              const sorted = mergedList.sort((a, b) => {
                 const seqA = parseBomSeq(a?.bomCode || a?.code || a?.id);
                 const seqB = parseBomSeq(b?.bomCode || b?.code || b?.id);
                 if (seqA !== seqB) return seqB - seqA;
@@ -1294,7 +1316,7 @@ export default function ProductionViewsEngine(props) {
 
             // Date range filter matching
             let matchesDate = true;
-            const rDateStr = r.c4 || r.date || r.createdAt || r.bomDate;
+            const rDateStr = r.date || r.createdAt || r.bomDate || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
             if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
               const rIso = String(rDateStr).substring(0, 10);
               if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
@@ -1439,9 +1461,22 @@ export default function ProductionViewsEngine(props) {
                       : [{ code: 'PRD-001', name: 'Standard Component', qty: 1, bomQty: 1, invQty: 1, rate: 1000, tax: 18, amt: 1180, selected: true }]
                   });
                 } else if (activeTab === 'Dispatch Orders') {
+                  const targetCode = targetRow.bomCode || targetRow.code || targetRow.id;
+                  const originalBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode));
+                  const fullBomToLoad = originalBom ? {
+                    ...originalBom,
+                    ...targetRow,
+                    status: (originalBom.status || targetRow.rawStatus || targetRow.status),
+                    salesPerson: (originalBom.salesPerson || targetRow.salesPerson),
+                    salesPersonCode: (originalBom.salesPersonCode || targetRow.salesPersonCode)
+                  } : targetRow;
+
                   const isAwaitingLoad = Boolean(
                     targetRow.tabGroup === 'AwaitingLoading' ||
                     targetRow.tabGroup === 'AwaitingLrCopy' ||
+                    targetRow.tabGroup === 'Closed' ||
+                    targetRow.status === 'Completed' ||
+                    targetRow.status === 'COMPLETED & DISPATCHED' ||
                     targetRow.status === 'Awaiting Vehicle Loading & Dispatch' ||
                     targetRow.status === 'AWAITING VEHICLE LOADING' ||
                     targetRow.status === 'Invoice Confirmed' ||
@@ -1454,11 +1489,13 @@ export default function ProductionViewsEngine(props) {
                     (targetRow.invoiceNo && targetRow.status !== 'Closed')
                   );
                   if (isCancelledRow) {
-                    setDispatchPackingModal({ ...targetRow, isViewOnly: true, isReadOnly: true });
+                    setDispatchPackingModal({ ...fullBomToLoad, isViewOnly: true, isReadOnly: true });
+                  } else if (targetRow.tabGroup === 'Closed' || targetRow.status === 'Completed' || targetRow.status === 'COMPLETED & DISPATCHED') {
+                    setVehicleLoadingModal({ ...fullBomToLoad, isReadOnly: true });
                   } else if (isAwaitingLoad) {
-                    setVehicleLoadingModal(targetRow);
+                    setVehicleLoadingModal(fullBomToLoad);
                   } else {
-                    setDispatchPackingModal(targetRow);
+                    setDispatchPackingModal(fullBomToLoad);
                   }
                 } else if (activeTab === 'Delivery Challans') {
                   setPendingDcModal(targetRow);
@@ -1504,10 +1541,23 @@ export default function ProductionViewsEngine(props) {
               setViewingInvoiceModal(rec);
               setInvoiceModalActiveTab('Invoice Items');
             } else if (activeTab === 'Dispatch Orders') {
+              const recCode = rec.bomCode || rec.code || rec.id;
+              const origRec = (bomStore || []).find(b => b && (b.bomCode === recCode || b.code === recCode || b.id === recCode));
+              const fullRec = origRec ? {
+                ...origRec,
+                ...rec,
+                status: (origRec.status || rec.rawStatus || rec.status),
+                salesPerson: (origRec.salesPerson || rec.salesPerson),
+                salesPersonCode: (origRec.salesPersonCode || rec.salesPersonCode)
+              } : rec;
+
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
               const isRecAwaitingLoad = Boolean(
                 rec.tabGroup === 'AwaitingLoading' ||
                 rec.tabGroup === 'AwaitingLrCopy' ||
+                rec.tabGroup === 'Closed' ||
+                rec.status === 'Completed' ||
+                rec.status === 'COMPLETED & DISPATCHED' ||
                 rec.status === 'Dispatched - Awaiting LR Copy' ||
                 rec.status === 'AWAITING LR COPY' ||
                 rec.status === 'Awaiting LR Copy' ||
@@ -1519,10 +1569,14 @@ export default function ProductionViewsEngine(props) {
                 rec.isAccountsDone ||
                 (rec.invoiceNo && rec.status !== 'Closed')
               );
-              if (isRecAwaitingLoad) {
-                setVehicleLoadingModal(rec);
+              if (isRecCancelled) {
+                setDispatchPackingModal({ ...fullRec, isViewOnly: true, isReadOnly: true });
+              } else if (rec.tabGroup === 'Closed' || rec.status === 'Completed' || rec.status === 'COMPLETED & DISPATCHED') {
+                setVehicleLoadingModal({ ...fullRec, isReadOnly: true });
+              } else if (isRecAwaitingLoad) {
+                setVehicleLoadingModal(fullRec);
               } else {
-                setDispatchPackingModal(isRecCancelled ? { ...rec, isViewOnly: true, isReadOnly: true } : rec);
+                setDispatchPackingModal(fullRec);
               }
             } else if (activeTab === 'Accounts Verification') {
               setAccountsVerificationModal(rec);

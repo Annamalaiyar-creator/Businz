@@ -378,8 +378,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 actionText: '',
                 searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
                 tabs: [
-                  { id: 'All', label: 'All Orders', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true)).length, bg: '#F1F5F9', fg: '#334155' },
-                  { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true) && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
+                  { id: 'All', label: 'All Orders', count: (bomStore || []).filter(Boolean).length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && !['Closed', 'CLOSED', 'Completed', 'Fully Dispatched & Delivered', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
                   { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => isPartiallyPackedOrder(b) && !['Closed', 'CLOSED', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => isPackedOrder(b) && !['Closed', 'CLOSED', 'Dispatched - Awaiting LR Copy', 'Cancelled', 'Cancelled & Stock Restored'].includes(b.status) && !b.cancelled && !isOrderAwaitingLoading(b)).length, bg: '#DCFCE7', fg: '#166534' },
                   { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => isOrderAwaitingLoading(b)).length, bg: '#DBEAFE', fg: '#1E40AF' },
@@ -388,7 +388,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   { id: 'Cancelled', label: 'Cancelled', count: (bomStore || []).filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
-                rows: (bomStore || []).filter(b => b && (b.status ? b.status !== 'Draft' : true)).sort((a, b) => {
+                rows: (bomStore || []).filter(Boolean).sort((a, b) => {
                   const parseBomSeq = (code) => {
                     const m = String(code || '').match(/BOM-(\d+)/i);
                     return m ? parseInt(m[1], 10) : 0;
@@ -477,6 +477,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     stFg = '#B45309';
                     stBorder = '1px solid #FDE68A';
                     tabGroup = 'PendingPacking';
+                  } else if (b.status === 'Draft') {
+                    statusLabel = 'DRAFT BOM';
+                    stBg = '#F1F5F9';
+                    stFg = '#475569';
+                    stBorder = '1px solid #CBD5E1';
+                    tabGroup = 'PendingPacking';
                   }
 
                   let packingProgressText = `${packedCount} of ${totalItemsCount} Items Packed`;
@@ -505,11 +511,28 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     const lower = String(name).toLowerCase().trim();
                     return lower === 'anu' || lower.includes('dispatch') || lower.includes('fulfillment');
                   };
-                  let rawSales = b.salesPerson || b.createdBy || '';
-                  if (isDispatchUser(rawSales) && b.createdBy && !isDispatchUser(b.createdBy)) {
-                    rawSales = b.createdBy;
+
+                  let rawSales = b.salesPerson || b.sales_person || '';
+                  if (!rawSales || rawSales === 'Sales Department' || isDispatchUser(rawSales)) {
+                    if (b.createdBy && !isDispatchUser(b.createdBy)) {
+                      rawSales = b.createdBy;
+                    } else if (b.sourcePiNo || b.source_pi_no || b.piNo) {
+                      try {
+                        const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
+                        const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
+                        if (rawPi) {
+                          const pis = JSON.parse(rawPi);
+                          if (Array.isArray(pis)) {
+                            const matchedPi = pis.find(p => p && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum));
+                            if (matchedPi && (matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy)) {
+                              rawSales = matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy;
+                            }
+                          }
+                        }
+                      } catch (_) {}
+                    }
                   }
-                  const salesPersonName = (rawSales && !isDispatchUser(rawSales) ? rawSales : (b.createdBy && !isDispatchUser(b.createdBy) ? b.createdBy : 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim();
+                  const salesPersonName = (rawSales && !isDispatchUser(rawSales) ? rawSales : (b.createdBy && !isDispatchUser(b.createdBy) ? b.createdBy : (b.salesPerson || 'Sales Department'))).trim();
                   
                   let totalAmt = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
                   if (!totalAmt && itemsArray.length > 0) {
@@ -521,12 +544,14 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     ...b,
                     code: b.bomCode,
                     c2: customerDisplayName,
-                    salesPerson: salesPersonName,
+                    salesPerson: b.salesPerson || salesPersonName,
+                    salesPersonName: b.salesPerson || salesPersonName,
                     c3: salesPersonName,
                     c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                     c5: formattedAmt,
                     packingProgressText: packingProgressText,
                     status: statusLabel,
+                    rawStatus: b.status,
                     stBg: stBg,
                     stFg: stFg,
                     stBorder: stBorder,

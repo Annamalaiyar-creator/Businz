@@ -58,6 +58,49 @@ export async function initPostgresDatabase() {
       );
     `);
 
+    // Ensure bom_orders has contact_person and gst_no columns if table already exists
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'bom_orders') THEN
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
+            
+            -- Fix BOM-659 to restore accurate PI company, contact, transport, and address details
+            UPDATE public.bom_orders
+            SET customer_name = 'Teorainn Solar Pvt Ltd',
+                company_name = 'Teorainn Solar Pvt Ltd',
+                contact_person = 'Incheon Kia',
+                gst_no = '32AAECI9544G1ZK',
+                email = 'admin@teorainnsolar.com',
+                payment_type = '100% Paid',
+                transporter_name = 'A2B',
+                transport_mode = 'Transport',
+                transport_scope = 'VRM Structures',
+                billing_address = 'Incheon Kia 32AAECI9544G1ZK, Muvattupuzha, Kerala PIN: 682316',
+                billing_address_obj = '{"street": "Incheon Kia 32AAECI9544G1ZK", "address": "Incheon Kia 32AAECI9544G1ZK", "city": "Muvattupuzha", "state": "Kerala", "pincode": "682316"}'::jsonb,
+                delivery_address = 'Incheon Kia 32AAECI9544G1ZK, Muvattupuzha, Kerala PIN: 682316',
+                delivery_address_obj = '{"street": "Incheon Kia 32AAECI9544G1ZK", "address": "Incheon Kia 32AAECI9544G1ZK", "city": "Muvattupuzha", "state": "Kerala", "pincode": "682316"}'::jsonb
+            WHERE (bom_code = 'BOM-659' OR id = 'BOM-659');
+
+            -- Automatically sync order values, items, and salesperson from source PI if missing
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN
+              UPDATE public.bom_orders b
+              SET grand_total = COALESCE(NULLIF(p.grand_total, 0), b.grand_total),
+                  sub_total = COALESCE(NULLIF(p.sub_total, 0), b.sub_total),
+                  sales_person = COALESCE(NULLIF(b.sales_person, ''), NULLIF(p.sales_person, ''), NULLIF(p.created_by, ''), 'Sales Department'),
+                  sales_person_code = COALESCE(NULLIF(b.sales_person_code, ''), NULLIF(p.sales_person_code, ''), NULLIF(p.created_by_id, ''), ''),
+                  items = CASE WHEN (b.items IS NULL OR jsonb_array_length(b.items) = 0 OR b.grand_total = 0) AND jsonb_array_length(p.items) > 0 THEN p.items ELSE b.items END
+              FROM public.proforma_invoices p
+              WHERE (b.source_pi_no = p.pi_no OR b.source_pi_no = p.id)
+                AND (b.grand_total IS NULL OR b.grand_total = 0 OR b.sales_person IS NULL OR b.sales_person = '' OR b.sales_person = 'Sales Department' OR b.sales_person = 'Sales Executive');
+            END IF;
+          END IF;
+        END $$;
+      `);
+    } catch (_) {}
+
     // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
     const storesToSeed = [
       'employees_store',

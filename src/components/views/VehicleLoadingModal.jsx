@@ -398,7 +398,7 @@ const handleAddSamplePhoto = () => {
   }, 'image/jpeg', 0.85);
 };
 
-const handleFinalizeVehicleLoading = () => {
+const handleFinalizeVehicleLoading = async () => {
   if (uploadingMedia || uploadingLr) {
     alert('⏳ Media or LR document is currently uploading to secure storage. Please wait until upload completes.');
     return;
@@ -438,10 +438,14 @@ const handleFinalizeVehicleLoading = () => {
     fullyCompleted: willCloseBom
   };
 
+  // Preserve authentic salesperson details from the order
+  const authenticSalesPerson = bom.salesPerson || bom.sales_person || bom.createdBy || 'Sales Department';
+  const authenticSalesPersonCode = bom.salesPersonCode || bom.sales_person_code || bom.createdById || '';
+
   // Permanently Deduct Inventory in Central Inventory Store & Raw Materials Store upon Vehicle Loading
   try {
     const itemsToDeduct = (bom.items && bom.items.length > 0) ? bom.items : packedItems;
-    centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, bom.salesPerson || 'Dispatch Vehicle Loading', true);
+    centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, authenticSalesPerson || 'Dispatch Vehicle Loading', true);
   } catch (cErr) {
     console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
   }
@@ -456,21 +460,35 @@ const handleFinalizeVehicleLoading = () => {
     stockDeducted: true,
     vehicleLoading: loadingPayload,
     lrCopyDoc: lrCopyDoc || bom.lrCopyDoc || null,
+    salesPerson: authenticSalesPerson,
+    salesPersonCode: authenticSalesPersonCode,
     dispatchedAt: bom.dispatchedAt || new Date().toISOString(),
     completedAt: willCloseBom ? new Date().toISOString() : null
   };
 
-  // Update BOM status to Fully Completed or Awaiting LR Copy & persist locally and to cloud
+  // 1. Update BOM status in local React state immediately
   setBomStore(prev => {
-    const updated = (prev || []).map(b => (b.bomCode === bCode || b.code === bCode) ? updatedBomData : b);
+    const updated = (prev || []).map(b => (b.bomCode === bCode || b.code === bCode || b.id === bCode) ? updatedBomData : b);
     try {
       localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
     } catch (_) {}
     return updated;
   });
 
+  // 2. Authoritative server update first - immediately updates server cache & PostgreSQL
   try {
-    saveCloudBomRow(updatedBomData);
+    await fetch('/api/boms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bom: updatedBomData, isUpdate: true })
+    });
+  } catch (apiErr) {
+    console.warn('Error saving BOM to /api/boms in VehicleLoadingModal:', apiErr);
+  }
+
+  // 3. Direct cloud sync via Supabase client
+  try {
+    await saveCloudBomRow(updatedBomData);
   } catch (e) {
     console.warn('Error saving BOM row to cloud in VehicleLoadingModal:', e);
   }
@@ -503,8 +521,8 @@ const handleFinalizeVehicleLoading = () => {
     notifyDispatchCompletedToSales({
       bomCode: bCode,
       customerName: custName,
-      salesPerson: bom.salesPerson || bom.createdBy,
-      salesPersonCode: bom.salesPersonCode || bom.createdById,
+      salesPerson: authenticSalesPerson,
+      salesPersonCode: authenticSalesPersonCode,
       vehicleNo: vNo,
       lrNo: isTransport ? lr : 'Self-Pickup',
       transporter: isTransport ? transp : 'Self-Pickup / Customer Handover',
@@ -519,7 +537,7 @@ const handleFinalizeVehicleLoading = () => {
     bomCode: bCode,
     invoiceNo: invNo,
     customer: custName,
-    salesPerson: (bom.salesPerson || bom.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
+    salesPerson: authenticSalesPerson,
     deliveryAddress: delAddr,
     packedCount: packedItems.length,
     vehicleLoading: loadingPayload,

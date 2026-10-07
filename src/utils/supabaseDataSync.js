@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 
 // Canonical column projection for BOM list/table queries (includes accounts_verification JSON for full metadata & extra data retention)
-export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
+export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
 
 // Canonical column projection for Invoice list/table queries
 export const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, status, pay, created_at, updated_at';
@@ -741,6 +741,8 @@ export function toConsumerBom(row) {
   const email = row.email || '';
   const billingAddr = row.billing_address || '';
   const deliveryAddr = row.delivery_address || '';
+  const contactPerson = row.contact_person || extraData.contactPerson || '';
+  const gstNo = row.gst_no || extraData.gstNo || extraData.gstin || '';
   const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || 'Sales Department';
   const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
   const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || salesRep;
@@ -753,6 +755,11 @@ export function toConsumerBom(row) {
     code: bomCode,
     customerName,
     companyName,
+    contactPerson,
+    contactPersonName: contactPerson,
+    gstNo,
+    gstNumber: gstNo,
+    gstin: gstNo,
     c2: customerName,
     c3: customerName,
     date: row.date || '',
@@ -775,7 +782,7 @@ export function toConsumerBom(row) {
     transporterName: row.transporter_name || '',
     vehicleNo: row.vehicle_no || '',
     lrNo: row.lr_no || '',
-    paymentType: row.payment_type || 'Credit Payment',
+    paymentType: row.payment_type || '100% Paid',
     partialAmount: Number(row.partial_amount || 0),
     balanceAmount: Number(row.balance_amount || 0),
     creditDays: Number(row.credit_days || 0),
@@ -872,7 +879,7 @@ export function toDatabaseBomRow(item) {
 
   const standardFields = new Set([
     'id', 'bomCode', 'code', 'sourcePiNo', 'date', 'deliveryDate',
-    'customerName', 'companyName', 'mobile', 'phone', 'email', 'billingAddress',
+    'customerName', 'companyName', 'contactPerson', 'contact_person', 'gstNo', 'gst_no', 'gstNumber', 'gstin', 'mobile', 'phone', 'email', 'billingAddress',
     'billingAddressObj', 'deliveryAddress', 'deliveryAddressObj',
     'deliveryAddressProofDoc', 'transportMode', 'transportScope',
     'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
@@ -913,6 +920,8 @@ export function toDatabaseBomRow(item) {
     delivery_date: sanitizeDate(item.deliveryDate),
     customer_name: item.customerName || item.companyName || item.vendor || item.clientName || 'Customer',
     company_name: item.companyName || item.customerName || item.vendor || item.clientName || '',
+    contact_person: item.contactPerson || item.contact_person || extraData.contactPerson || '',
+    gst_no: item.gstNo || item.gst_no || item.gstNumber || extraData.gstNo || '',
     mobile: item.mobile || item.phone || '',
     email: item.email || '',
     billing_address: item.billingAddress || item.c6 || '',
@@ -925,7 +934,7 @@ export function toDatabaseBomRow(item) {
     transporter_name: item.transporterName || '',
     vehicle_no: item.vehicleNo || '',
     lr_no: item.lrNo || '',
-    payment_type: item.paymentType || 'Credit Payment',
+    payment_type: item.paymentType || '100% Paid',
     partial_amount: sanitizeNumber(item.partialAmount, 0),
     balance_amount: sanitizeNumber(item.balanceAmount, 0),
     credit_days: Math.round(sanitizeNumber(item.creditDays, 0)),
@@ -1689,6 +1698,19 @@ export function saveCloudStore(storeKey, storeData) {
   }, 300);
 }
 
+export function getWorkflowRank(b) {
+  if (!b) return 0;
+  const s = String(b.status || '').toLowerCase();
+  if (s.includes('invoice confirmed') || s.includes('closed') || s.includes('completed')) return 60;
+  if (s.includes('awaiting lr copy') || s.includes('dispatched')) return 55;
+  if (s.includes('passed to invoice') || s.includes('accounts verified')) return 50;
+  if (s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 40;
+  if (s.includes('packed') || s.includes('awaiting accounts')) return 30;
+  if (s.includes('partially packed')) return 20;
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production')) return 10;
+  return 1;
+}
+
 /**
  * Deduplicates BOM list by unique bomCode and unique sourcePiNo (Strict 1-to-1 PI Rule).
  * Merges duplicate entries in place without fabricating clone BOM codes.
@@ -1697,28 +1719,12 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
   if (!Array.isArray(bomList)) return { list: [], maxSeq: sequenceMax };
   let maxSeq = Math.max(sequenceMax, 658);
 
-  const getWorkflowRank = (b) => {
-    if (!b) return 0;
-    const s = String(b.status || '').toLowerCase();
-    if (s.includes('invoice confirmed') || s.includes('closed') || s.includes('completed')) return 60;
-    if (s.includes('passed to invoice') || s.includes('accounts verified')) return 50;
-    if (s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 40;
-    if (s.includes('packed') || s.includes('awaiting accounts')) return 30;
-    if (s.includes('partially packed')) return 20;
-    if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production')) return 10;
-    return 1;
-  };
-
   const seenCodes = new Map();
   const seenPiNos = new Map();
   const resolvedList = [];
 
   for (const b of bomList) {
     if (!b) continue;
-    const cust = (b.customerName || b.customer_name || b.vendor || '').trim();
-    if (cust === 'Customer' && !b.sourcePiNo && !b.source_pi_no) {
-      continue;
-    }
     const code = String(b.bomCode || b.code || b.id || '').trim();
     if (!code || code === 'BOM-PENDING' || code === 'BOM-AUTO') {
       continue;

@@ -339,8 +339,7 @@ const loadLocalLeads = () => {
 // ==========================================
 const toConsumerBomServer = (row) => {
   if (!row || typeof row !== 'object') return null;
-  const cName = (row.customer_name || row.customerName || row.vendor || '').trim();
-  if (cName === 'Customer' && !row.source_pi_no && !row.sourcePiNo) return null;
+  const cName = (row.customer_name || row.customerName || row.company_name || row.vendor || 'Customer').trim();
 
   let extraData = {};
   if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
@@ -380,10 +379,12 @@ const toConsumerBomServer = (row) => {
   const bomCode = row.bom_code || row.id || '';
   const customerName = row.customer_name || row.company_name || '';
   const companyName = row.company_name || row.customer_name || '';
+  const contactPerson = row.contact_person || extraData.contactPerson || '';
+  const gstNo = row.gst_no || extraData.gstNo || extraData.gstin || '';
   const phone = row.mobile || '';
   const email = row.email || '';
-  const billingAddr = row.billing_address || '';
-  const deliveryAddr = row.delivery_address || '';
+  const billingAddr = row.billing_address || (row.billing_address_obj?.address ? `${row.billing_address_obj.address}, ${row.billing_address_obj.city || ''} ${row.billing_address_obj.state || ''} - ${row.billing_address_obj.pincode || ''}` : '');
+  const deliveryAddr = row.delivery_address || (row.delivery_address_obj?.address ? `${row.delivery_address_obj.address}, ${row.delivery_address_obj.city || ''} ${row.delivery_address_obj.state || ''} - ${row.delivery_address_obj.pincode || ''}` : billingAddr);
   const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || '';
   const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
   const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || '';
@@ -396,6 +397,9 @@ const toConsumerBomServer = (row) => {
     code: bomCode,
     customerName,
     companyName,
+    contactPerson,
+    gstNo,
+    gstin: gstNo,
     c2: companyName,
     c3: customerName,
     date: row.date || '',
@@ -418,7 +422,7 @@ const toConsumerBomServer = (row) => {
     transporterName: row.transporter_name || '',
     vehicleNo: row.vehicle_no || '',
     lrNo: row.lr_no || '',
-    paymentType: row.payment_type || 'Credit Payment',
+    paymentType: row.payment_type || '100% Paid',
     partialAmount: Number(row.partial_amount || 0),
     balanceAmount: Number(row.balance_amount || 0),
     creditDays: Number(row.credit_days || 0),
@@ -543,7 +547,7 @@ const toDatabaseBomRowServer = (item) => {
 
   const standardFields = new Set([
     'id', 'bomCode', 'code', 'sourcePiNo', 'date', 'deliveryDate',
-    'customerName', 'companyName', 'mobile', 'phone', 'email', 'billingAddress',
+    'customerName', 'companyName', 'contactPerson', 'contact_person', 'gstNo', 'gst_no', 'gstin', 'mobile', 'phone', 'email', 'billingAddress',
     'billingAddressObj', 'deliveryAddress', 'deliveryAddressObj',
     'deliveryAddressProofDoc', 'transportMode', 'transportScope',
     'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
@@ -638,8 +642,10 @@ const toDatabaseBomRowServer = (item) => {
     source_pi_no: sourcePiNo,
     date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
     delivery_date: sanitizeDate(item.deliveryDate),
-    customer_name: item.customerName || item.companyName || 'Customer',
-    company_name: item.companyName || item.customerName || '',
+    customer_name: item.companyName || item.customerName || item.vendor || 'Customer',
+    company_name: item.companyName || item.customerName || item.vendor || '',
+    contact_person: item.contactPerson || item.contact || extraData.contactPerson || '',
+    gst_no: item.gstNo || item.gst || item.gstin || extraData.gstNo || '',
     mobile: item.mobile || item.phone || '',
     email: item.email || '',
     billing_address: item.billingAddress || item.c6 || '',
@@ -649,10 +655,10 @@ const toDatabaseBomRowServer = (item) => {
     delivery_address_proof_doc: serializeDoc(item.deliveryAddressProofDoc),
     transport_mode: item.transportMode || 'Transport',
     transport_scope: item.transportScope || 'VRM Structures',
-    transporter_name: item.transporterName || '',
+    transporter_name: item.transporterName || item.transporter || '',
     vehicle_no: item.vehicleNo || '',
     lr_no: item.lrNo || '',
-    payment_type: item.paymentType || 'Credit Payment',
+    payment_type: item.paymentType || '100% Paid',
     partial_amount: sanitizeNumber(item.partialAmount, 0),
     balance_amount: sanitizeNumber(item.balanceAmount, 0),
     credit_days: Math.round(sanitizeNumber(item.creditDays, 0)),
@@ -688,15 +694,15 @@ const toDatabaseBomRowServer = (item) => {
   };
 };
 
-const loadDatabaseBoms = async () => {
+const loadDatabaseBoms = async (forceRefresh = false) => {
   // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
-  if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+  if (!forceRefresh && supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
     return supabaseMemoryStore.bom_store;
   }
 
   try {
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 5000));
-    const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
+    const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
     const fetchPromise = supabase
       .from('bom_orders')
       .select(BOM_LIST_COLUMNS)
@@ -707,6 +713,8 @@ const loadDatabaseBoms = async () => {
     if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
       supabaseMemoryStore.bom_store = mapped;
+      cachedBomsResult = mapped;
+      lastBomFetchTimestamp = Date.now();
       return mapped;
     }
   } catch (err) {
@@ -724,6 +732,8 @@ const loadDatabaseBoms = async () => {
       const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
       if (Array.isArray(diskData) && diskData.length > 0) {
         supabaseMemoryStore.bom_store = diskData;
+        cachedBomsResult = diskData;
+        lastBomFetchTimestamp = Date.now();
         return diskData;
       }
     }
@@ -743,6 +753,8 @@ const saveLocalBoms = async (boms) => {
   if (!boms) return;
   const list = Array.isArray(boms) ? boms : [boms];
   supabaseMemoryStore.bom_store = list;
+  cachedBomsResult = list;
+  lastBomFetchTimestamp = Date.now();
 
   // 1. Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
   // and is NOT rewritten on every normal BOM operation.
@@ -3130,8 +3142,9 @@ let lastBomFetchTimestamp = 0;
 app.get('/api/boms', async (req, res) => {
   try {
     const now = Date.now();
+    const shouldRefresh = Boolean(req.query.refresh === 'true' || req.query.refresh === '1');
     // 1. Serve immediately from high-speed memory cache if fresh (< 30s) unless refresh requested
-    if (!req.query.refresh && cachedBomsResult && (now - lastBomFetchTimestamp < 30000)) {
+    if (!shouldRefresh && cachedBomsResult && (now - lastBomFetchTimestamp < 30000)) {
       return res.json({ success: true, data: cachedBomsResult, total: cachedBomsResult.length });
     }
 
@@ -3152,7 +3165,7 @@ app.get('/api/boms', async (req, res) => {
     };
 
     // Load authoritative list directly from public.bom_orders (Zero leaves table interaction)
-    const boms = await loadDatabaseBoms();
+    const boms = await loadDatabaseBoms(shouldRefresh);
     const finalBoms = sortBoms(Array.isArray(boms) ? boms : []);
     cachedBomsResult = finalBoms;
     lastBomFetchTimestamp = Date.now();

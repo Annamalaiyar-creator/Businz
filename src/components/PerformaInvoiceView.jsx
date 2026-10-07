@@ -607,31 +607,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const dState = isSameAddr ? bState : (typeof pi.deliveryAddress === 'object' ? (pi.deliveryAddress?.state || '') : (pi.deliveryState || ''));
     const dPin = isSameAddr ? bPin : (typeof pi.deliveryAddress === 'object' ? (pi.deliveryAddress?.pincode || pi.deliveryAddress?.pin || '') : (pi.deliveryPincode || ''));
 
+    const formatAddrParts = (st, ct, sta, pin) => {
+      return [st, [ct, sta].filter(Boolean).join(', '), pin ? `PIN: ${pin}` : ''].filter(Boolean).join(', ');
+    };
+    const bFormatted = formatAddrParts(bStreet, bCity, bState, bPin) || bStreet;
+    const dFormatted = isSameAddr ? bFormatted : (formatAddrParts(dStreet, dCity, dState, dPin) || dStreet);
+
     const billingObj = { street: bStreet, address: bStreet, city: bCity, state: bState, pincode: bPin };
     const deliveryObj = { street: dStreet, address: dStreet, city: dCity, state: dState, pincode: dPin };
+
+    const compName = (pi.vendor || pi.customerName || pi.companyName || '').trim();
+    const custName = compName || 'Customer Order';
+    const contactPerson = (pi.contactPerson || pi.contact || '').trim();
+
+    const cleanGrand = parseFloat(String(pi.grandTotal || pi.amount || 0).replace(/[^0-9.]/g, '')) || 0;
+    const cleanSub = parseFloat(String(pi.subtotal || pi.unitValue || 0).replace(/[^0-9.]/g, '')) || (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : 0);
 
     const pGroups = pi.presetGroups || {};
     const pGroupList = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
     const pName = pi.presetName || (pGroupList.length > 0 ? pGroupList.map(g => `${g.presetName} (${g.setCount} Set${g.setCount > 1 ? 's' : ''})`).join(' + ') : null);
-    const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : null);
+    const pKitPrice = pi.presetKitPrice != null ? pi.presetKitPrice : (pi.kitSubtotal != null ? pi.kitSubtotal : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null));
     const pSetCount = pi.presetSetCount || (pGroupList.length > 0 ? pGroupList.reduce((s, g) => s + (parseInt(g.setCount) || 1), 0) : 1);
 
     const conversionData = {
       sourcePiNo: pi.piNo,
-      customerName: pi.vendor || pi.customerName || '',
-      companyName: pi.companyName || pi.vendor || pi.customerName || '',
-      contactPerson: pi.contactPerson || pi.contact || '',
+      customerName: custName,
+      companyName: compName,
+      contactPerson: contactPerson,
       phone: pi.phone || pi.mobile || '',
       email: pi.email || '',
       gstNo: pi.gstNo || pi.gst || '',
       productName: pi.productName || 'Solar Mounting Rails & Accessories',
-      billingAddress: billingObj,
+      billingAddress: bFormatted,
       billingAddressObj: billingObj,
       billingStreet: bStreet,
       billingCity: bCity,
       billingState: bState,
       billingPincode: bPin,
-      deliveryAddress: deliveryObj,
+      deliveryAddress: dFormatted,
       deliveryAddressObj: deliveryObj,
       deliveryStreet: dStreet,
       deliveryCity: dCity,
@@ -639,7 +652,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       deliveryPincode: dPin,
       sameAsBilling: isSameAddr,
       transportMode: pi.transportMode || 'Transport',
-      transporterName: pi.transporterName || '',
+      transporterName: pi.transporterName || pi.transporter || '',
       vehicleNo: pi.vehicleNo || '',
       transportScope: pi.transportScope || 'VRM Structures',
       lrNo: pi.lrNo || '',
@@ -653,9 +666,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       presetName: pName,
       presetKitPrice: pKitPrice,
       presetSetCount: pSetCount,
-      kitSubtotal: pi.kitSubtotal || null,
-      subtotal: pi.subtotal || null,
-      grandTotal: pi.grandTotal || null,
+      kitSubtotal: pi.kitSubtotal || (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : null),
+      subtotal: cleanSub || null,
+      grandTotal: cleanGrand || null,
+      amount: pi.amount || ('₹' + Math.round(cleanGrand).toLocaleString('en-IN')),
       salesPerson: pi.salesPerson || pi.salesperson || pi.salesRep || getEffectiveSalesPerson(),
       salesPersonCode: pi.salesPersonCode || currentEmpId,
       createdBy: pi.createdBy || getEffectiveSalesPerson(),
@@ -663,6 +677,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       items: (pi.items && pi.items.length > 0) ? pi.items.map(it => {
         const isPreset = Boolean(it.isPresetItem);
         const resolvedC = it.code || it.sku || it.itemId || resolveProductCode(it) || '';
+        const itQty = parseFloat(it.qty) || 1;
+        let itRate = String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0');
+        if (!isPreset && (parseFloat(itRate) === 0 || isNaN(parseFloat(itRate))) && cleanGrand > 0) {
+          itRate = String(Math.round(cleanGrand / itQty / 1.18));
+        }
         return {
           ...it,
           code: resolvedC,
@@ -671,7 +690,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           uom: it.uom || 'NOS',
           qty: String(it.qty || '1'),
           baseQty: it.baseQty != null ? it.baseQty : (parseFloat(it.qty) || 1),
-          rate: isPreset ? '0' : String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0'),
+          rate: isPreset ? '0' : itRate,
           gstRate: it.gstRate || '18%',
           isPresetItem: isPreset,
           presetGroupId: it.presetGroupId || null,
