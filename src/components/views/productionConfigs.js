@@ -333,6 +333,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
 
                 return Boolean(
                   allPacked ||
+                  b.packingStatus === 'PACKING_VERIFIED' ||
                   s.includes('packed') ||
                   s.includes('ready for dispatch') ||
                   s.includes('sent to accounts') ||
@@ -349,7 +350,11 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 const s = String(b.status || '').toLowerCase().trim();
                 const dp = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
                 const packedCount = dp.filter(p => p.packed).length;
-                return Boolean(s.includes('partially packed') || (packedCount > 0 && dp.length > packedCount));
+                return Boolean(
+                  b.packingStatus === 'PARTIALLY_PACKED' ||
+                  s.includes('partially packed') ||
+                  (packedCount > 0 && dp.length > packedCount)
+                );
               };
 
               const isClosedOrder = (b) => {

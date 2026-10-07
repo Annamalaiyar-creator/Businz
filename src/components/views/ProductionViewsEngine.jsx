@@ -217,18 +217,50 @@ export default function ProductionViewsEngine(props) {
                 if (!prevItem) return item;
                 const prevRank = getWorkflowRank(prevItem);
                 const newRank = getWorkflowRank(item);
-                if (prevRank > newRank) {
-                  return {
-                    ...item,
-                    ...prevItem,
-                    status: prevItem.status,
-                    fullyCompleted: prevItem.fullyCompleted,
-                    vehicleLoading: prevItem.vehicleLoading || item.vehicleLoading,
-                    salesPerson: prevItem.salesPerson || item.salesPerson,
-                    salesPersonCode: prevItem.salesPersonCode || item.salesPersonCode
-                  };
-                }
-                return item;
+
+                const prevPacking = Array.isArray(prevItem.dispatchPacking) ? prevItem.dispatchPacking : [];
+                const itemPacking = Array.isArray(item.dispatchPacking) ? item.dispatchPacking : [];
+                const prevPackedCount = prevPacking.filter(p => p && p.packed).length;
+                const itemPackedCount = itemPacking.filter(p => p && p.packed).length;
+                const resolvedPacking = (prevPackedCount > 0 && prevPackedCount >= itemPackedCount) 
+                  ? prevPacking 
+                  : (itemPackedCount > 0 ? itemPacking : (prevPacking.length > 0 ? prevPacking : itemPacking));
+
+                const resolvedPackingStatus = (prevItem.packingStatus === 'PACKING_VERIFIED' || item.packingStatus === 'PACKING_VERIFIED') 
+                  ? 'PACKING_VERIFIED' 
+                  : (prevItem.packingStatus === 'PARTIALLY_PACKED' || item.packingStatus === 'PARTIALLY_PACKED')
+                    ? 'PARTIALLY_PACKED'
+                    : (item.packingStatus || prevItem.packingStatus || null);
+
+                const effectiveStatus = (prevRank > newRank) ? prevItem.status : item.status;
+
+                return {
+                  ...item,
+                  ...((prevRank > newRank) ? prevItem : {}),
+                  status: effectiveStatus,
+                  dispatchPacking: resolvedPacking,
+                  packingStatus: resolvedPackingStatus,
+                  accountsVerification: {
+                    ...(item.accountsVerification || {}),
+                    ...(prevItem.accountsVerification || {}),
+                    verified: Boolean(item.accountsVerification?.verified || prevItem.accountsVerification?.verified),
+                    readyForAccounts: Boolean(item.accountsVerification?.readyForAccounts || prevItem.accountsVerification?.readyForAccounts),
+                    packedAt: item.accountsVerification?.packedAt || prevItem.accountsVerification?.packedAt || prevItem.packedAt || item.packedAt || null,
+                    packedBy: item.accountsVerification?.packedBy || prevItem.accountsVerification?.packedBy || prevItem.packedBy || item.packedBy || null
+                  },
+                  dispatchPackingMedia: (item.dispatchPackingMedia?.photos?.length > 0 || item.dispatchPackingMedia?.videos?.length > 0)
+                    ? item.dispatchPackingMedia
+                    : (prevItem.dispatchPackingMedia || { photos: [], videos: [] }),
+                  vehicleLoading: item.vehicleLoading || prevItem.vehicleLoading || null,
+                  lrCopyDoc: item.lrCopyDoc || prevItem.lrCopyDoc || null,
+                  packedAt: prevItem.packedAt || item.packedAt || null,
+                  packedBy: prevItem.packedBy || item.packedBy || null,
+                  packedById: prevItem.packedById || item.packedById || null,
+                  packingCompletedAt: prevItem.packingCompletedAt || item.packingCompletedAt || null,
+                  fullyCompleted: (prevItem.fullyCompleted !== undefined && prevRank >= newRank) ? prevItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : prevItem.fullyCompleted),
+                  salesPerson: prevItem.salesPerson || item.salesPerson,
+                  salesPersonCode: prevItem.salesPersonCode || item.salesPersonCode
+                };
               });
 
               const parseBomSeq = (code) => {

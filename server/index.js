@@ -345,9 +345,21 @@ const toConsumerBomServer = (row) => {
   if (!row || typeof row !== 'object') return null;
   const cName = (row.customer_name || row.customerName || row.company_name || row.vendor || 'Customer').trim();
 
+  let av = row.accounts_verification || row.accountsVerification;
+  if (typeof av === 'string' && (av.startsWith('{') || av.startsWith('['))) {
+    try { av = JSON.parse(av); } catch (_) {}
+  }
   let extraData = {};
-  if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
-    extraData = { ...row.accounts_verification._extra_data };
+  if (av && typeof av === 'object' && av._extra_data) {
+    extraData = { ...av._extra_data };
+  }
+
+  let cleanDispatchPacking = row.dispatch_packing || row.dispatchPacking || extraData.dispatchPacking || [];
+  if (typeof cleanDispatchPacking === 'string' && (cleanDispatchPacking.startsWith('[') || cleanDispatchPacking.startsWith('{'))) {
+    try { cleanDispatchPacking = JSON.parse(cleanDispatchPacking); } catch (_) {}
+  }
+  if (!Array.isArray(cleanDispatchPacking)) {
+    cleanDispatchPacking = [];
   }
 
   const isAccVerified = row.accounts_verified !== undefined
@@ -357,8 +369,8 @@ const toConsumerBomServer = (row) => {
         row.invoice_confirmed ||
         row.invoice_no
       );
-  const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
-    ? { ...row.accounts_verification }
+  const cleanAccountsVerification = (av && typeof av === 'object')
+    ? { ...av }
     : {
         verified: isAccVerified,
         verifiedBy: row.accounts_verified_by || '',
@@ -443,8 +455,16 @@ const toConsumerBomServer = (row) => {
     dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     items: Array.isArray(row.items) ? row.items : [],
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
-    dispatchPacking: (Array.isArray(row.dispatch_packing) || (row.dispatch_packing && typeof row.dispatch_packing === 'object')) ? row.dispatch_packing : [],
+    dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
+    packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
+      cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
+    ),
+    packedAt: row.packed_at || row.packedAt || extraData.packedAt || cleanAccountsVerification?.packedAt || null,
+    packedBy: row.packed_by || row.packedBy || extraData.packedBy || cleanAccountsVerification?.packedBy || null,
+    packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
+    packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
     invoiceConfirmed: Boolean(row.invoice_confirmed),
     invoiceDeducted: Boolean(row.invoice_deducted),
     invoiceNo: row.invoice_no || extraData.invoiceNo || '',
@@ -465,7 +485,6 @@ const toConsumerBomServer = (row) => {
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
-    dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
     vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
@@ -633,6 +652,14 @@ const toDatabaseBomRowServer = (item) => {
   const mergedExtra = { ...existingExtra, ...extraData };
   if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
   if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
+  if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
+  if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
+  if (item.packedAt) mergedExtra.packedAt = item.packedAt;
+  if (item.packedBy) mergedExtra.packedBy = item.packedBy;
+  if (item.packedById) mergedExtra.packedById = item.packedById;
+  if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
+  if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
+  if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -703,13 +730,37 @@ const toDatabaseBomRowServer = (item) => {
   };
 };
 
+function getWorkflowRankServer(b) {
+  if (!b) return 0;
+  const s = String(b.status || '').toLowerCase();
+  if (b.cancelled || s.includes('cancel')) return -1;
+  if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
+  if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
+  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
+  if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
+  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
+  if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
+  return 1;
+}
+
 const loadDatabaseBoms = async (forceRefresh = false) => {
   // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
   if (!forceRefresh && supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
     return supabaseMemoryStore.bom_store;
   }
 
-  // 2. Query PostgreSQL if connected
+  // 2. Read existing disk store as authoritative baseline
+  let existingDiskList = [];
+  const diskPath = getStoreFilePath('bom_store.json');
+  if (fs.existsSync(diskPath)) {
+    try {
+      existingDiskList = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+    } catch (_) {}
+  }
+  if (!Array.isArray(existingDiskList)) existingDiskList = [];
+
+  // 3. Query PostgreSQL if connected
   if (isDbConnected()) {
     try {
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 5000));
@@ -723,36 +774,89 @@ const loadDatabaseBoms = async (forceRefresh = false) => {
 
       if (!error && Array.isArray(data) && data.length > 0) {
         const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
-        supabaseMemoryStore.bom_store = mapped;
-        cachedBomsResult = mapped;
+
+        // Authoritative merge: NEVER discard disk data or overwrite rich dispatch packing with empty database records
+        const combinedMap = new Map();
+        existingDiskList.forEach(item => {
+          const c = item?.bomCode || item?.code || item?.id;
+          if (c) combinedMap.set(c, item);
+        });
+
+        mapped.forEach(item => {
+          const c = item?.bomCode || item?.code || item?.id;
+          if (!c) return;
+          const diskItem = combinedMap.get(c);
+          if (diskItem) {
+            const diskRank = getWorkflowRankServer(diskItem);
+            const dbRank = getWorkflowRankServer(item);
+            const diskPacking = Array.isArray(diskItem.dispatchPacking) ? diskItem.dispatchPacking : [];
+            const dbPacking = Array.isArray(item.dispatchPacking) ? item.dispatchPacking : [];
+            const diskPackedCount = diskPacking.filter(p => p && p.packed).length;
+            const dbPackedCount = dbPacking.filter(p => p && p.packed).length;
+
+            const resolvedPacking = (diskPackedCount > 0 && diskPackedCount >= dbPackedCount) 
+              ? diskPacking 
+              : (dbPackedCount > 0 ? dbPacking : (diskPacking.length > 0 ? diskPacking : dbPacking));
+
+            const resolvedPackingStatus = (diskItem.packingStatus === 'PACKING_VERIFIED' || item.packingStatus === 'PACKING_VERIFIED')
+              ? 'PACKING_VERIFIED'
+              : (diskItem.packingStatus === 'PARTIALLY_PACKED' || item.packingStatus === 'PARTIALLY_PACKED')
+                ? 'PARTIALLY_PACKED'
+                : (item.packingStatus || diskItem.packingStatus || null);
+
+            combinedMap.set(c, {
+              ...item,
+              ...((diskRank > dbRank) ? diskItem : {}),
+              status: (diskRank > dbRank) ? diskItem.status : item.status,
+              dispatchPacking: resolvedPacking,
+              packingStatus: resolvedPackingStatus,
+              accountsVerification: {
+                ...(item.accountsVerification || {}),
+                ...(diskItem.accountsVerification || {}),
+                verified: Boolean(item.accountsVerification?.verified || diskItem.accountsVerification?.verified),
+                readyForAccounts: Boolean(item.accountsVerification?.readyForAccounts || diskItem.accountsVerification?.readyForAccounts),
+                packedAt: item.accountsVerification?.packedAt || diskItem.accountsVerification?.packedAt || diskItem.packedAt || item.packedAt || null,
+                packedBy: item.accountsVerification?.packedBy || diskItem.accountsVerification?.packedBy || diskItem.packedBy || item.packedBy || null
+              },
+              vehicleLoading: diskItem.vehicleLoading || item.vehicleLoading || null,
+              lrCopyDoc: diskItem.lrCopyDoc || item.lrCopyDoc || null,
+              dispatchPackingMedia: (item.dispatchPackingMedia?.photos?.length > 0 || item.dispatchPackingMedia?.videos?.length > 0)
+                ? item.dispatchPackingMedia
+                : (diskItem.dispatchPackingMedia || { photos: [], videos: [] }),
+              packedAt: diskItem.packedAt || item.packedAt || null,
+              packedBy: diskItem.packedBy || item.packedBy || null,
+              packedById: diskItem.packedById || item.packedById || null,
+              packingCompletedAt: diskItem.packingCompletedAt || item.packingCompletedAt || null,
+              fullyCompleted: (diskItem.fullyCompleted !== undefined && diskRank >= dbRank) ? diskItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : diskItem.fullyCompleted)
+            });
+          } else {
+            combinedMap.set(c, item);
+          }
+        });
+
+        const mergedAll = Array.from(combinedMap.values());
+        supabaseMemoryStore.bom_store = mergedAll;
+        cachedBomsResult = mergedAll;
         lastBomFetchTimestamp = Date.now();
-        // Keep disk store updated
         try {
-          const diskPath = getStoreFilePath('bom_store.json');
-          fs.writeFileSync(diskPath, JSON.stringify(mapped, null, 2), 'utf8');
+          fs.writeFileSync(diskPath, JSON.stringify(mergedAll, null, 2), 'utf8');
         } catch (_) {}
-        return mapped;
+        return mergedAll;
       }
     } catch (err) {
       console.warn('[loadDatabaseBoms] Supabase fetch notice:', err?.message || err);
     }
   }
 
-  // 3. Fallback to local JSON store file on disk (guarantees survival across PM2 restarts)
-  try {
-    const diskPath = getStoreFilePath('bom_store.json');
-    if (fs.existsSync(diskPath)) {
-      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
-      if (Array.isArray(diskData) && diskData.length > 0) {
-        supabaseMemoryStore.bom_store = diskData;
-        cachedBomsResult = diskData;
-        lastBomFetchTimestamp = Date.now();
-        return diskData;
-      }
-    }
-  } catch (_) {}
+  // 4. Fallback to existing disk list if DB fetch did not succeed
+  if (existingDiskList.length > 0) {
+    supabaseMemoryStore.bom_store = existingDiskList;
+    cachedBomsResult = existingDiskList;
+    lastBomFetchTimestamp = Date.now();
+    return existingDiskList;
+  }
 
-  // 4. Fallback to memory store
+  // 5. Fallback to memory store
   if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
     return supabaseMemoryStore.bom_store;
   }

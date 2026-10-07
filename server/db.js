@@ -348,7 +348,14 @@ async function executeSql(state) {
           const keys = Object.keys(row).filter(k => row[k] !== undefined);
           if (keys.length === 0) continue;
           const cols = keys.map(k => `"${k}"`).join(', ');
-          const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+          const jsonbCols = new Set([
+            'items', 'payments', 'dispatch_packing', 'accounts_verification', 
+            'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
+            'dispatch_packing_media', 'vehicle_loading', 'data'
+          ]);
+          const placeholders = keys.map((k, i) => {
+            return jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`;
+          }).join(', ');
           const updateSet = keys
             .filter(k => k !== state.conflictTarget)
             .map(k => `"${k}" = EXCLUDED."${k}"`)

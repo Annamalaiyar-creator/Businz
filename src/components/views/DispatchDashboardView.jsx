@@ -12,7 +12,7 @@ import {
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
 import { getVendors, getItems } from '../../services/businzDataService';
-import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, subscribeToCloudStore, getWorkflowRank, resolveBomCollisions } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
 
@@ -134,7 +134,62 @@ export default function DispatchDashboardView(props) {
         }
 
         if (data && Array.isArray(data) && data.length > 0) {
-          setBomStore(data.map(stripDataUrlsFromRecord));
+          setBomStore(prev => {
+            const { list: resolvedList } = resolveBomCollisions(data, 662);
+            const prevMap = new Map((prev || []).map(b => [b?.bomCode || b?.code || b?.id, b]));
+            const merged = resolvedList.map(item => {
+              const k = item?.bomCode || item?.code || item?.id;
+              const prevItem = prevMap.get(k);
+              if (!prevItem) return item;
+              const prevRank = getWorkflowRank(prevItem);
+              const newRank = getWorkflowRank(item);
+
+              const prevPacking = Array.isArray(prevItem.dispatchPacking) ? prevItem.dispatchPacking : [];
+              const itemPacking = Array.isArray(item.dispatchPacking) ? item.dispatchPacking : [];
+              const prevPackedCount = prevPacking.filter(p => p && p.packed).length;
+              const itemPackedCount = itemPacking.filter(p => p && p.packed).length;
+              const resolvedPacking = (prevPackedCount > 0 && prevPackedCount >= itemPackedCount) 
+                ? prevPacking 
+                : (itemPackedCount > 0 ? itemPacking : (prevPacking.length > 0 ? prevPacking : itemPacking));
+
+              const resolvedPackingStatus = (prevItem.packingStatus === 'PACKING_VERIFIED' || item.packingStatus === 'PACKING_VERIFIED') 
+                ? 'PACKING_VERIFIED' 
+                : (prevItem.packingStatus === 'PARTIALLY_PACKED' || item.packingStatus === 'PARTIALLY_PACKED')
+                  ? 'PARTIALLY_PACKED'
+                  : (item.packingStatus || prevItem.packingStatus || null);
+
+              const effectiveStatus = (prevRank > newRank) ? prevItem.status : item.status;
+
+              return {
+                ...item,
+                ...((prevRank > newRank) ? prevItem : {}),
+                status: effectiveStatus,
+                dispatchPacking: resolvedPacking,
+                packingStatus: resolvedPackingStatus,
+                accountsVerification: {
+                  ...(item.accountsVerification || {}),
+                  ...(prevItem.accountsVerification || {}),
+                  verified: Boolean(item.accountsVerification?.verified || prevItem.accountsVerification?.verified),
+                  readyForAccounts: Boolean(item.accountsVerification?.readyForAccounts || prevItem.accountsVerification?.readyForAccounts),
+                  packedAt: item.accountsVerification?.packedAt || prevItem.accountsVerification?.packedAt || prevItem.packedAt || item.packedAt || null,
+                  packedBy: item.accountsVerification?.packedBy || prevItem.accountsVerification?.packedBy || prevItem.packedBy || item.packedBy || null
+                },
+                dispatchPackingMedia: (item.dispatchPackingMedia?.photos?.length > 0 || item.dispatchPackingMedia?.videos?.length > 0)
+                  ? item.dispatchPackingMedia
+                  : (prevItem.dispatchPackingMedia || { photos: [], videos: [] }),
+                vehicleLoading: item.vehicleLoading || prevItem.vehicleLoading || null,
+                lrCopyDoc: item.lrCopyDoc || prevItem.lrCopyDoc || null,
+                packedAt: prevItem.packedAt || item.packedAt || null,
+                packedBy: prevItem.packedBy || item.packedBy || null,
+                packedById: prevItem.packedById || item.packedById || null,
+                packingCompletedAt: prevItem.packingCompletedAt || item.packingCompletedAt || null,
+                fullyCompleted: (prevItem.fullyCompleted !== undefined && prevRank >= newRank) ? prevItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : prevItem.fullyCompleted),
+                salesPerson: prevItem.salesPerson || item.salesPerson,
+                salesPersonCode: prevItem.salesPersonCode || item.salesPersonCode
+              };
+            });
+            return merged.map(stripDataUrlsFromRecord);
+          });
         }
       } catch (err) {
         console.error('Error syncing BOMs in DispatchDashboardView:', err);
@@ -161,7 +216,24 @@ export default function DispatchDashboardView(props) {
         setBomStore(prev => {
           const map = new Map();
           (prev || []).forEach(b => b && map.set(b.bomCode || b.code || b.id, b));
-          map.set(item.bomCode || item.code || item.id, item);
+          const existing = map.get(item.bomCode || item.code || item.id);
+          if (existing) {
+            const existingPacking = Array.isArray(existing.dispatchPacking) ? existing.dispatchPacking : [];
+            const itemPacking = Array.isArray(item.dispatchPacking) ? item.dispatchPacking : [];
+            const existingPackedCount = existingPacking.filter(p => p && p.packed).length;
+            const itemPackedCount = itemPacking.filter(p => p && p.packed).length;
+            const resolvedPacking = (itemPackedCount > 0) ? itemPacking : (existingPackedCount > 0 ? existingPacking : itemPacking);
+
+            map.set(item.bomCode || item.code || item.id, {
+              ...existing,
+              ...item,
+              dispatchPacking: resolvedPacking,
+              packingStatus: item.packingStatus || existing.packingStatus || null,
+              accountsVerification: { ...(existing.accountsVerification || {}), ...(item.accountsVerification || {}) }
+            });
+          } else {
+            map.set(item.bomCode || item.code || item.id, item);
+          }
           return Array.from(map.values());
         });
       } else {
