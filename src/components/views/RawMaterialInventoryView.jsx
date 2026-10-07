@@ -943,12 +943,21 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             .then(res => res.json())
             .catch(() => null);
 
-        const [grns, bDataRes, rawMatsRes] = await Promise.all([
+        const [grns, bDataRes, rawMatsRes, deletedCodesRes] = await Promise.all([
           fetchWithTimeout('/api/grns').catch(() => []),
           fetchWithTimeout('/api/boms').catch(() => null),
-          fetchWithTimeout('/api/store/RAW_MATERIALS_STORE').catch(() => null)
+          fetchWithTimeout('/api/store/RAW_MATERIALS_STORE').catch(() => null),
+          fetchWithTimeout('/api/raw-materials/deleted').catch(() => [])
         ]);
         clearTimeout(timeoutId);
+
+        if (Array.isArray(deletedCodesRes) && deletedCodesRes.length > 0) {
+          const currentDeleted = getDeletedMaterialCodes();
+          const mergedDeleted = Array.from(new Set([...currentDeleted, ...deletedCodesRes]));
+          try {
+            localStorage.setItem('controlroom_deleted_raw_materials', JSON.stringify(mergedDeleted));
+          } catch (_) {}
+        }
 
         const bData = Array.isArray(bDataRes?.data) ? bDataRes.data : (Array.isArray(bDataRes) ? bDataRes : []);
         const rawMats = Array.isArray(rawMatsRes?.data) ? rawMatsRes.data : (Array.isArray(rawMatsRes) ? rawMatsRes : []);
@@ -4166,8 +4175,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Cancel
               </button>
               <button
-                type="button"
-                onClick={() => {
+                onClick={async () => {
                   const codesToDelete = itemsPendingDelete.map(item => item.code);
                   const currentDeleted = getDeletedMaterialCodes();
                   const newDeleted = Array.from(new Set([...currentDeleted, ...codesToDelete]));
@@ -4182,8 +4190,29 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(updatedMaterials));
                   } catch (e) {}
 
+                  // Immediately persist deletion to backend server and cloud database so all logins see it deleted
+                  try {
+                    fetch('/api/raw-materials/delete', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ codes: codesToDelete })
+                    }).catch(() => {});
+
+                    fetch('/api/raw-materials', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(updatedMaterials)
+                    }).catch(() => {});
+
+                    saveCloudStore('raw_materials_store', updatedMaterials);
+                    saveCloudStore('deleted_raw_materials_store', newDeleted);
+                  } catch (err) {
+                    console.error('Failed to sync deletion with backend:', err);
+                  }
+
                   // Notify engine inventory listeners
                   window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update'));
+                  window.dispatchEvent(new Event('central_inventory_updated'));
 
                   setShowDeleteModal(false);
                   setItemsPendingDelete([]);

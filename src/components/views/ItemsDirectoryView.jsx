@@ -2933,10 +2933,27 @@ export default function ItemsDirectoryView(props) {
                     </button>
 
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (window.confirm(`Are you sure you want to delete ${selectedItems.length} selected product(s)?`)) {
-                          setItemsList(prev => prev.filter(i => !selectedItems.includes(i.itemId)));
+                          const toDelete = [...selectedItems];
+                          setItemsList(prev => prev.filter(i => !toDelete.includes(i.itemId)));
                           setSelectedItems([]);
+
+                          try {
+                            await fetch('/api/items/delete', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ ids: toDelete })
+                            });
+                            await fetch('/api/raw-materials/delete', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ codes: toDelete })
+                            }).catch(() => {});
+                          } catch (err) {
+                            console.error('Failed to sync bulk deletion with backend:', err);
+                          }
+                          window.dispatchEvent(new Event('central_inventory_updated'));
                         }
                       }}
                       style={{

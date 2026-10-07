@@ -1864,22 +1864,48 @@ const saveLocalVendors = (vendors) => {
 
 const isRawZohoNumericId = (code) => Boolean(code && /^\d{10,}$/.test(String(code).trim()));
 
+const loadDeletedRawMaterialCodes = () => {
+  const delPath = getStoreFilePath('deleted_raw_materials_store.json');
+  if (fs.existsSync(delPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(delPath, 'utf8'));
+      if (Array.isArray(data)) return data;
+    } catch (_) {}
+  }
+  return supabaseMemoryStore.deleted_raw_materials_store || [];
+};
+
+const saveDeletedRawMaterialCodes = (codes) => {
+  const delPath = getStoreFilePath('deleted_raw_materials_store.json');
+  const arr = Array.from(new Set((codes || []).map(c => String(c).toUpperCase().trim())));
+  try {
+    fs.writeFileSync(delPath, JSON.stringify(arr, null, 2), 'utf8');
+  } catch (_) {}
+  supabaseMemoryStore.deleted_raw_materials_store = arr;
+  saveDatabaseStore('deleted_raw_materials_store', arr);
+};
+
 const loadLocalItems = () => {
   const itemsPath = getStoreFilePath('item_store.json');
+  const deletedCodes = loadDeletedRawMaterialCodes().map(c => String(c).toUpperCase().trim());
+  const isDeletedOrInvalid = (c, s, n) => {
+    const uc = String(c || '').toUpperCase().trim();
+    const us = String(s || '').toUpperCase().trim();
+    const un = String(n || '').toUpperCase().trim();
+    if (isRawZohoNumericId(uc) || isRawZohoNumericId(us) || isRawZohoNumericId(un)) return true;
+    return (uc && deletedCodes.includes(uc)) || (us && deletedCodes.includes(us)) || (un && deletedCodes.includes(un));
+  };
+
   let diskItems = [];
   if (fs.existsSync(itemsPath)) {
     try {
       diskItems = (JSON.parse(fs.readFileSync(itemsPath, 'utf8')) || []).filter(d => {
-        const c = String(d.code || d.sku || d.itemId || '').trim();
-        const n = String(d.name || '').trim();
-        return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+        return !isDeletedOrInvalid(d.code, d.sku, d.name) && !isDeletedOrInvalid(d.itemId, d.id, d.name);
       });
     } catch (_) {}
   }
   const memItems = (supabaseMemoryStore.item_store || []).filter(m => {
-    const c = String(m.code || m.sku || m.itemId || '').trim();
-    const n = String(m.name || '').trim();
-    return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+    return !isDeletedOrInvalid(m.code, m.sku, m.name) && !isDeletedOrInvalid(m.itemId, m.id, m.name);
   });
   if (Array.isArray(memItems) && memItems.length >= diskItems.length && memItems.length > 0) {
     return memItems;
@@ -1899,7 +1925,7 @@ const loadLocalItems = () => {
           map.set(k, { ...m });
         }
       });
-      const unified = Array.from(map.values());
+      const unified = Array.from(map.values()).filter(i => !isDeletedOrInvalid(i.code, i.sku, i.name));
       supabaseMemoryStore.item_store = unified;
       return unified;
     }
@@ -1911,20 +1937,25 @@ const loadLocalItems = () => {
 
 const loadLocalRawMaterials = () => {
   const rawPath = getStoreFilePath('raw_materials_store.json');
+  const deletedCodes = loadDeletedRawMaterialCodes().map(c => String(c).toUpperCase().trim());
+  const isDeletedOrInvalid = (c, s, n) => {
+    const uc = String(c || '').toUpperCase().trim();
+    const us = String(s || '').toUpperCase().trim();
+    const un = String(n || '').toUpperCase().trim();
+    if (isRawZohoNumericId(uc) || isRawZohoNumericId(us) || isRawZohoNumericId(un)) return true;
+    return (uc && deletedCodes.includes(uc)) || (us && deletedCodes.includes(us)) || (un && deletedCodes.includes(un));
+  };
+
   let diskMats = [];
   if (fs.existsSync(rawPath)) {
     try {
       diskMats = (JSON.parse(fs.readFileSync(rawPath, 'utf8')) || []).filter(d => {
-        const c = String(d.code || d.sku || d.itemId || '').trim();
-        const n = String(d.name || '').trim();
-        return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+        return !isDeletedOrInvalid(d.code, d.sku, d.name) && !isDeletedOrInvalid(d.itemId, d.id, d.name);
       });
     } catch (_) {}
   }
   const memMats = (supabaseMemoryStore.raw_materials_store || []).filter(m => {
-    const c = String(m.code || m.sku || m.itemId || '').trim();
-    const n = String(m.name || '').trim();
-    return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+    return !isDeletedOrInvalid(m.code, m.sku, m.name) && !isDeletedOrInvalid(m.itemId, m.id, m.name);
   });
   if (Array.isArray(memMats) && memMats.length >= diskMats.length && memMats.length > 0) {
     return memMats;
@@ -1944,7 +1975,7 @@ const loadLocalRawMaterials = () => {
           map.set(k, { ...m });
         }
       });
-      const unified = Array.from(map.values());
+      const unified = Array.from(map.values()).filter(m => !isDeletedOrInvalid(m.code, m.sku, m.name));
       supabaseMemoryStore.raw_materials_store = unified;
       return unified;
     }
@@ -5276,6 +5307,160 @@ app.post('/api/raw-materials', async (req, res) => {
       return res.json({ success: true, count: updatedMats.length });
     }
     res.status(400).json({ success: false, message: 'Array of materials required' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to get authoritative list of deleted raw material codes across all logins
+app.get('/api/raw-materials/deleted', (req, res) => {
+  res.json(loadDeletedRawMaterialCodes());
+});
+
+// Endpoint to delete raw materials across all stores, databases, and user logins
+app.post('/api/raw-materials/delete', async (req, res) => {
+  try {
+    const rawCodes = Array.isArray(req.body?.codes)
+      ? req.body.codes
+      : (req.body?.code ? [req.body.code] : []);
+    const codesToDelete = rawCodes.map(c => String(c).toUpperCase().trim()).filter(Boolean);
+
+    if (codesToDelete.length === 0) {
+      return res.status(400).json({ success: false, message: 'No material codes provided for deletion' });
+    }
+
+    // 1. Save deleted codes persistently
+    const existingDeleted = loadDeletedRawMaterialCodes();
+    const updatedDeleted = Array.from(new Set([...existingDeleted, ...codesToDelete]));
+    saveDeletedRawMaterialCodes(updatedDeleted);
+
+    // 2. Remove from raw materials store
+    const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+    let currentMats = [];
+    if (fs.existsSync(rawMatsPath)) {
+      try { currentMats = JSON.parse(fs.readFileSync(rawMatsPath, 'utf8')) || []; } catch (_) {}
+    }
+    const filteredMats = currentMats.filter(m => {
+      const mCode = String(m.code || m.sku || '').toUpperCase().trim();
+      const mName = String(m.name || '').toUpperCase().trim();
+      return !codesToDelete.includes(mCode) && !codesToDelete.includes(mName);
+    });
+    fs.writeFileSync(rawMatsPath, JSON.stringify(filteredMats, null, 2), 'utf8');
+    supabaseMemoryStore.raw_materials_store = filteredMats;
+    saveDatabaseStore('raw_materials_store', filteredMats);
+
+    // 3. Remove from items catalog store as well
+    const itemPath = getStoreFilePath('item_store.json');
+    let currentItems = [];
+    if (fs.existsSync(itemPath)) {
+      try { currentItems = JSON.parse(fs.readFileSync(itemPath, 'utf8')) || []; } catch (_) {}
+    }
+    const filteredItems = currentItems.filter(it => {
+      const iCode = String(it.code || it.sku || it.itemId || it.id || '').toUpperCase().trim();
+      const iName = String(it.name || '').toUpperCase().trim();
+      return !codesToDelete.includes(iCode) && !codesToDelete.includes(iName);
+    });
+    fs.writeFileSync(itemPath, JSON.stringify(filteredItems, null, 2), 'utf8');
+    supabaseMemoryStore.item_store = filteredItems;
+    saveDatabaseStore('item_store', filteredItems);
+
+    // 4. Real-time broadcasts
+    broadcastRealtimeEvent('inventory_updated', { rawMaterials: filteredMats });
+    broadcastRealtimeEvent('item_store_updated', { items: filteredItems });
+
+    return res.json({
+      success: true,
+      deletedCount: codesToDelete.length,
+      remainingMats: filteredMats.length,
+      message: `Deleted ${codesToDelete.length} item(s) from inventory across all stores.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/raw-materials/:code', async (req, res) => {
+  try {
+    const code = String(req.params.code || '').toUpperCase().trim();
+    if (!code) return res.status(400).json({ success: false, message: 'Invalid material code' });
+
+    const existingDeleted = loadDeletedRawMaterialCodes();
+    const updatedDeleted = Array.from(new Set([...existingDeleted, code]));
+    saveDeletedRawMaterialCodes(updatedDeleted);
+
+    const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+    let currentMats = [];
+    if (fs.existsSync(rawMatsPath)) {
+      try { currentMats = JSON.parse(fs.readFileSync(rawMatsPath, 'utf8')) || []; } catch (_) {}
+    }
+    const filteredMats = currentMats.filter(m => {
+      const mCode = String(m.code || m.sku || '').toUpperCase().trim();
+      const mName = String(m.name || '').toUpperCase().trim();
+      return mCode !== code && mName !== code;
+    });
+    fs.writeFileSync(rawMatsPath, JSON.stringify(filteredMats, null, 2), 'utf8');
+    supabaseMemoryStore.raw_materials_store = filteredMats;
+    saveDatabaseStore('raw_materials_store', filteredMats);
+
+    const itemPath = getStoreFilePath('item_store.json');
+    let currentItems = [];
+    if (fs.existsSync(itemPath)) {
+      try { currentItems = JSON.parse(fs.readFileSync(itemPath, 'utf8')) || []; } catch (_) {}
+    }
+    const filteredItems = currentItems.filter(it => {
+      const iCode = String(it.code || it.sku || it.itemId || it.id || '').toUpperCase().trim();
+      const iName = String(it.name || '').toUpperCase().trim();
+      return iCode !== code && iName !== code;
+    });
+    fs.writeFileSync(itemPath, JSON.stringify(filteredItems, null, 2), 'utf8');
+    supabaseMemoryStore.item_store = filteredItems;
+    saveDatabaseStore('item_store', filteredItems);
+
+    broadcastRealtimeEvent('inventory_updated', { rawMaterials: filteredMats });
+    broadcastRealtimeEvent('item_store_updated', { items: filteredItems });
+
+    res.json({ success: true, message: `Material ${code} deleted permanently.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to bulk delete items from catalog store
+app.post('/api/items/delete', async (req, res) => {
+  try {
+    const rawIds = Array.isArray(req.body?.ids)
+      ? req.body.ids
+      : (req.body?.id ? [req.body.id] : []);
+    const idsToDelete = rawIds.map(id => String(id).toLowerCase().trim()).filter(Boolean);
+
+    const localItems = loadLocalItems();
+    const updatedItems = localItems.filter(i => {
+      const iId = String(i.itemId || i.id || '').toLowerCase().trim();
+      const iSku = String(i.sku || '').toLowerCase().trim();
+      const iName = String(i.name || '').toLowerCase().trim();
+      return !idsToDelete.includes(iId) && !idsToDelete.includes(iSku) && !idsToDelete.includes(iName);
+    });
+
+    saveLocalItems(updatedItems);
+    broadcastRealtimeEvent('item_store_updated', { items: updatedItems });
+
+    // Also sync delete with raw materials
+    const rawMatsPath = getStoreFilePath('raw_materials_store.json');
+    let currentMats = [];
+    if (fs.existsSync(rawMatsPath)) {
+      try { currentMats = JSON.parse(fs.readFileSync(rawMatsPath, 'utf8')) || []; } catch (_) {}
+    }
+    const filteredMats = currentMats.filter(m => {
+      const mCode = String(m.code || m.sku || '').toLowerCase().trim();
+      const mName = String(m.name || '').toLowerCase().trim();
+      return !idsToDelete.includes(mCode) && !idsToDelete.includes(mName);
+    });
+    fs.writeFileSync(rawMatsPath, JSON.stringify(filteredMats, null, 2), 'utf8');
+    supabaseMemoryStore.raw_materials_store = filteredMats;
+    saveDatabaseStore('raw_materials_store', filteredMats);
+    broadcastRealtimeEvent('inventory_updated', { rawMaterials: filteredMats });
+
+    res.json({ success: true, count: idsToDelete.length, message: `Deleted ${idsToDelete.length} item(s)` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

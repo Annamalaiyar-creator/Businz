@@ -67,7 +67,8 @@ async function runProductionClean() {
     'crm_customers.json',
     'vendor_store.json',
     'item_store.json',
-    'raw_materials_store.json'
+    'raw_materials_store.json',
+    'deleted_raw_materials_store.json'
   ];
 
   storesToEmpty.forEach(storeFile => {
