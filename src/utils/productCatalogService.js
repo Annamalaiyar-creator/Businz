@@ -1,12 +1,33 @@
 import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
 import { centralInventoryStore } from './centralInventoryStore.js';
 
+const getDeletedCodes = () => {
+  try {
+    const raw = localStorage.getItem('controlroom_deleted_raw_materials');
+    return raw ? JSON.parse(raw).map(c => String(c).toUpperCase().trim()) : [];
+  } catch (_) {
+    return [];
+  }
+};
+
 /**
  * Product Catalog & Live Stock Service
  * Provides the unified, full 285+ standardized VRM products catalog
  * combined with real-time stock balances from Central Inventory Store.
  */
 export const getFullProductsCatalogWithStock = (directItems = null) => {
+  const deletedCodes = getDeletedCodes();
+  const isItemDeleted = (code, name, sku, itemId) => {
+    const c = String(code || '').toUpperCase().trim();
+    const n = String(name || '').toUpperCase().trim();
+    const s = String(sku || '').toUpperCase().trim();
+    const id = String(itemId || '').toUpperCase().trim();
+    return (c && deletedCodes.includes(c)) || 
+           (n && deletedCodes.includes(n)) || 
+           (s && deletedCodes.includes(s)) || 
+           (id && deletedCodes.includes(id));
+  };
+
   // 1. Build live stock map from Central Inventory Store
   const stockMap = new Map();
   const rawStoreMap = new Map();
@@ -15,6 +36,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     const centralItems = centralInventoryStore.getInventoryItems();
     if (Array.isArray(centralItems)) {
       centralItems.forEach(ci => {
+        if (isItemDeleted(ci.code, ci.name, ci.sku, ci.itemId)) return;
         const resCode = resolveProductCode(ci);
         const codeKey = String(resCode || ci.code || '').toLowerCase().trim();
         const origCode = String(ci.code || '').toLowerCase().trim();
@@ -45,8 +67,8 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     if (rawSaved) {
       const parsed = JSON.parse(rawSaved);
       if (Array.isArray(parsed)) {
-        parsedRawMats = parsed;
-        parsed.forEach(rm => {
+        parsedRawMats = parsed.filter(rm => !isItemDeleted(rm.code, rm.name, rm.sku, rm.itemId));
+        parsedRawMats.forEach(rm => {
           const resCode = resolveProductCode(rm);
           const codeKey = String(resCode || rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
           const origCode = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
@@ -71,6 +93,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   const catalogMap = new Map();
 
   (VRM_PRODUCTS || []).forEach(p => {
+    if (isItemDeleted(p.code, p.name, p.sku, p.itemId)) return;
     const resCode = resolveProductCode(p).toLowerCase().trim();
     const codeKey = String(resCode || p.code || '').toLowerCase().trim();
     const nameKey = String(p.name || '').toLowerCase().trim();
@@ -178,6 +201,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   const mergeExtraItems = (items) => {
     if (!Array.isArray(items)) return;
     items.forEach(ci => {
+      if (isItemDeleted(ci.code, ci.name, ci.sku, ci.itemId || ci.id)) return;
       const rawCode = String(ci.code || ci.sku || ci.itemId || ci.id || '').trim();
       const nameKey = String(ci.name || '').toLowerCase().trim();
       const resCode = resolveProductCode(ci);
@@ -271,7 +295,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       uniqueItemsMap.set(uKey, it);
     }
   }
-  const fullList = Array.from(uniqueItemsMap.values());
+  const fullList = Array.from(uniqueItemsMap.values()).filter(it => !isItemDeleted(it.code, it.name, it.sku, it.itemId));
 
   // Save to localStorage so other modules also have the full catalog ready
   try {

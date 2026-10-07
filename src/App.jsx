@@ -344,18 +344,54 @@ function App() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
       try {
-        const [poData, itemsData, branding, rawData] = await Promise.all([
+        const [poData, itemsData, branding, rawData, deletedCodes] = await Promise.all([
           getPurchaseOrders(),
           getItems(),
           fetchMasterBranding(),
           fetch('/api/raw-materials')
             .then(r => r.json())
-            .catch(() => fetchCloudStore('RAW_MATERIALS_STORE', []))
+            .catch(() => fetchCloudStore('RAW_MATERIALS_STORE', [])),
+          fetch('/api/raw-materials/deleted')
+            .then(r => r.json())
+            .catch(() => [])
         ]);
+
+        const delSet = new Set((Array.isArray(deletedCodes) ? deletedCodes : []).map(c => String(c).toUpperCase().trim()));
+        if (delSet.size > 0) {
+          try {
+            const existingDel = localStorage.getItem('controlroom_deleted_raw_materials');
+            const parsedDel = existingDel ? JSON.parse(existingDel) : [];
+            const merged = Array.from(new Set([...parsedDel, ...delSet]));
+            localStorage.setItem('controlroom_deleted_raw_materials', JSON.stringify(merged));
+
+            // Also purge from local storage caches
+            ['controlroom_items_list', 'controlroom_raw_materials_store', 'controlroom_inventory_items', 'controlroom_central_items_v2'].forEach(key => {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  const cleaned = parsed.filter(it => {
+                    const c = String(it?.code || it?.sku || it?.itemId || '').toUpperCase().trim();
+                    const n = String(it?.name || '').toUpperCase().trim();
+                    return !delSet.has(c) && !delSet.has(n);
+                  });
+                  if (cleaned.length !== parsed.length) {
+                    localStorage.setItem(key, JSON.stringify(cleaned));
+                  }
+                }
+              }
+            });
+          } catch (_) {}
+        }
         
         if (Array.isArray(rawData) && rawData.length > 0) {
           try {
-            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(rawData));
+            const cleanedRaw = rawData.filter(r => {
+              const c = String(r?.code || r?.sku || '').toUpperCase().trim();
+              const n = String(r?.name || '').toUpperCase().trim();
+              return !delSet.has(c) && !delSet.has(n);
+            });
+            localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(cleanedRaw));
           } catch (_) {}
         }
 
@@ -366,6 +402,9 @@ function App() {
           let mergedItems = itemsData.filter(it => {
             const c = String(it.code || it.sku || it.itemId || '').trim();
             const n = String(it.name || '').trim();
+            const uc = c.toUpperCase();
+            const un = n.toUpperCase();
+            if (delSet.has(uc) || delSet.has(un)) return false;
             return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
           });
           if (Array.isArray(rawData) && rawData.length > 0) {
