@@ -67,28 +67,13 @@ export async function initPostgresDatabase() {
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
             
-            -- Fix BOM-659 to restore accurate PI company, contact, transport, and address details
-            UPDATE public.bom_orders
-            SET customer_name = 'Teorainn Solar Pvt Ltd',
-                company_name = 'Teorainn Solar Pvt Ltd',
-                contact_person = 'Incheon Kia',
-                gst_no = '32AAECI9544G1ZK',
-                email = 'admin@teorainnsolar.com',
-                payment_type = '100% Paid',
-                transporter_name = 'A2B',
-                transport_mode = 'Transport',
-                transport_scope = 'VRM Structures',
-                billing_address = 'Incheon Kia 32AAECI9544G1ZK, Muvattupuzha, Kerala PIN: 682316',
-                billing_address_obj = '{"street": "Incheon Kia 32AAECI9544G1ZK", "address": "Incheon Kia 32AAECI9544G1ZK", "city": "Muvattupuzha", "state": "Kerala", "pincode": "682316"}'::jsonb,
-                delivery_address = 'Incheon Kia 32AAECI9544G1ZK, Muvattupuzha, Kerala PIN: 682316',
-                delivery_address_obj = '{"street": "Incheon Kia 32AAECI9544G1ZK", "address": "Incheon Kia 32AAECI9544G1ZK", "city": "Muvattupuzha", "state": "Kerala", "pincode": "682316"}'::jsonb
-            WHERE (bom_code = 'BOM-659' OR id = 'BOM-659');
-
-            -- Automatically sync order values, items, and salesperson from source PI if missing
+            -- 1-to-1 Sync order values, items, and salesperson from source PI if missing
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN
               UPDATE public.bom_orders b
               SET grand_total = COALESCE(NULLIF(p.grand_total, 0), b.grand_total),
                   sub_total = COALESCE(NULLIF(p.sub_total, 0), b.sub_total),
+                  customer_name = COALESCE(NULLIF(b.customer_name, ''), NULLIF(p.customer_name, ''), b.customer_name),
+                  company_name = COALESCE(NULLIF(b.company_name, ''), NULLIF(p.customer_name, ''), b.company_name),
                   sales_person = COALESCE(NULLIF(b.sales_person, ''), NULLIF(p.sales_person, ''), NULLIF(p.created_by, ''), 'Sales Department'),
                   sales_person_code = COALESCE(NULLIF(b.sales_person_code, ''), NULLIF(p.sales_person_code, ''), NULLIF(p.created_by_id, ''), ''),
                   items = CASE WHEN (b.items IS NULL OR jsonb_array_length(b.items) = 0 OR b.grand_total = 0) AND jsonb_array_length(p.items) > 0 THEN p.items ELSE b.items END

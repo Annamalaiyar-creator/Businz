@@ -37,7 +37,11 @@ dotenv.config();
 let supabaseMemoryStore = {};
 
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
-initPostgresDatabase().catch(err => {
+initPostgresDatabase().then(() => {
+  setTimeout(() => {
+    repairBomSequences().catch(err => console.warn('[Auto Repair Notice]:', err.message));
+  }, 2000);
+}).catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
 });
 
@@ -3023,6 +3027,31 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
         let maxNum = 658;
+
+        // 1. Authoritative: Query PostgreSQL directly for the absolute highest existing BOM sequence
+        if (isDbConnected()) {
+          try {
+            const dbRes = await query(`
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 658) AS max_bom
+              FROM public.bom_orders
+              WHERE bom_code ~ '^BOM-[0-9]+$'
+            `).catch(() => null);
+            const dbVal = parseInt(dbRes?.rows?.[0]?.max_bom, 10);
+            if (Number.isFinite(dbVal) && dbVal > maxNum) maxNum = dbVal;
+
+            // Also check proforma_invoices for any converted_bom_code
+            const piDbRes = await query(`
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 658) AS max_pi_bom
+              FROM public.proforma_invoices
+              WHERE converted_bom_code ~ '^BOM-[0-9]+$'
+            `).catch(() => null);
+            const piVal = parseInt(piDbRes?.rows?.[0]?.max_pi_bom, 10);
+            if (Number.isFinite(piVal) && piVal > maxNum) maxNum = piVal;
+          } catch (dbErr) {
+            console.warn('[getOrReserveNextBomAtomic PG check]:', dbErr.message);
+          }
+        }
+
         const filePath = getStoreFilePath('bom_store.json');
         let allRecords = [];
         if (fs.existsSync(filePath)) {
@@ -3034,31 +3063,6 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
           allRecords = [...allRecords, ...supabaseMemoryStore.bom_store];
         }
 
-        try {
-          const [seqRes, bomsRes] = await Promise.all([
-            supabase.from('leaves').select('reason').eq('employee', 'BOM_SEQUENCE').order('id', { ascending: false }).limit(1),
-            supabase.from('bom_orders').select('bom_code, id').order('created_at', { ascending: false }).limit(100)
-          ]);
-          const seqRecord = seqRes.data?.[0];
-          if (seqRecord && seqRecord.reason) {
-            try {
-              const parsed = JSON.parse(seqRecord.reason);
-              const seqVal = parseInt(parsed?.lastNumber || parsed?.counter || 0);
-              if (Number.isFinite(seqVal) && seqVal > maxNum) maxNum = seqVal;
-            } catch (_) {}
-          }
-          if (Array.isArray(bomsRes.data)) {
-            bomsRes.data.forEach(b => {
-              const str = String(b?.bom_code || b?.id || '');
-              const match = str.match(/^BOM-(\d+)$/i);
-              if (match) {
-                const val = parseInt(match[1], 10);
-                if (Number.isFinite(val) && val > maxNum) maxNum = val;
-              }
-            });
-          }
-        } catch (_) {}
-
         allRecords.forEach(b => {
           const str = String(b?.bomCode || b?.code || b?.id || '');
           const match = str.match(/^BOM-(\d+)$/i);
@@ -3067,6 +3071,18 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
             if (Number.isFinite(val) && val > maxNum) maxNum = val;
           }
         });
+
+        // Also check sales_pi_store in memory
+        if (Array.isArray(supabaseMemoryStore.sales_pi_store)) {
+          supabaseMemoryStore.sales_pi_store.forEach(pi => {
+            const codeStr = String(pi?.convertedBomCode || pi?.convertedBomNo || '');
+            const match = codeStr.match(/^BOM-(\d+)$/i);
+            if (match) {
+              const val = parseInt(match[1], 10);
+              if (Number.isFinite(val) && val > maxNum) maxNum = val;
+            }
+          });
+        }
 
         if (serverBomSequenceCounter !== null && serverBomSequenceCounter > maxNum) {
           maxNum = serverBomSequenceCounter;
@@ -3086,7 +3102,7 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
           } catch (_) {}
         }
 
-        resolve({ success: true, nextBomCode, nextCode: nextBomCode, maxNum: nextNum });
+        resolve({ success: true, nextBomCode, nextCode: nextBomCode, maxNum: nextNum, counter: nextNum });
       } catch (err) {
         reject(err);
       }
@@ -3130,6 +3146,147 @@ app.post('/api/reset-bom-workflow-data', async (req, res) => {
       }
     }
     res.json({ success: true, message: 'All BOM, PI, Dispatch, Accounts Verification, and Invoice records have been reset cleanly.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Dedicated function to audit, deduplicate, and repair historical BOM sequence mappings for converted PIs
+async function repairBomSequences() {
+  if (!isDbConnected()) return { message: 'Database not connected' };
+
+  console.log('🔄 [BOM Sequence Repair] Auditing and restoring 1-to-1 BOM sequence mapping...');
+
+  let piList = [];
+  try {
+    const sRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`);
+    if (sRes?.rows?.[0]?.data && Array.isArray(sRes.rows[0].data)) {
+      piList = sRes.rows[0].data;
+    }
+  } catch (_) {}
+
+  // Explicit sequential alignment mapping for converted PIs
+  const targetMap = {
+    'PI-00059': { bomCode: 'BOM-659', defaultCustomer: 'VRM Energy Consultancy Services Private Limited', defaultAmount: 28320 },
+    'PI-00060': { bomCode: 'BOM-660', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 14160 },
+    'PI-00061': { bomCode: 'BOM-661', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 28320 },
+    'PI-00062': { bomCode: 'BOM-662', defaultCustomer: 'URBAN ENGINEER CONSULTANCY (OPC) PRIVATE LIMITED', defaultAmount: 169920 }
+  };
+
+  let piUpdatedCount = 0;
+  let bomUpdatedCount = 0;
+
+  // 1. Ensure each PI in sales_pi_store has its distinct convertedBomCode
+  if (piList.length > 0) {
+    let piListChanged = false;
+    piList = piList.map(pi => {
+      const pNo = String(pi.piNo || pi.id || '').trim();
+      if (targetMap[pNo]) {
+        const assigned = targetMap[pNo].bomCode;
+        if (pi.convertedBomCode !== assigned || pi.convertedBomNo !== assigned) {
+          piUpdatedCount++;
+          piListChanged = true;
+          return {
+            ...pi,
+            status: 'Converted to BOM',
+            convertedToBom: true,
+            convertedBomCode: assigned,
+            convertedBomNo: assigned
+          };
+        }
+      }
+      return pi;
+    });
+
+    if (piListChanged) {
+      await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
+      supabaseMemoryStore['sales_pi_store'] = piList;
+    }
+  }
+
+  // 2. Ensure public.proforma_invoices table is also updated
+  for (const [piNo, info] of Object.entries(targetMap)) {
+    try {
+      await query(`
+        UPDATE public.proforma_invoices
+        SET converted_bom_code = $1,
+            converted_to_bom = true,
+            status = 'Converted to BOM',
+            updated_at = NOW()
+        WHERE pi_no = $2 OR id = $2
+      `, [info.bomCode, piNo]);
+    } catch (_) {}
+  }
+
+  // 3. Ensure each BOM exists in public.bom_orders with matching source_pi_no and unique bom_code
+  for (const [piNo, info] of Object.entries(targetMap)) {
+    try {
+      const piData = piList.find(p => String(p.piNo || p.id || '').trim() === piNo);
+      const custName = piData?.customerName || piData?.vendor || info.defaultCustomer;
+      const grandTotal = Number(piData?.total || piData?.grandTotal || info.defaultAmount || 0);
+      const subTotal = Number(piData?.subtotal || piData?.unitValue || Math.round(grandTotal / 1.18));
+      const items = Array.isArray(piData?.items) && piData.items.length > 0 ? JSON.stringify(piData.items) : '[]';
+      const salesPerson = piData?.salesPerson || piData?.salesperson || 'Sales Executive';
+
+      const existingBom = await query(`
+        SELECT id, bom_code, source_pi_no FROM public.bom_orders 
+        WHERE bom_code = $1 OR source_pi_no = $2
+      `, [info.bomCode, piNo]);
+
+      if (existingBom.rows.length === 0) {
+        await query(`
+          INSERT INTO public.bom_orders (
+            id, bom_code, code, source_pi_no, customer_name, company_name, 
+            grand_total, sub_total, sales_person, status, items, date, created_at, updated_at
+          ) VALUES (
+            $1, $1, $1, $2, $3, $3, 
+            $4, $5, $6, 'Draft', $7::jsonb, CURRENT_DATE, NOW(), NOW()
+          ) ON CONFLICT (id) DO UPDATE SET
+            bom_code = EXCLUDED.bom_code,
+            source_pi_no = EXCLUDED.source_pi_no,
+            customer_name = EXCLUDED.customer_name,
+            grand_total = EXCLUDED.grand_total,
+            updated_at = NOW()
+        `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
+        bomUpdatedCount++;
+      } else {
+        await query(`
+          UPDATE public.bom_orders
+          SET bom_code = $1,
+              code = $1,
+              source_pi_no = $2,
+              customer_name = COALESCE(NULLIF(customer_name, ''), $3),
+              company_name = COALESCE(NULLIF(company_name, ''), $3),
+              grand_total = CASE WHEN grand_total IS NULL OR grand_total = 0 THEN $4 ELSE grand_total END,
+              updated_at = NOW()
+          WHERE id = $1 OR source_pi_no = $2
+        `, [info.bomCode, piNo, custName, grandTotal]);
+      }
+    } catch (e) {
+      console.warn(`[repairBomSequences notice for ${piNo}]:`, e.message);
+    }
+  }
+
+  // 4. Update sequence counter
+  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, 662);
+
+  // 5. Reload memory cache & broadcast updates
+  await loadDatabaseBoms(true);
+  try {
+    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piList });
+    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: supabaseMemoryStore.bom_store });
+    broadcastRealtimeEvent('bom_updated', { bomList: supabaseMemoryStore.bom_store });
+  } catch (_) {}
+
+  console.log(`✅ [BOM Sequence Repair] Complete. ${piUpdatedCount} PIs aligned, ${bomUpdatedCount} BOMs ensured.`);
+  return { piUpdatedCount, bomUpdatedCount, maxSequence: serverBomSequenceCounter };
+}
+
+// Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs
+app.post('/api/repair-bom-sequences', async (req, res) => {
+  try {
+    const repaired = await repairBomSequences();
+    res.json({ success: true, ...repaired });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -3503,8 +3660,20 @@ app.post('/api/boms', async (req, res) => {
           }
         });
 
-        // Compute true max sequence number across existing BOMs
+        // Authoritative: Query PostgreSQL directly for the highest BOM sequence
         let maxNum = 658;
+        if (isDbConnected()) {
+          try {
+            const dbRes = await query(`
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 658) AS max_bom
+              FROM public.bom_orders
+              WHERE bom_code ~ '^BOM-[0-9]+$'
+            `).catch(() => null);
+            const dbVal = parseInt(dbRes?.rows?.[0]?.max_bom, 10);
+            if (Number.isFinite(dbVal) && dbVal > maxNum) maxNum = dbVal;
+          } catch (_) {}
+        }
+
         for (const key of map.keys()) {
           const match = String(key).match(/^BOM-(\d+)/i);
           if (match) {
@@ -3519,13 +3688,9 @@ app.post('/api/boms', async (req, res) => {
 
         const incomingCode = String(bom.bomCode || bom.code || bom.id || '').trim();
         const isPlaceholderCode = !incomingCode || incomingCode.toLowerCase().includes('auto') || incomingCode.toLowerCase().includes('pending');
-        const alreadyExists = incomingCode && map.has(incomingCode);
-        const hasValidCode = Boolean(incomingCode && !isPlaceholderCode);
-        
-        let finalCode = incomingCode;
-        let shouldAssignNewCode = false;
-
         const incomingPi = String(bom.sourcePiNo || bom.source_pi_no || bom.piNo || '').trim().toLowerCase();
+
+        // 1. Check if an existing BOM belongs to this specific source PI
         let existingPiBom = null;
         if (incomingPi && incomingPi !== 'null' && incomingPi !== 'undefined') {
           existingPiBom = Array.from(map.values()).find(item => {
@@ -3534,13 +3699,26 @@ app.post('/api/boms', async (req, res) => {
           });
         }
 
-        const shouldUpdate = Boolean(isUpdate || alreadyExists);
+        // 2. Check if incomingCode already exists in map or database
+        const existingRecordWithCode = (incomingCode && !isPlaceholderCode && map.has(incomingCode)) ? map.get(incomingCode) : null;
+        const codeBelongsToSameRecord = existingRecordWithCode && (
+          (existingPiBom && (existingPiBom.bomCode === incomingCode || existingPiBom.id === incomingCode)) ||
+          (isUpdate && (existingRecordWithCode.id === bom.id || existingRecordWithCode.bomCode === incomingCode))
+        );
 
-        // Strict 1-to-1 PI Rule: If BOM for this PI exists, always update that record instead of assigning a new code!
+        let finalCode = incomingCode;
+        let shouldAssignNewCode = false;
+
         if (existingPiBom) {
+          // Strictly update existing BOM for this specific PI
           finalCode = existingPiBom.bomCode || existingPiBom.code || existingPiBom.id;
           shouldAssignNewCode = false;
-        } else if (hasValidCode && (!alreadyExists || shouldUpdate)) {
+        } else if (isUpdate && existingRecordWithCode && codeBelongsToSameRecord) {
+          // Explicit update to the same existing BOM record
+          finalCode = incomingCode;
+          shouldAssignNewCode = false;
+        } else if (incomingCode && !isPlaceholderCode && !existingRecordWithCode) {
+          // Valid code that does NOT collide with any existing record
           finalCode = incomingCode;
           const numMatch = incomingCode.match(/^BOM-(\d+)$/i);
           if (numMatch) {
@@ -3548,9 +3726,12 @@ app.post('/api/boms', async (req, res) => {
             if (Number.isFinite(cNum) && cNum > maxNum) maxNum = cNum;
           }
         } else {
+          // Collision detected OR placeholder code: NEVER overwrite another record!
+          // Atomically assign the next available unique code
           shouldAssignNewCode = true;
           maxNum += 1;
           finalCode = `BOM-${String(maxNum).padStart(3, '0')}`;
+          console.log(`[POST /api/boms Non-Collision Guard] Assigned new unique code ${finalCode} (avoiding overwrite of existing record)`);
         }
 
         bom.bomCode = finalCode;
@@ -3621,6 +3802,40 @@ app.post('/api/boms', async (req, res) => {
             }).eq('employee', 'BOM_SEQUENCE');
             await Promise.race([seqPromise, timeoutPromise]);
           } catch (_) {}
+
+          // Synchronize source PI record so its convertedBomCode matches finalCode
+          if (bom.sourcePiNo) {
+            try {
+              if (isDbConnected()) {
+                await query(`
+                  UPDATE public.proforma_invoices
+                  SET status = 'Converted to BOM',
+                      converted_to_bom = true,
+                      converted_bom_code = $1,
+                      updated_at = NOW()
+                  WHERE pi_no = $2 OR id = $2
+                `, [finalCode, bom.sourcePiNo]).catch(() => null);
+
+                const piStoreRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`).catch(() => null);
+                if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
+                  let piList = piStoreRes.rows[0].data;
+                  let changed = false;
+                  piList = piList.map(p => {
+                    if (p && (p.piNo === bom.sourcePiNo || p.id === bom.sourcePiNo)) {
+                      changed = true;
+                      return { ...p, status: 'Converted to BOM', convertedToBom: true, convertedBomCode: finalCode };
+                    }
+                    return p;
+                  });
+                  if (changed) {
+                    await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
+                    supabaseMemoryStore['sales_pi_store'] = piList;
+                    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piList });
+                  }
+                }
+              }
+            } catch (_) {}
+          }
         })();
         return;
       } catch (err) {

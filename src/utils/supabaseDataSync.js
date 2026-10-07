@@ -1851,6 +1851,22 @@ export async function getAndReserveNextBomCode(commit = true) {
           });
         }
       }
+
+      // Also inspect sales PI store in localStorage
+      const piSavedStr = localStorage.getItem('controlroom_sales_pi_store');
+      if (piSavedStr) {
+        const piList = JSON.parse(piSavedStr);
+        if (Array.isArray(piList)) {
+          piList.forEach(p => {
+            const raw = String(p?.convertedBomCode || p?.convertedBomNo || '');
+            const match = raw.match(/BOM-(\d+)/i);
+            if (match) {
+              const parsed = parseInt(match[1], 10);
+              if (Number.isFinite(parsed) && parsed > storeMax) storeMax = parsed;
+            }
+          });
+        }
+      }
     } catch (_) {}
 
     // High-speed query directly to canonical public.bom_orders (prevents sequence drift)
