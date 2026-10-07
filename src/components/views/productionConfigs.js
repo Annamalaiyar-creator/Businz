@@ -33,8 +33,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
               const cleanNum = bCode.replace(/[^0-9]/g, '') || '101';
-              const isConf = b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed;
-              const invNo = b.invoiceNo || (isConf ? `INV-2026-${cleanNum}` : 'Pending Confirmation');
+              const isConf = b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed || Boolean(b.invoiceNo && b.invoiceNo !== 'Pending Confirmation');
+              const invNo = (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') ? b.invoiceNo : (isConf ? (b.invoiceNo || `INV-2026-${cleanNum}`) : 'Pending Confirmation');
               const s = String(b.status || '').toLowerCase();
               const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
 
@@ -118,9 +118,10 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3))
             );
             if (matchingBom) {
-              const isConf = matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed || inv.status === 'Invoice Confirmed';
+              const isConf = matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed || inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.pay === 'Completed & Locked' || Boolean(matchingBom.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation');
               return {
                 ...inv,
+                invNo: (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo : (matchingBom.invoiceNo || inv.invNo),
                 vendor: inv.vendor || matchingBom.customerName || 'Customer',
                 customerName: matchingBom.customerName || inv.vendor || 'Customer',
                 billingAddress: inv.billingAddress || matchingBom.billingAddress,
@@ -177,8 +178,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   c3: i.poNo || i.bomCode || 'BOM-001',
                   c4: i.date,
                   c5: typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : i.invAmt,
-                  c6: i.pay || 'Ready for Payment',
-                  status: i.status || 'Ready for Payment',
+                  c6: isConfirmed ? 'Completed & Locked' : (i.pay || 'Ready for Payment'),
+                  status: isConfirmed ? 'Invoice Confirmed' : (i.status || 'Ready for Payment'),
                   stBg: isConfirmed ? '#DCFCE7' : (isReady ? '#EFF6FF' : '#FEF3C7'),
                   stFg: isConfirmed ? '#166534' : (isReady ? '#2563EB' : '#B45309'),
                   stBorder: isConfirmed ? '1px solid #86EFAC' : (isReady ? '1px solid #BFDBFE' : '1px solid #FDE68A'),

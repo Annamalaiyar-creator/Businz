@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Check, Eye, FileText, AlertCircle, X, CheckCircle, Clock,
+  Check, Eye, FileText, AlertCircle, AlertTriangle, X, CheckCircle, Clock,
   FileCheck, CheckSquare, XCircle, ChevronLeft, RotateCcw,
   Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode
 } from "lucide-react";
@@ -59,10 +59,11 @@ export default function InvoiceDetailModal({
     )
   );
 
-  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
+  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
+  const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'INV-000012'));
   const invNoText = isEditingInvoice
-    ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'))
-    : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'));
+    ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'))
+    : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'));
   const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer') : (inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer');
   const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
   const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || matchingBom?.paymentType || '100% Advance') : (inv.paymentType || matchingBom?.paymentType || '100% Advance');
@@ -741,30 +742,78 @@ export default function InvoiceDetailModal({
                 // 5. Update Invoice status & persist to localStorage / cloud store
                 const unpackedItems = (itemsList || []).filter(it => it.selected === false);
                 const disclaimerClause = 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.';
+                const targetInvNumber = (invNoText && invNoText !== 'Pending Confirmation')
+                  ? invNoText
+                  : (inv.invNo && inv.invNo !== 'Pending Confirmation'
+                    ? inv.invNo
+                    : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation'
+                      ? matchingBom.invoiceNo
+                      : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'INV-000012')));
+
+                const confirmedInvRecord = {
+                  ...inv,
+                  id: inv.id || targetInvNumber,
+                  invNo: targetInvNumber,
+                  code: targetInvNumber,
+                  invoiceNo: targetInvNumber,
+                  invoiceNumber: targetInvNumber,
+                  poNo: bomRefText,
+                  bomCode: bomRefText,
+                  vendor: customerText,
+                  customerName: customerText,
+                  date: invDateText || new Date().toISOString().split('T')[0],
+                  invAmt: totalAmtRaw || inv.invAmt || (matchingBom ? (matchingBom.grandTotal || matchingBom.subTotal) : 0),
+                  status: 'Invoice Confirmed',
+                  match: 'Matched',
+                  pay: 'Completed & Locked',
+                  stockDeducted: true,
+                  stockDeductionDate: new Date().toISOString(),
+                  packedItemsDeducted: packedItemsToDeduct,
+                  unpackedItemsRemaining: unpackedItems,
+                  addressProofReuploadRequested: false,
+                  processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(inv.processedWithoutAddressProof),
+                  addressProofWaived: waiveProofDisclaimer ? true : Boolean(inv.addressProofWaived),
+                  disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : inv.disclaimerTerm,
+                  terms: waiveProofDisclaimer
+                    ? ((inv.terms ? inv.terms + '\n• ' : '') + disclaimerClause)
+                    : inv.terms,
+                  items: packedItemsToDeduct.length > 0 ? packedItemsToDeduct : (inv.items || matchingBom?.dispatchPacking || matchingBom?.items || [])
+                };
+
                 setInvoiceList(prev => {
-                  const updatedInvoices = prev.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
-                    ...item,
-                    status: 'Invoice Confirmed',
-                    match: 'Matched',
-                    pay: 'Completed & Locked',
-                    stockDeducted: true,
-                    stockDeductionDate: new Date().toISOString(),
-                    packedItemsDeducted: packedItemsToDeduct,
-                    unpackedItemsRemaining: unpackedItems,
-                    addressProofReuploadRequested: false,
-                    processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(item.processedWithoutAddressProof),
-                    addressProofWaived: waiveProofDisclaimer ? true : Boolean(item.addressProofWaived),
-                    disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : item.disclaimerTerm,
-                    terms: waiveProofDisclaimer
-                      ? ((item.terms ? item.terms + '\n• ' : '') + disclaimerClause)
-                      : item.terms
-                  } : item);
+                  const currentList = Array.isArray(prev) ? prev : [];
+                  const matchKey = (item) =>
+                    (item.invNo && item.invNo === targetInvNumber) ||
+                    (item.code && item.code === targetInvNumber) ||
+                    (item.id && item.id === confirmedInvRecord.id) ||
+                    (item.bomCode && item.bomCode === bomRefText) ||
+                    (item.poNo && item.poNo === bomRefText) ||
+                    (inv.invNo && item.invNo === inv.invNo) ||
+                    (inv.id && item.id === inv.id);
+
+                  const exists = currentList.some(matchKey);
+                  const updatedInvoices = exists
+                    ? currentList.map(item => matchKey(item) ? { ...item, ...confirmedInvRecord } : item)
+                    : [confirmedInvRecord, ...currentList];
+
                   try {
-                    const confirmedInv = updatedInvoices.find(item => (item.invNo === invNoText || item.code === invNoText || item.id === inv.id));
-                    if (confirmedInv) saveCloudInvoiceRow(confirmedInv);
+                    localStorage.setItem('controlroom_invoice_store', JSON.stringify(updatedInvoices.map(stripDataUrlsFromRecord)));
+                    saveCloudInvoiceRow(confirmedInvRecord);
                   } catch (e) { }
                   return updatedInvoices;
                 });
+
+                // Update viewing modal state directly
+                setViewingInvoiceModal(confirmedInvRecord);
+
+                // Broadcast local event matching existing listeners
+                try {
+                  window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
+                    detail: { invoice: confirmedInvRecord }
+                  }));
+                  window.dispatchEvent(new Event('controlroom_storage_update'));
+                  window.dispatchEvent(new Event('storage'));
+                } catch (_) {}
 
                 // 6. Update matching BOM status to 'Awaiting Vehicle Loading & Dispatch'
                 const targetBomCode = matchingBom?.bomCode || matchingBom?.code || inv.bomCode || inv.poNo || inv.code || bomRefText;
@@ -778,9 +827,9 @@ export default function InvoiceDetailModal({
                     (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode))
                   ) ? {
                     ...b,
-                    status: 'Awaiting Vehicle Loading & Dispatch',
+                    status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch',
                     invoiceConfirmed: true,
-                    invoiceNo: invNoText,
+                    invoiceNo: targetInvNumber,
                     stockDeducted: true,
                     stockDeductionDate: new Date().toISOString(),
                     packedItemsDeducted: packedItemsToDeduct,
@@ -900,8 +949,8 @@ export default function InvoiceDetailModal({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      invNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
-                      invoiceNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
+                      invNo: targetInvNumber,
+                      invoiceNo: targetInvNumber,
                       poNo: bomRefText,
                       bomCode: bomRefText,
                       vendor: customerText,
@@ -920,25 +969,39 @@ export default function InvoiceDetailModal({
                     .then(data => {
                       if (data && data.invoice) {
                         const createdInv = data.invoice;
-                        const finalConfirmedInvNo = createdInv.invoice_number || createdInv.invNo || invNoText;
-                        setInvoiceList(prev => (prev || []).map(item =>
-                          (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText)
-                            ? {
-                                ...item,
-                                invNo: finalConfirmedInvNo,
-                                code: finalConfirmedInvNo,
-                                invoiceNo: finalConfirmedInvNo,
-                                id: createdInv.id || item.id,
-                                invoiceNumber: finalConfirmedInvNo,
-                                synced: true
-                              }
-                            : item
-                        ));
-                        setBomStore(prev => (prev || []).map(b =>
-                          (b.bomCode === bomRefText || b.code === bomRefText)
-                            ? { ...b, invoiceNo: finalConfirmedInvNo }
-                            : b
-                        ));
+                        const finalConfirmedInvNo = createdInv.invoice_number || createdInv.invNo || targetInvNumber;
+                        setInvoiceList(prev => {
+                          const updated = (prev || []).map(item =>
+                            (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText || item.invNo === targetInvNumber)
+                              ? {
+                                  ...item,
+                                  invNo: finalConfirmedInvNo,
+                                  code: finalConfirmedInvNo,
+                                  invoiceNo: finalConfirmedInvNo,
+                                  id: createdInv.id || item.id,
+                                  invoiceNumber: finalConfirmedInvNo,
+                                  status: 'Invoice Confirmed',
+                                  pay: 'Completed & Locked',
+                                  synced: true
+                                }
+                              : item
+                          );
+                          try {
+                            localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+                          } catch (_) {}
+                          return updated;
+                        });
+                        setBomStore(prev => {
+                          const updated = (prev || []).map(b =>
+                            (b.bomCode === bomRefText || b.code === bomRefText)
+                              ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
+                              : b
+                          );
+                          try {
+                            localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+                          } catch (_) {}
+                          return updated;
+                        });
                       }
                     })
                     .catch(err => console.warn('Invoice sync notice:', err));

@@ -465,9 +465,9 @@ const toConsumerBomServer = (row) => {
     packedBy: row.packed_by || row.packedBy || extraData.packedBy || cleanAccountsVerification?.packedBy || null,
     packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
     packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
-    invoiceConfirmed: Boolean(row.invoice_confirmed),
-    invoiceDeducted: Boolean(row.invoice_deducted),
-    invoiceNo: row.invoice_no || extraData.invoiceNo || '',
+    invoiceConfirmed: Boolean(row.invoice_confirmed || row.invoiceConfirmed || extraData.invoiceConfirmed),
+    invoiceDeducted: Boolean(row.invoice_deducted || row.invoiceDeducted || extraData.invoiceDeducted),
+    invoiceNo: row.invoice_no || row.invoiceNo || extraData.invoiceNo || '',
     stockBlocked: Boolean(row.stock_blocked),
     stockBlockedAt: row.stock_blocked_at || null,
     stockDeducted: Boolean(row.stock_deducted),
@@ -711,8 +711,9 @@ const toDatabaseBomRowServer = (item) => {
     payments: cleanPayments,
     dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
     accounts_verification: accountsVerification,
-    invoice_confirmed: Boolean(item.invoiceConfirmed),
-    invoice_deducted: Boolean(item.invoiceDeducted),
+    invoice_no: item.invoiceNo || item.invoice_no || extraData.invoiceNo || '',
+    invoice_confirmed: Boolean(item.invoiceConfirmed || item.invoice_confirmed),
+    invoice_deducted: Boolean(item.invoiceDeducted || item.invoice_deducted),
     stock_blocked: Boolean(item.stockBlocked),
     stock_blocked_at: sanitizeTimestamp(item.stockBlockedAt),
     preset_name: item.presetName || '',
@@ -4490,7 +4491,13 @@ app.post('/api/invoices', async (req, res) => {
       try { localInvList = JSON.parse(fs.readFileSync(invStorePath, 'utf8')); } catch (_) {}
     }
     if (!Array.isArray(localInvList)) localInvList = [];
-    const matchIdx = localInvList.findIndex(i => i.invNo === invRecord.invNo || i.id === invRecord.id);
+
+    const matchIdx = localInvList.findIndex(i =>
+      (invRecord.invNo && i.invNo === invRecord.invNo) ||
+      (invRecord.id && i.id === invRecord.id) ||
+      (invRecord.bomCode && (i.bomCode === invRecord.bomCode || i.poNo === invRecord.bomCode)) ||
+      (invRecord.poNo && (i.poNo === invRecord.poNo || i.bomCode === invRecord.poNo))
+    );
     if (matchIdx !== -1) {
       localInvList[matchIdx] = { ...localInvList[matchIdx], ...invRecord };
     } else {
@@ -4500,6 +4507,49 @@ app.post('/api/invoices', async (req, res) => {
     if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
     supabaseMemoryStore['invoice_store'] = localInvList;
     pushStoreToSupabase('invoice_store', localInvList);
+
+    // Synchronize matching BOM record with assigned invoice
+    const targetBomCode = invRecord.bomCode || invRecord.poNo;
+    if (targetBomCode) {
+      try {
+        const bomPath = getStoreFilePath('bom_store.json');
+        let diskBoms = [];
+        if (fs.existsSync(bomPath)) {
+          try { diskBoms = JSON.parse(fs.readFileSync(bomPath, 'utf8')); } catch (_) {}
+        }
+        if (Array.isArray(diskBoms)) {
+          let bomChanged = false;
+          diskBoms = diskBoms.map(b => {
+            if (b && (b.bomCode === targetBomCode || b.code === targetBomCode || b.id === targetBomCode)) {
+              bomChanged = true;
+              return {
+                ...b,
+                invoiceNo: assignedInvNo,
+                invoiceConfirmed: true,
+                status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch'
+              };
+            }
+            return b;
+          });
+          if (bomChanged) {
+            fs.writeFileSync(bomPath, JSON.stringify(diskBoms, null, 2), 'utf8');
+            supabaseMemoryStore.bom_store = diskBoms;
+            cachedBomsResult = diskBoms;
+            try {
+              broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: diskBoms });
+              broadcastRealtimeEvent('bom_updated', { bom: diskBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode) });
+            } catch (_) {}
+          }
+        }
+      } catch (bErr) {
+        console.warn('Error linking BOM in /api/invoices:', bErr);
+      }
+    }
+
+    try {
+      broadcastRealtimeEvent('store_updated', { key: 'invoice_store', storeData: localInvList });
+      broadcastRealtimeEvent('invoice_updated', { invoice: invRecord });
+    } catch (_) {}
 
     return res.json({
       success: true,
