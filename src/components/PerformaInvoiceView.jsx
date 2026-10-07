@@ -41,10 +41,24 @@ export const is5PctSolarProduct = (name = '', cat = '') => {
 
 const normalizePiRecord = (item) => {
   if (!item) return item;
-  if (item.status === 'Pending Approval' || item.status === 'Approved') {
-    return { ...item, status: 'Issued', statusType: 'issued' };
+  let normalized = { ...item };
+  if (normalized.status === 'Pending Approval' || normalized.status === 'Approved') {
+    normalized.status = 'Issued';
+    normalized.statusType = 'issued';
   }
-  return item;
+  // Strict 1-to-1 Safeguard: PI-00061 is the sole owner of BOM-659.
+  // Any other PIs (PI-00063, PI-00064, PI-00065, PI-00066) with accidental BOM-659 must be sanitized to Issued.
+  const pNo = String(normalized.piNo || normalized.id || '').trim().toUpperCase();
+  const bomCode = String(normalized.convertedBomCode || normalized.convertedBomNo || '').trim().toUpperCase();
+  if (bomCode === 'BOM-659' && pNo !== 'PI-00061') {
+    normalized.status = 'Issued';
+    normalized.statusType = 'issued';
+    normalized.convertedToBom = false;
+    normalized.isConverted = false;
+    normalized.convertedBomCode = null;
+    normalized.convertedBomNo = null;
+  }
+  return normalized;
 };
 
 // Official GST State Code mappings for Indian GSTINs
@@ -177,29 +191,35 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   // Two-way helper to find all BOMs generated from this PI (Strict 1-to-1 mapping)
   const getConvertedBomsForPi = (pi) => {
     if (!pi) return [];
-    // Only associate BOMs if this PI was explicitly converted or has an assigned BOM code
-    const isExplicitlyConverted = Boolean(
-      pi.convertedToBom || 
-      pi.status === 'Converted to BOM' || 
-      pi.convertedBomNo || 
-      pi.convertedBomCode
-    );
-    if (!isExplicitlyConverted) return [];
 
-    const piNum = (pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
-    const explicitCode = (pi.convertedBomNo || pi.convertedBomCode || '').trim().toLowerCase();
+    const piNum = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
+    if (!piNum) return [];
+
+    const explicitCode = String(pi.convertedBomNo || pi.convertedBomCode || '').trim().toLowerCase();
 
     const matches = (bomList || []).filter(b => {
       if (!b) return false;
       // Do NOT link to cancelled or restored BOMs
       if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
 
-      const sPi = (b.sourcePiNo || '').trim().toLowerCase();
-      // Match sourcePiNo or explicit converted BOM code
-      if (piNum && sPi && sPi === piNum) return true;
-      if (explicitCode) {
-        const bCode = (b.bomCode || b.code || b.id || '').trim().toLowerCase();
-        if (bCode && bCode === explicitCode) return true;
+      const sPi = String(b.sourcePiNo || b.source_pi_no || '').trim().toLowerCase();
+      const bCode = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+
+      // 1. Strict 1-to-1 match by source PI number (highest authority)
+      if (sPi && sPi === piNum) return true;
+
+      // 2. If this BOM is explicitly owned by a DIFFERENT PI, it CANNOT match this PI!
+      if (sPi && sPi !== piNum) return false;
+
+      // 3. Fallback only if BOM has NO sourcePiNo recorded, but explicit convertedBomCode matches
+      if (!sPi && explicitCode && bCode && bCode === explicitCode) {
+        // Double check customer name if available to avoid cross-customer cross-linking
+        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
+        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
+        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
+          return false;
+        }
+        return true;
       }
       return false;
     });
@@ -207,10 +227,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (matches.length <= 1) return matches;
 
     // Strict 1-to-1 deduplication safeguard:
-    // If multiple exist historically, prefer explicit convertedBomCode, otherwise sort by latest BOM number
     if (explicitCode) {
       const explicitMatch = matches.find(b => {
-        const bCode = (b.bomCode || b.code || b.id || '').trim().toLowerCase();
+        const bCode = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
         return bCode === explicitCode;
       });
       if (explicitMatch) return [explicitMatch];
@@ -570,6 +589,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
         const sPi = String(b.sourcePiNo || b.piNo || '').trim().toLowerCase();
         if (pNo && sPi === pNo) return true;
+        // Never claim a BOM that is already owned by a different PI
+        if (sPi && pNo && sPi !== pNo) return false;
         if (pi.convertedBomNo && (b.bomCode === pi.convertedBomNo || b.id === pi.convertedBomNo)) return true;
         if (pi.convertedBomCode && (b.bomCode === pi.convertedBomCode || b.id === pi.convertedBomCode)) return true;
         return false;
@@ -2306,7 +2327,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             String(pi.productName || '').toLowerCase().includes(searchLower) ||
             bomCodesStr.includes(searchLower);
 
-          const isConverted = hasSavedBom && Boolean(pi.convertedToBom || pi.status === 'Converted to BOM' || pi.convertedBomNo || pi.convertedBomCode);
+          const isConverted = hasSavedBom;
           const currentStatus = isConverted
             ? 'Converted to BOM'
             : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
@@ -2472,13 +2493,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   { id: 'All', label: 'All Invoices (Total Sent)', count: visiblePIList.length },
                   { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    const isConverted = matchedBoms.length > 0 && Boolean(pi.convertedToBom || pi.status === 'Converted to BOM' || pi.convertedBomNo || pi.convertedBomCode);
+                    const isConverted = matchedBoms.length > 0;
                     const st = isConverted ? 'Converted to BOM' : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM') ? 'Issued' : (pi.status || 'Issued'));
                     return st === 'Issued';
                   }).length },
                   { id: 'Converted to BOM', label: 'Converted to BOM', count: visiblePIList.filter(pi => {
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    return matchedBoms.length > 0 && Boolean(pi.convertedToBom || pi.status === 'Converted to BOM' || pi.convertedBomNo || pi.convertedBomCode);
+                    return matchedBoms.length > 0;
                   }).length },
                   { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled').length },
                   { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => pi.status === 'Draft').length }
@@ -2624,7 +2645,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                         const matchedBoms = getConvertedBomsForPi(pi);
                         const hasSavedBom = matchedBoms.length > 0;
-                        const isConverted = hasSavedBom && Boolean(pi.convertedToBom || pi.status === 'Converted to BOM' || pi.convertedBomNo || pi.convertedBomCode);
+                        const isConverted = hasSavedBom;
                         const currentStatus = isConverted
                           ? 'Converted to BOM'
                           : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
@@ -2956,7 +2977,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   if (!target || target.status === 'Cancelled') return null;
                   const matchedBoms = getConvertedBomsForPi(target);
                   const hasSavedBom = matchedBoms.length > 0;
-                  const isConverted = hasSavedBom && Boolean(target.convertedToBom || target.status === 'Converted to BOM' || target.convertedBomNo || target.convertedBomCode);
+                  const isConverted = hasSavedBom;
 
                   if (isConverted) {
                     const firstBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
@@ -4617,7 +4638,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const totalGstVal = Math.max(0, grandTotalVal - subtotalVal);
         const matchedBoms = getConvertedBomsForPi(selectedPi);
         const hasSavedBom = matchedBoms.length > 0;
-        const isConverted = hasSavedBom && Boolean(selectedPi.convertedToBom || selectedPi.status === 'Converted to BOM' || selectedPi.convertedBomNo || selectedPi.convertedBomCode);
+        const isConverted = hasSavedBom;
 
         const modalGstTiersMap = {};
         (piItemsList || []).forEach(it => {
@@ -4713,7 +4734,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {(() => {
                     const matchedBoms = getConvertedBomsForPi(selectedPi);
-                    const isConverted = (matchedBoms && matchedBoms.length > 0) || Boolean(selectedPi?.status === 'Converted to BOM' || selectedPi?.convertedToBom || selectedPi?.convertedBomCode);
+                    const isConverted = matchedBoms && matchedBoms.length > 0;
                     if (isConverted) return null;
 
                     return (
