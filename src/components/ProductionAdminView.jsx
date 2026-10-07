@@ -106,7 +106,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
     };
   }, []);
 
-  // Live Zoho Inventory Work Orders State
+  // Live Central Inventory Work Orders State
   const [workOrders, setWorkOrders] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -773,7 +773,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
 
         <div className="production-welcome-stats" style={{ display: 'flex', alignItems: 'center', gap: '20px', zIndex: 2 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Zoho Integration</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Central System</div>
             <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#06B6D4', boxShadow: '0 0 8px #06B6D4' }}></span>
               Connected & Synced
@@ -1271,7 +1271,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                   {isDispatchView ? 'Top 5 Delayed Dispatch Orders' : 'Top 5 Delayed Production Orders'}
                 </span>
                 <span style={{ fontSize: '9.5px', color: isDispatchView ? '#2563EB' : '#0E7490', fontWeight: '700', backgroundColor: isDispatchView ? '#EFF6FF' : '#ECFEFF', padding: '2px 8px', borderRadius: '8px' }}>
-                  {isDispatchView ? 'Synced with Zoho' : 'Internal Businz'}
+                  {isDispatchView ? 'Synced with Central Store' : 'Internal Businz'}
                 </span>
               </div>
             </div>
@@ -1743,7 +1743,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                   type="submit"
                   style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#2563EB', fontSize: '13px', fontWeight: '700', color: '#FFFFFF', cursor: 'pointer' }}
                 >
-                  Sync to Zoho Inventory
+                  Sync to Inventory
                 </button>
               </div>
             </form>

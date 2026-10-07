@@ -10,7 +10,6 @@ import MaterialReorderAlerts from './components/MaterialReorderAlerts';
 import PerformaInvoiceView from './components/PerformaInvoiceView';
 import PurchaseOrdersView from './components/PurchaseOrdersView';
 import OtherViews from './components/OtherViews';
-import ZohoIntegrationView from './components/ZohoIntegrationView';
 import DashboardFullReference from './components/DashboardFullReference';
 import InventoryAutoConversion from './components/InventoryAutoConversion';
 import CreateWorkOrderPage from './components/CreateWorkOrderPage';
@@ -28,7 +27,7 @@ import WorkflowNotificationBanner from './components/WorkflowNotificationBanner'
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
 import { useEffect, Component } from 'react';
 import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
-import { getSafeZohoPOs, getSafeZohoItems } from './services/zohoSafeSync';
+import { getPurchaseOrders, getItems } from './services/businzDataService';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
 import { fetchCloudStore } from './utils/supabaseDataSync';
@@ -180,12 +179,14 @@ function App() {
   useEffect(() => {
     initRealtimeSync();
     try {
-      if (localStorage.getItem('controlroom_prod_cutover_stock_zero_20261006') !== 'true') {
+      if (localStorage.getItem('controlroom_prod_cutover_stock_zero_20261006_v2') !== 'true') {
         const wipeKeys = [
           'controlroom_bom_store',
           'controlroom_sales_pi_store',
           'controlroom_proforma_invoice_store',
           'controlroom_procurement_pi_store',
+          'sales_pi_store',
+          'proforma_invoice_store',
           'controlroom_po_store',
           'controlroom_grn_store',
           'controlroom_invoice_store',
@@ -214,7 +215,7 @@ function App() {
         wipeKeys.forEach(k => {
           try { localStorage.removeItem(k); } catch (_) {}
         });
-        localStorage.setItem('controlroom_prod_cutover_stock_zero_20261006', 'true');
+        localStorage.setItem('controlroom_prod_cutover_stock_zero_20261006_v2', 'true');
       }
     } catch (_) {}
   }, []);
@@ -344,8 +345,8 @@ function App() {
       setIsLoading(true);
       try {
         const [poData, itemsData, branding, rawData] = await Promise.all([
-          getSafeZohoPOs(),
-          getSafeZohoItems(),
+          getPurchaseOrders(),
+          getItems(),
           fetchMasterBranding(),
           fetch('/api/raw-materials')
             .then(r => r.json())
@@ -591,8 +592,6 @@ function App() {
               clearTargetPoTab={() => setTargetPoTab(null)}
               onNavigateTab={handleTabChange}
             />
-          ) : (activeTab === 'Integration' || activeTab === 'Zoho Integration') ? (
-            <ZohoIntegrationView userRole={userRole} />
           ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
             <InventoryAutoConversion />
           ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (

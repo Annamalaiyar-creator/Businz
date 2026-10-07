@@ -176,7 +176,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
       // 2. Fetch primary live operational records
       const [pos, pis, boms, invs, workOrders, dispatches, challans, quotes, payments, customers, presets] = await Promise.all([
-        fetchWithTimeout('/api/zoho/purchaseorders', { timeout: 8000 })
+        fetchWithTimeout('/api/purchaseorders', { timeout: 8000 })
           .then(r => r.json())
           .catch(() => fetchCloudStore('po_store', [])),
         fetchCloudStore('sales_pi_store', [])
@@ -1534,7 +1534,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 fontSize: '11px',
                 color: '#0369A1'
               }}>
-                <span>Total Zoho PO Inventory Sync:</span>
+                <span>Total PO Inventory Sync:</span>
                 <strong>{poList.length} Orders Active</strong>
               </div>
             </div>
@@ -1995,7 +1995,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #F1F5F9', paddingTop: '8px', fontSize: '11px', color: '#64748B' }}>
                 <span>Enterprise System Health:</span>
-                <strong style={{ color: '#16A34A' }}>99.9% Uptime • Zoho Books Synced</strong>
+                <strong style={{ color: '#16A34A' }}>99.9% Uptime • BUSINZ Native Catalog Synced</strong>
               </div>
             </div>
 
@@ -2636,7 +2636,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>Total PO Spend Handled</span>
               <div style={{ fontSize: '20px', fontWeight: '900', color: '#2563EB' }}>₹ {totalPoSpendCr} Cr</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Zoho Books live synced</div>
+              <div style={{ fontSize: '11px', color: '#64748B' }}>BUSINZ Native Catalog live synced</div>
             </div>
 
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #EAEFEF', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -2747,7 +2747,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             </div>
           </div>
 
-          {/* Live Zoho Purchase Orders Table */}
+          {/* Live Purchase Orders Table */}
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
@@ -2760,7 +2760,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' }}>
-                Live Zoho Purchase Orders Registry
+                Live Purchase Orders Registry
               </span>
               <span style={{ fontSize: '11px', color: '#64748B' }}>Sorted by recent issue date</span>
             </div>

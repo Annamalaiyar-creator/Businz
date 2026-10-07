@@ -34,11 +34,11 @@ export default function DashboardFullReference({ userRole }) {
     } catch (e) {}
   };
 
-  // Fetch live Zoho Purchase Orders, Approval Pending Counts & GRNs
+  // Fetch live Purchase Orders, Approval Pending Counts & GRNs
   useEffect(() => {
     Promise.all([
-      fetchWithTimeout('/api/zoho/purchaseorders', { timeout: 25000 }).then((res) => res.json()).catch(() => []),
-      fetchWithTimeout('/api/zoho/approvals-pending', { timeout: 25000 }).then((res) => res.json()).catch(() => ({ posPending: 0, grnsPending: 0, invoicesPending: 0 })),
+      fetchWithTimeout('/api/purchaseorders', { timeout: 25000 }).then((res) => res.json()).catch(() => []),
+      fetchWithTimeout('/api/approvals-pending', { timeout: 25000 }).then((res) => res.json()).catch(() => ({ posPending: 0, grnsPending: 0, invoicesPending: 0 })),
       fetchWithTimeout('/api/grns', { timeout: 25000 }).then((res) => res.json()).catch(() => [])
     ]).then(([poResults, approvals, grnResults]) => {
       if (Array.isArray(poResults)) {
@@ -52,7 +52,7 @@ export default function DashboardFullReference({ userRole }) {
       }
       setLoading(false);
     }).catch((err) => {
-      console.error('Error fetching Zoho data:', err);
+      console.error('Error fetching dashboard data:', err);
       setLoading(false);
     });
   }, []);
@@ -96,7 +96,7 @@ export default function DashboardFullReference({ userRole }) {
   const draftCount = filteredPOs.filter((po) => po.status === 'Draft' || po.statusType === 'draft').length;
   const approvedCount = filteredPOs.filter((po) => po.status === 'Approved' || po.status === 'OPEN' || po.statusType === 'approved').length;
 
-  // Helper & calculations for TODAY'S SNAPSHOT (Live Zoho Data)
+  // Helper & calculations for TODAY'S SNAPSHOT (Live System Data)
   const isToday = (dateStr) => {
     if (!dateStr) return false;
     const d = new Date(dateStr);
@@ -344,7 +344,7 @@ export default function DashboardFullReference({ userRole }) {
             icon: CheckCircle2,
             iconColor: '#0E7490',
             iconBg: '#ECFEFF',
-            bottomPrefix: 'Zoho synced ',
+            bottomPrefix: 'System synced ',
             bottomHighlight: '142 bills'
           },
           {
@@ -985,7 +985,7 @@ export default function DashboardFullReference({ userRole }) {
               <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 {(userRole === 'Invoice Executive' || userRole === 'Accounts Head' || userRole === 'Finance & Accounts') ? 'Recently Issued Invoices' : (userRole === 'Sales Executive' || userRole === 'Sales Head') ? 'Recent Proforma Invoices' : 'Recently Raised POs'}
               </span>
-              <span style={{ fontSize: '9.5px', color: '#059669', fontWeight: '700', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '8px' }}>ZOHO SYNC</span>
+              <span style={{ fontSize: '9.5px', color: '#059669', fontWeight: '700', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '8px' }}>LIVE SYNC</span>
             </div>
           </div>
 
@@ -1137,7 +1137,7 @@ export default function DashboardFullReference({ userRole }) {
                   <strong style={{ fontSize: '16px', color: '#DC2626', fontWeight: '800', lineHeight: '1' }}>5</strong>
                 </div>
                 <div style={{ padding: '10px 6px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', minHeight: '68px', boxSizing: 'border-box' }}>
-                  <span style={{ fontSize: '10px', fontWeight: '600', color: '#64748B', textAlign: 'center', lineHeight: '1.2', display: 'flex', alignItems: 'center', minHeight: '24px' }}>Zoho Sync</span>
+                  <span style={{ fontSize: '10px', fontWeight: '600', color: '#64748B', textAlign: 'center', lineHeight: '1.2', display: 'flex', alignItems: 'center', minHeight: '24px' }}>Live Sync</span>
                   <strong style={{ fontSize: '16px', color: '#16A34A', fontWeight: '800', lineHeight: '1' }}>100%</strong>
                 </div>
               </>

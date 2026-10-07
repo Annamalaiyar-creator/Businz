@@ -804,7 +804,7 @@ export default function InvoiceDetailModal({
                   return updatedBoms;
                 });
 
-                // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) - Dynamic support for Individual Products vs Preset Packages
+                // 7. Post Invoice to BUSINZ Native Catalog API (/api/invoices) - Dynamic support for Individual Products vs Preset Packages
                 const rawPresetGroups = matchingBom?.presetGroups || inv.presetGroups;
                 const presetGroupsList = Array.isArray(rawPresetGroups)
                   ? rawPresetGroups
@@ -816,7 +816,7 @@ export default function InvoiceDetailModal({
                   (inv.presetName && inv.presetName !== 'Solar Mounting Structure Kit')
                 );
 
-                let zohoItems = [];
+                let backendItems = [];
                 let totalAmt = 0;
                 let invoiceNotes = '';
 
@@ -831,7 +831,7 @@ export default function InvoiceDetailModal({
                       const setCount = parseFloat(grp.setCount) || 1;
                       const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
                       const gName = grp.presetName || grp.name || presetName;
-                      zohoItems.push({
+                      backendItems.push({
                         name: gName,
                         rate: unitPrice,
                         quantity: setCount,
@@ -845,7 +845,7 @@ export default function InvoiceDetailModal({
                     extraItems.forEach(it => {
                       const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
                       const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
-                      zohoItems.push({
+                      backendItems.push({
                         name: it.name || it.productName || 'Solar Structure Component',
                         rate: r,
                         quantity: q,
@@ -854,7 +854,7 @@ export default function InvoiceDetailModal({
                       });
                     });
                   } else {
-                    zohoItems.push({
+                    backendItems.push({
                       name: presetName,
                       rate: totalPresetPrice,
                       quantity: 1,
@@ -868,7 +868,7 @@ export default function InvoiceDetailModal({
                   const billedItems = (itemsList || []).filter(it => it.selected !== false);
                   const itemsToInclude = billedItems.length > 0 ? billedItems : (itemsList || []);
 
-                  zohoItems = itemsToInclude.map(it => {
+                  backendItems = itemsToInclude.map(it => {
                     const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
                     const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
                     return {
@@ -889,7 +889,7 @@ export default function InvoiceDetailModal({
                 }
 
                 try {
-                  fetch('/api/zoho/invoices', {
+                  fetch('/api/invoices', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -904,7 +904,7 @@ export default function InvoiceDetailModal({
                       isPreset: isPresetOrder,
                       presetName: isPresetOrder ? (matchingBom?.presetName || inv.presetName) : undefined,
                       presetGroups: isPresetOrder ? presetGroupsList : undefined,
-                      items: zohoItems,
+                      items: backendItems,
                       notes: invoiceNotes,
                       terms: waiveProofDisclaimer ? disclaimerClause : (inv.terms || undefined)
                     })
@@ -912,8 +912,8 @@ export default function InvoiceDetailModal({
                     .then(res => res.json())
                     .then(data => {
                       if (data && data.invoice) {
-                        const zohoInv = data.invoice;
-                        const finalConfirmedInvNo = zohoInv.invoice_number || zohoInv.invNo || invNoText;
+                        const createdInv = data.invoice;
+                        const finalConfirmedInvNo = createdInv.invoice_number || createdInv.invNo || invNoText;
                         setInvoiceList(prev => (prev || []).map(item =>
                           (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText)
                             ? {
@@ -921,9 +921,9 @@ export default function InvoiceDetailModal({
                                 invNo: finalConfirmedInvNo,
                                 code: finalConfirmedInvNo,
                                 invoiceNo: finalConfirmedInvNo,
-                                zohoId: zohoInv.zohoId || zohoInv.id,
-                                zohoInvoiceNumber: finalConfirmedInvNo,
-                                syncedToZoho: true
+                                id: createdInv.id || item.id,
+                                invoiceNumber: finalConfirmedInvNo,
+                                synced: true
                               }
                             : item
                         ));
@@ -934,8 +934,8 @@ export default function InvoiceDetailModal({
                         ));
                       }
                     })
-                    .catch(err => console.warn('Zoho invoice sync notice:', err));
-                } catch (e) { console.error('Zoho invoice fetch trigger error:', e); }
+                    .catch(err => console.warn('Invoice sync notice:', err));
+                } catch (e) { console.error('Invoice fetch trigger error:', e); }
 
                 // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch
                 try {

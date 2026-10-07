@@ -92,7 +92,7 @@ const DEFAULT_MULTI_TEMPLATES = {
   pi: [
     {
       id: 'pi_tax_inv',
-      name: 'Official Tax Invoice (Zoho Books / e-Invoice Layout)',
+      name: 'Official Tax Invoice (Standard e-Invoice Layout)',
       description: 'Official Government e-Invoice format with QR code, IRN, HSN, Place of Supply, and CGST/SGST breakdown.',
       isDefault: true,
       lastModified: '17 Aug 2026',
@@ -231,7 +231,7 @@ const DEFAULT_MULTI_TEMPLATES = {
   po: [
     {
       id: 'po_std',
-      name: 'Official Vendor Purchase Order (Zoho Books Format)',
+      name: 'Official Vendor Purchase Order (Standard Format)',
       description: 'Official GST Purchase Order format with PO number, vendor details, line items, rates, taxes, delivery terms, and authorized signatures.',
       isDefault: true,
       lastModified: '03 Oct 2026',

@@ -29,7 +29,7 @@ import { CompletedBomSummaryModal, ActiveMediaPreviewModal, PreviewAddressProofM
 import { buildProductionConfigs } from './productionConfigs';
 import { CloseInvoiceReasonModal, ConfirmInvoiceSuccessModal } from './InvoiceModals';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions } from '../../utils/supabaseDataSync';
-import { getSafeZohoItems, getSafeZohoVendors } from '../../services/zohoSafeSync';
+import { getItems, getVendors } from '../../services/businzDataService';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
@@ -234,14 +234,14 @@ export default function ProductionViewsEngine(props) {
           }
         }
 
-        // Sync Customers directly from Supabase & Zoho Books
+        // Sync Customers directly from Supabase & backend
         try {
           let custs = await fetchCloudStore('customer_store', []);
           if (!Array.isArray(custs) || custs.length === 0) {
-            const zohoCustRes = await fetch('/api/zoho/customers');
-            if (zohoCustRes.ok) {
-              const zCusts = await zohoCustRes.json();
-              if (Array.isArray(zCusts) && zCusts.length > 0) custs = zCusts;
+            const custRes = await fetch('/api/customers');
+            if (custRes.ok) {
+              const fetchedCusts = await custRes.json();
+              if (Array.isArray(fetchedCusts) && fetchedCusts.length > 0) custs = fetchedCusts;
             }
           }
           if (Array.isArray(custs) && custs.length > 0) {
@@ -776,8 +776,8 @@ export default function ProductionViewsEngine(props) {
 
   // Initial cloud fetch for invoices & listen for local update events
   useEffect(() => {
-    // Fetch live invoices from Zoho Books & local backend
-    fetch('/api/zoho/invoices')
+    // Fetch live invoices from backend
+    fetch('/api/invoices')
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data) && data.length > 0) {
@@ -1234,6 +1234,7 @@ export default function ProductionViewsEngine(props) {
                 setBomStore={setBomStore}
                 invoiceList={invoiceList}
                 setInvoiceList={setInvoiceList}
+                userRole={userRole}
               />
             );
           }

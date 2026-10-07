@@ -89,7 +89,7 @@ export default function MaterialReorderAlerts({ items = [], isLoading = false })
         currentStock: `${item.stockOnHand || 0} ${item.unit || 'nos'}`,
         reorderLevel: `${item.reorderLevel || 0} ${item.unit || 'nos'}`,
         eta: '3 Days (Medium)',
-        supplier: 'Zoho Sync',
+        supplier: 'Central Inventory',
         etaColor: '#eab308',
         tags: [
           { label: 'LOW STOCK', color: '#d97706', bg: '#fffbeb', border: '#fef3c7' },

@@ -1049,7 +1049,7 @@ export default function CrmQuotationsView({
     try {
       await saveCloudStoreImmediate('sales_pi_store', updatedPIs);
       await saveCloudStoreImmediate('proforma_invoice_store', updatedPIs);
-      fetch('/api/zoho/estimates', {
+      fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newPI)

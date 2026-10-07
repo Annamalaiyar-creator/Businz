@@ -257,7 +257,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const handleCancelPi = async (piToCancel) => {
     if (!piToCancel || !piToCancel.piNo) return;
     const cleanPiNo = String(piToCancel.piNo).trim();
-    if (!window.confirm(`Are you sure you want to mark Proforma Invoice ${cleanPiNo} as Cancelled? This will also update its status to Declined in Zoho Books.`)) {
+    if (!window.confirm(`Are you sure you want to mark Proforma Invoice ${cleanPiNo} as Cancelled?`)) {
       return;
     }
 
@@ -266,12 +266,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     updatePiList(updated);
 
     try {
-      const resp = await fetch('/api/zoho/estimates/cancel', {
+      const resp = await fetch('/api/estimates/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           piNo: cleanPiNo,
-          zohoEstimateId: piToCancel.zohoEstimateId,
           reason: 'Cancelled by user in Businz'
         })
       });
@@ -279,7 +278,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (data && data.success) {
         notifyPiCreated({
           title: `PI ${cleanPiNo} Cancelled`,
-          message: data.message || `Proforma Invoice ${cleanPiNo} marked as Cancelled & Declined in Zoho Books.`,
+          message: data.message || `Proforma Invoice ${cleanPiNo} marked as Cancelled.`,
           type: 'warning'
         });
       }
@@ -386,7 +385,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       // 2. Fetch Zoho Estimates in background and smoothly enrich without blocking the UI
       try {
-        const zohoRes = await fetch('/api/zoho/estimates');
+        const zohoRes = await fetch('/api/estimates');
         if (zohoRes.ok) {
           const zohoData = await zohoRes.json();
           if (Array.isArray(zohoData) && zohoData.length > 0) {
@@ -426,19 +425,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 }
               });
 
-              return Array.from(mergedMap.values()).map(normalizePiRecord);
+              const finalMerged = Array.from(mergedMap.values()).map(normalizePiRecord);
+              try {
+                localStorage.setItem(storageKey, JSON.stringify(finalMerged));
+                localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(finalMerged));
+              } catch (_) {}
+              return finalMerged;
             });
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ZOHO ESTIMATES FETCH NOTICE]', err);
+      }
     };
 
     loadPiData();
 
     // Live Realtime sync directly from Supabase Database
     const sub = subscribeToCloudStore('sales_pi_store', (latest) => {
-      if (Array.isArray(latest)) {
-        setPiList(latest.map(normalizePiRecord));
+      if (Array.isArray(latest) && latest.length > 0) {
+        setPiList(prevList => {
+          const merged = new Map();
+          (prevList || []).forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), p); });
+          latest.forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p)); });
+          return Array.from(merged.values());
+        });
         setTableLoading(false);
       }
     });
@@ -474,7 +485,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitizedPi.deliveryProofDoc;
       delete sanitizedPi.deliveryAddressProofDoc;
 
-      const res = await fetch('/api/zoho/estimates', {
+      const res = await fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...sanitizedPi, piNo: cleanNo })
@@ -531,13 +542,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             return prev;
           });
         }
-        showTopToast(`✓ Proforma Invoice ${finalEstNo} successfully synced with Zoho Books (Quotes # ${finalEstNo})!`, 'success');
+        showTopToast(`✓ Proforma Invoice ${finalEstNo} successfully synced with Central Ledger!`, 'success');
       } else {
-        const errMsg = data?.zohoError || data?.notice || data?.error || data?.message || (!res.ok ? `HTTP ${res.status} error` : 'Zoho Books synchronization could not be confirmed. Please verify your connection.');
-        showTopToast(`Notice from Zoho Books: ${errMsg}`, 'error', 6000);
+        const errMsg = data?.notice || data?.error || data?.message || (!res.ok ? `HTTP ${res.status} error` : 'Central synchronization could not be confirmed.');
+        showTopToast(`Notice: ${errMsg}`, 'error', 6000);
       }
     } catch (err) {
-      showTopToast(`Notice syncing with Zoho Books: ${err.message}`, 'error', 6000);
+      showTopToast(`Notice syncing: ${err.message}`, 'error', 6000);
     } finally {
       setSyncingPiNo(null);
     }
@@ -809,7 +820,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
         // 2. Fetch live from Zoho Books endpoint to ensure all 61+ customers are always loaded
         try {
-          const zohoRes = await fetch('/api/zoho/customers');
+          const zohoRes = await fetch('/api/customers');
           if (zohoRes.ok) {
             const zList = await zohoRes.json();
             if (Array.isArray(zList) && zList.length > 0) {
@@ -1412,25 +1423,29 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   const fetchNextPiNumber = async () => {
     const existingNums = (piList || []).map(p => {
+      const vrmMatch = String(p.piNo || p.id || '').match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || String(p.piNo || p.id || '').match(/\/(\d{3,6})$/);
+      if (vrmMatch) return parseInt(vrmMatch[1], 10);
       const match = String(p.piNo || p.id || '').match(/PI-(\d+)/i);
       return match ? parseInt(match[1], 10) : 0;
     }).filter(n => Number.isFinite(n) && n > 0);
     const localMax = existingNums.length > 0 ? Math.max(0, ...existingNums) : 0;
-    const fallback = `PI-${String(localMax + 1).padStart(5, '0')}`;
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    const fyStart = curMonth >= 4 ? curYear : curYear - 1;
+    const fyStr = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+    const fallback = localMax >= 1000 ? `VRMS/PI/${fyStr}/${localMax + 1}` : `PI-${String(localMax + 1).padStart(5, '0')}`;
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
-      const res = await fetch('/api/zoho/next-pi-number', { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch('/api/next-pi-number', { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
         if (data && data.nextPiNo) {
-          const serverNum = data.nextNum || (parseInt(data.nextPiNo.replace(/[^0-9]/g, ''), 10) || 0);
-          const trueMax = Math.max(localMax, serverNum - 1);
-          const finalNo = 'PI-' + String(trueMax + 1).padStart(5, '0');
-          setPiNumber(finalNo);
-          return finalNo;
+          setPiNumber(data.nextPiNo);
+          return data.nextPiNo;
         }
       }
     } catch (e) {
@@ -1733,7 +1748,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       updatePiList(updatedList);
 
       // Push to Zoho Books Quotes (Estimates API)
-      fetch('/api/zoho/estimates', {
+      fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newPI)
@@ -1753,7 +1768,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           } : p);
           updatePiList(enrichedList);
         } else if (data && data.zohoError) {
-          console.warn('[ZOHO ESTIMATE SYNC NOTICE]', data.zohoError);
+          console.warn('[ESTIMATE SYNC NOTICE]', data.zohoError);
           const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
             ...p,
             zohoSynced: false,
@@ -1762,7 +1777,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           updatePiList(enrichedList);
         }
       }).catch(err => {
-        console.warn('[ZOHO ESTIMATE SYNC NOTICE]', err);
+        console.warn('[ESTIMATE SYNC NOTICE]', err);
       });
 
       // Instantly dismiss modal and advance to list view so user is never stuck
@@ -2514,11 +2529,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       Loading Proforma Invoices...
                                     </span>
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
-                                      <span className="businz-pulse-dot" /> Live Cloud & Zoho Sync
+                                      <span className="businz-pulse-dot" /> Live Cloud Sync
                                     </span>
                                   </div>
                                   <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                                    Retrieving quotation records from Businz Cloud Storage & Zoho Books...
+                                    Retrieving quotation records from Businz Cloud Storage...
                                   </span>
                                 </div>
                               </div>
@@ -2645,46 +2660,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               <div style={{ fontWeight: 'bold', color: '#2563EB', fontSize: '13px' }}>
                                 {pi.piNo}
                               </div>
-                              {pi.zohoEstimateId ? (
-                                <span style={{ fontSize: '10px', fontWeight: '700', color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }} title={`Synced to Zoho Books Quotes (Estimate ID: ${pi.zohoEstimateId})`}>
-                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#059669', display: 'inline-block' }}></span>
-                                  Zoho Quotes
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={Boolean(syncingPiNo)}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    syncPiToZoho(pi);
-                                  }}
-                                  style={{
-                                    fontSize: '9.5px',
-                                    fontWeight: '700',
-                                    color: '#0E7490',
-                                    backgroundColor: '#F0FDFA',
-                                    border: '1px solid #A5F3FC',
-                                    borderRadius: '4px',
-                                    padding: '1px 5px',
-                                    cursor: syncingPiNo ? 'not-allowed' : 'pointer',
-                                    marginTop: '2px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '3px',
-                                    opacity: (syncingPiNo && syncingPiNo !== String(pi.piNo || pi.id).trim()) ? 0.5 : 1
-                                  }}
-                                  title="Click to sync this PI directly with Zoho Books Quotes"
-                                >
-                                  {syncingPiNo === String(pi.piNo || pi.id).trim() ? (
-                                    <>
-                                      <RotateCcw size={10} style={{ animation: 'spin 0.75s linear infinite' }} />
-                                      Syncing...
-                                    </>
-                                  ) : (
-                                    <>↻ Sync Zoho</>
-                                  )}
-                                </button>
-                              )}
                             </td>
                             <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -3106,77 +3081,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <Printer size={14} style={{ color: '#0E7490' }} /> Export / Print PDF
                 </button>
 
-                {/* Zoho Books Action */}
-                {(() => {
-                  const targetPiNo = selectedPIs[0];
-                  const targetPi = targetPiNo ? piList.find(p => p.piNo === targetPiNo) : null;
-                  if (!targetPi) return null;
 
-                  if (targetPi.zohoEstimateId) {
-                    return (
-                      <a
-                        href={`https://books.zoho.in/app/60082137608#/quotes/${targetPi.zohoEstimateId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setSelectedPIs([])}
-                        style={{
-                          backgroundColor: '#ECFDF5',
-                          border: '1px solid #A7F3D0',
-                          color: '#059669',
-                          borderRadius: '10px',
-                          padding: '6px 14px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0,
-                          textDecoration: 'none',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                          transition: 'all 0.15s ease'
-                        }}
-                        title="View official Quote in Zoho Books"
-                      >
-                        <ShieldCheck size={14} style={{ color: '#059669' }} /> Zoho Quotes ↗
-                      </a>
-                    );
-                  }
-
-                  const isTargetSyncing = syncingPiNo && syncingPiNo === String(targetPi.piNo || targetPi.id || '').trim();
-                  return (
-                    <button
-                      disabled={Boolean(syncingPiNo)}
-                      onClick={() => {
-                        setSelectedPIs([]);
-                        syncPiToZoho(targetPi);
-                      }}
-                      style={{
-                        backgroundColor: '#F0FDFA',
-                        border: '1px solid #A5F3FC',
-                        color: '#0E7490',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: syncingPiNo ? 'not-allowed' : 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        transition: 'all 0.15s ease',
-                        opacity: syncingPiNo ? 0.7 : 1
-                      }}
-                      title="Sync this PI directly to Zoho Books Quotes"
-                    >
-                      <RotateCcw size={14} style={{ color: '#0E7490', animation: isTargetSyncing ? 'spin 0.75s linear infinite' : 'none' }} />
-                      {isTargetSyncing ? 'Syncing to Zoho...' : 'Sync to Zoho'}
-                    </button>
-                  );
-                })()}
 
                 {/* Deselect All */}
                 <button
@@ -4783,57 +4688,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {selectedPi.zohoEstimateId ? (
-                    <a
-                      href={`https://books.zoho.in/app/60082137608#/quotes/${selectedPi.zohoEstimateId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Open and view official Quote in Zoho Books"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 14px',
-                        backgroundColor: '#ECFDF5',
-                        color: '#059669',
-                        border: '1.5px solid #A7F3D0',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: '800',
-                        textDecoration: 'none',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ✓ Zoho Quotes ↗
-                    </a>
-                  ) : (() => {
-                    const isSelectedSyncing = syncingPiNo && syncingPiNo === String(selectedPi.piNo || selectedPi.id || '').trim();
-                    return (
-                      <button
-                        type="button"
-                        disabled={Boolean(syncingPiNo)}
-                        onClick={() => syncPiToZoho(selectedPi)}
-                        title="Push this Proforma Invoice to Zoho Books Quotes"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
-                          backgroundColor: '#F0FDFA',
-                          color: '#0E7490',
-                          border: '1.5px solid #0E7490',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: '800',
-                          cursor: syncingPiNo ? 'not-allowed' : 'pointer',
-                          opacity: syncingPiNo ? 0.7 : 1
-                        }}
-                      >
-                        <RotateCcw size={14} style={{ color: '#0E7490', animation: isSelectedSyncing ? 'spin 0.75s linear infinite' : 'none' }} />
-                        {isSelectedSyncing ? 'Syncing to Zoho...' : 'Sync to Zoho'}
-                      </button>
-                    );
-                  })()}
                   {(() => {
                     const matchedBoms = getConvertedBomsForPi(selectedPi);
                     const isConverted = (matchedBoms && matchedBoms.length > 0) || Boolean(selectedPi?.status === 'Converted to BOM' || selectedPi?.convertedToBom || selectedPi?.convertedBomCode);
@@ -5398,7 +5252,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         gap: '6px'
                       }}
                     >
-                      {cancellingPiNo === selectedPi.piNo ? 'Cancelling in Zoho...' : 'Cancel PI'}
+                      {cancellingPiNo === selectedPi.piNo ? 'Cancelling...' : 'Cancel PI'}
                     </button>
                   )}
 

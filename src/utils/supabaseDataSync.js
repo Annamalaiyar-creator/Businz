@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient.js';
 export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
 
 // Canonical column projection for Invoice list/table queries
-export const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+export const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, status, pay, created_at, updated_at';
 
 // Preserve local browser caches for zero-data-loss protection per project guidelines
 
@@ -110,8 +110,7 @@ export function toConsumerCustomer(c) {
     assignedSalesperson: rep,
     salesPerson: rep,
     c8: rep,
-    source: c.source || (c.zoho_contact_id ? 'Zoho Books' : 'Manual'),
-    zohoContactId: c.zoho_contact_id || null,
+    source: c.source || 'Manual',
     primaryContact: c.primary_contact || {
       name: name,
       phone: phone,
@@ -166,8 +165,7 @@ export function toDatabaseCustomerRow(item) {
     credit_days: Number(item.creditDays || item.credit_days || 0),
     payment_terms: item.paymentTerms || item.payment_terms || 'Due on Receipt',
     assigned_salesperson: item.assignedSalesperson || item.assigned_salesperson || item.salesPerson || item.c8 || 'Sales Rep',
-    source: item.source || (item.zohoContactId || item.zoho_contact_id ? 'Zoho Books' : 'Manual'),
-    zoho_contact_id: item.zohoContactId || item.zoho_contact_id || null,
+    source: item.source || 'Manual',
     primary_contact: item.primaryContact || item.primary_contact || {},
     email: item.email || item.c5 || '—',
     phone: item.phone || item.c4 || '—',
@@ -416,7 +414,6 @@ export function toConsumerInvoice(row) {
     balance: meta.balance !== undefined ? meta.balance : invAmt,
     status: row.status || 'Draft',
     pay: row.pay || row.status || 'Pending',
-    syncedToZoho: Boolean(row.synced_to_zoho),
     items: meta.items || [],
     deliveryAddress: meta.deliveryAddress || '',
     billingAddress: meta.billingAddress || '',
@@ -427,7 +424,6 @@ export function toConsumerInvoice(row) {
     lrCopyDoc: meta.lrCopyDoc || null,
     deliveryAddressProofDoc: meta.deliveryAddressProofDoc || null,
     presetName: meta.presetName || '',
-    zohoId: row.zoho_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -442,10 +438,8 @@ export function toDatabaseInvoiceRow(item) {
   const invNo = item.invNo || item.invoiceNumber || item.code || id;
   const vendor = item.vendor || item.customerName || item.customer_name || 'Customer';
   const bomCode = item.bomCode || item.poNo || item.bom_code || '';
-  const zohoId = item.zohoId || item.zoho_id || null;
   const status = item.status || 'Draft';
   const pay = item.pay || status || 'Pending';
-  const synced = Boolean(item.syncedToZoho || item.synced_to_zoho);
   const invAmt = Number(item.invAmt !== undefined ? String(item.invAmt).replace(/[^0-9.]/g, '') : (item.total || item.grandTotal || item.amount || 0)) || 0;
 
   const extraMetadata = {
@@ -476,10 +470,8 @@ export function toDatabaseInvoiceRow(item) {
     inv_amt: invAmt,
     vendor,
     bom_code: bomCode,
-    zoho_id: zohoId,
     status,
     pay,
-    synced_to_zoho: synced,
     created_at: item.createdAt || item.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -1132,7 +1124,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
           gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
           dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-          source, zoho_contact_id, primary_contact, email, phone, status, notes, created_at, updated_at
+          source, primary_contact, email, phone, status, notes, created_at, updated_at
         `)
         .order('company_name', { ascending: true });
 
@@ -1191,11 +1183,11 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
 
   // CANONICAL INVOICE READ PATH: Query via local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'invoice_store' || storeKey === 'INVOICE_STORE') {
-    // 1. Try local server memory/zoho cache first (Zero Supabase PostgREST egress)
+    // 1. Try local server memory/cache first (Zero Supabase PostgREST egress)
     try {
       const controller = new AbortController();
       const tId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch('/api/zoho/invoices', { signal: controller.signal }).catch(() => null);
+      const res = await fetch('/api/invoices', { signal: controller.signal }).catch(() => null);
       clearTimeout(tId);
       if (res && res.ok) {
         const json = await res.json().catch(() => null);
@@ -1207,7 +1199,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
 
     // 2. Direct query fallback: SELECT from public.invoices (with limit 200)
     try {
-      const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+      const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, status, pay, created_at, updated_at';
       const { data: dbInvoices, error: invErr } = await supabase
         .from('invoices')
         .select(INVOICE_SUMMARY_COLUMNS)

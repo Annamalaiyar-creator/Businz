@@ -524,7 +524,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             },
             'Work Orders': {
               title: 'Work Orders & Shop Floor Execution',
-              subtitle: 'Zoho Inventory synced manufacturing work orders and shop floor dispatch',
+              subtitle: 'Central Inventory synced manufacturing work orders and shop floor dispatch',
               actionText: '+ Create Work Order',
               searchPlaceholder: 'Search Work Orders (WO No, Product Name, Material)...',
               tabs: [

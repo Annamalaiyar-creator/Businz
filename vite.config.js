@@ -10,13 +10,13 @@ function autoStartBackendPlugin() {
     name: 'auto-start-backend',
     configureServer() {
       const checkBackend = () => {
-        const req = http.get('http://localhost:5001/api/zoho/status', (res) => {
+        const req = http.get('http://localhost:5001/api/customers', (res) => {
           // Backend is already up and responding
         });
         req.on('error', () => {
           // Backend is not running, spawn it automatically
           if (!backendProc) {
-            console.log('\n🚀 [Auto-Backend] Starting Zoho Node.js backend server on port 5001...');
+            console.log('\n🚀 [Auto-Backend] Starting BUSINZ Node.js backend server on port 5001...');
             backendProc = spawn('node', ['server/index.js'], {
               stdio: 'inherit',
               shell: true

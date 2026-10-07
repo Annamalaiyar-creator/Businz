@@ -159,9 +159,9 @@ export default function CustomerFormView({
                   setSameAsBilling(true);
                 }
 
-                // Synchronize to Zoho Books in the background
+                // Synchronize to BUSINZ Native Catalog in the background
                 try {
-                  fetch('/api/zoho/customers', {
+                  fetch('/api/customers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
