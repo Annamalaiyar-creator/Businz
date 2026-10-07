@@ -363,15 +363,20 @@ function App() {
           setPurchaseOrders(poData);
         }
         if (Array.isArray(itemsData)) {
-          let mergedItems = [...itemsData];
+          let mergedItems = itemsData.filter(it => {
+            const c = String(it.code || it.sku || it.itemId || '').trim();
+            const n = String(it.name || '').trim();
+            return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+          });
           if (Array.isArray(rawData) && rawData.length > 0) {
             const rawMap = new Map();
             rawData.forEach(rm => {
               const rawK = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
+              if (/^\d{10,}$/.test(rawK)) return;
               const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
               rawMap.set(rawK, rm);
               rawMap.set(canonK, rm);
-              if (rm.name) rawMap.set(String(rm.name).toUpperCase().trim(), rm);
+              if (rm.name && !/^\d{10,}$/.test(String(rm.name).trim())) rawMap.set(String(rm.name).toUpperCase().trim(), rm);
             });
             mergedItems = mergedItems.map(it => {
               const rawK = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
@@ -413,10 +418,11 @@ function App() {
           const rawMap = new Map();
           updated.forEach(rm => {
             const rawK = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
+            if (/^\d{10,}$/.test(rawK)) return;
             const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
             rawMap.set(rawK, rm);
             rawMap.set(canonK, rm);
-            if (rm.name) rawMap.set(String(rm.name).toUpperCase().trim(), rm);
+            if (rm.name && !/^\d{10,}$/.test(String(rm.name).trim())) rawMap.set(String(rm.name).toUpperCase().trim(), rm);
           });
           const matchedKeys = new Set();
           const nextItems = prev.map(it => {

@@ -374,14 +374,24 @@ export async function saveCustomer(customer) {
 // 4. ITEMS & CATALOG
 // ---------------------------
 export async function getItems() {
+  const sanitize = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter(item => {
+      const c = String(item?.sku || item?.code || item?.itemId || '').trim();
+      const n = String(item?.name || '').trim();
+      return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+    });
+  };
+
   // 1. Try BUSINZ backend endpoint
   try {
     const res = await fetch('/api/items');
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
-        saveCloudStore('item_store', data);
-        return data;
+        const clean = sanitize(data);
+        saveCloudStore('item_store', clean);
+        return clean;
       }
     }
   } catch (_) {}
@@ -390,7 +400,7 @@ export async function getItems() {
   try {
     const cloudItems = await fetchCloudStore('item_store', []);
     if (Array.isArray(cloudItems) && cloudItems.length > 0) {
-      return cloudItems;
+      return sanitize(cloudItems);
     }
   } catch (err) {
     console.warn('[getItems] Supabase fetch notice:', err);

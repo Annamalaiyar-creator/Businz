@@ -1862,15 +1862,25 @@ const saveLocalVendors = (vendors) => {
   saveDatabaseStore('vendor_store', vendors);
 };
 
+const isRawZohoNumericId = (code) => Boolean(code && /^\d{10,}$/.test(String(code).trim()));
+
 const loadLocalItems = () => {
   const itemsPath = getStoreFilePath('item_store.json');
   let diskItems = [];
   if (fs.existsSync(itemsPath)) {
     try {
-      diskItems = JSON.parse(fs.readFileSync(itemsPath, 'utf8')) || [];
+      diskItems = (JSON.parse(fs.readFileSync(itemsPath, 'utf8')) || []).filter(d => {
+        const c = String(d.code || d.sku || d.itemId || '').trim();
+        const n = String(d.name || '').trim();
+        return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+      });
     } catch (_) {}
   }
-  const memItems = supabaseMemoryStore.item_store;
+  const memItems = (supabaseMemoryStore.item_store || []).filter(m => {
+    const c = String(m.code || m.sku || m.itemId || '').trim();
+    const n = String(m.name || '').trim();
+    return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+  });
   if (Array.isArray(memItems) && memItems.length >= diskItems.length && memItems.length > 0) {
     return memItems;
   }
@@ -1904,10 +1914,18 @@ const loadLocalRawMaterials = () => {
   let diskMats = [];
   if (fs.existsSync(rawPath)) {
     try {
-      diskMats = JSON.parse(fs.readFileSync(rawPath, 'utf8')) || [];
+      diskMats = (JSON.parse(fs.readFileSync(rawPath, 'utf8')) || []).filter(d => {
+        const c = String(d.code || d.sku || d.itemId || '').trim();
+        const n = String(d.name || '').trim();
+        return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+      });
     } catch (_) {}
   }
-  const memMats = supabaseMemoryStore.raw_materials_store;
+  const memMats = (supabaseMemoryStore.raw_materials_store || []).filter(m => {
+    const c = String(m.code || m.sku || m.itemId || '').trim();
+    const n = String(m.name || '').trim();
+    return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+  });
   if (Array.isArray(memMats) && memMats.length >= diskMats.length && memMats.length > 0) {
     return memMats;
   }

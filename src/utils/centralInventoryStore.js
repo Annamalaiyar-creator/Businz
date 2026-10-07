@@ -55,7 +55,13 @@ class CentralInventoryStore {
       const savedItems = localStorage.getItem(this.storageKeyItems);
       if (savedItems) {
         const parsed = JSON.parse(savedItems);
-        if (Array.isArray(parsed) && parsed.length > 0) seeded = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          seeded = parsed.filter(item => {
+            const c = String(item?.code || item?.sku || item?.itemId || '').trim();
+            const n = String(item?.name || '').trim();
+            return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+          });
+        }
       }
     } catch (_) {}
 

@@ -1291,7 +1291,12 @@ export default function ItemsDirectoryView(props) {
       }
 
       if (Array.isArray(freshData) && freshData.length > 0) {
-        setItemsList(freshData);
+        const cleaned = freshData.filter(item => {
+          const c = String(item?.sku || item?.code || item?.itemId || '').trim();
+          const n = String(item?.name || '').trim();
+          return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+        });
+        setItemsList(cleaned);
       }
     } catch (err) {
       console.error("Error fetching Catalog Items:", err);

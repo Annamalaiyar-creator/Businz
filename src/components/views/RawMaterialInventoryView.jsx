@@ -11,6 +11,8 @@ import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName
 import { fetchCloudStore, subscribeToCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
 import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
 
+export const isRawZohoNumericId = (code) => Boolean(code && /^\d{10,}$/.test(String(code).trim()));
+
 const RAW_MATERIAL_IMPORT_FIELDS = [
   { key: 'code', label: 'Material / Item Code', required: true, description: 'Unique material code or SKU (e.g. RM-AL-6063)' },
   { key: 'name', label: 'Material Description', required: true, description: 'Full description or title of the material' },
@@ -55,15 +57,22 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const setAddStockActive = externalSetShowForm || setInternalShowAddStockForm;
 
   const getStoredItemsList = () => {
-    if (Array.isArray(passedItemsList) && passedItemsList.length > 0) return passedItemsList;
-    try {
-      const saved = localStorage.getItem('controlroom_items_list') || localStorage.getItem('controlroom_inventory_items');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (_) {}
-    return [];
+    let list = [];
+    if (Array.isArray(passedItemsList) && passedItemsList.length > 0) {
+      list = passedItemsList;
+    } else {
+      try {
+        const saved = localStorage.getItem('controlroom_items_list') || localStorage.getItem('controlroom_inventory_items');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        }
+      } catch (_) {}
+    }
+    return list.filter(item => {
+      const code = String(item?.code || item?.sku || item?.itemId || '').trim();
+      return code && !isRawZohoNumericId(code);
+    });
   };
 
   const itemsList = useMemo(() => getStoredItemsList(), [passedItemsList]);
@@ -227,9 +236,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Exclude MR-300MM from raw material storage
+          // Exclude MR-300MM and raw numeric Zoho IDs from raw material storage
           const filteredParsed = parsed.filter(item => {
-            const c = String(item?.code || '').toUpperCase().trim();
+            const c = String(item?.code || item?.sku || '').toUpperCase().trim();
+            if (!c || isRawZohoNumericId(c)) return false;
             return c !== 'MR-300MM' && c !== 'MR300MM' && c !== 'MINI RAIL - 300 MM';
           });
 
@@ -590,6 +600,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       if (itemsList && itemsList.length > 0) {
         itemsList.forEach(it => {
           const rawKey = it.code || it.sku || it.itemId || 'RM-VRM';
+          if (isRawZohoNumericId(rawKey) || isRawZohoNumericId(it.code) || isRawZohoNumericId(it.sku) || isRawZohoNumericId(it.name)) return;
           const rawUpper = String(rawKey).toUpperCase().trim();
           const upperKey = CANONICAL_PRODUCT_ALIASES[rawUpper] || rawUpper;
           const upperName = it.name ? String(it.name).toUpperCase() : '';
@@ -655,6 +666,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       // Also include any raw material items from completed GRNs even if not in itemsList
       completedGrnMapSync.forEach((grnItem, gCode) => {
         const itemKey = grnItem.materialCode || grnItem.itemCode || grnItem.code || grnItem.sku || gCode;
+        if (isRawZohoNumericId(itemKey) || isRawZohoNumericId(gCode) || isRawZohoNumericId(grnItem.code) || isRawZohoNumericId(grnItem.name)) return;
         const recQty = Number(grnItem.receivedQty || 0);
         if (recQty <= 0) return;
 
@@ -863,6 +875,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       Array.from(matMap.values()).forEach(m => {
         if (!m || !m.code) return;
         const upperCode = String(m.code).toUpperCase().trim();
+        if (isRawZohoNumericId(upperCode) || isRawZohoNumericId(m.sku) || isRawZohoNumericId(m.name)) return;
         const canonical = CANONICAL_PRODUCT_ALIASES[upperCode] || upperCode;
         if (deletedCodes.includes(upperCode) || deletedCodes.includes(canonical)) return;
 
@@ -952,7 +965,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           } catch (_) {}
         }
         if (Array.isArray(rawMats) && rawMats.length > 0) {
-          const sanitizedRawMats = rawMats.map(rm => {
+          const sanitizedRawMats = rawMats
+            .filter(rm => !isRawZohoNumericId(rm.code) && !isRawZohoNumericId(rm.sku) && !isRawZohoNumericId(rm.name))
+            .map(rm => {
             let openVal = Number(rm.openingStock !== undefined ? rm.openingStock : 5000);
             if (isNaN(openVal) || openVal < 0) openVal = 5000;
             if (openVal > 5000 && (!rm.stockAdj || rm.stockAdj === 0)) openVal = 5000;
@@ -973,6 +988,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         setIsInventoryLoading(false);
       }
     };
+
+    // Automatically purge legacy/raw numeric Zoho item IDs from local storage
+    try {
+      ['controlroom_raw_materials_store', 'controlroom_items_list', 'controlroom_inventory_items', 'controlroom_central_items_v2'].forEach(key => {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.filter(i => {
+              const c = String(i?.code || i?.sku || i?.itemId || '').trim();
+              const n = String(i?.name || '').trim();
+              return !isRawZohoNumericId(c) && !isRawZohoNumericId(n);
+            });
+            if (cleaned.length !== parsed.length) {
+              localStorage.setItem(key, JSON.stringify(cleaned));
+            }
+          }
+        }
+      });
+    } catch (_) {}
 
     loadAuthoritativeInventory();
 
@@ -1341,8 +1376,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const mCodeLower = mCode.toLowerCase();
       const mNameLower = mName.toLowerCase();
 
-      // Filter out invalid items or blank rows upfront, and unify legacy MR300 into canonical MR-300MM
-      if (!mCode || !mName || mCode === '—' || mCodeLower === 'rm-vrm' || mCodeLower === 'mr300') return false;
+      // Filter out invalid items, blank rows, or raw numeric Zoho IDs (e.g. 1264216000007425446)
+      if (!mCode || !mName || mCode === '—' || mCodeLower === 'rm-vrm' || mCodeLower === 'mr300' || isRawZohoNumericId(mCode) || isRawZohoNumericId(m.sku) || isRawZohoNumericId(mName)) return false;
 
       // MR-300MM is a cut finished product and MUST NEVER appear in Raw Material Directory
       if (isRawMaterialDirectory && (mCodeLower === 'mr-300mm' || mCodeLower === 'mr300')) return false;
