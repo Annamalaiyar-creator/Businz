@@ -20,6 +20,7 @@ server/zoho_token_cache.json
 server/backups/
 backups/
 backup_recovered/
+server/uploads/
 
 # Environment files & Secrets
 .env

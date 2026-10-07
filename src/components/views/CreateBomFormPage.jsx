@@ -2066,7 +2066,7 @@ export default function CreateBomFormPage(props) {
                         return true;
                       });
                       const combined = [sanitizedNewBom, ...filtered];
-                      const { list: updatedList } = resolveBomCollisions(combined, 658);
+                      const { list: updatedList } = resolveBomCollisions(combined, 662);
 
                       try {
                         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));

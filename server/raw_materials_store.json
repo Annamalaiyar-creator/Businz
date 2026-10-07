@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "code": "MR-300MM",
+    "name": "Mini Rail - 300 mm",
+    "cat": "Aluminium Profiles",
+    "unit": "NOS",
+    "stock": 1800,
+    "availableStock": 1800,
+    "physicalStock": 1800,
+    "openingStock": 2000,
+    "reserved": 0,
+    "blockedForBom": 0,
+    "status": "In Stock",
+    "issuedProd": 400,
+    "lastUpdated": "Deducted 200 for BOM BOM-663 by Sales Department"
+  }
+]

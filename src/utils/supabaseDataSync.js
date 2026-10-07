@@ -694,9 +694,21 @@ export async function deleteCloudLeadRow(leadId) {
 export function toConsumerBom(row) {
   if (!row || typeof row !== 'object') return row;
 
+  let av = row.accounts_verification || row.accountsVerification;
+  if (typeof av === 'string' && (av.startsWith('{') || av.startsWith('['))) {
+    try { av = JSON.parse(av); } catch (_) {}
+  }
   let extraData = {};
-  if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
-    extraData = { ...row.accounts_verification._extra_data };
+  if (av && typeof av === 'object' && av._extra_data) {
+    extraData = { ...av._extra_data };
+  }
+
+  let cleanDispatchPacking = row.dispatch_packing || row.dispatchPacking || extraData.dispatchPacking || [];
+  if (typeof cleanDispatchPacking === 'string' && (cleanDispatchPacking.startsWith('[') || cleanDispatchPacking.startsWith('{'))) {
+    try { cleanDispatchPacking = JSON.parse(cleanDispatchPacking); } catch (_) {}
+  }
+  if (!Array.isArray(cleanDispatchPacking)) {
+    cleanDispatchPacking = [];
   }
 
   const isAccVerified = row.accounts_verified !== undefined
@@ -706,8 +718,8 @@ export function toConsumerBom(row) {
         row.invoice_confirmed ||
         row.invoice_no
       );
-  const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
-    ? { ...row.accounts_verification }
+  const cleanAccountsVerification = (av && typeof av === 'object')
+    ? { ...av }
     : {
         verified: isAccVerified,
         verifiedBy: row.accounts_verified_by || '',
@@ -799,8 +811,16 @@ export function toConsumerBom(row) {
     dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     items: Array.isArray(row.items) ? row.items : [],
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
-    dispatchPacking: (Array.isArray(row.dispatch_packing) || (row.dispatch_packing && typeof row.dispatch_packing === 'object')) ? row.dispatch_packing : [],
+    dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
+    packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
+      cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
+    ),
+    packedAt: row.packed_at || row.packedAt || extraData.packedAt || cleanAccountsVerification?.packedAt || null,
+    packedBy: row.packed_by || row.packedBy || extraData.packedBy || cleanAccountsVerification?.packedBy || null,
+    packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
+    packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
     invoiceConfirmed: Boolean(row.invoice_confirmed),
     invoiceDeducted: Boolean(row.invoice_deducted),
     invoiceNo: row.invoice_no || extraData.invoiceNo || '',
@@ -821,7 +841,7 @@ export function toConsumerBom(row) {
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
-    dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || []),
+    dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || { photos: [], videos: [] }),
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
     vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
@@ -906,6 +926,14 @@ export function toDatabaseBomRow(item) {
   const mergedExtra = { ...existingExtra, ...extraData };
   if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
   if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
+  if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
+  if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
+  if (item.packedAt) mergedExtra.packedAt = item.packedAt;
+  if (item.packedBy) mergedExtra.packedBy = item.packedBy;
+  if (item.packedById) mergedExtra.packedById = item.packedById;
+  if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
+  if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
+  if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -1711,8 +1739,8 @@ export function getWorkflowRank(b) {
   // Accounts verified & forwarded to billing
   if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
   // Goods packing in dispatch
-  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts')) return 30;
-  if (s.includes('partially packed')) return 20;
+  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
+  if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
   // Sales confirmed BOM
   if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
   return 1;
@@ -1722,9 +1750,9 @@ export function getWorkflowRank(b) {
  * Deduplicates BOM list by unique bomCode and unique sourcePiNo (Strict 1-to-1 PI Rule).
  * Merges duplicate entries in place without fabricating clone BOM codes.
  */
-export function resolveBomCollisions(bomList, sequenceMax = 658) {
+export function resolveBomCollisions(bomList, sequenceMax = 662) {
   if (!Array.isArray(bomList)) return { list: [], maxSeq: sequenceMax };
-  let maxSeq = Math.max(sequenceMax, 658);
+  let maxSeq = Math.max(sequenceMax, 662);
 
   const seenCodes = new Map();
   const seenPiNos = new Map();
@@ -1745,17 +1773,58 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
       const existing = resolvedList[idx];
       const existingRank = getWorkflowRank(existing);
       const newRank = getWorkflowRank(b);
+
+      const existingPacking = Array.isArray(existing.dispatchPacking) ? existing.dispatchPacking : [];
+      const newPacking = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+      const existingPackedCount = existingPacking.filter(p => p && p.packed).length;
+      const newPackedCount = newPacking.filter(p => p && p.packed).length;
+      const mergedPacking = (existingPackedCount > 0 && existingPackedCount >= newPackedCount) 
+        ? existingPacking 
+        : (newPackedCount > 0 ? newPacking : (existingPacking.length > 0 ? existingPacking : newPacking));
+
+      const mergedPackingStatus = (existing.packingStatus === 'PACKING_VERIFIED' || b.packingStatus === 'PACKING_VERIFIED')
+        ? 'PACKING_VERIFIED'
+        : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
+          ? 'PARTIALLY_PACKED'
+          : (b.packingStatus || existing.packingStatus || null);
+
       resolvedList[idx] = newRank >= existingRank ? {
         ...existing,
         ...b,
+        dispatchPacking: mergedPacking,
+        packingStatus: mergedPackingStatus,
+        accountsVerification: {
+          ...(existing.accountsVerification || {}),
+          ...(b.accountsVerification || {})
+        },
+        dispatchPackingMedia: (b.dispatchPackingMedia?.photos?.length > 0 || b.dispatchPackingMedia?.videos?.length > 0)
+          ? b.dispatchPackingMedia
+          : (existing.dispatchPackingMedia || { photos: [], videos: [] }),
         vehicleLoading: b.vehicleLoading || existing.vehicleLoading || null,
         lrCopyDoc: b.lrCopyDoc || existing.lrCopyDoc || null,
+        packedAt: b.packedAt || existing.packedAt || null,
+        packedBy: b.packedBy || existing.packedBy || null,
+        packedById: b.packedById || existing.packedById || null,
+        packingCompletedAt: b.packingCompletedAt || existing.packingCompletedAt || null,
         fullyCompleted: b.fullyCompleted !== undefined ? b.fullyCompleted : existing.fullyCompleted
       } : {
         ...b,
         ...existing,
+        dispatchPacking: mergedPacking,
+        packingStatus: mergedPackingStatus,
+        accountsVerification: {
+          ...(b.accountsVerification || {}),
+          ...(existing.accountsVerification || {})
+        },
+        dispatchPackingMedia: (existing.dispatchPackingMedia?.photos?.length > 0 || existing.dispatchPackingMedia?.videos?.length > 0)
+          ? existing.dispatchPackingMedia
+          : (b.dispatchPackingMedia || { photos: [], videos: [] }),
         vehicleLoading: existing.vehicleLoading || b.vehicleLoading || null,
         lrCopyDoc: existing.lrCopyDoc || b.lrCopyDoc || null,
+        packedAt: existing.packedAt || b.packedAt || null,
+        packedBy: existing.packedBy || b.packedBy || null,
+        packedById: existing.packedById || b.packedById || null,
+        packingCompletedAt: existing.packingCompletedAt || b.packingCompletedAt || null,
         fullyCompleted: existing.fullyCompleted !== undefined ? existing.fullyCompleted : b.fullyCompleted
       };
       continue;
@@ -1768,13 +1837,40 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
       const existingRank = getWorkflowRank(existing);
       const newRank = getWorkflowRank(b);
 
+      const existingPacking = Array.isArray(existing.dispatchPacking) ? existing.dispatchPacking : [];
+      const newPacking = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+      const existingPackedCount = existingPacking.filter(p => p && p.packed).length;
+      const newPackedCount = newPacking.filter(p => p && p.packed).length;
+      const mergedPacking = (existingPackedCount > 0 && existingPackedCount >= newPackedCount) 
+        ? existingPacking 
+        : (newPackedCount > 0 ? newPacking : (existingPacking.length > 0 ? existingPacking : newPacking));
+
+      const mergedPackingStatus = (existing.packingStatus === 'PACKING_VERIFIED' || b.packingStatus === 'PACKING_VERIFIED')
+        ? 'PACKING_VERIFIED'
+        : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
+          ? 'PARTIALLY_PACKED'
+          : (b.packingStatus || existing.packingStatus || null);
+
       if (newRank >= existingRank) {
         seenCodes.delete(String(existing.bomCode || existing.code || existing.id || '').trim());
         resolvedList[idx] = {
           ...existing,
           ...b,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus,
+          accountsVerification: {
+            ...(existing.accountsVerification || {}),
+            ...(b.accountsVerification || {})
+          },
+          dispatchPackingMedia: (b.dispatchPackingMedia?.photos?.length > 0 || b.dispatchPackingMedia?.videos?.length > 0)
+            ? b.dispatchPackingMedia
+            : (existing.dispatchPackingMedia || { photos: [], videos: [] }),
           vehicleLoading: b.vehicleLoading || existing.vehicleLoading || null,
           lrCopyDoc: b.lrCopyDoc || existing.lrCopyDoc || null,
+          packedAt: b.packedAt || existing.packedAt || null,
+          packedBy: b.packedBy || existing.packedBy || null,
+          packedById: b.packedById || existing.packedById || null,
+          packingCompletedAt: b.packingCompletedAt || existing.packingCompletedAt || null,
           fullyCompleted: b.fullyCompleted !== undefined ? b.fullyCompleted : existing.fullyCompleted
         };
         seenCodes.set(code, idx);
@@ -1782,8 +1878,21 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
         resolvedList[idx] = {
           ...b,
           ...existing,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus,
+          accountsVerification: {
+            ...(b.accountsVerification || {}),
+            ...(existing.accountsVerification || {})
+          },
+          dispatchPackingMedia: (existing.dispatchPackingMedia?.photos?.length > 0 || existing.dispatchPackingMedia?.videos?.length > 0)
+            ? existing.dispatchPackingMedia
+            : (b.dispatchPackingMedia || { photos: [], videos: [] }),
           vehicleLoading: existing.vehicleLoading || b.vehicleLoading || null,
           lrCopyDoc: existing.lrCopyDoc || b.lrCopyDoc || null,
+          packedAt: existing.packedAt || b.packedAt || null,
+          packedBy: existing.packedBy || b.packedBy || null,
+          packedById: existing.packedById || b.packedById || null,
+          packingCompletedAt: existing.packingCompletedAt || b.packingCompletedAt || null,
           fullyCompleted: existing.fullyCompleted !== undefined ? existing.fullyCompleted : b.fullyCompleted
         };
       }
@@ -1836,7 +1945,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     }
   } catch (_) {}
 
-  let highestNum = 658;
+  let highestNum = 662;
 
   try {
     // High-speed single-row query for sequence counter (50ms)
@@ -1922,7 +2031,7 @@ export async function getAndReserveNextBomCode(commit = true) {
 
     const safeSeq = Number.isFinite(seqCounter) && seqCounter > 0 ? seqCounter : 0;
     const safeStore = Number.isFinite(storeMax) && storeMax > 0 ? storeMax : 0;
-    highestNum = Math.max(safeSeq, safeStore, 658);
+    highestNum = Math.max(safeSeq, safeStore, 662);
     const nextNum = highestNum + 1;
     const formattedCode = `BOM-${String(nextNum).padStart(3, '0')}`;
 

@@ -345,9 +345,21 @@ const toConsumerBomServer = (row) => {
   if (!row || typeof row !== 'object') return null;
   const cName = (row.customer_name || row.customerName || row.company_name || row.vendor || 'Customer').trim();
 
+  let av = row.accounts_verification || row.accountsVerification;
+  if (typeof av === 'string' && (av.startsWith('{') || av.startsWith('['))) {
+    try { av = JSON.parse(av); } catch (_) {}
+  }
   let extraData = {};
-  if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
-    extraData = { ...row.accounts_verification._extra_data };
+  if (av && typeof av === 'object' && av._extra_data) {
+    extraData = { ...av._extra_data };
+  }
+
+  let cleanDispatchPacking = row.dispatch_packing || row.dispatchPacking || extraData.dispatchPacking || [];
+  if (typeof cleanDispatchPacking === 'string' && (cleanDispatchPacking.startsWith('[') || cleanDispatchPacking.startsWith('{'))) {
+    try { cleanDispatchPacking = JSON.parse(cleanDispatchPacking); } catch (_) {}
+  }
+  if (!Array.isArray(cleanDispatchPacking)) {
+    cleanDispatchPacking = [];
   }
 
   const isAccVerified = row.accounts_verified !== undefined
@@ -357,8 +369,8 @@ const toConsumerBomServer = (row) => {
         row.invoice_confirmed ||
         row.invoice_no
       );
-  const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
-    ? { ...row.accounts_verification }
+  const cleanAccountsVerification = (av && typeof av === 'object')
+    ? { ...av }
     : {
         verified: isAccVerified,
         verifiedBy: row.accounts_verified_by || '',
@@ -443,11 +455,19 @@ const toConsumerBomServer = (row) => {
     dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     items: Array.isArray(row.items) ? row.items : [],
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
-    dispatchPacking: (Array.isArray(row.dispatch_packing) || (row.dispatch_packing && typeof row.dispatch_packing === 'object')) ? row.dispatch_packing : [],
+    dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
-    invoiceConfirmed: Boolean(row.invoice_confirmed),
-    invoiceDeducted: Boolean(row.invoice_deducted),
-    invoiceNo: row.invoice_no || extraData.invoiceNo || '',
+    packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
+      cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
+    ),
+    packedAt: row.packed_at || row.packedAt || extraData.packedAt || cleanAccountsVerification?.packedAt || null,
+    packedBy: row.packed_by || row.packedBy || extraData.packedBy || cleanAccountsVerification?.packedBy || null,
+    packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
+    packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
+    invoiceConfirmed: Boolean(row.invoice_confirmed || row.invoiceConfirmed || extraData.invoiceConfirmed),
+    invoiceDeducted: Boolean(row.invoice_deducted || row.invoiceDeducted || extraData.invoiceDeducted),
+    invoiceNo: row.invoice_no || row.invoiceNo || extraData.invoiceNo || '',
     stockBlocked: Boolean(row.stock_blocked),
     stockBlockedAt: row.stock_blocked_at || null,
     stockDeducted: Boolean(row.stock_deducted),
@@ -465,7 +485,6 @@ const toConsumerBomServer = (row) => {
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
-    dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
     vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
@@ -633,6 +652,14 @@ const toDatabaseBomRowServer = (item) => {
   const mergedExtra = { ...existingExtra, ...extraData };
   if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
   if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
+  if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
+  if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
+  if (item.packedAt) mergedExtra.packedAt = item.packedAt;
+  if (item.packedBy) mergedExtra.packedBy = item.packedBy;
+  if (item.packedById) mergedExtra.packedById = item.packedById;
+  if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
+  if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
+  if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -684,8 +711,9 @@ const toDatabaseBomRowServer = (item) => {
     payments: cleanPayments,
     dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
     accounts_verification: accountsVerification,
-    invoice_confirmed: Boolean(item.invoiceConfirmed),
-    invoice_deducted: Boolean(item.invoiceDeducted),
+    invoice_no: item.invoiceNo || item.invoice_no || extraData.invoiceNo || '',
+    invoice_confirmed: Boolean(item.invoiceConfirmed || item.invoice_confirmed),
+    invoice_deducted: Boolean(item.invoiceDeducted || item.invoice_deducted),
     stock_blocked: Boolean(item.stockBlocked),
     stock_blocked_at: sanitizeTimestamp(item.stockBlockedAt),
     preset_name: item.presetName || '',
@@ -703,58 +731,154 @@ const toDatabaseBomRowServer = (item) => {
   };
 };
 
+function getWorkflowRankServer(b) {
+  if (!b) return 0;
+  const s = String(b.status || '').toLowerCase();
+  if (b.cancelled || s.includes('cancel')) return -1;
+  if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
+  if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
+  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
+  if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
+  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
+  if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
+  return 1;
+}
+
 const loadDatabaseBoms = async (forceRefresh = false) => {
   // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
   if (!forceRefresh && supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
     return supabaseMemoryStore.bom_store;
   }
 
-  try {
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 5000));
-    const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
-    const fetchPromise = supabase
-      .from('bom_orders')
-      .select(BOM_LIST_COLUMNS)
-      .order('created_at', { ascending: false });
+  // 2. Read existing disk store as authoritative baseline
+  let existingDiskList = [];
+  const diskPath = getStoreFilePath('bom_store.json');
+  if (fs.existsSync(diskPath)) {
+    try {
+      existingDiskList = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+    } catch (_) {}
+  }
+  if (!Array.isArray(existingDiskList)) existingDiskList = [];
 
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+  // 3. Query PostgreSQL if connected
+  if (isDbConnected()) {
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BOMs cloud fetch timeout')), 5000));
+      const BOM_LIST_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
+      const fetchPromise = supabase
+        .from('bom_orders')
+        .select(BOM_LIST_COLUMNS)
+        .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
-      supabaseMemoryStore.bom_store = mapped;
-      cachedBomsResult = mapped;
-      lastBomFetchTimestamp = Date.now();
-      return mapped;
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const mapped = data.map(r => toConsumerBomServer(r)).filter(Boolean);
+
+        // Authoritative merge: NEVER discard disk data or overwrite rich dispatch packing with empty database records
+        const combinedMap = new Map();
+        existingDiskList.forEach(item => {
+          const c = item?.bomCode || item?.code || item?.id;
+          if (c) combinedMap.set(c, item);
+        });
+
+        mapped.forEach(item => {
+          const c = item?.bomCode || item?.code || item?.id;
+          if (!c) return;
+          const diskItem = combinedMap.get(c);
+          if (diskItem) {
+            const diskRank = getWorkflowRankServer(diskItem);
+            const dbRank = getWorkflowRankServer(item);
+            const diskPacking = Array.isArray(diskItem.dispatchPacking) ? diskItem.dispatchPacking : [];
+            const dbPacking = Array.isArray(item.dispatchPacking) ? item.dispatchPacking : [];
+            const diskPackedCount = diskPacking.filter(p => p && p.packed).length;
+            const dbPackedCount = dbPacking.filter(p => p && p.packed).length;
+
+            const resolvedPacking = (diskPackedCount > 0 && diskPackedCount >= dbPackedCount) 
+              ? diskPacking 
+              : (dbPackedCount > 0 ? dbPacking : (diskPacking.length > 0 ? diskPacking : dbPacking));
+
+            const resolvedPackingStatus = (diskItem.packingStatus === 'PACKING_VERIFIED' || item.packingStatus === 'PACKING_VERIFIED')
+              ? 'PACKING_VERIFIED'
+              : (diskItem.packingStatus === 'PARTIALLY_PACKED' || item.packingStatus === 'PARTIALLY_PACKED')
+                ? 'PARTIALLY_PACKED'
+                : (item.packingStatus || diskItem.packingStatus || null);
+
+            combinedMap.set(c, {
+              ...item,
+              ...((diskRank > dbRank) ? diskItem : {}),
+              status: (diskRank > dbRank) ? diskItem.status : item.status,
+              dispatchPacking: resolvedPacking,
+              packingStatus: resolvedPackingStatus,
+              accountsVerification: {
+                ...(item.accountsVerification || {}),
+                ...(diskItem.accountsVerification || {}),
+                verified: Boolean(item.accountsVerification?.verified || diskItem.accountsVerification?.verified),
+                readyForAccounts: Boolean(item.accountsVerification?.readyForAccounts || diskItem.accountsVerification?.readyForAccounts),
+                packedAt: item.accountsVerification?.packedAt || diskItem.accountsVerification?.packedAt || diskItem.packedAt || item.packedAt || null,
+                packedBy: item.accountsVerification?.packedBy || diskItem.accountsVerification?.packedBy || diskItem.packedBy || item.packedBy || null
+              },
+              vehicleLoading: diskItem.vehicleLoading || item.vehicleLoading || null,
+              lrCopyDoc: diskItem.lrCopyDoc || item.lrCopyDoc || null,
+              dispatchPackingMedia: (item.dispatchPackingMedia?.photos?.length > 0 || item.dispatchPackingMedia?.videos?.length > 0)
+                ? item.dispatchPackingMedia
+                : (diskItem.dispatchPackingMedia || { photos: [], videos: [] }),
+              packedAt: diskItem.packedAt || item.packedAt || null,
+              packedBy: diskItem.packedBy || item.packedBy || null,
+              packedById: diskItem.packedById || item.packedById || null,
+              packingCompletedAt: diskItem.packingCompletedAt || item.packingCompletedAt || null,
+              fullyCompleted: (diskItem.fullyCompleted !== undefined && diskRank >= dbRank) ? diskItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : diskItem.fullyCompleted)
+            });
+          } else {
+            combinedMap.set(c, item);
+          }
+        });
+
+        const mergedAll = Array.from(combinedMap.values());
+        supabaseMemoryStore.bom_store = mergedAll;
+        cachedBomsResult = mergedAll;
+        lastBomFetchTimestamp = Date.now();
+        try {
+          fs.writeFileSync(diskPath, JSON.stringify(mergedAll, null, 2), 'utf8');
+        } catch (_) {}
+        return mergedAll;
+      }
+    } catch (err) {
+      console.warn('[loadDatabaseBoms] Supabase fetch notice:', err?.message || err);
     }
-  } catch (err) {
-    console.warn('[loadDatabaseBoms] Supabase fetch notice:', err?.message || err);
   }
 
-  // Fallback to memory store or disk JSON
+  // 4. Fallback to existing disk list if DB fetch did not succeed
+  if (existingDiskList.length > 0) {
+    supabaseMemoryStore.bom_store = existingDiskList;
+    cachedBomsResult = existingDiskList;
+    lastBomFetchTimestamp = Date.now();
+    return existingDiskList;
+  }
+
+  // 5. Fallback to memory store
   if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
     return supabaseMemoryStore.bom_store;
   }
 
-  try {
-    const diskPath = path.resolve(__dirname, 'bom_store.json');
-    if (fs.existsSync(diskPath)) {
-      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
-      if (Array.isArray(diskData) && diskData.length > 0) {
-        supabaseMemoryStore.bom_store = diskData;
-        cachedBomsResult = diskData;
-        lastBomFetchTimestamp = Date.now();
-        return diskData;
-      }
-    }
-  } catch (_) {}
-
-  return supabaseMemoryStore.bom_store || [];
+  return [];
 };
 
 const loadLocalBoms = () => {
   if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
     return supabaseMemoryStore.bom_store;
   }
+  try {
+    const diskPath = getStoreFilePath('bom_store.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskData) && diskData.length > 0) {
+        supabaseMemoryStore.bom_store = diskData;
+        return diskData;
+      }
+    }
+  } catch (_) {}
   return [];
 };
 
@@ -765,8 +889,13 @@ const saveLocalBoms = async (boms) => {
   cachedBomsResult = list;
   lastBomFetchTimestamp = Date.now();
 
-  // 1. Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
-  // and is NOT rewritten on every normal BOM operation.
+  // 1. Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
+  try {
+    const diskPath = getStoreFilePath('bom_store.json');
+    fs.writeFileSync(diskPath, JSON.stringify(list, null, 2), 'utf8');
+  } catch (diskErr) {
+    console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
+  }
 
   // 2. Broadcast via SSE to all connected clients
   try {
@@ -774,8 +903,15 @@ const saveLocalBoms = async (boms) => {
     broadcastRealtimeEvent('bom_updated', { bomList: list });
   } catch (_) {}
 
-  // 3. Upsert to canonical public.bom_orders table (Zero leaves table interaction)
+  // 3. Upsert to controlroom_store and canonical public.bom_orders table
   try {
+    if (isDbConnected()) {
+      query(`
+        INSERT INTO controlroom_store (key, data, updated_at)
+        VALUES ('bom_store', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
+      `, [JSON.stringify(list)]).catch(() => null);
+    }
     const rows = list.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
     for (let i = 0; i < rows.length; i += 20) {
       const batch = rows.slice(i, i + 20);
@@ -3031,13 +3167,13 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
   return new Promise((resolve, reject) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let maxNum = 658;
+        let maxNum = 662;
 
         // 1. Authoritative: Query PostgreSQL directly for the absolute highest existing BOM sequence
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 658) AS max_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_bom
               FROM public.bom_orders
               WHERE bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3046,7 +3182,7 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 658) AS max_pi_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_pi_bom
               FROM public.proforma_invoices
               WHERE converted_bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3077,17 +3213,25 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
           }
         });
 
-        // Also check sales_pi_store in memory
-        if (Array.isArray(supabaseMemoryStore.sales_pi_store)) {
-          supabaseMemoryStore.sales_pi_store.forEach(pi => {
-            const codeStr = String(pi?.convertedBomCode || pi?.convertedBomNo || '');
-            const match = codeStr.match(/^BOM-(\d+)$/i);
-            if (match) {
-              const val = parseInt(match[1], 10);
-              if (Number.isFinite(val) && val > maxNum) maxNum = val;
-            }
-          });
+        // Also check sales_pi_store on disk and in memory
+        const piFilePath = getStoreFilePath('sales_pi_store.json');
+        let piRecords = [];
+        if (fs.existsSync(piFilePath)) {
+          try {
+            piRecords = JSON.parse(fs.readFileSync(piFilePath, 'utf8'));
+          } catch (_) {}
         }
+        if (Array.isArray(supabaseMemoryStore.sales_pi_store)) {
+          piRecords = [...piRecords, ...supabaseMemoryStore.sales_pi_store];
+        }
+        piRecords.forEach(pi => {
+          const codeStr = String(pi?.convertedBomCode || pi?.convertedBomNo || '');
+          const match = codeStr.match(/^BOM-(\d+)$/i);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            if (Number.isFinite(val) && val > maxNum) maxNum = val;
+          }
+        });
 
         if (serverBomSequenceCounter !== null && serverBomSequenceCounter > maxNum) {
           maxNum = serverBomSequenceCounter;
@@ -3158,17 +3302,26 @@ app.post('/api/reset-bom-workflow-data', async (req, res) => {
 
 // Dedicated function to audit, deduplicate, and repair historical BOM sequence mappings for converted PIs
 async function repairBomSequences() {
-  if (!isDbConnected()) return { message: 'Database not connected' };
-
   console.log('🔄 [BOM Sequence Repair] Auditing and restoring 1-to-1 BOM sequence mapping...');
 
   let piList = [];
-  try {
-    const sRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`);
-    if (sRes?.rows?.[0]?.data && Array.isArray(sRes.rows[0].data)) {
-      piList = sRes.rows[0].data;
+  if (isDbConnected()) {
+    try {
+      const sRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`);
+      if (sRes?.rows?.[0]?.data && Array.isArray(sRes.rows[0].data)) {
+        piList = sRes.rows[0].data;
+      }
+    } catch (_) {}
+  }
+  if (piList.length === 0) {
+    const piFilePath = getStoreFilePath('sales_pi_store.json');
+    if (fs.existsSync(piFilePath)) {
+      try {
+        piList = JSON.parse(fs.readFileSync(piFilePath, 'utf8'));
+      } catch (_) {}
     }
-  } catch (_) {}
+  }
+  if (!Array.isArray(piList)) piList = [];
 
   // Explicit sequential alignment mapping matching existing converted PIs
   const targetMap = {
@@ -3204,80 +3357,127 @@ async function repairBomSequences() {
     });
 
     if (piListChanged) {
-      await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
+      if (isDbConnected()) {
+        await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
+      }
+      try {
+        fs.writeFileSync(getStoreFilePath('sales_pi_store.json'), JSON.stringify(piList, null, 2), 'utf8');
+      } catch (_) {}
       supabaseMemoryStore['sales_pi_store'] = piList;
     }
   }
 
-  // 2. Ensure public.proforma_invoices table is also updated
-  for (const [piNo, info] of Object.entries(targetMap)) {
+  // 2. Ensure each BOM exists on disk (bom_store.json)
+  const diskPath = getStoreFilePath('bom_store.json');
+  let currentDiskBoms = [];
+  if (fs.existsSync(diskPath)) {
     try {
-      await query(`
-        UPDATE public.proforma_invoices
-        SET converted_bom_code = $1,
-            converted_to_bom = true,
-            status = 'Converted to BOM',
-            updated_at = NOW()
-        WHERE pi_no = $2 OR id = $2
-      `, [info.bomCode, piNo]);
+      currentDiskBoms = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
     } catch (_) {}
   }
+  if (!Array.isArray(currentDiskBoms)) currentDiskBoms = [];
+  const bomDiskMap = new Map();
+  currentDiskBoms.forEach(b => {
+    const c = b?.bomCode || b?.code || b?.id;
+    if (c) bomDiskMap.set(c, b);
+  });
 
-  // 3. Ensure each BOM exists in public.bom_orders with matching source_pi_no and unique bom_code
   for (const [piNo, info] of Object.entries(targetMap)) {
-    try {
-      const piData = piList.find(p => String(p.piNo || p.id || '').trim() === piNo);
-      const custName = piData?.customerName || piData?.vendor || info.defaultCustomer;
-      const grandTotal = Number(piData?.total || piData?.grandTotal || info.defaultAmount || 0);
-      const subTotal = Number(piData?.subtotal || piData?.unitValue || Math.round(grandTotal / 1.18));
-      const items = Array.isArray(piData?.items) && piData.items.length > 0 ? JSON.stringify(piData.items) : '[]';
-      const salesPerson = (piData?.salesPerson || piData?.salesperson || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim();
+    if (!bomDiskMap.has(info.bomCode)) {
+      bomDiskMap.set(info.bomCode, {
+        id: info.bomCode,
+        bomCode: info.bomCode,
+        code: info.bomCode,
+        sourcePiNo: piNo,
+        customerName: info.defaultCustomer,
+        companyName: info.defaultCustomer,
+        salesPerson: 'Annamalaiyar',
+        grandTotal: info.defaultAmount,
+        subTotal: Math.round(info.defaultAmount / 1.18),
+        status: info.bomCode === 'BOM-659' ? 'COMPLETED & DISPATCHED' : 'Draft',
+        salesConfirmed: true,
+        date: '2026-10-06'
+      });
+      bomUpdatedCount++;
+    }
+  }
 
-      const existingBom = await query(`
-        SELECT id, bom_code, source_pi_no FROM public.bom_orders 
-        WHERE bom_code = $1 OR source_pi_no = $2
-      `, [info.bomCode, piNo]);
+  const finalDiskBoms = Array.from(bomDiskMap.values());
+  try {
+    fs.writeFileSync(diskPath, JSON.stringify(finalDiskBoms, null, 2), 'utf8');
+  } catch (_) {}
+  supabaseMemoryStore.bom_store = finalDiskBoms;
 
-      if (existingBom.rows.length === 0) {
+  // 3. Ensure public.proforma_invoices and public.bom_orders tables in PostgreSQL are updated
+  if (isDbConnected()) {
+    for (const [piNo, info] of Object.entries(targetMap)) {
+      try {
         await query(`
-          INSERT INTO public.bom_orders (
-            id, bom_code, code, source_pi_no, customer_name, company_name, 
-            grand_total, sub_total, sales_person, status, items, dispatch_packing, date, created_at, updated_at
-          ) VALUES (
-            $1, $1, $1, $2, $3, $3, 
-            $4, $5, $6, 'Draft', $7::jsonb, $7::jsonb, CURRENT_DATE, NOW(), NOW()
-          ) ON CONFLICT (id) DO UPDATE SET
-            bom_code = EXCLUDED.bom_code,
-            source_pi_no = EXCLUDED.source_pi_no,
-            customer_name = EXCLUDED.customer_name,
-            company_name = EXCLUDED.company_name,
-            grand_total = EXCLUDED.grand_total,
-            sub_total = EXCLUDED.sub_total,
-            sales_person = EXCLUDED.sales_person,
-            items = EXCLUDED.items,
-            dispatch_packing = EXCLUDED.dispatch_packing,
-            updated_at = NOW()
-        `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
-        bomUpdatedCount++;
-      } else {
-        await query(`
-          UPDATE public.bom_orders
-          SET bom_code = $1,
-              code = $1,
-              source_pi_no = $2,
-              customer_name = CASE WHEN customer_name IS NULL OR customer_name = '' OR customer_name = 'Customer' OR customer_name = '-' THEN $3 ELSE customer_name END,
-              company_name = CASE WHEN company_name IS NULL OR company_name = '' OR company_name = 'Customer' OR company_name = '-' THEN $3 ELSE company_name END,
-              grand_total = CASE WHEN grand_total IS NULL OR grand_total = 0 THEN $4 ELSE grand_total END,
-              sub_total = CASE WHEN sub_total IS NULL OR sub_total = 0 THEN $5 ELSE sub_total END,
-              sales_person = CASE WHEN sales_person IS NULL OR sales_person = '' OR sales_person = 'Anu' OR sales_person = 'Sales Department' THEN $6 ELSE sales_person END,
-              items = CASE WHEN items IS NULL OR jsonb_array_length(items) = 0 THEN $7::jsonb ELSE items END,
-              dispatch_packing = CASE WHEN dispatch_packing IS NULL OR jsonb_array_length(dispatch_packing) = 0 THEN $7::jsonb ELSE dispatch_packing END,
+          UPDATE public.proforma_invoices
+          SET converted_bom_code = $1,
+              converted_to_bom = true,
+              status = 'Converted to BOM',
               updated_at = NOW()
-          WHERE id = $1 OR bom_code = $1 OR source_pi_no = $2
-        `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
+          WHERE pi_no = $2 OR id = $2
+        `, [info.bomCode, piNo]);
+      } catch (_) {}
+    }
+
+    for (const [piNo, info] of Object.entries(targetMap)) {
+      try {
+        const piData = piList.find(p => String(p.piNo || p.id || '').trim() === piNo);
+        const custName = piData?.customerName || piData?.vendor || info.defaultCustomer;
+        const grandTotal = Number(piData?.total || piData?.grandTotal || info.defaultAmount || 0);
+        const subTotal = Number(piData?.subtotal || piData?.unitValue || Math.round(grandTotal / 1.18));
+        const items = Array.isArray(piData?.items) && piData.items.length > 0 ? JSON.stringify(piData.items) : '[]';
+        const salesPerson = (piData?.salesPerson || piData?.salesperson || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim();
+
+        const existingBom = await query(`
+          SELECT id, bom_code, source_pi_no FROM public.bom_orders 
+          WHERE bom_code = $1 OR source_pi_no = $2
+        `, [info.bomCode, piNo]);
+
+        if (existingBom.rows.length === 0) {
+          await query(`
+            INSERT INTO public.bom_orders (
+              id, bom_code, code, source_pi_no, customer_name, company_name, 
+              grand_total, sub_total, sales_person, status, items, dispatch_packing, date, created_at, updated_at
+            ) VALUES (
+              $1, $1, $1, $2, $3, $3, 
+              $4, $5, $6, 'Draft', $7::jsonb, $7::jsonb, CURRENT_DATE, NOW(), NOW()
+            ) ON CONFLICT (id) DO UPDATE SET
+              bom_code = EXCLUDED.bom_code,
+              source_pi_no = EXCLUDED.source_pi_no,
+              customer_name = EXCLUDED.customer_name,
+              company_name = EXCLUDED.company_name,
+              grand_total = EXCLUDED.grand_total,
+              sub_total = EXCLUDED.sub_total,
+              sales_person = EXCLUDED.sales_person,
+              items = EXCLUDED.items,
+              dispatch_packing = EXCLUDED.dispatch_packing,
+              updated_at = NOW()
+          `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
+          bomUpdatedCount++;
+        } else {
+          await query(`
+            UPDATE public.bom_orders
+            SET bom_code = $1,
+                code = $1,
+                source_pi_no = $2,
+                customer_name = CASE WHEN customer_name IS NULL OR customer_name = '' OR customer_name = 'Customer' OR customer_name = '-' THEN $3 ELSE customer_name END,
+                company_name = CASE WHEN company_name IS NULL OR company_name = '' OR company_name = 'Customer' OR company_name = '-' THEN $3 ELSE company_name END,
+                grand_total = CASE WHEN grand_total IS NULL OR grand_total = 0 THEN $4 ELSE grand_total END,
+                sub_total = CASE WHEN sub_total IS NULL OR sub_total = 0 THEN $5 ELSE sub_total END,
+                sales_person = CASE WHEN sales_person IS NULL OR sales_person = '' OR sales_person = 'Anu' OR sales_person = 'Sales Department' THEN $6 ELSE sales_person END,
+                items = CASE WHEN items IS NULL OR jsonb_array_length(items) = 0 THEN $7::jsonb ELSE items END,
+                dispatch_packing = CASE WHEN dispatch_packing IS NULL OR jsonb_array_length(dispatch_packing) = 0 THEN $7::jsonb ELSE dispatch_packing END,
+                updated_at = NOW()
+            WHERE id = $1 OR bom_code = $1 OR source_pi_no = $2
+          `, [info.bomCode, piNo, custName, grandTotal, subTotal, salesPerson, items]);
+        }
+      } catch (e) {
+        console.warn(`[repairBomSequences notice for ${piNo}]:`, e.message);
       }
-    } catch (e) {
-      console.warn(`[repairBomSequences notice for ${piNo}]:`, e.message);
     }
   }
 
@@ -3675,11 +3875,11 @@ app.post('/api/boms', async (req, res) => {
         });
 
         // Authoritative: Query PostgreSQL directly for the highest BOM sequence
-        let maxNum = 658;
+        let maxNum = 662;
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 658) AS max_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_bom
               FROM public.bom_orders
               WHERE bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3764,9 +3964,21 @@ app.post('/api/boms', async (req, res) => {
         const mergedList = Array.from(map.values());
         supabaseMemoryStore.bom_store = mergedList;
 
-        // Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
-        // and is NOT rewritten on every normal BOM operation.
-        console.log(`[BOM Store] BOM ${finalCode} saved to normalized public.bom_orders (isNew: ${shouldAssignNewCode}).`);
+        // Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
+        try {
+          const diskPath = getStoreFilePath('bom_store.json');
+          fs.writeFileSync(diskPath, JSON.stringify(mergedList, null, 2), 'utf8');
+        } catch (diskErr) {
+          console.warn('[POST /api/boms disk write error]:', diskErr?.message || diskErr);
+        }
+        if (isDbConnected()) {
+          query(`
+            INSERT INTO controlroom_store (key, data, updated_at)
+            VALUES ('bom_store', $1, NOW())
+            ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
+          `, [JSON.stringify(mergedList)]).catch(() => null);
+        }
+        console.log(`[BOM Store] BOM ${finalCode} saved to disk and normalized public.bom_orders (isNew: ${shouldAssignNewCode}).`);
 
         // Automatically reconcile and deduct inventory in raw_materials_store and item_store
         try {
@@ -3882,8 +4094,17 @@ app.delete('/api/boms/:id', async (req, res) => {
     }
     const updated = current.filter(b => (b.id !== cleanId && b.bomCode !== cleanId && b.code !== cleanId));
     supabaseMemoryStore.bom_store = updated;
-    // Phase C: Disk file bom_store.json is retained as a passive emergency fallback only
-    // and is not rewritten on normal BOM delete operations.
+    try {
+      const diskPath = getStoreFilePath('bom_store.json');
+      fs.writeFileSync(diskPath, JSON.stringify(updated, null, 2), 'utf8');
+    } catch (_) {}
+    if (isDbConnected()) {
+      query(`
+        INSERT INTO controlroom_store (key, data, updated_at)
+        VALUES ('bom_store', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
+      `, [JSON.stringify(updated)]).catch(() => null);
+    }
 
     // 3. Broadcast real-time deletion
     broadcastRealtimeEvent('bom_updated', { id: cleanId, action: 'delete', bomList: updated });
@@ -4270,7 +4491,13 @@ app.post('/api/invoices', async (req, res) => {
       try { localInvList = JSON.parse(fs.readFileSync(invStorePath, 'utf8')); } catch (_) {}
     }
     if (!Array.isArray(localInvList)) localInvList = [];
-    const matchIdx = localInvList.findIndex(i => i.invNo === invRecord.invNo || i.id === invRecord.id);
+
+    const matchIdx = localInvList.findIndex(i =>
+      (invRecord.invNo && i.invNo === invRecord.invNo) ||
+      (invRecord.id && i.id === invRecord.id) ||
+      (invRecord.bomCode && (i.bomCode === invRecord.bomCode || i.poNo === invRecord.bomCode)) ||
+      (invRecord.poNo && (i.poNo === invRecord.poNo || i.bomCode === invRecord.poNo))
+    );
     if (matchIdx !== -1) {
       localInvList[matchIdx] = { ...localInvList[matchIdx], ...invRecord };
     } else {
@@ -4280,6 +4507,49 @@ app.post('/api/invoices', async (req, res) => {
     if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
     supabaseMemoryStore['invoice_store'] = localInvList;
     pushStoreToSupabase('invoice_store', localInvList);
+
+    // Synchronize matching BOM record with assigned invoice
+    const targetBomCode = invRecord.bomCode || invRecord.poNo;
+    if (targetBomCode) {
+      try {
+        const bomPath = getStoreFilePath('bom_store.json');
+        let diskBoms = [];
+        if (fs.existsSync(bomPath)) {
+          try { diskBoms = JSON.parse(fs.readFileSync(bomPath, 'utf8')); } catch (_) {}
+        }
+        if (Array.isArray(diskBoms)) {
+          let bomChanged = false;
+          diskBoms = diskBoms.map(b => {
+            if (b && (b.bomCode === targetBomCode || b.code === targetBomCode || b.id === targetBomCode)) {
+              bomChanged = true;
+              return {
+                ...b,
+                invoiceNo: assignedInvNo,
+                invoiceConfirmed: true,
+                status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch'
+              };
+            }
+            return b;
+          });
+          if (bomChanged) {
+            fs.writeFileSync(bomPath, JSON.stringify(diskBoms, null, 2), 'utf8');
+            supabaseMemoryStore.bom_store = diskBoms;
+            cachedBomsResult = diskBoms;
+            try {
+              broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: diskBoms });
+              broadcastRealtimeEvent('bom_updated', { bom: diskBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode) });
+            } catch (_) {}
+          }
+        }
+      } catch (bErr) {
+        console.warn('Error linking BOM in /api/invoices:', bErr);
+      }
+    }
+
+    try {
+      broadcastRealtimeEvent('store_updated', { key: 'invoice_store', storeData: localInvList });
+      broadcastRealtimeEvent('invoice_updated', { invoice: invRecord });
+    } catch (_) {}
 
     return res.json({
       success: true,
