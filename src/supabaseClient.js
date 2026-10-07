@@ -243,8 +243,8 @@ function mapSelectEndpoint(table) {
   if (table === 'leads') return '/api/crm/leads';
   if (table === 'opportunities') return '/api/crm/opportunities';
   if (table === 'quotations') return '/api/crm/quotations';
-  if (table === 'purchase_orders') return '/api/zoho/purchaseorders';
-  if (table === 'invoices') return '/api/zoho/invoices';
+  if (table === 'purchase_orders') return '/api/purchaseorders';
+  if (table === 'invoices') return '/api/invoices';
   return `/api/store/${encodeURIComponent(mapTableToStoreKey(table))}`;
 }
 

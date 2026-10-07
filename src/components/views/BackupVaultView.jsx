@@ -240,7 +240,7 @@ export default function BackupVaultView({ userRole }) {
               </span>
             </div>
             <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748B' }}>
-              Zoho-grade zero-data-loss protection. Snapshots include all ERP tables, user accounts, and media proofs (PDFs & images).
+              Enterprise-grade zero-data-loss protection. Snapshots include all ERP tables, user accounts, and media proofs (PDFs & images).
             </p>
           </div>
         </div>

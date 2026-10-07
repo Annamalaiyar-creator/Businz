@@ -69,7 +69,13 @@ export async function initPostgresDatabase() {
       'vrm_prod_workorders',
       'vendor_store',
       'presets_store',
-      'company_branding_store'
+      'company_branding_store',
+      'invoice_store',
+      'proforma_invoice_store',
+      'sales_pi_store',
+      'payment_store',
+      'customer_store',
+      'crm_customers'
     ];
 
     for (const storeKey of storesToSeed) {

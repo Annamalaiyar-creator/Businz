@@ -2,67 +2,64 @@ import { supabase } from '../supabaseClient';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, saveCloudInvoiceRow } from '../utils/supabaseDataSync';
 
 /**
- * Universal Safe Synchronizer for Zoho Books + Supabase in Control Room.
+ * Universal Native Data Service for BUSINZ.
  * 
  * ARCHITECTURAL MANDATE:
- * 1. Supabase Cloud + Zoho Books are the authoritative dual storage engines.
- * 2. Zero reliance on browser localStorage.
- * 3. All items, POs, Vendors, Customers, and Invoices are stored in Zoho Books AND Supabase Cloud.
+ * 1. Supabase Cloud + Local Authoritative Stores are the primary dual storage engines.
+ * 2. Zero reliance on external accounting systems at runtime.
+ * 3. All items, POs, Vendors, Customers, and Invoices are persisted directly to BUSINZ native stores.
  */
 
 // ---------------------------
 // 1. PURCHASE ORDERS (PO)
 // ---------------------------
-export async function getSafeZohoPOs() {
+export async function getPurchaseOrders() {
   // 1. Fetch current cloud list from Supabase first
   let cloudList = [];
   try {
     cloudList = await fetchCloudStore('po_store', []);
   } catch (_) {}
 
-  // 2. Fetch from live Zoho backend with timeout
+  // 2. Fetch from live BUSINZ native backend with timeout
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch('/api/zoho/purchaseorders', { signal: controller.signal }).catch(() => null);
+    const res = await fetch('/api/purchaseorders', { signal: controller.signal }).catch(() => null);
     clearTimeout(timeoutId);
     if (res && res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
         const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-        const merged = data.map(zohoPo => {
-          const zNo = normalize(zohoPo.poNo);
-          const zId = normalize(zohoPo.id);
-          const zZohoId = normalize(zohoPo.zohoId);
+        const merged = data.map(poItem => {
+          const zNo = normalize(poItem.poNo);
+          const zId = normalize(poItem.id);
           const cloudMatch = Array.isArray(cloudList) && cloudList.find(c => {
             const cNo = normalize(c.poNo);
             const cId = normalize(c.id);
-            const cZohoId = normalize(c.zohoId);
-            return (zNo && (cNo === zNo || cId === zNo || cZohoId === zNo)) ||
-                   (zId && (cId === zId || cZohoId === zId || cNo === zId)) ||
-                   (zZohoId && (cZohoId === zZohoId || cId === zZohoId || cNo === zZohoId));
+            return (zNo && (cNo === zNo || cId === zNo)) ||
+                   (zId && (cId === zId || cNo === zId));
           });
           if (cloudMatch) {
             const preservedItems = (Array.isArray(cloudMatch.items) && cloudMatch.items.length > 0)
               ? cloudMatch.items
-              : (Array.isArray(zohoPo.items) && zohoPo.items.length > 0 ? zohoPo.items : []);
-            const effPayDetails = cloudMatch.paymentDetails || zohoPo.paymentDetails;
-            const effProceedDetails = cloudMatch.proceedDetails || zohoPo.proceedDetails;
-            const effApprovedBy = cloudMatch.approvedBy || zohoPo.approvedBy;
+              : (Array.isArray(poItem.items) && poItem.items.length > 0 ? poItem.items : []);
+            const effPayDetails = cloudMatch.paymentDetails || poItem.paymentDetails;
+            const effProceedDetails = cloudMatch.proceedDetails || poItem.proceedDetails;
+            const effApprovedBy = cloudMatch.approvedBy || poItem.approvedBy;
 
             return {
-              ...zohoPo,
+              ...poItem,
               ...cloudMatch,
               vendor: (cloudMatch.vendor && cloudMatch.vendor !== 'Vendor' && cloudMatch.vendor !== 'Annamalaiyar' && cloudMatch.vendor !== 'Fresh Vendor') 
                 ? cloudMatch.vendor 
-                : ((zohoPo.vendor && zohoPo.vendor !== 'Vendor' && zohoPo.vendor !== 'Annamalaiyar') ? zohoPo.vendor : (cloudMatch.vendor || zohoPo.vendor || 'Vendor')),
-              branch: cloudMatch.branch || zohoPo.branch || '',
-              contactPerson: cloudMatch.contactPerson || zohoPo.contactPerson || '',
-              gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (zohoPo.gstNo || '—'),
-              poDate: cloudMatch.poDate || zohoPo.poDate || zohoPo.date,
+                : ((poItem.vendor && poItem.vendor !== 'Vendor' && poItem.vendor !== 'Annamalaiyar') ? poItem.vendor : (cloudMatch.vendor || poItem.vendor || 'Vendor')),
+              branch: cloudMatch.branch || poItem.branch || '',
+              contactPerson: cloudMatch.contactPerson || poItem.contactPerson || '',
+              gstNo: (cloudMatch.gstNo && cloudMatch.gstNo !== '—') ? cloudMatch.gstNo : (poItem.gstNo || '—'),
+              poDate: cloudMatch.poDate || poItem.poDate || poItem.date,
               status: (() => {
-                const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
-                const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
+                const totOrd = Number(cloudMatch.totalOrderedQty || poItem.totalOrderedQty || 0);
+                const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || poItem.totalReceivedQty || poItem.totalReceived || 0);
                 if (totOrd > 0 && totRec >= totOrd) {
                   return 'CLOSED / FULLY RECEIVED';
                 }
@@ -70,7 +67,7 @@ export async function getSafeZohoPOs() {
                   return 'OPEN / PARTIALLY RECEIVED';
                 }
                 const cStatus = String(cloudMatch.status || '').toUpperCase();
-                const zStatus = String(zohoPo.status || '').toUpperCase();
+                const zStatus = String(poItem.status || '').toUpperCase();
                 if ((cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) && totOrd > 0 && totRec >= totOrd) {
                   return 'CLOSED / FULLY RECEIVED';
                 }
@@ -90,7 +87,7 @@ export async function getSafeZohoPOs() {
                   return 1;
                 };
                 const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, effApprovedBy, effPayDetails, effProceedDetails);
-                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, effApprovedBy, effPayDetails, effProceedDetails);
+                const zRank = getStageRank(poItem.status, poItem.statusType, effApprovedBy, effPayDetails, effProceedDetails);
                 const effectiveRank = Math.max(cRank, zRank);
                 if (effectiveRank === 7) return 'REJECTED';
                 if (effectiveRank === 6) return 'CLOSED / FULLY RECEIVED';
@@ -98,11 +95,11 @@ export async function getSafeZohoPOs() {
                 if (effectiveRank === 4) return 'Proceed PO';
                 if (effectiveRank === 3) return 'Payment Processed';
                 if (effectiveRank === 2) return 'MD Approved';
-                return cloudMatch.status || zohoPo.status || 'Draft';
+                return cloudMatch.status || poItem.status || 'Draft';
               })(),
               statusType: (() => {
-                const totOrd = Number(cloudMatch.totalOrderedQty || zohoPo.totalOrderedQty || 0);
-                const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || zohoPo.totalReceivedQty || zohoPo.totalReceived || 0);
+                const totOrd = Number(cloudMatch.totalOrderedQty || poItem.totalOrderedQty || 0);
+                const totRec = Number(cloudMatch.totalReceivedQty || cloudMatch.totalReceived || poItem.totalReceivedQty || poItem.totalReceived || 0);
                 if (totOrd > 0 && totRec >= totOrd) {
                   return 'closed';
                 }
@@ -110,7 +107,7 @@ export async function getSafeZohoPOs() {
                   return 'partially_received';
                 }
                 const cStatus = String(cloudMatch.status || '').toUpperCase();
-                const zStatus = String(zohoPo.status || '').toUpperCase();
+                const zStatus = String(poItem.status || '').toUpperCase();
                 if ((cStatus.includes('CLOSED') || cStatus.includes('FULLY') || zStatus.includes('CLOSED') || zStatus.includes('FULLY')) && totOrd > 0 && totRec >= totOrd) {
                   return 'closed';
                 }
@@ -130,7 +127,7 @@ export async function getSafeZohoPOs() {
                   return 1;
                 };
                 const cRank = getStageRank(cloudMatch.status, cloudMatch.statusType, effApprovedBy, effPayDetails, effProceedDetails);
-                const zRank = getStageRank(zohoPo.status, zohoPo.statusType, effApprovedBy, effPayDetails, effProceedDetails);
+                const zRank = getStageRank(poItem.status, poItem.statusType, effApprovedBy, effPayDetails, effProceedDetails);
                 const effectiveRank = Math.max(cRank, zRank);
                 if (effectiveRank === 7) return 'rejected';
                 if (effectiveRank === 6) return 'closed';
@@ -138,57 +135,54 @@ export async function getSafeZohoPOs() {
                 if (effectiveRank === 4) return 'proceed_po';
                 if (effectiveRank === 3) return 'payment_processed';
                 if (effectiveRank === 2) return 'md_approved';
-                return cloudMatch.statusType || zohoPo.statusType || 'draft';
+                return cloudMatch.statusType || poItem.statusType || 'draft';
               })(),
               approvedBy: effApprovedBy,
-              approvalDate: cloudMatch.approvalDate || zohoPo.approvalDate,
-              approvalTime: cloudMatch.approvalTime || zohoPo.approvalTime,
-              approvalRemarks: cloudMatch.approvalRemarks || zohoPo.approvalRemarks,
+              approvalDate: cloudMatch.approvalDate || poItem.approvalDate,
+              approvalTime: cloudMatch.approvalTime || poItem.approvalTime,
+              approvalRemarks: cloudMatch.approvalRemarks || poItem.approvalRemarks,
               proceedDetails: effProceedDetails,
               paymentDetails: effPayDetails,
-              grnDetails: cloudMatch.grnDetails || zohoPo.grnDetails,
-              totalOrderedQty: cloudMatch.totalOrderedQty !== undefined ? cloudMatch.totalOrderedQty : zohoPo.totalOrderedQty,
-              totalReceivedQty: cloudMatch.totalReceivedQty !== undefined ? cloudMatch.totalReceivedQty : zohoPo.totalReceivedQty,
-              totalRemainingQty: cloudMatch.totalRemainingQty !== undefined ? cloudMatch.totalRemainingQty : zohoPo.totalRemainingQty,
-              receivingProgressPct: cloudMatch.receivingProgressPct !== undefined ? cloudMatch.receivingProgressPct : zohoPo.receivingProgressPct,
-              grnCount: cloudMatch.grnCount !== undefined ? cloudMatch.grnCount : zohoPo.grnCount,
-              totalReceived: cloudMatch.totalReceived !== undefined ? cloudMatch.totalReceived : zohoPo.totalReceived,
-              grnHistory: (Array.isArray(cloudMatch.grnHistory) && cloudMatch.grnHistory.length > 0) ? cloudMatch.grnHistory : (zohoPo.grnHistory || []),
+              grnDetails: cloudMatch.grnDetails || poItem.grnDetails,
+              totalOrderedQty: cloudMatch.totalOrderedQty !== undefined ? cloudMatch.totalOrderedQty : poItem.totalOrderedQty,
+              totalReceivedQty: cloudMatch.totalReceivedQty !== undefined ? cloudMatch.totalReceivedQty : poItem.totalReceivedQty,
+              totalRemainingQty: cloudMatch.totalRemainingQty !== undefined ? cloudMatch.totalRemainingQty : poItem.totalRemainingQty,
+              receivingProgressPct: cloudMatch.receivingProgressPct !== undefined ? cloudMatch.receivingProgressPct : poItem.receivingProgressPct,
+              grnCount: cloudMatch.grnCount !== undefined ? cloudMatch.grnCount : poItem.grnCount,
+              totalReceived: cloudMatch.totalReceived !== undefined ? cloudMatch.totalReceived : poItem.totalReceived,
+              grnHistory: (Array.isArray(cloudMatch.grnHistory) && cloudMatch.grnHistory.length > 0) ? cloudMatch.grnHistory : (poItem.grnHistory || []),
               items: preservedItems,
-              notes: cloudMatch.notes || zohoPo.notes || '',
-              terms: (cloudMatch.terms && cloudMatch.terms.length > 50) ? cloudMatch.terms : (zohoPo.terms || cloudMatch.terms || ''),
-              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—' && cloudMatch.deliveryAddress !== 'Tamil Nadu, India') ? cloudMatch.deliveryAddress : (zohoPo.deliveryAddress || '—'),
-              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—') ? cloudMatch.billingAddress : (zohoPo.billingAddress || '—'),
-              paymentTerms: (cloudMatch.paymentTerms && cloudMatch.paymentTerms !== 'Net 30 Days' && cloudMatch.paymentTerms !== 'Due on Receipt') ? cloudMatch.paymentTerms : (zohoPo.paymentTerms || 'Net 30 Days'),
-              priority: cloudMatch.priority || zohoPo.priority || 'High',
-              scope: cloudMatch.scope || zohoPo.scope || 'Vendor Scope',
-              transportName: cloudMatch.transportName || zohoPo.transportName || '',
-              shippingCharges: cloudMatch.shippingCharges !== undefined ? cloudMatch.shippingCharges : (zohoPo.shippingCharges || 0),
-              otherCharges: cloudMatch.otherCharges !== undefined ? cloudMatch.otherCharges : (zohoPo.otherCharges || 0),
-              discountPct: cloudMatch.discountPct !== undefined ? cloudMatch.discountPct : (zohoPo.discountPct || 0),
-              purchaser: (cloudMatch.purchaser && cloudMatch.purchaser !== '—') ? cloudMatch.purchaser : (zohoPo.purchaser || '—'),
-              amount: (cloudMatch.amount && cloudMatch.amount !== '₹0.00' && cloudMatch.amount !== '₹ 0.00') ? cloudMatch.amount : zohoPo.amount
+              notes: cloudMatch.notes || poItem.notes || '',
+              terms: (cloudMatch.terms && cloudMatch.terms.length > 50) ? cloudMatch.terms : (poItem.terms || cloudMatch.terms || ''),
+              deliveryAddress: (cloudMatch.deliveryAddress && cloudMatch.deliveryAddress !== '—' && cloudMatch.deliveryAddress !== 'Tamil Nadu, India') ? cloudMatch.deliveryAddress : (poItem.deliveryAddress || '—'),
+              billingAddress: (cloudMatch.billingAddress && cloudMatch.billingAddress !== '—') ? cloudMatch.billingAddress : (poItem.billingAddress || '—'),
+              paymentTerms: (cloudMatch.paymentTerms && cloudMatch.paymentTerms !== 'Net 30 Days' && cloudMatch.paymentTerms !== 'Due on Receipt') ? cloudMatch.paymentTerms : (poItem.paymentTerms || 'Net 30 Days'),
+              priority: cloudMatch.priority || poItem.priority || 'High',
+              scope: cloudMatch.scope || poItem.scope || 'Vendor Scope',
+              transportName: cloudMatch.transportName || poItem.transportName || '',
+              shippingCharges: cloudMatch.shippingCharges !== undefined ? cloudMatch.shippingCharges : (poItem.shippingCharges || 0),
+              otherCharges: cloudMatch.otherCharges !== undefined ? cloudMatch.otherCharges : (poItem.otherCharges || 0),
+              discountPct: cloudMatch.discountPct !== undefined ? cloudMatch.discountPct : (poItem.discountPct || 0),
+              purchaser: (cloudMatch.purchaser && cloudMatch.purchaser !== '—') ? cloudMatch.purchaser : (poItem.purchaser || '—'),
+              amount: (cloudMatch.amount && cloudMatch.amount !== '₹0.00' && cloudMatch.amount !== '₹ 0.00') ? cloudMatch.amount : poItem.amount
             };
           }
-          return zohoPo;
+          return poItem;
         });
 
-        // Also preserve any newly created local/cloud POs not yet returned by Zoho list
+        // Also preserve any newly created local/cloud POs not yet returned by backend list
         if (Array.isArray(cloudList) && cloudList.length > 0) {
           const mergedPoKeys = new Set();
           merged.forEach(p => {
             const k1 = normalize(p.poNo);
             const k2 = normalize(p.id);
-            const k3 = normalize(p.zohoId);
             if (k1) mergedPoKeys.add(k1);
             if (k2) mergedPoKeys.add(k2);
-            if (k3) mergedPoKeys.add(k3);
           });
           cloudList.forEach(c => {
             const c1 = normalize(c.poNo);
             const c2 = normalize(c.id);
-            const c3 = normalize(c.zohoId);
-            const alreadyIn = (c1 && mergedPoKeys.has(c1)) || (c2 && mergedPoKeys.has(c2)) || (c3 && mergedPoKeys.has(c3));
+            const alreadyIn = (c1 && mergedPoKeys.has(c1)) || (c2 && mergedPoKeys.has(c2));
             if (!alreadyIn) {
               merged.push(c);
             }
@@ -208,7 +202,7 @@ export async function getSafeZohoPOs() {
   return [];
 }
 
-export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
+export async function savePurchaseOrder(newOrUpdatedPO, syncRemote = false) {
   if (!newOrUpdatedPO) return;
   try {
     // 1. Fetch current cloud list from Supabase
@@ -216,15 +210,12 @@ export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
     const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
     const targetNo = normalize(newOrUpdatedPO.poNo);
     const targetId = normalize(newOrUpdatedPO.id);
-    const targetZohoId = normalize(newOrUpdatedPO.zohoId);
 
     const existingIdx = cloudList.findIndex(p => {
       const pNo = normalize(p.poNo);
       const pId = normalize(p.id);
-      const pZohoId = normalize(p.zohoId);
-      return (targetNo && (pNo === targetNo || pId === targetNo || pZohoId === targetNo)) ||
-             (targetId && (pId === targetId || pNo === targetId || pZohoId === targetId)) ||
-             (targetZohoId && (pZohoId === targetZohoId || pId === targetZohoId || pNo === targetZohoId));
+      return (targetNo && (pNo === targetNo || pId === targetNo)) ||
+             (targetId && (pId === targetId || pNo === targetId));
     });
 
     let updatedList;
@@ -255,30 +246,30 @@ export async function saveSafeZohoPO(newOrUpdatedPO, syncWithZoho = false) {
       window.dispatchEvent(new Event('controlroom_storage_update'));
     }
 
-    // 3. Post to Zoho Books API ONLY when explicitly asked (avoids 3x duplicate creations)
-    if (syncWithZoho) {
+    // 3. Post to backend purchase orders endpoint
+    if (syncRemote) {
       try {
-        fetch('/api/zoho/purchaseorders', {
+        fetch('/api/purchaseorders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newOrUpdatedPO)
-        }).catch(e => console.warn('[saveSafeZohoPO] Zoho sync notice:', e));
+        }).catch(e => console.warn('[savePurchaseOrder] Backend notice:', e));
       } catch (_) {}
     }
 
     return updatedList;
   } catch (err) {
-    console.warn('[saveSafeZohoPO] Error:', err);
+    console.warn('[savePurchaseOrder] Error:', err);
   }
 }
 
 // ---------------------------
 // 2. VENDORS
 // ---------------------------
-export async function getSafeZohoVendors() {
-  // 1. Try Zoho backend endpoint
+export async function getVendors() {
+  // 1. Try BUSINZ backend endpoint
   try {
-    const res = await fetch('/api/zoho/vendors');
+    const res = await fetch('/api/vendors');
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
@@ -295,13 +286,13 @@ export async function getSafeZohoVendors() {
       return cloudVendors;
     }
   } catch (err) {
-    console.warn('[getSafeZohoVendors] Supabase fetch notice:', err);
+    console.warn('[getVendors] Supabase fetch notice:', err);
   }
 
   return [];
 }
 
-export async function saveSafeZohoVendor(vendor) {
+export async function saveVendor(vendor) {
   if (!vendor) return;
   try {
     const cloudList = await fetchCloudStore('vendor_store', []);
@@ -318,7 +309,7 @@ export async function saveSafeZohoVendor(vendor) {
     saveCloudStore('vendor_store', updatedList);
 
     try {
-      fetch('/api/zoho/vendors', {
+      fetch('/api/vendors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vendor)
@@ -327,17 +318,17 @@ export async function saveSafeZohoVendor(vendor) {
 
     return updatedList;
   } catch (err) {
-    console.warn('[saveSafeZohoVendor] Error:', err);
+    console.warn('[saveVendor] Error:', err);
   }
 }
 
 // ---------------------------
 // 3. CUSTOMERS
 // ---------------------------
-export async function getSafeZohoCustomers() {
-  // 1. Try Zoho backend endpoint
+export async function getCustomers() {
+  // 1. Try BUSINZ backend endpoint
   try {
-    const res = await fetch('/api/zoho/customers');
+    const res = await fetch('/api/customers');
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
@@ -353,20 +344,20 @@ export async function getSafeZohoCustomers() {
       return cloudCustomers;
     }
   } catch (err) {
-    console.warn('[getSafeZohoCustomers] Supabase fetch notice:', err);
+    console.warn('[getCustomers] Supabase fetch notice:', err);
   }
 
   return [];
 }
 
-export async function saveSafeZohoCustomer(customer) {
+export async function saveCustomer(customer) {
   if (!customer) return;
   try {
     // Save single customer directly to public.customers (single-record upsert)
     saveCloudStore('customer_store', customer);
 
     try {
-      fetch('/api/zoho/customers', {
+      fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(customer)
@@ -375,17 +366,17 @@ export async function saveSafeZohoCustomer(customer) {
 
     return customer;
   } catch (err) {
-    console.warn('[saveSafeZohoCustomer] Error:', err);
+    console.warn('[saveCustomer] Error:', err);
   }
 }
 
 // ---------------------------
 // 4. ITEMS & CATALOG
 // ---------------------------
-export async function getSafeZohoItems() {
-  // 1. Try Zoho backend endpoint
+export async function getItems() {
+  // 1. Try BUSINZ backend endpoint
   try {
-    const res = await fetch('/api/zoho/items');
+    const res = await fetch('/api/items');
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
@@ -402,7 +393,7 @@ export async function getSafeZohoItems() {
       return cloudItems;
     }
   } catch (err) {
-    console.warn('[getSafeZohoItems] Supabase fetch notice:', err);
+    console.warn('[getItems] Supabase fetch notice:', err);
   }
 
   return [];
@@ -411,10 +402,10 @@ export async function getSafeZohoItems() {
 // ---------------------------
 // 5. INVOICES
 // ---------------------------
-export async function getSafeZohoInvoices() {
-  // 1. Try Zoho backend endpoint
+export async function getInvoices() {
+  // 1. Try BUSINZ backend endpoint
   try {
-    const res = await fetch('/api/zoho/invoices');
+    const res = await fetch('/api/invoices');
     if (res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
@@ -430,13 +421,13 @@ export async function getSafeZohoInvoices() {
       return cloudInvoices;
     }
   } catch (err) {
-    console.warn('[getSafeZohoInvoices] Supabase fetch notice:', err);
+    console.warn('[getInvoices] Supabase fetch notice:', err);
   }
 
   return [];
 }
 
-export async function saveSafeZohoInvoice(invoice) {
+export async function saveInvoice(invoice) {
   if (!invoice) return;
   try {
     const cloudList = await fetchCloudStore('invoice_store', []);
@@ -453,7 +444,7 @@ export async function saveSafeZohoInvoice(invoice) {
     saveCloudInvoiceRow(invoice);
 
     try {
-      fetch('/api/zoho/invoices', {
+      fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(invoice)
@@ -462,6 +453,7 @@ export async function saveSafeZohoInvoice(invoice) {
 
     return updatedList;
   } catch (err) {
-    console.warn('[saveSafeZohoInvoice] Error:', err);
+    console.warn('[saveInvoice] Error:', err);
   }
 }
+

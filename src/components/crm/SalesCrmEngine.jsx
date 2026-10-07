@@ -100,8 +100,8 @@ export default function SalesCrmEngine({
   });
   const [isCloudSyncing, setIsCloudSyncing] = useState(true);
 
-  // Live Zoho customers sync on mount
-  // Live Supabase Cloud + Zoho sync on mount
+  // Live Central Customers sync on mount
+  // Live Supabase Cloud + Central sync on mount
   useEffect(() => {
     let isMounted = true;
     let syncDebounceTimer = null;
@@ -127,10 +127,10 @@ export default function SalesCrmEngine({
           if (Array.isArray(cloudInvs) && cloudInvs.length > 0) setInvoices(cloudInvs);
         }
 
-        // Fetch live Zoho Customers
+        // Fetch live Central Customers
         let liveList = [];
         try {
-          const res = await fetch('/api/zoho/customers');
+          const res = await fetch('/api/customers');
           if (res.ok) {
             const zData = await res.json();
             if (Array.isArray(zData)) liveList = zData;
@@ -138,7 +138,7 @@ export default function SalesCrmEngine({
         } catch (_) {}
 
         if (isMounted) {
-          // Atomic single update: merge cloud and live Zoho without double-setting state
+          // Atomic single update: merge cloud and live Central without double-setting state
           const map = new Map();
           (cloudCust || []).forEach(c => {
             const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
@@ -156,7 +156,7 @@ export default function SalesCrmEngine({
           }
         }
       } catch (err) {
-        console.warn('Initial Supabase/Zoho CRM sync notice:', err);
+        console.warn('Initial Supabase/Central CRM sync notice:', err);
       } finally {
         if (isMounted) setIsCloudSyncing(false);
       }
@@ -352,32 +352,30 @@ export default function SalesCrmEngine({
       console.warn('Error syncing customer to cloud store:', e);
     }
 
-    // Automatically synchronize to Zoho Books
+    // Automatically synchronize to Central Store
     try {
-      const res = await fetch('/api/zoho/customers', {
+      const res = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(customer)
       });
       if (res.ok) {
         const resJson = await res.json();
-        if (resJson && resJson.customer && resJson.customer.zohoContactId) {
-          const withZoho = {
-            ...customer,
-            ...resJson.customer,
-            zohoContactId: resJson.customer.zohoContactId
-          };
-          setCustomers(prev => prev.map(c => 
-            (c.customerCode || c.id) === custKey ? withZoho : c
-          ));
-          const refreshed = updated.map(c => 
-            (c.customerCode || c.id) === custKey ? withZoho : c
-          );
-          saveCrmStore('customers', refreshed);
-        }
+        const savedCustomer = resJson?.customer || customer;
+        const withCust = {
+          ...customer,
+          ...savedCustomer
+        };
+        setCustomers(prev => prev.map(c => 
+          (c.customerCode || c.id) === custKey ? withCust : c
+        ));
+        const refreshed = updated.map(c => 
+          (c.customerCode || c.id) === custKey ? withCust : c
+        );
+        saveCrmStore('customers', refreshed);
       }
     } catch (err) {
-      console.warn('Zoho customer background sync:', err);
+      console.warn('Customer background sync notice:', err);
     }
   };
 

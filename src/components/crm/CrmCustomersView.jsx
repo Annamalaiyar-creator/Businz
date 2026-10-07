@@ -23,8 +23,8 @@ export default function CrmCustomersView({
 }) {
   // Page mode: 'table' | 'create' | 'details' (Dedicated full-page views)
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'create' | 'details'
-  const [isSyncingZoho, setIsSyncingZoho] = useState(false);
-  const [zohoSyncMessage, setZohoSyncMessage] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomerType, setFilterCustomerType] = useState('All');
@@ -171,18 +171,17 @@ export default function CrmCustomersView({
 
   const [formCust, setFormCust] = useState(initialFormState);
 
-  // Sync with Zoho Books on component mount & manual trigger
-  // Sync with Zoho Books on component mount & manual trigger
-  const handleSyncWithZoho = async (isManual = false) => {
-    // Only perform the heavy POST sync if manually triggered by user clicking 'Sync Zoho Books'
+  // Sync with Central Database on component mount & manual trigger
+  const handleSyncWithBackend = async (isManual = false) => {
+    // Only perform the heavy POST sync if manually triggered by user clicking sync button
     if (isManual) {
-      setIsSyncingZoho(true);
+      setIsSyncing(true);
       try {
         if (Array.isArray(customers) && customers.length > 0) {
-          const unsynced = customers.filter(c => !c.zohoContactId && (c.customerCode || c.companyName));
+          const unsynced = customers.filter(c => (c.customerCode || c.companyName));
           for (const cust of unsynced) {
             try {
-              await fetch('/api/zoho/customers', {
+              await fetch('/api/customers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(cust)
@@ -193,7 +192,7 @@ export default function CrmCustomersView({
           }
         }
 
-        const res = await fetch('/api/zoho/customers');
+        const res = await fetch('/api/customers');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -202,15 +201,15 @@ export default function CrmCustomersView({
             } else if (typeof onSaveCustomer === 'function') {
               data.forEach(c => onSaveCustomer(c));
             }
-            setZohoSyncMessage({
+            setSyncMessage({
               type: 'success',
-              title: 'Zoho Books Synchronized',
-              message: `Synchronized ${data.length} customer account(s) with Zoho Books!`
+              title: 'Customers Synchronized',
+              message: `Synchronized ${data.length} customer account(s) with Central Database!`
             });
             addLiveNotification({
-              id: 'zoho_cust_sync_' + Date.now(),
-              title: 'Zoho Books Synchronized',
-              message: `Synchronized ${data.length} customer account(s) with Zoho Books!`,
+              id: 'cust_sync_' + Date.now(),
+              title: 'Customers Synchronized',
+              message: `Synchronized ${data.length} customer account(s) with Central Database!`,
               time: 'Just now',
               type: 'success',
               role: 'All',
@@ -219,20 +218,20 @@ export default function CrmCustomersView({
           }
         }
       } catch (err) {
-        console.warn('Zoho customer sync notice:', err.message);
-        setZohoSyncMessage({
+        console.warn('Customer sync notice:', err.message);
+        setSyncMessage({
           type: 'error',
-          title: 'Zoho Books Sync Notice',
-          message: err.message || 'Unable to synchronize customer accounts with Zoho Books.'
+          title: 'Customer Sync Notice',
+          message: err.message || 'Unable to synchronize customer accounts.'
         });
       } finally {
-        setIsSyncingZoho(false);
+        setIsSyncing(false);
       }
     } else {
-      // Background sync on mount: only query Zoho if customers list has not been populated yet
+      // Background sync on mount: only query database if customers list has not been populated yet
       if (!Array.isArray(customers) || customers.length === 0) {
         try {
-          const res = await fetch('/api/zoho/customers');
+          const res = await fetch('/api/customers');
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0 && typeof onBatchUpdateCustomers === 'function') {
@@ -247,7 +246,7 @@ export default function CrmCustomersView({
   // Single mount check: only sync if customers prop is currently empty
   useEffect(() => {
     if (!Array.isArray(customers) || customers.length === 0) {
-      handleSyncWithZoho(false);
+      handleSyncWithBackend(false);
     }
   }, []);
 
@@ -385,7 +384,7 @@ export default function CrmCustomersView({
     setViewMode('create');
   };
 
-  // Submit Handler for Dedicated Customer Creation & Dual Sync with Zoho Books
+  // Submit Handler for Dedicated Customer Creation & Central Sync
   const handleSaveCustomerForm = async (e) => {
     if (e) e.preventDefault();
 
@@ -482,9 +481,9 @@ export default function CrmCustomersView({
       console.error('Error syncing customer to cloud store:', e);
     }
 
-    // 3. Post to Zoho Books sync API
+    // 3. Post to Central Customers API
     try {
-      const response = await fetch('/api/zoho/customers', {
+      const response = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(record)
@@ -495,15 +494,15 @@ export default function CrmCustomersView({
         onSaveCustomer(mergedFinal);
         saveCloudStore('customer_store', mergedFinal);
       }
-      setZohoSyncMessage({
+      setSyncMessage({
         type: 'success',
-        text: resJson.message || '✅ Customer created and synchronized with Zoho Books!'
+        text: resJson.message || '✅ Customer created and synchronized successfully!'
       });
     } catch (err) {
-      console.warn('Zoho Customer Sync warning:', err);
-      setZohoSyncMessage({
+      console.warn('Customer Sync warning:', err);
+      setSyncMessage({
         type: 'info',
-        text: 'Customer created locally in Businz. Zoho Books sync will retry automatically.'
+        text: 'Customer created locally in Businz. Central sync will retry automatically.'
       });
     }
 
@@ -557,7 +556,7 @@ export default function CrmCustomersView({
                 {editingCustomer ? `Edit Customer Account: ${editingCustomer.companyName}` : 'Add New B2B Solar Customer'}
               </h1>
               <p style={{ fontSize: '13px', color: '#CFFAFE', margin: '4px 0 0 0' }}>
-                Configure client directory, enterprise KYC, billing & delivery addresses, commercial payment terms & Zoho Books sync
+                Configure client directory, enterprise KYC, billing & delivery addresses, commercial payment terms & directory sync
               </p>
             </div>
           </div>
@@ -576,7 +575,7 @@ export default function CrmCustomersView({
               style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
               <Save size={16} />
-              {editingCustomer ? 'Update & Sync to Zoho →' : 'Save & Sync to Zoho →'}
+              {editingCustomer ? 'Update Customer →' : 'Save Customer →'}
             </button>
           </div>
         </div>
@@ -647,7 +646,7 @@ export default function CrmCustomersView({
                 <option value="WhatsApp">WhatsApp Business</option>
                 <option value="Referral">Client / EPC Referral</option>
                 <option value="Trade Exhibition">Intersolar / Renewable Expo</option>
-                <option value="Zoho Books">Zoho Books Integrated</option>
+                <option value="ERP">ERP Database Import</option>
               </select>
             </div>
           </div>
@@ -1055,7 +1054,7 @@ export default function CrmCustomersView({
             style={{ backgroundColor: '#0E7490', border: 'none', color: '#FFFFFF', padding: '12px 32px', borderRadius: '10px', fontSize: '14px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)' }}
           >
             <Save size={16} />
-            {editingCustomer ? 'Update & Synchronize to Zoho Books' : 'Save Customer & Synchronize to Zoho Books'}
+            {editingCustomer ? 'Update Customer' : 'Save Customer'}
           </button>
         </div>
       </div>
@@ -1090,10 +1089,10 @@ export default function CrmCustomersView({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
       
       {/* ─── CUSTOM TOAST NOTIFICATION (MATCHING SYSTEM-WIDE NOTIFICATIONS) ─── */}
-      {zohoSyncMessage && (
+      {syncMessage && (
         <NotificationToast
-          alert={zohoSyncMessage}
-          onClose={() => setZohoSyncMessage(null)}
+          alert={syncMessage}
+          onClose={() => setSyncMessage(null)}
         />
       )}
 
@@ -1104,7 +1103,7 @@ export default function CrmCustomersView({
             Customer Directory
           </h2>
           <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-            Centralized repository with 11-point 360° account intelligence, credit limits & automatic Zoho Books synchronization
+            Centralized repository with 11-point 360° account intelligence, credit limits & automatic database synchronization
           </span>
         </div>
 
@@ -1304,7 +1303,7 @@ export default function CrmCustomersView({
                               </span>
                             </div>
                             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                              Retrieving customer directory from Businz Cloud & Zoho...
+                              Retrieving customer directory from Businz Cloud...
                             </span>
                           </div>
                         </div>
@@ -1394,11 +1393,6 @@ export default function CrmCustomersView({
                       >
                         <div style={{ fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{cust.companyName}</span>
-                          {cust.source === 'Zoho Books' && (
-                            <span style={{ fontSize: '10px', backgroundColor: '#F3E8FF', color: '#7E22CE', border: '1px solid #E9D5FF', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
-                              ZOHO
-                            </span>
-                          )}
                         </div>
                         <div style={{ fontSize: '11px', color: '#64748B' }}>{cust.city || '—'}, {cust.state || ''}</div>
                       </td>

@@ -88,9 +88,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
   const [showTerms, setShowTerms] = useState(false);
   const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD';
   const isTechAdmin = userRole === 'Technical Administrator' || userRole === 'Technical Admin' || userRole === 'Developer' || (userRole || '').startsWith('TA');
-  // Same permission rule as the sidebar: Zoho Integration is only for CEO / MD / Technical Admin
-  const canSeeIntegrations = isExecutiveOrMD || isTechAdmin;
-  
+
   const [readIds, setReadIds] = useState(() => {
     try {
       const saved = localStorage.getItem('controlroom_read_notification_ids');
@@ -678,24 +676,6 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
                   <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
                 </button>
 
-                {canSeeIntegrations && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="bz-menu-item"
-                    onClick={() => {
-                      setShowRoleMenu(false);
-                      onSelectTab && onSelectTab('Integration');
-                    }}
-                  >
-                    <span className="bz-menu-icon"><GitBranch size={16} /></span>
-                    <span style={{ flex: 1 }}>
-                      <span className="bz-menu-title">Zoho Integration</span>
-                      <span className="bz-menu-sub">Connection & sync status</span>
-                    </span>
-                    <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
-                  </button>
-                )}
 
                 <button
                   type="button"

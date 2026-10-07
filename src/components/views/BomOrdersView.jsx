@@ -94,7 +94,7 @@ export default function BomOrdersView(props) {
     return true;
   });
 
-  // Customer List from Supabase & Zoho
+  // Customer List from Supabase & Central Store
   const [customerList, setCustomerList] = useState([]);
 
   // Active Presets state (loaded from master JSON + localStorage/cloud)
@@ -183,10 +183,10 @@ export default function BomOrdersView(props) {
           try {
             let custs = await fetchCloudStore('customer_store', []);
             if (!Array.isArray(custs) || custs.length === 0) {
-              const zohoCustRes = await fetch('/api/zoho/customers');
-              if (zohoCustRes.ok) {
-                const zCusts = await zohoCustRes.json();
-                if (Array.isArray(zCusts) && zCusts.length > 0) custs = zCusts;
+              const custRes = await fetch('/api/customers');
+              if (custRes.ok) {
+                const fetchedCusts = await custRes.json();
+                if (Array.isArray(fetchedCusts) && fetchedCusts.length > 0) custs = fetchedCusts;
               }
             }
             if (Array.isArray(custs) && custs.length > 0) {

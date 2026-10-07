@@ -172,7 +172,7 @@ export default function AccountsVerificationModal({
   useEffect(() => {
     if (!assignedInvoiceNo || assignedInvoiceNo === 'Pending Confirmation') {
       setIsFetchingInvNo(true);
-      fetch('/api/zoho/next-invoice-number')
+      fetch('/api/next-invoice-number')
         .then(res => res.json())
         .then(data => {
           if (data && data.nextInvNo) {
@@ -248,7 +248,7 @@ export default function AccountsVerificationModal({
     let finalInvNo = assignedInvoiceNo;
     if (!finalInvNo || finalInvNo === 'Pending Confirmation') {
       try {
-        const res = await fetch('/api/zoho/next-invoice-number');
+        const res = await fetch('/api/next-invoice-number');
         if (res.ok) {
           const data = await res.json();
           if (data && data.nextInvNo) {
@@ -386,7 +386,7 @@ export default function AccountsVerificationModal({
 
     setAccountsVerificationModal(null);
     if (typeof showCustomAlert === 'function') {
-      showCustomAlert(`Accounts Verification approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches Zoho Books sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`, 'Accounts Verification Completed', 'success');
+      showCustomAlert(`Accounts Verification approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches BUSINZ Native Catalog sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`, 'Accounts Verification Completed', 'success');
     }
   };
 
@@ -425,7 +425,7 @@ export default function AccountsVerificationModal({
                 display: 'inline-flex', alignItems: 'center', gap: '6px'
               }}>
                 <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
-                Zoho Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
+                Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
               </span>
               <StatusBadge
                 status={(isAlreadyCompleted || isVerified) ? 'ACCOUNTS VERIFIED' : isPartialVerified ? 'PARTIALLY VERIFIED' : 'PENDING VERIFICATION'}

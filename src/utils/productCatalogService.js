@@ -4,7 +4,7 @@ import { centralInventoryStore } from './centralInventoryStore.js';
 /**
  * Product Catalog & Live Stock Service
  * Provides the unified, full 285+ standardized VRM products catalog
- * combined with real-time stock balances from Central Inventory Store and Zoho Books.
+ * combined with real-time stock balances from Central Inventory Store.
  */
 export const getFullProductsCatalogWithStock = (directItems = null) => {
   // 1. Build live stock map from Central Inventory Store
@@ -174,7 +174,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   catalogMap.set('mini rail 300 mm', miniRail300Record);
   catalogMap.set('mini rail', miniRail300Record);
 
-  // 3. Include any items from Zoho, custom item store, or raw materials store
+  // 3. Include any items from custom item store or raw materials store
   const mergeExtraItems = (items) => {
     if (!Array.isArray(items)) return;
     items.forEach(ci => {

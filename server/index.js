@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import https from 'https';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -28,15 +27,6 @@ import {
   validateBusinzSession,
   validateBomCode
 } from './bomDocumentService.js';
-import {
-  getZohoAccessToken as getCentralZohoAccessToken,
-  invalidateZohoAccessToken,
-  zohoRequest,
-  getZohoAuthStats,
-  initZohoTokenStore,
-  configureSessionProvider
-} from './zohoAuthService.js';
-
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -46,12 +36,9 @@ dotenv.config();
 // In-memory active cache for server stores
 let supabaseMemoryStore = {};
 
-// Initialize self-hosted PostgreSQL database on Hostinger VPS and restore Zoho token
-initPostgresDatabase().then(() => {
-  initZohoTokenStore().catch(err => console.warn('[Zoho Auth Init Notice]:', err.message));
-}).catch(err => {
+// Initialize self-hosted PostgreSQL database on Hostinger VPS
+initPostgresDatabase().catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
-  initZohoTokenStore().catch(err2 => console.warn('[Zoho Auth Init Notice]:', err2.message));
 });
 
 // Self-hosted database client (queries local PostgreSQL directly with fallback to disk)
@@ -100,7 +87,7 @@ const loadDatabaseCustomers = async () => {
         gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
         dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
         same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-        source, zoho_contact_id, primary_contact, email, phone, status, notes, created_at, updated_at
+        source, primary_contact, email, phone, status, notes, created_at, updated_at
       `)
       .order('company_name', { ascending: true });
 
@@ -139,8 +126,7 @@ const loadDatabaseCustomers = async () => {
         assignedSalesperson: c.assigned_salesperson || 'Sales Rep',
         salesPerson: c.assigned_salesperson || 'Sales Rep',
         c8: c.assigned_salesperson || 'Sales Rep',
-        source: c.source || (c.zoho_contact_id ? 'Zoho Books' : 'Manual'),
-        zohoContactId: c.zoho_contact_id || null,
+        source: c.source || 'Manual',
         primaryContact: c.primary_contact || {},
         email: c.email || '—',
         c5: c.email || '—',
@@ -178,6 +164,27 @@ const loadLocalCustomers = () => {
   if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
     return supabaseMemoryStore.customer_store;
   }
+  try {
+    const p1 = getStoreFilePath('crm_customers.json');
+    if (fs.existsSync(p1)) {
+      const data = JSON.parse(fs.readFileSync(p1, 'utf8'));
+      if (Array.isArray(data) && data.length > 0) {
+        supabaseMemoryStore.customer_store = data;
+        supabaseMemoryStore.crm_customers = data;
+        return data;
+      }
+    }
+  } catch (_) {}
+  try {
+    const p2 = getStoreFilePath('customer_store.json');
+    if (fs.existsSync(p2)) {
+      const data = JSON.parse(fs.readFileSync(p2, 'utf8'));
+      if (Array.isArray(data) && data.length > 0) {
+        supabaseMemoryStore.customer_store = data;
+        return data;
+      }
+    }
+  } catch (_) {}
   return [];
 };
 
@@ -860,17 +867,14 @@ const getDatabaseStore = async (key) => {
                     parsed.forEach(p => {
                       const k1 = normalize(p.poNo);
                       const k2 = normalize(p.id);
-                      const k3 = normalize(p.zohoId);
                       if (k1) poMap.set(k1, p);
                       if (k2) poMap.set(k2, p);
-                      if (k3) poMap.set(k3, p);
                     });
                   }
                   diskPOs.forEach(d => {
                     const k1 = normalize(d.poNo);
                     const k2 = normalize(d.id);
-                    const k3 = normalize(d.zohoId);
-                    const cloudItem = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || (k3 && poMap.get(k3)) || {};
+                    const cloudItem = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || {};
                     const dRank = getPoStageRank(d);
                     const cloudRank = getPoStageRank(cloudItem);
                     const winner = dRank >= cloudRank ? d : cloudItem;
@@ -1086,8 +1090,7 @@ const saveLocalCustomers = async (customers) => {
       credit_days: Number(c.creditDays || 0),
       payment_terms: c.paymentTerms || 'Due on Receipt',
       assigned_salesperson: c.assignedSalesperson || c.salesPerson || c.c8 || 'Sales Rep',
-      source: c.source || (c.zohoContactId ? 'Zoho Books' : 'Manual'),
-      zoho_contact_id: c.zohoContactId || null,
+      source: c.source || 'Manual',
       primary_contact: c.primaryContact || {},
       email: c.email || c.c5 || '—',
       phone: c.phone || c.c4 || '—',
@@ -1602,104 +1605,6 @@ app.get('/api/media/find/:name', (req, res) => {
   }
 });
 
-const loadCredentialsFromEnv = () => {
-  const DEFAULT_ORG_ID = process.env.ZOHO_ORG_ID || '60020613233';
-  const DEFAULT_REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN || '1000.72a818ee439bb2de32b531f9dc5588ee.bf37bcc95e83b89d487c42fb342042ca';
-  const DEFAULT_CLIENT_ID = process.env.ZOHO_CLIENT_ID || '1000.GLVQL7WI3FS3N0YC5F8VPP59OL73OH';
-  const DEFAULT_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || '12442de238386baed5a051d7036d71540c4ff90db4';
-
-  // Active VRM Structures Zoho credentials
-  process.env.ZOHO_CLIENT_ID = DEFAULT_CLIENT_ID;
-  process.env.ZOHO_CLIENT_SECRET = DEFAULT_CLIENT_SECRET;
-  process.env.ZOHO_ORG_ID = DEFAULT_ORG_ID;
-  process.env.ZOHO_REFRESH_TOKEN = DEFAULT_REFRESH_TOKEN;
-
-  return { 
-    orgId: DEFAULT_ORG_ID, 
-    apiToken: DEFAULT_REFRESH_TOKEN, 
-    connected: true 
-  };
-};
-
-const initialCreds = loadCredentialsFromEnv();
-
-let cachedToken = '';
-let cachedExpiresAt = 0;
-try {
-  const p = path.join(__dirname, 'zoho_token_cache.json');
-  if (fs.existsSync(p)) {
-    const c = JSON.parse(fs.readFileSync(p, 'utf8'));
-    if (c.accessToken && c.tokenExpiresAt > Date.now() + 60000) {
-      cachedToken = c.accessToken;
-      cachedExpiresAt = c.tokenExpiresAt;
-    }
-  }
-} catch (_) {}
-
-// In-memory session store for Zoho OAuth tokens, initializing from env if present
-let zohoSession = {
-  connected: initialCreds.connected,
-  orgId: initialCreds.orgId,
-  apiToken: initialCreds.apiToken,
-  accessToken: cachedToken,
-  tokenExpiresAt: cachedExpiresAt,
-  organizationName: 'VRM Structures India Pvt Ltd.'
-};
-
-// Wire dynamic session provider to centralized Zoho Auth service
-configureSessionProvider(() => ({
-  refreshToken: zohoSession.apiToken || process.env.ZOHO_REFRESH_TOKEN,
-  clientId: process.env.ZOHO_CLIENT_ID,
-  clientSecret: process.env.ZOHO_CLIENT_SECRET,
-  orgId: zohoSession.orgId
-}));
-
-const saveCredentialsToEnv = (orgId, apiToken, clientId, clientSecret) => {
-  try {
-    const envPath = path.resolve(process.cwd(), '.env');
-    let content = '';
-    if (fs.existsSync(envPath)) {
-      content = fs.readFileSync(envPath, 'utf8');
-    }
-    
-    if (orgId !== undefined) {
-      if (content.includes('ZOHO_ORG_ID=')) {
-        content = content.replace(/ZOHO_ORG_ID=.*/, `ZOHO_ORG_ID=${orgId}`);
-      } else {
-        content += `\nZOHO_ORG_ID=${orgId}`;
-      }
-    }
-    
-    if (apiToken !== undefined) {
-      if (content.includes('ZOHO_REFRESH_TOKEN=')) {
-        content = content.replace(/ZOHO_REFRESH_TOKEN=.*/, `ZOHO_REFRESH_TOKEN=${apiToken}`);
-      } else {
-        content += `\nZOHO_REFRESH_TOKEN=${apiToken}`;
-      }
-    }
-
-    if (clientId) {
-      if (content.includes('ZOHO_CLIENT_ID=')) {
-        content = content.replace(/ZOHO_CLIENT_ID=.*/, `ZOHO_CLIENT_ID=${clientId}`);
-      } else {
-        content += `\nZOHO_CLIENT_ID=${clientId}`;
-      }
-    }
-
-    if (clientSecret) {
-      if (content.includes('ZOHO_CLIENT_SECRET=')) {
-        content = content.replace(/ZOHO_CLIENT_SECRET=.*/, `ZOHO_CLIENT_SECRET=${clientSecret}`);
-      } else {
-        content += `\nZOHO_CLIENT_SECRET=${clientSecret}`;
-      }
-    }
-    
-    fs.writeFileSync(envPath, content.trim() + '\n', 'utf8');
-  } catch (err) {
-    console.error("Failed to write credentials to .env file:", err);
-  }
-};
-
 // ============================================================================
 // BUSINZ - TALLYPRIME & TALLY.ERP 9 HTTP CONNECTOR & XML INTEGRATION
 // ============================================================================
@@ -1801,114 +1706,6 @@ app.post('/api/tally/sync', async (req, res) => {
   }
 });
 
-// 1. Check Connection Status and Credentials
-app.get('/api/zoho/status', async (req, res) => {
-  let orgName = zohoSession.organizationName || 'ARMS AI';
-  if (zohoSession.connected && zohoSession.apiToken) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: '/books/v3/organizations',
-        method: 'GET',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`
-        }
-      };
-      const orgData = await new Promise((resolve) => {
-        const r = https.request(options, (resp) => {
-          let body = '';
-          resp.on('data', c => body += c);
-          resp.on('end', () => {
-            try { resolve(JSON.parse(body)); } catch(e) { resolve(null); }
-          });
-        });
-        r.on('error', () => resolve(null));
-        r.end();
-      });
-      if (orgData && Array.isArray(orgData.organizations)) {
-        const matched = orgData.organizations.find(o => String(o.organization_id) === String(zohoSession.orgId)) || orgData.organizations[0];
-        if (matched && matched.name) {
-          orgName = matched.name;
-          zohoSession.organizationName = matched.name;
-        }
-      }
-    } catch(err) {
-      console.error('Error fetching org name from Zoho:', err.message);
-    }
-  }
-
-  res.json({
-    connected: zohoSession.connected,
-    orgId: zohoSession.orgId,
-    apiToken: zohoSession.apiToken,
-    clientId: process.env.ZOHO_CLIENT_ID || '',
-    organizationName: orgName
-  });
-});
-
-// 2. Save Credentials (API Token, Org ID, Client ID, Client Secret)
-app.post('/api/zoho/credentials', (req, res) => {
-  const { orgId, apiToken, clientId, clientSecret } = req.body;
-  if (!orgId || !apiToken) {
-    return res.status(400).json({ error: 'Organization ID and Refresh Token are required.' });
-  }
-
-  const effectiveClientId = clientId ? clientId.trim() : (process.env.ZOHO_CLIENT_ID || '1000.9U5BAN338075M5HBI3U8K1VBNKUU8K');
-  const effectiveClientSecret = clientSecret ? clientSecret.trim() : (process.env.ZOHO_CLIENT_SECRET || 'e82079a5165e3b2e75fdc602f3e08fd38489d75f13');
-
-  zohoSession.connected = true;
-  zohoSession.orgId = orgId.trim();
-  zohoSession.apiToken = apiToken.trim();
-  zohoSession.accessToken = ''; // Reset token to force immediate re-authentication
-  zohoSession.tokenExpiresAt = 0;
-  invalidateZohoAccessToken().catch(console.warn);
-  
-  process.env.ZOHO_CLIENT_ID = effectiveClientId;
-  process.env.ZOHO_CLIENT_SECRET = effectiveClientSecret;
-  process.env.ZOHO_ORG_ID = orgId.trim();
-  process.env.ZOHO_REFRESH_TOKEN = apiToken.trim();
-
-  saveCredentialsToEnv(orgId.trim(), apiToken.trim(), effectiveClientId, effectiveClientSecret);
-  
-  res.json({ success: true, message: 'Zoho Account credentials updated successfully!' });
-});
-
-// 3. Disconnect from Zoho
-app.post('/api/zoho/disconnect', (req, res) => {
-  invalidateZohoAccessToken().catch(console.warn);
-  zohoSession = {
-    connected: false,
-    orgId: '',
-    apiToken: '',
-    organizationName: 'ARMS AI'
-  };
-  
-  // Wipe from .env
-  saveCredentialsToEnv('', '');
-  
-  res.json({ success: true });
-});
-
-// 4. Trigger Manual Sync
-app.post('/api/zoho/sync', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.status(401).json({ error: 'Zoho not connected. Configure credentials first.' });
-  }
-  
-  try {
-    // Force testing Zoho access token validity
-    const accessToken = await getZohoAccessToken();
-    // Test fetch to confirm organization and access token are healthy
-    await fetchZohoItems(accessToken);
-    res.json({ success: true, timestamp: new Date().toISOString() });
-  } catch (err) {
-    console.error("Zoho Sync authentication or connection failed:", err);
-    res.status(500).json({ error: `Sync failed: ${err.message || 'Check OAuth configuration'}` });
-  }
-});
-
 // Local Store file helpers
 const loadLocalPOs = () => {
   let memPOs = [];
@@ -1928,17 +1725,14 @@ const loadLocalPOs = () => {
         memPOs.forEach(p => {
           const k1 = normalize(p.poNo);
           const k2 = normalize(p.id);
-          const k3 = normalize(p.zohoId);
           if (k1) map.set(k1, p);
           if (k2) map.set(k2, p);
-          if (k3) map.set(k3, p);
         });
         // Merge with diskPOs (disk has the authoritative local edits)
         diskPOs.forEach(d => {
           const k1 = normalize(d.poNo);
           const k2 = normalize(d.id);
-          const k3 = normalize(d.zohoId);
-          const existing = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3)) || {};
+          const existing = (k1 && map.get(k1)) || (k2 && map.get(k2)) || {};
           const items = (Array.isArray(d.items) && d.items.length > 0) ? d.items : (existing.items || []);
 
           const dOrd = Number(d.totalOrderedQty || 0);
@@ -2012,16 +1806,13 @@ const loadLocalPOs = () => {
           };
           if (k1) map.set(k1, mergedItem);
           if (k2) map.set(k2, mergedItem);
-          if (k3) map.set(k3, mergedItem);
         });
         // Also ensure any existing in-memory/cloud POs not on disk are in the map
         memPOs.forEach(p => {
           const k1 = normalize(p.poNo);
           const k2 = normalize(p.id);
-          const k3 = normalize(p.zohoId);
           if (k1 && !map.has(k1)) map.set(k1, p);
           if (k2 && !map.has(k2)) map.set(k2, p);
-          if (k3 && !map.has(k3)) map.set(k3, p);
         });
         const merged = Array.from(new Set(map.values()));
         supabaseMemoryStore.po_store = merged;
@@ -2048,6 +1839,16 @@ const loadLocalVendors = () => {
   if (supabaseMemoryStore.vendor_store && Array.isArray(supabaseMemoryStore.vendor_store) && supabaseMemoryStore.vendor_store.length > 0) {
     return supabaseMemoryStore.vendor_store;
   }
+  try {
+    const p = getStoreFilePath('vendor_store.json');
+    if (fs.existsSync(p)) {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (Array.isArray(data) && data.length > 0) {
+        supabaseMemoryStore.vendor_store = data;
+        return data;
+      }
+    }
+  } catch (_) {}
   return [];
 };
 
@@ -2195,9 +1996,6 @@ app.get('/api/realtime-events', (req, res) => {
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   try {
-    if ((key === 'sales_pi_store' || key === 'proforma_invoice_store') && zohoEstimatesCache.data && Array.isArray(zohoEstimatesCache.data) && zohoEstimatesCache.data.length > 0) {
-      return res.json({ success: true, data: zohoEstimatesCache.data });
-    }
     const data = await getDatabaseStore(key);
     res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
@@ -2267,16 +2065,13 @@ app.post('/api/store/:key', async (req, res) => {
           currentData.forEach(p => {
             const k1 = normalize(p.poNo);
             const k2 = normalize(p.id);
-            const k3 = normalize(p.zohoId);
             if (k1) poMap.set(k1, p);
             if (k2) poMap.set(k2, p);
-            if (k3) poMap.set(k3, p);
           });
           storeData.forEach(item => {
             const k1 = normalize(item.poNo);
             const k2 = normalize(item.id);
-            const k3 = normalize(item.zohoId);
-            const existing = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2)) || (k3 && poMap.get(k3));
+            const existing = (k1 && poMap.get(k1)) || (k2 && poMap.get(k2));
             if (existing) {
               const eRank = getPoStageRank(existing);
               const iRank = getPoStageRank(item);
@@ -2482,112 +2277,82 @@ app.delete('/api/store/:key/:id', async (req, res) => {
   return res.status(400).json({ success: false, error: `Deletion not supported for store key: ${key}` });
 });
 
-// Centralized Zoho OAuth Token Provider with Concurrency Lock, 5-min Safety Buffer & Durable Storage
-const getZohoAccessToken = async (forceRefresh = false) => {
-  const token = await getCentralZohoAccessToken(forceRefresh);
-  const authStats = getZohoAuthStats();
-  zohoSession.accessToken = token;
-  zohoSession.tokenExpiresAt = authStats.tokenExpiresAt;
-  return token;
-};
-
-// Safe operational metrics endpoint (Audit & Health check, zero secrets exposed)
-app.get('/api/zoho/auth-stats', (req, res) => {
-  res.json(getZohoAuthStats());
-});
-
-// In-memory reference caches to protect Zoho daily API limits (24-hour TTL)
-const ZOHO_CACHE_TTL = 24 * 60 * 60 * 1000;
-let zohoVendorsCache = { data: null, timestamp: 0 };
-let zohoItemsCache = { data: null, timestamp: 0 };
-let zohoPurchaseOrdersCache = { data: null, timestamp: 0 };
-let zohoEstimatesCache = { data: null, timestamp: 0 };
-let zohoEstimatesRateLimitedUntil = 0;
-
-const fetchZohoVendors = async (accessToken, forceRefresh = false) => {
-  if (!forceRefresh && zohoVendorsCache.data && (Date.now() - zohoVendorsCache.timestamp < ZOHO_CACHE_TTL)) {
-    return zohoVendorsCache.data;
-  }
-
-  const response = await zohoRequest({
-    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&contact_type=vendor`,
-    method: 'GET'
-  });
-
-  if (response.ok && response.data && Array.isArray(response.data.contacts)) {
-    zohoVendorsCache = { data: response.data, timestamp: Date.now() };
-  }
-  return response.data || { contacts: [] };
-};
-
-// Helper to create a new Vendor contact in Zoho Books
-const createZohoVendor = async (accessToken, vendorPayload) => {
-  const response = await zohoRequest({
-    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
-    method: 'POST'
-  }, vendorPayload);
-  return response.data;
-};
-
-// Endpoint to create a new vendor in Zoho Books
-app.post('/api/zoho/vendors', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.json({ success: true, message: 'Saved locally (Zoho not connected)', vendor: req.body });
-  }
-
+// Endpoint to create or update a vendor in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post('/api/vendors', async (req, res) => {
   try {
-    const accessToken = await getZohoAccessToken();
-    const vendorPayload = {
-      contact_name: req.body.name || req.body.companyName || 'New Vendor',
-      company_name: req.body.companyName || req.body.name || 'New Vendor',
-      contact_type: 'vendor',
-      email: req.body.email && req.body.email !== '—' ? req.body.email : undefined,
-      phone: req.body.phone && req.body.phone !== '—' ? req.body.phone : undefined,
-      mobile: req.body.mobile && req.body.mobile !== '—' ? req.body.mobile : undefined,
-      currency_code: req.body.currency || 'INR',
-      pan_no: req.body.pan && req.body.pan !== '—' ? req.body.pan : undefined
+    const localVendors = loadLocalVendors();
+    const incoming = req.body || {};
+    const vendorName = String(incoming.name || incoming.companyName || 'New Vendor').trim();
+    const vendorId = incoming.id || incoming.code || incoming.vendorCode || `VEND-${100 + localVendors.length + 1}`;
+
+    const vendorRecord = {
+      id: vendorId,
+      code: incoming.code || vendorId,
+      name: vendorName,
+      companyName: incoming.companyName || vendorName,
+      type: incoming.type || 'Supplier',
+      contact: incoming.contact || incoming.contactPerson || '—',
+      phone: incoming.phone && incoming.phone !== '—' ? incoming.phone : '—',
+      mobile: incoming.mobile && incoming.mobile !== '—' ? incoming.mobile : '—',
+      email: incoming.email && incoming.email !== '—' ? incoming.email : '—',
+      cat: incoming.cat || incoming.category || 'General Vendor',
+      status: incoming.status || 'Active',
+      spend: incoming.spend || '—',
+      payable: incoming.payable || '₹0.00',
+      terms: incoming.terms || incoming.paymentTerms || 'Due on Receipt',
+      gstin: incoming.gstin || incoming.gstNo || incoming.gstNumber || '—',
+      gstTreatment: incoming.gstTreatment || '—',
+      sourceOfSupply: incoming.sourceOfSupply || '—',
+      pan: incoming.pan || incoming.pan_no || '—',
+      currency: incoming.currency || incoming.currency_code || 'INR',
+      website: incoming.website || '—',
+      address: incoming.address || '',
+      createdAt: incoming.createdAt || new Date().toISOString()
     };
 
-    let result = await createZohoVendor(accessToken, vendorPayload);
-    if (result && (result.code === 0 || result.contact)) {
-      zohoVendorsCache.timestamp = 0;
-      return res.json({
-        success: true,
-        message: 'Vendor created in Zoho Books successfully!',
-        contact: result.contact
-      });
+    const targetIdClean = String(vendorRecord.id).toLowerCase().trim();
+    const targetNameClean = vendorName.toLowerCase().trim();
+
+    // In-place update or prepend
+    const existingIdx = localVendors.findIndex(v => {
+      const vId = String(v.id || '').toLowerCase().trim();
+      const vCode = String(v.code || '').toLowerCase().trim();
+      const vName = String(v.name || v.companyName || '').toLowerCase().trim();
+      return (targetIdClean && (vId === targetIdClean || vCode === targetIdClean)) || (targetNameClean && vName === targetNameClean);
+    });
+
+    let updatedVendors;
+    if (existingIdx !== -1) {
+      localVendors[existingIdx] = { ...localVendors[existingIdx], ...vendorRecord };
+      updatedVendors = [...localVendors];
     } else {
-      console.warn('[ZOHO VENDOR CREATE NOTICE]', result);
-      return res.status(400).json({
-        error: (result && result.message) || 'Failed to create vendor in Zoho Books.'
-      });
+      updatedVendors = [vendorRecord, ...localVendors];
     }
+
+    saveLocalVendors(updatedVendors);
+
+    return res.json({
+      success: true,
+      message: 'Vendor saved in BUSINZ successfully!',
+      vendor: vendorRecord,
+      contact: {
+        contact_id: vendorRecord.id,
+        contact_name: vendorRecord.name,
+        company_name: vendorRecord.companyName,
+        contact_type: 'vendor',
+        email: vendorRecord.email,
+        phone: vendorRecord.phone,
+        status: vendorRecord.status
+      }
+    });
   } catch (err) {
-    console.error('[ZOHO VENDOR CREATE ERROR]', err);
-    res.status(500).json({ error: 'Failed to create vendor in Zoho Books: ' + err.message });
+    console.error('[BUSINZ VENDOR SAVE ERROR]', err);
+    res.status(500).json({ error: 'Failed to save vendor in BUSINZ: ' + err.message });
   }
 });
 
-// Helper to fetch customer contacts from Zoho Books
-const fetchZohoCustomers = async (accessToken) => {
-  const response = await zohoRequest({
-    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}&contact_type=customer`,
-    method: 'GET'
-  });
-  return response.data;
-};
-
-// Helper to create a new Customer contact in Zoho Books
-const createZohoCustomer = async (accessToken, customerPayload) => {
-  const response = await zohoRequest({
-    path: `/books/v3/contacts?organization_id=${zohoSession.orgId}`,
-    method: 'POST'
-  }, customerPayload);
-  return response.data;
-};
-
-// Endpoint to create a new customer in Zoho Books
-app.post('/api/zoho/customers', async (req, res) => {
+// Endpoint to create a new customer in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post('/api/customers', async (req, res) => {
   const localCustomers = loadLocalCustomers();
   const incoming = req.body;
 
@@ -2648,495 +2413,34 @@ app.post('/api/zoho/customers', async (req, res) => {
   // 1. Immediately persist to disk storage & Supabase (Never delete customers sharing same companyName)
   const updatedCustomers = [
     localCustomerRecord,
-    ...localCustomers.filter(c => 
-      (c.customerCode || c.id) !== localCustomerRecord.customerCode &&
-      (!localCustomerRecord.zohoContactId || !c.zohoContactId || c.zohoContactId !== localCustomerRecord.zohoContactId)
-    )
+    ...localCustomers.filter(c => (c.customerCode || c.id) !== localCustomerRecord.customerCode)
   ];
   saveLocalCustomers(updatedCustomers);
 
-  if (!zohoSession.connected) {
-    return res.json({ success: true, message: 'Saved locally in Control Room (Zoho not connected)', customer: localCustomerRecord });
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const contactPersons = [];
-    if (localCustomerRecord.primaryContact && localCustomerRecord.primaryContact.name) {
-      const names = localCustomerRecord.primaryContact.name.trim().split(' ');
-      contactPersons.push({
-        first_name: names[0] || 'Contact',
-        last_name: names.slice(1).join(' ') || 'Person',
-        email: localCustomerRecord.primaryContact.email || undefined,
-        phone: localCustomerRecord.primaryContact.phone || undefined,
-        mobile: localCustomerRecord.primaryContact.whatsapp || localCustomerRecord.primaryContact.phone || undefined,
-        is_primary_contact: true
-      });
-    }
-
-    const billingAddress = {
-      address: (localCustomerRecord.address || '').slice(0, 80),
-      city: (localCustomerRecord.city || '').slice(0, 40),
-      state: (localCustomerRecord.state || '').slice(0, 40),
-      zip: (localCustomerRecord.pincode || '').slice(0, 20),
-      country: 'India'
-    };
-
-    const shippingAddress = {
-      address: (localCustomerRecord.dispatchAddress || localCustomerRecord.address || '').slice(0, 80),
-      city: (localCustomerRecord.dispatchCity || localCustomerRecord.city || '').slice(0, 40),
-      state: (localCustomerRecord.dispatchState || localCustomerRecord.state || '').slice(0, 40),
-      zip: (localCustomerRecord.dispatchPincode || localCustomerRecord.pincode || '').slice(0, 20),
-      country: 'India'
-    };
-
-    const baseCompanyName = String(localCustomerRecord.companyName || localCustomerRecord.customerName || incoming.code || 'Valued Customer').trim();
-    const custIdentifier = localCustomerRecord.customerCode || customerId;
-    const contactNameVal = `${baseCompanyName} [${custIdentifier}]`;
-    const companyNameVal = baseCompanyName;
-
-    const rawGst = String(localCustomerRecord.gstNumber || '').trim();
-    const isValidGst = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(rawGst);
-
-    const zohoPayload = {
-      contact_name: contactNameVal,
-      company_name: companyNameVal,
-      contact_type: 'customer',
-      customer_sub_type: 'business',
-      currency_code: 'INR',
-      pan_no: localCustomerRecord.panNumber ? String(localCustomerRecord.panNumber).trim().slice(0, 10) : undefined,
-      billing_address: billingAddress,
-      shipping_address: shippingAddress,
-      contact_persons: contactPersons.length > 0 ? contactPersons : undefined,
-      notes: `Customer Code: ${custIdentifier}${rawGst ? ` | GSTIN: ${rawGst}` : ''} | Created via Control Room B2B Solar CRM. Type: ${localCustomerRecord.customerType || 'EPC Contractor'}`
-    };
-
-    let result = await createZohoCustomer(accessToken, zohoPayload);
-
-    // Auto-resolve Zoho code 8 / Invalid Element error (e.g. if any field is rejected by Zoho org config)
-    if (result && result.code === 8 && result.message) {
-      const match = result.message.match(/Invalid Element\s+(\w+)/i);
-      if (match && match[1]) {
-        const invalidKey = match[1];
-        console.warn(`[Zoho Contact Notice] Stripping invalid element "${invalidKey}" and retrying customer creation...`);
-        delete zohoPayload[invalidKey];
-        result = await createZohoCustomer(accessToken, zohoPayload);
-      }
-    }
-
-    // Auto-resolve Zoho code 3062 / duplicate contact name error
-    if (result && (result.code === 3062 || (result.message && result.message.toLowerCase().includes('already exists')))) {
-      console.log(`[Zoho Contact Notice] Contact "${contactNameVal}" already exists in Zoho Books. Linking or resolving unique name...`);
-      try {
-        const existingData = await fetchZohoCustomers(accessToken);
-        if (existingData && Array.isArray(existingData.contacts)) {
-          const targetName = contactNameVal.toLowerCase().trim();
-          const targetComp = companyNameVal.toLowerCase().trim();
-          const targetBase = baseCompanyName.toLowerCase().trim();
-
-          const exactMatch = existingData.contacts.find(c => {
-            const zName = (c.contact_name || '').toLowerCase().trim();
-            const zComp = (c.company_name || '').toLowerCase().trim();
-            return zName === targetName || zName === targetBase || zComp === targetComp || zComp === targetBase;
-          });
-          if (exactMatch && exactMatch.contact_id) {
-            localCustomerRecord.zohoContactId = exactMatch.contact_id;
-            const finalized = updatedCustomers.map(c => 
-              (c.customerCode === localCustomerRecord.customerCode || c.id === localCustomerRecord.id) 
-                ? { ...c, zohoContactId: exactMatch.contact_id } 
-                : c
-            );
-            saveLocalCustomers(finalized);
-            return res.json({
-              success: true,
-              message: 'Customer linked with existing Zoho Books contact successfully!',
-              customer: localCustomerRecord,
-              zohoContact: exactMatch
-            });
-          }
-        }
-      } catch (eMatch) {
-        console.warn('Error matching existing Zoho contact:', eMatch.message);
-      }
-
-      // If not linked to existing, disambiguate contact name with contact person or code and retry
-      const contactPersonName = localCustomerRecord.primaryContact && localCustomerRecord.primaryContact.name;
-      const suffix = contactPersonName || localCustomerRecord.customerCode || Date.now();
-      const disambiguatedName = `${companyNameVal} (${suffix})`;
-      console.log(`[Zoho Retry] Retrying customer creation with unique contact_name: "${disambiguatedName}"`);
-      result = await createZohoCustomer(accessToken, { ...zohoPayload, contact_name: disambiguatedName });
-    }
-
-    if (result && (result.code === 0 || result.contact)) {
-      if (result.contact && result.contact.contact_id) {
-        localCustomerRecord.zohoContactId = result.contact.contact_id;
-        const finalized = updatedCustomers.map(c => 
-          (c.customerCode === localCustomerRecord.customerCode || c.id === localCustomerRecord.id) 
-            ? { ...c, zohoContactId: result.contact.contact_id } 
-            : c
-        );
-        saveLocalCustomers(finalized);
-      }
-      return res.json({
-        success: true,
-        message: 'Customer registered in Control Room and synchronized to Zoho Books successfully!',
-        customer: localCustomerRecord,
-        zohoContact: result.contact
-      });
-    } else {
-      console.warn('[ZOHO CUSTOMER CREATE NOTICE]', result);
-      return res.json({
-        success: true,
-        warning: `Customer saved in Control Room, but Zoho Books responded: ${(result && result.message) || 'Unknown response'}`,
-        customer: localCustomerRecord
-      });
-    }
-  } catch (err) {
-    console.error('[ZOHO CUSTOMER CREATE ERROR]', err);
-    return res.json({
-      success: true,
-      warning: `Customer saved in Control Room. Zoho API synchronization notice: ${err.message}`,
-      customer: localCustomerRecord
-    });
-  }
+  // Return authoritative BUSINZ customer record with zero remote calls
+  return res.json({
+    success: true,
+    message: 'Customer registered in BUSINZ successfully!',
+    customer: localCustomerRecord
+  });
 });
 
-// Real-time synchronization endpoint retrieving live customers from Zoho Books
-app.get('/api/zoho/customers', async (req, res) => {
-  const forceRefresh = req.query.force === 'true';
+// BUSINZ Native Customers endpoint (Native BUSINZ Store)
+app.get('/api/customers', async (req, res) => {
   const localCustomers = loadLocalCustomers();
-
-  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
-  if (!forceRefresh && Array.isArray(localCustomers) && localCustomers.length > 0) {
-    return res.json(localCustomers);
-  }
-
-  if (!zohoSession.connected) {
-    return res.json(localCustomers);
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const data = await fetchZohoCustomers(accessToken);
-
-    if (data && data.contacts && Array.isArray(data.contacts)) {
-      // Map raw Zoho Books contacts
-      const zohoCustomers = data.contacts.map((c, idx) => {
-        const bAddr = c.billing_address || {};
-        const codeMatch = (c.contact_name || '').match(/\[(CUST-[^\]]+)\]/i);
-        const extractedCode = codeMatch ? codeMatch[1].trim() : null;
-        const cleanCompanyName = extractedCode
-          ? (c.company_name || c.contact_name.replace(/\[CUST-[^\]]+\]/i, '').trim())
-          : (c.company_name || c.contact_name);
-
-        const assignedCode = extractedCode || (c.contact_id ? `CUST-${String(c.contact_id).slice(-4)}` : `CUST-VRM-${100 + idx + 1}`);
-
-        // Parse contact person name cleanly
-        let contactPersonName = c.primary_contact_name;
-        if (!contactPersonName || contactPersonName === '—' || contactPersonName === c.contact_name) {
-          if (c.first_name) {
-            contactPersonName = `${c.first_name} ${c.last_name || ''}`.trim();
-          } else if (Array.isArray(c.contact_persons) && c.contact_persons[0] && c.contact_persons[0].first_name) {
-            contactPersonName = `${c.contact_persons[0].first_name} ${c.contact_persons[0].last_name || ''}`.trim();
-          } else {
-            contactPersonName = '—';
-          }
-        }
-
-        const phoneVal = c.phone || c.mobile || (c.contact_persons && c.contact_persons[0]?.phone) || (c.contact_persons && c.contact_persons[0]?.mobile) || '';
-        const emailVal = c.email || (c.contact_persons && c.contact_persons[0]?.email) || '';
-
-        return {
-          id: assignedCode,
-          customerCode: assignedCode,
-          companyName: cleanCompanyName,
-          customerName: cleanCompanyName,
-          customerType: 'EPC Contractor',
-          industry: 'Solar Energy / Utility Scale',
-          gstNumber: c.gst_no || c.gstin || '',
-          panNumber: c.pan_no || c.pan || '',
-          address: bAddr.address || c.address || '',
-          city: bAddr.city || c.city || '',
-          state: bAddr.state || c.state || '',
-          pincode: bAddr.zip || c.zip || '',
-          creditLimit: c.credit_limit || 2500000,
-          creditDays: c.payment_terms || 30,
-          paymentTerms: c.payment_terms_label || (c.payment_terms ? `Net ${c.payment_terms} Days` : '50% Advance + 50% Dispatch'),
-          assignedSalesperson: 'Mohith JV',
-          source: 'Zoho Books',
-          zohoContactId: c.contact_id,
-          primaryContact: {
-            name: contactPersonName,
-            designation: 'Procurement Head',
-            phone: phoneVal,
-            whatsapp: phoneVal,
-            email: emailVal
-          },
-          createdAt: c.created_time || new Date().toISOString()
-        };
-      });
-
-      // 1. Index local customers by zohoContactId, customerCode, and company + primary contact
-      const byZohoId = new Map();
-      const byCode = new Map();
-      const byNameAndContact = new Map();
-
-      localCustomers.forEach(cust => {
-        if (cust.zohoContactId) byZohoId.set(String(cust.zohoContactId).trim(), cust);
-        const codeKey = (cust.customerCode || cust.id || '').toLowerCase().trim();
-        if (codeKey) byCode.set(codeKey, cust);
-
-        const pName = (cust.primaryContact && cust.primaryContact.name) || cust.c3 || '';
-        const nameKey = `${(cust.companyName || '').toLowerCase().trim()}:::${pName.toLowerCase().trim()}`;
-        if (nameKey !== ':::') byNameAndContact.set(nameKey, cust);
-      });
-
-      // 2. Map all Zoho contacts and merge with local customer details without losing distinct contacts
-      const processedZohoIds = new Set();
-      const processedCodes = new Set();
-      const mergedList = [];
-
-      zohoCustomers.forEach(zCust => {
-        const zId = String(zCust.zohoContactId || zCust.id).trim();
-        processedZohoIds.add(zId);
-
-        let localMatch = byZohoId.get(zId);
-        if (!localMatch) {
-          const pName = (zCust.primaryContact && zCust.primaryContact.name) || '';
-          const zNameKey = `${(zCust.companyName || '').toLowerCase().trim()}:::${pName.toLowerCase().trim()}`;
-          localMatch = byNameAndContact.get(zNameKey);
-        }
-        if (!localMatch && zCust.customerCode) {
-          localMatch = byCode.get(zCust.customerCode.toLowerCase().trim());
-        }
-
-        const effectiveCode = (localMatch && (localMatch.customerCode || localMatch.id)) || zCust.customerCode;
-        processedCodes.add(String(effectiveCode).toLowerCase().trim());
-
-        const mergedCust = {
-          ...zCust,
-          ...(localMatch || {}),
-          id: effectiveCode,
-          customerCode: effectiveCode,
-          companyName: (localMatch && localMatch.companyName) || zCust.companyName,
-          customerName: zCust.customerName || (localMatch && localMatch.customerName),
-          zohoContactId: zCust.zohoContactId || zId,
-          primaryContact: {
-            ...zCust.primaryContact,
-            ...((localMatch && localMatch.primaryContact) || {})
-          },
-          customerType: (localMatch && localMatch.customerType) || zCust.customerType,
-          creditLimit: (localMatch && localMatch.creditLimit) || zCust.creditLimit,
-          creditDays: (localMatch && localMatch.creditDays) || zCust.creditDays,
-          assignedSalesperson: (localMatch && localMatch.assignedSalesperson) || zCust.assignedSalesperson || 'Mohith JV'
-        };
-
-        mergedList.push(mergedCust);
-      });
-
-      // 3. Preserve local customers that haven't been synchronized to Zoho yet
-      localCustomers.forEach(cust => {
-        const custZohoId = cust.zohoContactId ? String(cust.zohoContactId).trim() : null;
-        if (custZohoId && processedZohoIds.has(custZohoId)) {
-          return;
-        }
-        const cCode = String(cust.customerCode || cust.id || '').toLowerCase().trim();
-        if (cCode && processedCodes.has(cCode)) {
-          return;
-        }
-        mergedList.push(cust);
-      });
-
-      saveLocalCustomers(mergedList);
-      return res.json(mergedList);
-    }
-  } catch (err) {
-    console.error('Zoho customers fetch notice:', err.message);
-  }
-
   res.json(localCustomers);
 });
 
-// Real-time synchronization endpoint retrieving live vendors from Zoho Books
-app.get('/api/zoho/vendors', async (req, res) => {
-  const forceRefresh = req.query.force === 'true';
+// BUSINZ Native Vendors endpoint (Native BUSINZ Store)
+app.get('/api/vendors', async (req, res) => {
   const localVendors = loadLocalVendors();
-
-  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
-  if (!forceRefresh && Array.isArray(localVendors) && localVendors.length > 0) {
-    return res.json(localVendors);
-  }
-
-  if (!zohoSession.connected) {
-    return res.json(localVendors);
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const data = await fetchZohoVendors(accessToken, req.query.force === 'true');
-    
-    if (data && data.contacts && Array.isArray(data.contacts)) {
-      const translated = data.contacts.map(c => ({
-        id: c.contact_id,
-        code: c.contact_id,
-        name: c.contact_name,
-        companyName: c.company_name || c.contact_name,
-        type: c.contact_type === 'customer_vendor' ? 'Manufacturer' : 'Supplier',
-        contact: c.primary_contact_name || '—',
-        phone: c.phone || c.mobile || '—',
-        mobile: c.mobile || '—',
-        email: c.email || '—',
-        cat: 'General Vendor',
-        status: c.status === 'active' ? 'Active' : 'Inactive',
-        spend: c.outstanding_payable_amount ? `₹${Number(c.outstanding_payable_amount).toLocaleString('en-IN')}` : '—',
-        payable: c.outstanding_payable_amount ? `₹${Number(c.outstanding_payable_amount).toLocaleString('en-IN')}` : '₹0.00',
-        terms: c.payment_terms_label || (c.payment_terms ? `Net ${c.payment_terms} Days` : 'Net 30 Days'),
-        gstin: c.gst_no || c.gstin || '—',
-        gstTreatment: c.gst_treatment_formatted || c.gst_treatment || '—',
-        sourceOfSupply: c.place_of_contact_formatted || c.place_of_contact || c.source_of_supply || '—',
-        pan: c.pan_no || c.pan || '—',
-        currency: c.currency_code || 'INR',
-        website: c.website || '—'
-      }));
-
-      // Persist & Cache newly fetched Zoho vendors automatically into local storage & Supabase
-      saveLocalVendors(translated);
-
-      // Return live vendor list from Zoho Books
-      return res.json(translated);
-    }
-  } catch (err) {
-    console.error('Zoho vendors fetch notice:', err.message);
-  }
-
   res.json(localVendors);
 });
 
-// Helper to delete a Vendor in Zoho Books
-const deleteZohoVendor = async (accessToken, vendorRefOrId) => {
-  let targetId = vendorRefOrId;
 
-  if (!String(vendorRefOrId).match(/^\d+$/)) {
-    const localVendors = loadLocalVendors();
-    const matched = localVendors.find(v => String(v.id) === String(vendorRefOrId) || String(v.code) === String(vendorRefOrId) || String(v.name).toLowerCase() === String(vendorRefOrId).toLowerCase());
-    if (matched && String(matched.id).match(/^\d+$/)) {
-      targetId = matched.id;
-    }
-  }
 
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts/${encodeURIComponent(targetId)}?organization_id=${zohoSession.orgId}`,
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          console.log(`[ZOHO VENDOR DELETE] Deleted vendor ${targetId} in Zoho:`, parsed.message || 'Success');
-          resolve(parsed);
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    });
-
-    req.on('error', (e) => {
-      console.error('[ZOHO VENDOR DELETE ERROR]', e);
-      resolve(null);
-    });
-    req.end();
-  });
-};
-
-const updateZohoVendorAddress = (accessToken, vendorId, addrObj, gstNo) => {
-  return new Promise((resolve) => {
-    const payload = {
-      billing_address: addrObj,
-      shipping_address: addrObj
-    };
-    if (gstNo && String(gstNo).trim().length > 0) {
-      payload.gstin = String(gstNo).trim();
-    }
-    const postData = JSON.stringify(payload);
-    const req = https.request({
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts/${vendorId}?organization_id=${zohoSession.orgId}`,
-      method: 'PUT',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    }, res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.write(postData);
-    req.end();
-  });
-};
-
-const updateZohoOrganizationAddress = (accessToken, rawAddrStr) => {
-  return new Promise((resolve) => {
-    if (!rawAddrStr) return resolve(null);
-    const parts = String(rawAddrStr).split(',').map(s => s.trim()).filter(Boolean);
-    const payload = {
-      street_address1: (parts[0] || rawAddrStr).slice(0, 40),
-      street_address2: (parts[1] || '').slice(0, 40),
-      city: (parts[2] || 'Chennai').slice(0, 20),
-      state: (parts[3] || 'Tamil Nadu').slice(0, 20),
-      country: 'India',
-      zip: '600032'
-    };
-    const postData = JSON.stringify(payload);
-    const req = https.request({
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/organizations/${zohoSession.orgId}?organization_id=${zohoSession.orgId}`,
-      method: 'PUT',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    }, res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.write(postData);
-    req.end();
-  });
-};
-
-// Endpoint to delete a Vendor in Zoho Books & Control Room
-app.delete('/api/zoho/vendors/:id', async (req, res) => {
+// Endpoint to delete a Vendor in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.delete('/api/vendors/:id', async (req, res) => {
   const targetId = req.params.id;
 
   // 1. Remove from local store
@@ -3149,21 +2453,8 @@ app.delete('/api/zoho/vendors/:id', async (req, res) => {
     return vId !== targetClean && vCode !== targetClean && vName !== targetClean;
   });
   saveLocalVendors(updatedVendors);
-  zohoVendorsCache.timestamp = 0;
 
-  // 2. Delete in Zoho Books if connecte
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const zohoResult = await deleteZohoVendor(accessToken, targetId);
-      return res.json({ success: true, message: `Vendor ${targetId} deleted from Control Room and Zoho Books!`, zohoResult });
-    } catch (err) {
-      console.error('Failed to delete vendor in Zoho Books:', err);
-      return res.json({ success: true, warning: 'Vendor deleted locally in Control Room, but Zoho deletion encountered an issue.' });
-    }
-  }
-
-  res.json({ success: true, message: `Vendor ${targetId} deleted from Control Room!` });
+  res.json({ success: true, message: `Vendor ${targetId} deleted from BUSINZ!` });
 });
 
 
@@ -3225,118 +2516,85 @@ app.post('/api/workorders', async (req, res) => {
   }
 });
 
-// Single vendor details endpoint from Zoho Books
-app.get('/api/zoho/vendors/:id', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.status(400).json({ error: 'Zoho session not connected.' });
-  }
-
+// Single vendor details endpoint from BUSINZ local/database store (Native BUSINZ Store)
+app.get('/api/vendors/:id', async (req, res) => {
   try {
-    const accessToken = await getZohoAccessToken();
     const { id } = req.params;
-    
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/contacts/${id}?organization_id=${zohoSession.orgId}`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`
-      }
-    };
+    const localVendors = loadLocalVendors();
+    const normalize = (s) => String(s || '').toLowerCase().trim();
+    const target = normalize(id);
 
-    const request = https.request(options, (response) => {
-      let data = '';
-      response.on('data', (chunk) => { data += chunk; });
-      response.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.contact) {
-            const c = parsed.contact;
-            let billingObj = c.billing_address || {};
-            let shippingObj = c.shipping_address || {};
+    const v = localVendors.find(vend => 
+      normalize(vend.id) === target || 
+      normalize(vend.code) === target || 
+      normalize(vend.vendorId) === target ||
+      normalize(vend.name) === target ||
+      normalize(vend.companyName) === target
+    );
 
-            if (Array.isArray(c.addresses)) {
-              const bFound = c.addresses.find(a => a.address_type === 'billing');
-              if (bFound) billingObj = bFound;
-              const sFound = c.addresses.find(a => a.address_type === 'shipping');
-              if (sFound) shippingObj = sFound;
-            }
+    if (v) {
+      const billingObj = v.billingAddressObj || {
+        address: v.address || 'Industrial Estate, Main Road',
+        city: v.city || 'Chennai',
+        state: v.state || 'Tamil Nadu',
+        zip: v.pincode || '600001',
+        country: 'India'
+      };
+      const shippingObj = v.shippingAddressObj || billingObj;
 
-            const formatAddr = (a) => {
-              if (!a || typeof a !== 'object') return '—';
-              const parts = [
-                a.attention ? `Attn: ${a.attention}` : '',
-                a.address || a.street || a.address_1 || '',
-                a.street2 || a.address_2 || '',
-                a.city || '',
-                a.state || a.province || '',
-                a.zip || a.zipcode || a.postal_code || a.pincode || '',
-                a.country || a.country_name || ''
-              ].filter(p => p && String(p).trim().length > 0);
-              return parts.length > 0 ? parts.join(', ') : '—';
-            };
-
-            const billingAddressStr = formatAddr(billingObj);
-            const shippingAddressStr = formatAddr(shippingObj);
-
-            const detailedVendor = {
-              id: c.contact_id,
-              code: c.contact_id,
-              name: c.contact_name,
-              companyName: c.company_name || c.contact_name,
-              type: c.contact_type === 'customer_vendor' ? 'Manufacturer' : 'Supplier',
-              contact: c.primary_contact_name || (c.first_name ? `${c.first_name} ${c.last_name || ''}`.trim() : '—'),
-              firstName: c.first_name || '—',
-              lastName: c.last_name || '—',
-              email: c.email || '—',
-              phone: c.phone || '—',
-              mobile: c.mobile || '—',
-              cat: 'General Vendor',
-              status: c.status === 'active' ? 'Active' : 'Inactive',
-              spend: c.outstanding_payable_amount ? `₹${Number(c.outstanding_payable_amount).toLocaleString('en-IN')}` : '—',
-              payable: c.outstanding_payable_amount ? `₹${Number(c.outstanding_payable_amount).toLocaleString('en-IN')}` : '₹0.00',
-              unusedCredits: c.unused_credits_receivable_amount ? `₹${Number(c.unused_credits_receivable_amount).toLocaleString('en-IN')}` : '₹0.00',
-              terms: c.payment_terms_label || (c.payment_terms ? `Net ${c.payment_terms} Days` : 'Net 30 Days'),
-              gstin: c.gst_no || c.gstin || '—',
-              gstTreatment: c.gst_treatment_formatted || c.gst_treatment || '—',
-              sourceOfSupply: c.place_of_contact_formatted || c.place_of_contact || c.source_of_supply || (billingObj.state || '—'),
-              pan: c.pan_no || c.pan || '—',
-              currency: c.currency_code || 'INR',
-              website: c.website || '—',
-              billingAddressObj: billingObj,
-              shippingAddressObj: shippingObj,
-              billingAddress: billingAddressStr,
-              shippingAddress: shippingAddressStr,
-              notes: c.notes || '—',
-              contactPersons: Array.isArray(c.contact_persons) ? c.contact_persons.map(cp => ({
-                name: `${cp.first_name || ''} ${cp.last_name || ''}`.trim(),
-                email: cp.email || '—',
-                phone: cp.phone || cp.mobile || '—',
-                designation: cp.designation || '—'
-              })) : [],
-              rawZohoContact: c
-            };
-            res.json(detailedVendor);
-          } else {
-            res.status(500).json({ error: parsed.message || 'Failed to fetch vendor detail from Zoho.' });
-          }
-        } catch (e) {
-          res.status(500).json({ error: e.message });
+      const detailedVendor = {
+        id: v.id || v.code,
+        code: v.id || v.code,
+        name: v.name || v.companyName,
+        companyName: v.companyName || v.name,
+        type: v.type === 'Manufacturer' ? 'customer_vendor' : 'vendor',
+        contact: v.contact || v.primaryContact || '—',
+        email: v.email && v.email !== '—' ? v.email : '',
+        phone: v.phone && v.phone !== '—' ? v.phone : (v.mobile || ''),
+        mobile: v.mobile || '',
+        cat: v.cat || 'General Vendor',
+        status: v.status || 'Active',
+        spend: v.spend || '—',
+        payable: v.payable || '₹0.00',
+        terms: v.terms || 'Due on Receipt',
+        gstin: v.gstin && v.gstin !== '—' ? v.gstin : '',
+        pan: v.pan && v.pan !== '—' ? v.pan : '',
+        currency: v.currency || 'INR',
+        website: v.website || '—',
+        billingAddressObj: billingObj,
+        shippingAddressObj: shippingObj,
+        billingAddress: v.address || 'Industrial Estate, Main Road, Tamil Nadu',
+        shippingAddress: v.address || 'Industrial Estate, Main Road, Tamil Nadu',
+        notes: v.notes || '',
+        contactPersons: v.contactPersons || [],
+        contact: {
+          contact_id: v.id || v.code,
+          contact_name: v.name || v.companyName,
+          company_name: v.companyName || v.name,
+          contact_type: v.type === 'Manufacturer' ? 'customer_vendor' : 'vendor',
+          status: (v.status || 'Active').toLowerCase(),
+          email: v.email && v.email !== '—' ? v.email : '',
+          phone: v.phone && v.phone !== '—' ? v.phone : (v.mobile || ''),
+          gst_no: v.gstin && v.gstin !== '—' ? v.gstin : '',
+          pan_no: v.pan && v.pan !== '—' ? v.pan : '',
+          billing_address: billingObj,
+          shipping_address: shippingObj,
+          payment_terms: v.terms || 'Due on Receipt'
         }
-      });
-    });
+      };
 
-    request.on('error', (e) => res.status(500).json({ error: e.message }));
-    request.end();
+      return res.json(detailedVendor);
+    }
+
+    res.status(404).json({ error: 'Vendor not found in BUSINZ local database.' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to connect to Zoho Books API.' });
+    console.error('[GET VENDOR BY ID ERROR]', err);
+    res.status(500).json({ error: 'Failed to retrieve vendor details: ' + err.message });
   }
 });
 
-// GSTIN Lookup & Verification Endpoint
-app.get('/api/zoho/gst-lookup', async (req, res) => {
+// GSTIN Lookup & Verification Endpoint from BUSINZ local stores (Native BUSINZ Store)
+app.get('/api/gst-lookup', async (req, res) => {
   try {
     const rawGst = (req.query.gstin || '').trim().toUpperCase();
     if (!rawGst || rawGst.length !== 15) {
@@ -3355,11 +2613,15 @@ app.get('/api/zoho/gst-lookup', async (req, res) => {
 
     const stateCode = rawGst.substring(0, 2);
     const pan = rawGst.substring(2, 12);
-    const stateName = stateMap[stateCode] || 'Andhra Pradesh';
+    const stateName = stateMap[stateCode] || 'Tamil Nadu';
 
-    // Search local cache / registered vendors
-    const matchedVendor = (zohoVendorCache || []).find(v => (v.gstin || '').toUpperCase() === rawGst || (v.pan || '').toUpperCase() === pan);
-    
+    // 1. Search local verified vendors
+    const localVendors = loadLocalVendors();
+    const matchedVendor = localVendors.find(v => 
+      (v.gstin || '').toUpperCase().trim() === rawGst || 
+      (v.pan || '').toUpperCase().trim() === pan
+    );
+
     if (matchedVendor) {
       return res.json({
         success: true,
@@ -3370,9 +2632,35 @@ app.get('/api/zoho/gst-lookup', async (req, res) => {
         tradeName: matchedVendor.name,
         email: matchedVendor.email && matchedVendor.email !== '—' ? matchedVendor.email : `contact@${(matchedVendor.name || 'vendor').toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
         phone: matchedVendor.phone && matchedVendor.phone !== '—' ? matchedVendor.phone : (matchedVendor.mobile && matchedVendor.mobile !== '—' ? matchedVendor.mobile : '9840012345'),
-        address: matchedVendor.billingAddress && matchedVendor.billingAddress !== '—' ? matchedVendor.billingAddress : `Industrial Estate, Main Road, ${stateName}`,
-        city: matchedVendor.billingAddressObj?.city || 'Nellore',
-        pincode: matchedVendor.billingAddressObj?.zip || '524002',
+        address: matchedVendor.address && matchedVendor.address !== '—' ? matchedVendor.address : `Industrial Estate, Main Road, ${stateName}`,
+        city: matchedVendor.city || 'Chennai',
+        pincode: matchedVendor.pincode || '600001',
+        status: 'Active',
+        taxpayerType: 'Regular',
+        companyReg: `U${Math.floor(10000 + Math.random()*90000)}${stateCode}2018PTC098412`
+      });
+    }
+
+    // 2. Search local verified customers
+    const localCustomers = loadLocalCustomers();
+    const matchedCustomer = localCustomers.find(c => 
+      (c.gstNumber || c.gstin || '').toUpperCase().trim() === rawGst || 
+      (c.panNumber || c.pan || '').toUpperCase().trim() === pan
+    );
+
+    if (matchedCustomer) {
+      return res.json({
+        success: true,
+        gstin: rawGst,
+        pan: pan,
+        state: stateName,
+        legalName: matchedCustomer.companyName || matchedCustomer.customerName,
+        tradeName: matchedCustomer.customerName || matchedCustomer.companyName,
+        email: matchedCustomer.email && matchedCustomer.email !== '—' ? matchedCustomer.email : (matchedCustomer.primaryContact?.email || ''),
+        phone: matchedCustomer.phone && matchedCustomer.phone !== '—' ? matchedCustomer.phone : (matchedCustomer.primaryContact?.phone || ''),
+        address: matchedCustomer.address || matchedCustomer.billingAddress || `Industrial Road, ${stateName}`,
+        city: matchedCustomer.city || 'Chennai',
+        pincode: matchedCustomer.pincode || '600001',
         status: 'Active',
         taxpayerType: 'Regular',
         companyReg: `U${Math.floor(10000 + Math.random()*90000)}${stateCode}2018PTC098412`
@@ -3389,13 +2677,13 @@ app.get('/api/zoho/gst-lookup', async (req, res) => {
       gstin: rawGst,
       pan: pan,
       state: stateName,
-      legalName: `VRM REGISTERED SUPPLIER (${pan})`,
-      tradeName: `VRM Industrial Partner`,
-      email: `contact@vendor-${pan.toLowerCase()}.com`,
+      legalName: `BUSINZ REGISTERED ENTITY (${pan})`,
+      tradeName: `BUSINZ Industrial Partner`,
+      email: `contact@entity-${pan.toLowerCase()}.com`,
       phone: `9440${Math.floor(10005 + Math.random()*89995)}`,
       address: `Door No. 12/484, Industrial Complex, Highway Road, ${stateName}`,
-      city: stateCode === '37' ? 'Nellore' : (stateCode === '33' ? 'Chennai' : (stateCode === '36' ? 'Hyderabad' : 'Bangalore')),
-      pincode: stateCode === '37' ? '524002' : '600028',
+      city: stateCode === '33' ? 'Chennai' : (stateCode === '37' ? 'Nellore' : (stateCode === '36' ? 'Hyderabad' : 'Bangalore')),
+      pincode: stateCode === '33' ? '600001' : (stateCode === '37' ? '524002' : '600028'),
       status: 'Active',
       taxpayerType: 'Regular',
       companyReg: `U28112${stateCode}2016PTC098412`
@@ -3404,560 +2692,10 @@ app.get('/api/zoho/gst-lookup', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-const fetchZohoPurchaseOrders = async (accessToken) => {
-  let allOrders = [];
-  let page = 1;
-  let hasMore = true;
 
-  while (hasMore && page <= 3) {
-    const pageData = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/purchaseorders?organization_id=${zohoSession.orgId}&filter_by=Status.All&page=${page}&per_page=200`,
-        method: 'GET',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`
-        }
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(e);
-          }
-        });
-      });
-
-      req.on('error', (e) => reject(e));
-      req.end();
-    });
-
-    if (pageData && pageData.code === 45) {
-      console.warn('[ZOHO POs]: Daily rate limit reached. Halting pagination.');
-      break;
-    }
-
-    if (pageData && Array.isArray(pageData.purchaseorders)) {
-      allOrders = allOrders.concat(pageData.purchaseorders);
-      if (pageData.page_context && pageData.page_context.has_more_page) {
-        page++;
-      } else {
-        hasMore = false;
-      }
-    } else {
-      hasMore = false;
-    }
-  }
-
-  return { purchaseorders: allOrders };
-};
-
-const fetchZohoInvoices = (accessToken) => {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/invoices?organization_id=${zohoSession.orgId}`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.end();
-  });
-};
-
-// Helper to resolve PO Ref/Number to Zoho purchaseorder_id
-const resolveZohoPOId = async (accessToken, poRefOrId) => {
-  if (!poRefOrId) return null;
-  if (/^\d{15,}$/.test(String(poRefOrId))) return String(poRefOrId);
-
-  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-  const targetClean = normalize(poRefOrId);
-
-  // 1. Check local PO store first for instant zero-latency match (< 1ms)
+// Endpoint to create a new Purchase Order in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post('/api/purchaseorders', async (req, res) => {
   try {
-    const localPOs = loadLocalPOs();
-    const localMatch = localPOs.find(p => 
-      normalize(p.poNo) === targetClean || 
-      normalize(p.id) === targetClean || 
-      normalize(p.zohoId) === targetClean ||
-      normalize(p.purchaseorder_number) === targetClean
-    );
-    if (localMatch) {
-      if (localMatch.id && /^\d{15,}$/.test(String(localMatch.id))) return String(localMatch.id);
-      if (localMatch.zohoId && /^\d{15,}$/.test(String(localMatch.zohoId))) return String(localMatch.zohoId);
-      if (localMatch.purchaseorder_id && /^\d{15,}$/.test(String(localMatch.purchaseorder_id))) return String(localMatch.purchaseorder_id);
-    }
-  } catch (_) {}
-
-  // 2. Query Zoho Books API directly by purchaseorder_number (single fast HTTP request ~200ms)
-  try {
-    const singleLookup = await new Promise((resolve) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/purchaseorders?organization_id=${zohoSession.orgId}&purchaseorder_number=${encodeURIComponent(poRefOrId)}`,
-        method: 'GET',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`
-        }
-      };
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch {
-            resolve(null);
-          }
-        });
-      });
-      req.on('error', () => resolve(null));
-      req.setTimeout(5000, () => { req.destroy(); resolve(null); });
-      req.end();
-    });
-
-    if (singleLookup && Array.isArray(singleLookup.purchaseorders) && singleLookup.purchaseorders.length > 0) {
-      const match = singleLookup.purchaseorders.find(p => 
-        normalize(p.purchaseorder_number) === targetClean ||
-        normalize(p.purchaseorder_id) === targetClean
-      ) || singleLookup.purchaseorders[0];
-      if (match && match.purchaseorder_id) return match.purchaseorder_id;
-    }
-  } catch (lookupErr) {
-    console.warn('[resolveZohoPOId direct lookup notice]:', lookupErr?.message);
-  }
-
-  // 3. Fallback: paginate all orders if not found in single query
-  try {
-    const data = await fetchZohoPurchaseOrders(accessToken);
-    if (data && data.purchaseorders) {
-      const match = data.purchaseorders.find(p => 
-        normalize(p.purchaseorder_number) === targetClean || 
-        normalize(p.purchaseorder_id) === targetClean ||
-        normalize(p.reference_number) === targetClean
-      );
-      if (match) return match.purchaseorder_id;
-    }
-  } catch (err) {
-    console.error('Error resolving Zoho PO ID:', err);
-  }
-  return poRefOrId;
-};
-
-// Helper to approve/open PO in Zoho Books (transitions Draft -> Open/Approved)
-const approveOrOpenZohoPO = async (accessToken, poRefOrId) => {
-  const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
-  if (!realPoId) return null;
-
-  const tryEndpoint = (pathStr) => new Promise((resolve) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: pathStr,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    });
-
-    req.on('error', () => resolve(null));
-    req.end();
-  });
-
-  let res = await tryEndpoint(`/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/status/issued?organization_id=${zohoSession.orgId}`);
-  if (!res || res.code !== 0) {
-    res = await tryEndpoint(`/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/approve?organization_id=${zohoSession.orgId}`);
-  }
-  if (!res || res.code !== 0) {
-    res = await tryEndpoint(`/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/status/open?organization_id=${zohoSession.orgId}`);
-  }
-  return res;
-};
-
-// Helper to automatically email PO PDF to vendor via Zoho Books API
-const emailZohoPOToVendor = async (accessToken, poRefOrId, vendorEmail, remarks = '') => {
-  const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
-  if (!realPoId || !vendorEmail || !vendorEmail.includes('@')) {
-    return { success: false, reason: 'Invalid or missing PO ID or vendor email' };
-  }
-
-  return new Promise((resolve) => {
-    const payload = JSON.stringify({
-      to_mail_ids: [vendorEmail.trim()],
-      subject: `Purchase Order - ${poRefOrId}`,
-      body: `Dear Vendor,\n\nPlease find attached the authorized Purchase Order (${poRefOrId}) for fulfillment.\n${remarks ? `\nInstructions/Remarks: ${remarks}\n` : ''}\nThank you.`
-    });
-
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/email?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve({ success: parsed.code === 0, response: parsed });
-        } catch (e) {
-          resolve({ success: false, error: e.message });
-        }
-      });
-    });
-
-    req.on('error', (err) => resolve({ success: false, error: err.message }));
-    req.write(payload);
-    req.end();
-  });
-};
-
-// Helper to mark PO as closed in Zoho Books (transitions to Closed)
-const markZohoPOClosed = async (accessToken, poRefOrId) => {
-  const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
-  if (!realPoId) return null;
-
-  // Step 1: Transition Draft PO to Open (Issued/Approved) in Zoho first if needed
-  await approveOrOpenZohoPO(accessToken, realPoId);
-
-  // Step 2: Transition Open PO to Closed in Zoho
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/status/closed?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          console.log(`[ZOHO PO CLOSE] Marked PO ${realPoId} closed in Zoho:`, parsed.message || 'Success');
-          resolve(parsed);
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    });
-
-    req.on('error', (e) => {
-      console.error('[ZOHO PO CLOSE ERROR]', e);
-      resolve(null);
-    });
-    req.end();
-  });
-};
-
-// Helper to delete a Purchase Order in Zoho Books
-const deleteZohoPurchaseOrder = async (accessToken, poRefOrId) => {
-  const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
-  if (!realPoId) return null;
-
-  const apiReq = (method, apiPath) => new Promise((resolve) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: apiPath,
-      method: method,
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch(e) { resolve(null); }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.end();
-  });
-
-  // Step 1: Clear associated purchase receives if any exist
-  try {
-    const receivesRes = await apiReq('GET', `/books/v3/purchasereceives?organization_id=${zohoSession.orgId}`);
-    if (receivesRes && Array.isArray(receivesRes.purchasereceives)) {
-      const matchingRecs = receivesRes.purchasereceives.filter(r => String(r.purchaseorder_id) === String(realPoId));
-      for (const rec of matchingRecs) {
-        const recId = rec.receive_id || rec.purchasereceive_id;
-        if (recId) {
-          await apiReq('DELETE', `/books/v3/purchasereceives/${recId}?organization_id=${zohoSession.orgId}`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error clearing receives for PO:', err);
-  }
-
-  // Step 2: Undo marked receives if any
-  await apiReq('POST', `/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/markasunreceived?organization_id=${zohoSession.orgId}`);
-
-  // Step 3: Delete Purchase Order in Zoho Books
-  const result = await apiReq('DELETE', `/books/v3/purchaseorders/${encodeURIComponent(realPoId)}?organization_id=${zohoSession.orgId}`);
-  console.log(`[ZOHO PO DELETE] Deleted PO ${realPoId} in Zoho:`, result ? result.message : 'Success');
-  return result;
-};
-
-// Helper to create Purchase Receive in Zoho Books (sets Receive Status to Received)
-const createZohoPurchaseReceive = async (accessToken, poRefOrId, grnData = {}) => {
-  try {
-    const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
-    if (!realPoId) return null;
-
-    // Ensure PO is open first before receiving
-    await approveOrOpenZohoPO(accessToken, realPoId);
-
-    // Fetch live PO details to get exact line_item_ids
-    const poRes = await fetchZohoPurchaseOrderDetail(accessToken, realPoId);
-    const poObj = (poRes && poRes.purchaseorder) ? poRes.purchaseorder : null;
-    if (!poObj || !Array.isArray(poObj.line_items) || poObj.line_items.length === 0) return null;
-
-    const poLineItems = poObj.line_items;
-    const grnItemsList = grnData.items || [];
-
-    const receiveLineItems = poLineItems.map((pli, idx) => {
-      const matched = grnItemsList.find(gi => 
-        (gi.name && pli.name && gi.name.toLowerCase() === pli.name.toLowerCase()) ||
-        gi.id === pli.line_item_id
-      ) || grnItemsList[idx];
-
-      const qtyReceived = matched ? Number(matched.accepted !== undefined && matched.accepted !== '' ? matched.accepted : (matched.now || pli.quantity)) : pli.quantity;
-
-      return {
-        line_item_id: pli.line_item_id,
-        quantity: qtyReceived > 0 ? qtyReceived : pli.quantity
-      };
-    });
-
-    const payload = {
-      receive_number: `PR-${Date.now().toString().slice(-6)}`,
-      date: new Date().toISOString().split('T')[0],
-      line_items: receiveLineItems
-    };
-
-    return new Promise((resolve) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/purchasereceives?organization_id=${zohoSession.orgId}&purchaseorder_id=${encodeURIComponent(realPoId)}`,
-        method: 'POST',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      const req = https.request(options, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(body);
-            console.log(`[ZOHO PO RECEIVE CREATED] Marked PO ${realPoId} received in Zoho:`, parsed.message || 'Success');
-            resolve(parsed);
-          } catch (e) {
-            resolve(null);
-          }
-        });
-      });
-      req.on('error', (e) => {
-        console.error('[ZOHO PO RECEIVE ERROR]', e);
-        resolve(null);
-      });
-      req.write(JSON.stringify(payload));
-      req.end();
-    });
-  } catch (err) {
-    console.error('Error creating Zoho Purchase Receive:', err);
-    return null;
-  }
-};
-
-// Helper to revert PO to Draft status in Zoho Books
-const markZohoPODraft = async (accessToken, poRefOrId) => {
-  const realPoId = await resolveZohoPOId(accessToken, poRefOrId);
-  if (!realPoId) return null;
-
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/purchaseorders/${encodeURIComponent(realPoId)}/status/draft?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          console.log(`[ZOHO PO DRAFT] Reverted PO ${realPoId} to Draft in Zoho:`, parsed.message || 'Success');
-          resolve(parsed);
-        } catch (e) { resolve(null); }
-      });
-    });
-    req.on('error', (e) => resolve(null));
-    req.end();
-  });
-};
-
-// Helper to create a new Purchase Order in Zoho Books
-const createZohoPurchaseOrder = (accessToken, poPayload) => {
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify(poPayload);
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/purchaseorders?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.write(postData);
-    req.end();
-  });
-};
-
-// Endpoint to create a new Purchase Order in Zoho Books
-app.post('/api/zoho/purchaseorders', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.json({ success: true, message: 'Saved locally (Zoho not connected)', po: req.body });
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    
-    // Find, match or create vendor in Zoho
-    let vendorId = req.body.vendorId;
-    const vendorData = await fetchZohoVendors(accessToken);
-    const contacts = (vendorData && Array.isArray(vendorData.contacts)) ? vendorData.contacts : [];
-
-    if (!vendorId && req.body.vendor) {
-      const vName = String(req.body.vendor).trim().toLowerCase();
-      const found = contacts.find(c => 
-        (c.contact_name && c.contact_name.toLowerCase() === vName) ||
-        (c.company_name && c.company_name.toLowerCase() === vName) ||
-        (c.contact_id === req.body.vendor)
-      );
-      if (found) {
-        vendorId = found.contact_id;
-      }
-    }
-
-    // If no vendorId matched, create new vendor in Zoho on-the-fly or search by name
-    if (!vendorId) {
-      if (req.body.vendor && req.body.vendor.trim() !== '' && req.body.vendor !== 'Fresh Vendor') {
-        try {
-          const newV = await createZohoVendor(accessToken, {
-            contact_name: req.body.vendor.trim(),
-            company_name: req.body.vendor.trim(),
-            contact_type: 'vendor',
-            email: req.body.email && req.body.email !== '—' ? req.body.email : undefined,
-            phone: req.body.contactNo && req.body.contactNo !== '—' ? req.body.contactNo : undefined,
-            currency_code: 'INR'
-          });
-          if (newV && newV.contact) {
-            vendorId = newV.contact.contact_id;
-          } else if (newV && (newV.code === 3062 || String(newV.message || '').includes('already exists'))) {
-            const vClean = req.body.vendor.trim().toLowerCase();
-            const existingContact = contacts.find(c => 
-              (c.contact_name && c.contact_name.toLowerCase() === vClean) ||
-              (c.company_name && c.company_name.toLowerCase() === vClean)
-            );
-            if (existingContact) {
-              vendorId = existingContact.contact_id;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to auto-create vendor for PO:', e);
-        }
-      }
-
-      if (!vendorId && contacts.length > 0) {
-        vendorId = contacts[0].contact_id;
-      }
-    }
-
-    if (!vendorId) {
-      vendorId = '4080449000000039008'; // Default Annamalaiyar vendor ID in Zoho Books
-    }
-
-    // Format dates to YYYY-MM-DD
     const parseDateToYYYYMMDD = (dStr) => {
       if (!dStr) return new Date().toISOString().split('T')[0];
       const d = new Date(dStr);
@@ -3965,176 +2703,37 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
       return d.toISOString().split('T')[0];
     };
 
-    // Fetch live items from Zoho to attach valid item_id
-    let zohoItemsList = [];
-    try {
-      const itemsRes = await fetchZohoItems(accessToken);
-      if (itemsRes && Array.isArray(itemsRes.items)) {
-        zohoItemsList = itemsRes.items;
-      }
-    } catch (e) {}
-
-    const defaultZohoItemId = zohoItemsList[0] ? zohoItemsList[0].item_id : undefined;
-
-    let totalSubTotal = 0;
-    let totalTaxAmt = 0;
-
-    // Process line items and automatically enable Purchase Information in Zoho if disabled
-    const lineItems = await Promise.all((req.body.items || []).map(async (item) => {
-      const itemName = item.itemName || item.name || item.description || 'General Item';
-      const matched = zohoItemsList.find(zi => 
-        zi.name.toLowerCase() === itemName.toLowerCase() ||
-        (zi.sku && item.sku && zi.sku.toLowerCase() === item.sku.toLowerCase())
-      );
-
-      const itemTaxPct = Number(item.tax !== undefined && item.tax !== '' ? item.tax : 18);
-      const baseRate = Number(item.unitPrice || item.rate || item.price || 0) || 100;
-      const itemQty = Number(item.qty || item.quantity || 1);
-      const subTotalAmt = baseRate * itemQty;
-      const taxAmt = (subTotalAmt * itemTaxPct) / 100;
-      totalSubTotal += subTotalAmt;
-      totalTaxAmt += taxAmt;
-
-      const li = {
-        name: itemName,
-        description: item.description || '',
-        rate: baseRate,
-        quantity: itemQty,
-        account_id: "4080449000000000567"
-      };
-
-      if (matched && matched.item_id) {
-        // Check if item has purchase permissions enabled in Zoho Books
-        let isPurchasableInZoho = matched.can_be_purchased === true || 
-                                  matched.item_type === 'sales_and_purchases' || 
-                                  matched.item_type === 'purchases' || 
-                                  matched.is_purchased === true;
-
-        if (!isPurchasableInZoho) {
-          try {
-            console.log('[ZOHO AUTO-ENABLE ITEM]', matched.item_id, matched.name);
-            const upRes = await updateZohoItem(accessToken, matched.item_id, {
-              name: matched.name,
-              rate: matched.rate || baseRate,
-              sku: matched.sku,
-              description: matched.description || item.description,
-              unit: matched.unit || item.unit || 'NOS',
-              purchase_rate: baseRate,
-              purchase_description: item.description || matched.description || matched.name,
-              is_purchase: true,
-              can_be_purchased: true,
-              item_type: 'sales_and_purchases',
-              purchase_account_id: "4080449000000000567"
-            });
-            if (upRes && upRes.item && (upRes.item.can_be_purchased === true || upRes.item.item_type === 'sales_and_purchases' || upRes.item.item_type === 'purchases')) {
-              isPurchasableInZoho = true;
-              matched.can_be_purchased = true;
-            }
-          } catch (e) {
-            console.warn('Failed to auto-enable purchase on item:', e.message);
-          }
-        }
-
-        // Attach item_id ONLY if it is verified as a purchase item in Zoho Books
-        if (isPurchasableInZoho) {
-          li.item_id = matched.item_id;
-        } else {
-          // Sales-only item in Zoho: do not link item_id and use material label so Zoho accepts as a custom purchase line
-          li.name = `${itemName} (Material)`;
-        }
-      }
-
-      // Zoho Books Tax ID mapping based on user-entered GST rate
-      const taxIdMap = {
-        0: '4080449000000341001',   // GST0
-        5: '4080449000000333019',   // GST5
-        12: '4080449000000324002',  // GST12
-        18: '4080449000000055031',  // GST18
-        28: '4080449000000340001'   // GST28
-      };
-      if (taxIdMap[itemTaxPct] !== undefined) {
-        li.tax_id = taxIdMap[itemTaxPct];
-      } else if (taxIdMap[Math.round(itemTaxPct)] !== undefined) {
-        li.tax_id = taxIdMap[Math.round(itemTaxPct)];
-      }
-
-      return li;
-    }));
-
-    if (lineItems.length === 0) {
-      lineItems.push({
-        name: 'General Procurement Item',
-        rate: 1000,
-        quantity: 1,
-        item_id: defaultZohoItemId
-      });
-    }
-
     const delAddressStr = String(req.body.deliveryAddress || '').trim();
     const billAddressStr = String(req.body.billingAddress || '').trim();
     const notesStr = String(req.body.notes || '').trim();
     const termsStr = String(req.body.terms || '').trim();
-
-    const payload = {
-      purchaseorder_number: req.body.poNo || undefined,
-      date: parseDateToYYYYMMDD(req.body.poDate),
-      delivery_date: parseDateToYYYYMMDD(req.body.deliveryDate),
-      line_items: lineItems
-    };
-
-    if (vendorId) {
-      payload.vendor_id = vendorId;
-    }
-
-    if (delAddressStr) {
-      payload.delivery_address = delAddressStr.slice(0, 80);
-    }
-
-    if (billAddressStr) {
-      payload.billing_address = billAddressStr.slice(0, 80);
-    }
-
-    if (notesStr) {
-      payload.notes = notesStr;
-    } else {
-      payload.notes = '';
-    }
-
-    if (termsStr) {
-      payload.terms = termsStr;
-    }
-
-    if (req.body.project || req.body.branch || req.body.poNo) {
-      payload.reference_number = req.body.project || req.body.branch || req.body.poNo;
-    }
-
-    if (req.body.paymentTerms) {
-      payload.payment_terms_label = req.body.paymentTerms;
-      const pMatch = String(req.body.paymentTerms).match(/\d+/);
-      if (pMatch) {
-        payload.payment_terms = parseInt(pMatch[0], 10);
-      }
-    }
-
-    if (req.body.shippingCharges && Number(req.body.shippingCharges) > 0) {
-      payload.shipping_charge = Number(req.body.shippingCharges);
-    }
-    if (req.body.otherCharges && Number(req.body.otherCharges) !== 0) {
-      payload.adjustment = Number(req.body.otherCharges);
-    }
-    if (req.body.discountPct && Number(req.body.discountPct) > 0) {
-      payload.discount = Number(req.body.discountPct);
-      payload.discount_type = 'entity_level';
-    }
 
     const statusRequested = req.body.status || 'Draft';
     const isDraft = statusRequested === 'Draft' || statusRequested === 'DRAFT';
     const isPendingApproval = statusRequested === 'Draft / Pending Approval' || statusRequested === 'WAITING FOR APPROVAL';
     const isNoApproval = String(req.body.approvalRequired).toUpperCase() === 'NO' || statusRequested === 'OPEN';
 
+    // Calculate total ordered quantity from line items
+    const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+    let calcTotalOrdered = 0;
+    const processedItems = rawItems.map(item => {
+      const q = Number(item.qty || item.quantity || 1);
+      calcTotalOrdered += q;
+      return {
+        ...item,
+        name: item.itemName || item.name || item.description || 'General Item',
+        qty: q,
+        rate: Number(item.unitPrice || item.rate || item.price || 0),
+        tax: Number(item.tax !== undefined && item.tax !== '' ? item.tax : 18),
+        previouslyReceived: Number(item.previouslyReceived || 0),
+        remainingQty: Number(item.remainingQty !== undefined ? item.remainingQty : q)
+      };
+    });
+
+    const poNumber = req.body.poNo || `PO-2026-${Date.now()}`;
     const localPOObj = {
-      id: req.body.poNo || `PO-2026-${Date.now()}`,
-      poNo: req.body.poNo || `PO-2026-${Date.now()}`,
+      id: poNumber,
+      poNo: poNumber,
       vendor: req.body.vendor || 'Fresh Vendor',
       branch: req.body.branch || '',
       contactPerson: req.body.contactPerson || '',
@@ -4161,13 +2760,15 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
       approver: req.body.approver || '',
       approvalPriority: req.body.approvalPriority || '',
       amount: req.body.amount || '₹0.00',
-      status: isDraft ? 'Draft' : (isPendingApproval ? 'Draft / Pending Approval' : 'OPEN'),
-      statusType: isDraft ? 'draft' : (isPendingApproval ? 'pending' : 'approved'),
-      items: req.body.items || []
+      status: isNoApproval ? 'OPEN' : (isPendingApproval ? 'Draft / Pending Approval' : 'Draft'),
+      statusType: isNoApproval ? 'approved' : (isPendingApproval ? 'pending' : 'draft'),
+      items: processedItems,
+      totalOrderedQty: calcTotalOrdered,
+      totalReceivedQty: 0,
+      totalRemainingQty: calcTotalOrdered,
+      grnCount: 0,
+      createdAt: req.body.createdAt || new Date().toISOString()
     };
-
-    const initialTempId = localPOObj.id;
-    const initialTempPoNo = localPOObj.poNo;
 
     const localPOs = loadLocalPOs();
     const existingIdx = localPOs.findIndex(p => p.poNo === localPOObj.poNo || p.id === localPOObj.id);
@@ -4178,149 +2779,24 @@ app.post('/api/zoho/purchaseorders', async (req, res) => {
     }
     saveLocalPOs(localPOs);
 
-    // Create Purchase Order in Zoho Books (Zoho creates it as Draft by default)
-    console.log('[ZOHO PO CREATE] Sending payload to Zoho Books:', JSON.stringify(payload, null, 2));
-    let result = await createZohoPurchaseOrder(accessToken, payload);
-    console.log('[ZOHO PO CREATE] Initial response from Zoho Books:', JSON.stringify(result, null, 2));
-    
-    // If Zoho returns any error code, strip custom purchaseorder_number & non-essential fields and retry
-    if (result && result.code && result.code !== 0) {
-      console.warn(`[ZOHO PO CREATE RETRY] Code ${result.code}: ${result.message}. Retrying with minimal payload...`);
-      delete payload.purchaseorder_number;
-      delete payload.discount;
-      delete payload.discount_type;
-      delete payload.shipping_charge;
-      delete payload.adjustment;
-      delete payload.reference_number;
-      if (payload.delivery_address) payload.delivery_address = payload.delivery_address.slice(0, 60);
-      if (payload.billing_address) payload.billing_address = payload.billing_address.slice(0, 60);
-      
-      // If error mentions non-purchase item or tax/item/account, strip item_id and tax_id so Zoho accepts it as a clean purchase order
-      const isNonPurchaseError = String(result.message || "").toLowerCase().includes("non-purchase") ||
-        String(result.message || "").toLowerCase().includes("sales information") ||
-        String(result.message || "").toLowerCase().includes("item");
-
-      if (payload.line_items && Array.isArray(payload.line_items)) {
-        payload.line_items = payload.line_items.map(li => {
-          const cleanName = (isNonPurchaseError && !li.name.includes('(Material)')) ? `${li.name} (Material)` : li.name;
-          const cleanLi = { 
-            name: cleanName, 
-            rate: li.rate, 
-            quantity: li.quantity,
-            account_id: "4080449000000000567"
-          };
-          if (li.description) cleanLi.description = li.description;
-          return cleanLi;
-        });
-      }
-
-      result = await createZohoPurchaseOrder(accessToken, payload);
-      console.log('[ZOHO PO CREATE] Retry response from Zoho Books:', JSON.stringify(result, null, 2));
-    }
-
-    if (result && (result.code === 0 || result.purchaseorder)) {
-      const createdPo = result.purchaseorder;
-      
-      // Update local object with official Zoho ID & PO number
-      if (createdPo) {
-        localPOObj.zohoId = createdPo.purchaseorder_id;
-        localPOObj.id = createdPo.purchaseorder_id || localPOObj.id;
-        localPOObj.poNo = createdPo.purchaseorder_number || localPOObj.poNo;
-        if (req.body.vendor && req.body.vendor.trim() !== '' && req.body.vendor !== 'Fresh Vendor') {
-          localPOObj.vendor = req.body.vendor.trim();
-        }
-        if (req.body.branch) localPOObj.branch = req.body.branch;
-        if (req.body.contactPerson) localPOObj.contactPerson = req.body.contactPerson;
-        if (req.body.gstNo) localPOObj.gstNo = req.body.gstNo;
-        if (delAddressStr) localPOObj.deliveryAddress = delAddressStr;
-        if (billAddressStr) localPOObj.billingAddress = billAddressStr;
-        if (termsStr) localPOObj.terms = termsStr;
-        if (notesStr) localPOObj.notes = notesStr;
-        if (req.body.amount && req.body.amount !== '₹0.00' && req.body.amount !== '₹ 0.00') localPOObj.amount = req.body.amount;
-        if (Array.isArray(req.body.items) && req.body.items.length > 0) localPOObj.items = req.body.items;
-      }
-
-      if (isNoApproval) {
-        if (createdPo && createdPo.purchaseorder_id) {
-          try {
-            await approveOrOpenZohoPO(accessToken, createdPo.purchaseorder_id);
-            createdPo.status = 'issued';
-          } catch (err) {
-            console.warn('Failed to auto-issue PO in Zoho:', err);
-          }
-        }
-        localPOObj.status = 'OPEN';
-        localPOObj.statusType = 'approved';
-      } else if (isPendingApproval) {
-        localPOObj.status = 'Draft / Pending Approval';
-        localPOObj.statusType = 'pending';
-      } else {
-        localPOObj.status = 'Draft';
-        localPOObj.statusType = 'draft';
-      }
-
-      // Save updated PO in local store - strictly in-place update using initialTempId/initialTempPoNo
-      const localPOs = loadLocalPOs();
-      const existingIdx = localPOs.findIndex(p => 
-        (localPOObj.zohoId && p.zohoId === localPOObj.zohoId) ||
-        (localPOObj.poNo && p.poNo === localPOObj.poNo) ||
-        (localPOObj.id && p.id === localPOObj.id) ||
-        (initialTempPoNo && (p.poNo === initialTempPoNo || p.id === initialTempPoNo)) ||
-        (initialTempId && (p.id === initialTempId || p.poNo === initialTempId))
-      );
-      if (existingIdx !== -1) {
-        localPOs[existingIdx] = { ...localPOs[existingIdx], ...localPOObj };
-      } else {
-        localPOs.unshift(localPOObj);
-      }
-      saveLocalPOs(localPOs);
-      zohoPurchaseOrdersCache.timestamp = 0;
-
-      return res.json({
-        success: true,
-        message: isPendingApproval ? 'PO created in Zoho Books as Draft & awaiting CEO Approval!' : 'PO created and issued in Zoho Books successfully!',
-        zohoPo: createdPo,
-        po: localPOObj
-      });
-    } else {
-      console.warn('[ZOHO PO CREATE NOTICE]', result);
-      const zohoErrMsg = (result && result.message) ? result.message : 'Unknown Zoho error';
-      return res.json({
-        success: false,
-        message: `Zoho creation warning: ${zohoErrMsg}`,
-        zohoResult: result,
-        po: localPOObj
-      });
-    }
+    return res.json({
+      success: true,
+      message: isPendingApproval 
+        ? 'PO created in BUSINZ as Draft & awaiting Approval!' 
+        : 'PO created and issued in BUSINZ successfully!',
+      purchaseorder: localPOObj,
+      po: localPOObj,
+      id: localPOObj.id,
+      poNo: localPOObj.poNo
+    });
   } catch (err) {
-    console.error('[ZOHO PO CREATE ERROR]', err);
-    res.status(500).json({ error: 'Failed to create PO: ' + err.message });
+    console.error('[BUSINZ PO CREATE ERROR]', err);
+    res.status(500).json({ error: 'Failed to create PO in BUSINZ: ' + err.message });
   }
 });
-// Returns next sequential PO number matching Zoho Books sequence (PO-000XX)
-app.get('/api/zoho/next-po-number', async (req, res) => {
+// Returns next sequential PO number matching sequence (PO-000XX) from BUSINZ local stores
+app.get('/api/next-po-number', async (req, res) => {
   let maxNum = 43;
-
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const data = await fetchZohoPurchaseOrders(accessToken);
-      if (data && data.purchaseorders && Array.isArray(data.purchaseorders)) {
-        data.purchaseorders.forEach(p => {
-          const str = String(p.purchaseorder_number || '');
-          const match = str.match(/^PO-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 2000) {
-              maxNum = val;
-            }
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching next PO number from Zoho:', err);
-    }
-  }
 
   const localPOs = loadLocalPOs();
   localPOs.forEach(p => {
@@ -4338,48 +2814,31 @@ app.get('/api/zoho/next-po-number', async (req, res) => {
   res.json({ nextPoNo });
 });
 
-// Returns next sequential Tax Invoice number matching Zoho Books sequence (INV-0000XX)
-app.get('/api/zoho/next-invoice-number', async (req, res) => {
+// Returns next sequential Tax Invoice number matching sequence (INV-0000XX) from BUSINZ local stores
+app.get('/api/next-invoice-number', async (req, res) => {
   let maxNum = 11;
 
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const data = await fetchZohoInvoices(accessToken);
-      if (data && data.invoices && Array.isArray(data.invoices)) {
-        data.invoices.forEach(i => {
-          const str = String(i.invoice_number || '');
-          const match = str.match(/^INV-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 2000) {
-              maxNum = val;
-            }
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching next Invoice number from Zoho:', err);
-    }
-  }
-
-  // Also scan local invoice_store.json
+  // Also scan local invoice_store.json and in-memory store
   try {
     const invStorePath = getStoreFilePath('invoice_store.json');
+    let localInvs = [];
     if (fs.existsSync(invStorePath)) {
-      const localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
-      if (Array.isArray(localInvs)) {
-        localInvs.forEach(i => {
-          const str = String(i.invNo || i.invoiceNo || i.code || '');
-          const match = str.match(/^INV-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 2000) {
-              maxNum = val;
-            }
+      localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+    }
+    if (supabaseMemoryStore.invoice_store && Array.isArray(supabaseMemoryStore.invoice_store)) {
+      localInvs = [...localInvs, ...supabaseMemoryStore.invoice_store];
+    }
+    if (Array.isArray(localInvs)) {
+      localInvs.forEach(i => {
+        const str = String(i.invNo || i.invoiceNo || i.code || '');
+        const match = str.match(/^INV-(\d+)/i);
+        if (match) {
+          const val = parseInt(match[1], 10);
+          if (val > maxNum && val < 2000) {
+            maxNum = val;
           }
-        });
-      }
+        }
+      });
     }
   } catch (_) {}
 
@@ -5269,499 +3728,112 @@ app.get('/api/boms/:bomCode/documents/metadata', requireBusinzSession, async (re
   }
 });
 
-// Real-time synchronization endpoint retrieving live purchase orders from Zoho Books
-app.get('/api/zoho/purchaseorders', async (req, res) => {
-  if (!zohoSession.connected) {
-    const localGRNs = loadLocalGRNs();
-    const samplePOs = [
-      { id: 'VRMS-PO/26-27/0201', poNo: 'VRMS-PO/26-27/0201', vendor: 'RK ENTERPRISES', poDate: '05 Aug 2026', amount: '₹ 3,86,000.00' },
-      { id: 'VRMS-PO/26-27/0202', poNo: 'VRMS-PO/26-27/0202', vendor: 'Misar Trading Co', poDate: '05 Aug 2026', amount: '₹ 13,75,000.00' },
-      { id: 'PO-2026-00142', poNo: 'PO-2026-00142', vendor: 'Tata Power Solar Systems', poDate: '01 Aug 2026', amount: '₹ 28,40,000.00' },
-      { id: 'PO-2026-00139', poNo: 'PO-2026-00139', vendor: 'Sterling and Wilson Ltd', poDate: '28 Jul 2026', amount: '₹ 8,90,000.00' }
-    ];
-
-    const translated = samplePOs.map(po => {
-      const matchingGRNs = localGRNs.filter(g => g.poRef === po.poNo || g.poNo === po.poNo);
-      let totalReceived = 0;
-      matchingGRNs.forEach(grn => {
-        (grn.items || []).forEach(it => {
-          totalReceived += Number(it.accepted || it.now || 0);
-        });
-      });
-
-      return {
-        id: po.id,
-        poNo: po.poNo,
-        vendor: po.vendor,
-        poDate: po.poDate,
-        deliveryDate: '12 Aug 2026',
-        amount: po.amount,
-        status: matchingGRNs.length > 0 ? 'OPEN / PARTIALLY RECEIVED' : 'OPEN',
-        statusType: matchingGRNs.length > 0 ? 'partially_received' : 'approved',
-        grnCount: matchingGRNs.length,
-        totalReceived
-      };
-    });
-
-    return res.json(translated);
-  }
-
-  const now = Date.now();
-  const forceRefresh = req.query.force === 'true';
-
+// Real-time endpoint retrieving purchase orders strictly from BUSINZ local stores
+app.get('/api/purchaseorders', async (req, res) => {
   let localPOs = loadLocalPOs();
+  const localGRNs = loadLocalGRNs();
 
-  // Credit Protection Mandate: By default, serve 100% from local Hostinger VPS store. Zero Zoho API calls!
-  if (!forceRefresh && Array.isArray(localPOs) && localPOs.length > 0) {
-    return res.json(localPOs);
-  }
-  if (!forceRefresh && zohoPurchaseOrdersCache.data && Array.isArray(zohoPurchaseOrdersCache.data) && zohoPurchaseOrdersCache.data.length > 0) {
-    return res.json(zohoPurchaseOrdersCache.data);
-  }
+  // Calculate live receiving quantities and update status if applicable
+  const clean = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
 
-  try {
-    const accessToken = await getZohoAccessToken();
-    const data = await fetchZohoPurchaseOrders(accessToken);
-    
-    if (data.purchaseorders) {
-      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-
-      // Permanently ensure local server store is merged with Supabase cloud store
-      try {
-        const cloudPOs = await getDatabaseStore('po_store');
-        if (Array.isArray(cloudPOs) && cloudPOs.length > 0) {
-          const map = new Map();
-          cloudPOs.forEach(p => {
-            const k1 = normalize(p.poNo);
-            const k2 = normalize(p.id);
-            const k3 = normalize(p.zohoId);
-            if (k1) map.set(k1, p);
-            if (k2) map.set(k2, p);
-            if (k3) map.set(k3, p);
-          });
-          localPOs.forEach(p => {
-            const k1 = normalize(p.poNo);
-            const k2 = normalize(p.id);
-            const k3 = normalize(p.zohoId);
-            const match = (k1 && map.get(k1)) || (k2 && map.get(k2)) || (k3 && map.get(k3));
-            if (match) {
-              const pRank = getPoStageRank(p);
-              const mRank = getPoStageRank(match);
-              const effPay = p.paymentDetails || match.paymentDetails;
-              const effProceed = p.proceedDetails || match.proceedDetails;
-              const effApp = p.approvedBy || match.approvedBy;
-              let effStatus = (pRank >= mRank ? p.status : match.status) || p.status || match.status;
-              let effStatusType = (pRank >= mRank ? p.statusType : match.statusType) || p.statusType || match.statusType;
-              if (effProceed && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 4) {
-                effStatus = 'Proceed PO';
-                effStatusType = 'proceed_po';
-              } else if (effPay && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 3) {
-                effStatus = 'Payment Processed';
-                effStatusType = 'payment_processed';
-              } else if (effApp && getPoStageRank({ status: effStatus, statusType: effStatusType }) < 2) {
-                effStatus = 'MD Approved';
-                effStatusType = 'md_approved';
-              }
-              const winner = {
-                ...match,
-                ...p,
-                ...(mRank > pRank ? match : {}),
-                status: effStatus,
-                statusType: effStatusType,
-                paymentDetails: effPay,
-                proceedDetails: effProceed,
-                approvedBy: effApp,
-                approvalDate: p.approvalDate || match.approvalDate,
-                approvalTime: p.approvalTime || match.approvalTime,
-                approvalRemarks: p.approvalRemarks || match.approvalRemarks
-              };
-              if (k1) map.set(k1, winner);
-              if (k2) map.set(k2, winner);
-              if (k3) map.set(k3, winner);
-            } else {
-              if (k1) map.set(k1, p);
-              if (k2) map.set(k2, p);
-              if (k3) map.set(k3, p);
-            }
-          });
-          localPOs = Array.from(new Set(map.values()));
-          saveLocalPOs(localPOs);
-        }
-      } catch (err) {
-        console.warn('Notice: Error merging cloud PO store in GET /api/zoho/purchaseorders:', err?.message);
-      }
-
-      let localGRNs = loadLocalGRNs();
-      try {
-        const cloudGRNs = await getDatabaseStore('grn_store');
-        if (Array.isArray(cloudGRNs) && cloudGRNs.length > 0) {
-          const gMap = new Map();
-          cloudGRNs.forEach(g => {
-            const id = g.id || g.grnNo;
-            if (id) gMap.set(id, g);
-          });
-          localGRNs.forEach(g => {
-            const id = g.id || g.grnNo;
-            if (id && !gMap.has(id)) gMap.set(id, g);
-          });
-          localGRNs = Array.from(gMap.values());
-          saveLocalGRNs(localGRNs);
-        }
-      } catch (err) {
-        console.warn('Notice: Error merging cloud GRN store in GET /api/zoho/purchaseorders:', err?.message);
-      }
-
-      const translated = data.purchaseorders.map(po => {
-        // Calculate total received across all GRNs linked strictly to this exact PO
-        const clean = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-        const poRefClean = clean(po.purchaseorder_number || po.purchaseorder_id);
-        const matchingGRNs = localGRNs.filter(g => {
-          const gRef = clean(g.poRef || g.poNo || g.poId);
-          return gRef && gRef === poRefClean;
-        });
-        let totalReceived = 0;
-        matchingGRNs.forEach(grn => {
-          if (Array.isArray(grn.items) && grn.items.length > 0) {
-            grn.items.forEach(it => {
-              totalReceived += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
-            });
-          } else {
-            totalReceived += Number(grn.acceptedQty !== undefined && grn.acceptedQty !== '' ? grn.acceptedQty : (grn.receivedQty || 0));
-          }
-        });
-
-        let statusType = 'pending';
-        let statusText = 'Draft / Pending Approval';
-
-        const matchingClosedGRN = matchingGRNs.some(g => {
-          const gs = String(g.status || '').toUpperCase();
-          return gs.includes('CLOSED') || gs.includes('FULLY') || g.forceClosePO === true;
-        });
-
-        const currentLocalPOs = loadLocalPOs();
-        const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-        const pNoClean = normalize(po.purchaseorder_number);
-        const pIdClean = normalize(po.purchaseorder_id);
-        const lpMatch = currentLocalPOs.find(p => {
-          const lpNoClean = normalize(p.poNo);
-          const lpIdClean = normalize(p.id);
-          const lpZohoId = normalize(p.zohoId);
-          return (pNoClean && (lpNoClean === pNoClean || lpIdClean === pNoClean)) ||
-                 (pIdClean && (lpIdClean === pIdClean || lpZohoId === pIdClean || lpNoClean === pIdClean));
-        });
-
-        const isNoApproval = lpMatch && String(lpMatch.approvalRequired).toUpperCase() === 'NO';
-
-        let totalOrdered = lpMatch && Number(lpMatch.totalOrderedQty) ? Number(lpMatch.totalOrderedQty) : 0;
-        if (totalOrdered === 0 && Array.isArray(lpMatch?.items) && lpMatch.items.length > 0) {
-          totalOrdered = lpMatch.items.reduce((s, it) => s + Number(it.qty || it.quantity || 0), 0);
-        }
-        if (totalOrdered === 0 && matchingGRNs.length > 0) {
-          const gWithOrd = matchingGRNs.find(g => Number(g.totalOrderedQty) > 0);
-          if (gWithOrd) totalOrdered = Number(gWithOrd.totalOrderedQty);
-        }
-        if (totalOrdered === 0 && matchingGRNs.length > 0) {
-          matchingGRNs.forEach(g => {
-            if (Array.isArray(g.items)) {
-              const ordSum = g.items.reduce((s, it) => s + Number(it.ordered || 0), 0);
-              if (ordSum > totalOrdered) totalOrdered = ordSum;
-            }
-          });
-        }
-
-        const isFullyReceived = (totalOrdered > 0 && totalReceived >= totalOrdered) || 
-                                matchingClosedGRN || 
-                                (lpMatch && (lpMatch.status === 'CLOSED / FULLY RECEIVED' || lpMatch.statusType === 'closed'));
-        const isPartial = !isFullyReceived && (totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered);
-
-        if (isFullyReceived) {
-          statusType = 'closed';
-          statusText = 'CLOSED / FULLY RECEIVED';
-        } else if (isPartial && totalReceived > 0) {
-          statusType = 'partially_received';
-          statusText = 'OPEN / PARTIALLY RECEIVED';
-        } else if (lpMatch && (lpMatch.status === 'Proceed PO' || lpMatch.statusType === 'proceed_po' || Boolean(lpMatch.proceedDetails))) {
-          statusType = 'proceed_po';
-          statusText = 'Proceed PO';
-        } else if (lpMatch && (lpMatch.status === 'Payment Processed' || lpMatch.statusType === 'payment_processed' || Boolean(lpMatch.paymentDetails))) {
-          statusType = 'payment_processed';
-          statusText = 'Payment Processed';
-        } else if (lpMatch && (lpMatch.status === 'MD Approved' || lpMatch.statusType === 'md_approved' || Boolean(lpMatch.approvedBy))) {
-          statusType = 'md_approved';
-          statusText = 'MD Approved';
-        } else if (lpMatch && lpMatch.status === 'REJECTED') {
-          statusType = 'rejected';
-          statusText = 'REJECTED';
-        } else if (lpMatch && (lpMatch.status === 'Draft / Pending Approval' || lpMatch.status === 'WAITING FOR APPROVAL' || lpMatch.status === 'Pending Approval' || lpMatch.statusType === 'pending')) {
-          statusType = 'pending';
-          statusText = 'Draft / Pending Approval';
-        } else if (lpMatch && (lpMatch.status === 'Draft' || lpMatch.statusType === 'draft')) {
-          statusType = 'draft';
-          statusText = 'Draft';
-        } else if (isNoApproval || (lpMatch && lpMatch.status === 'OPEN') || po.status === 'issued' || po.status === 'open' || po.status === 'approved') {
-          statusType = 'approved';
-          statusText = 'OPEN';
-        } else {
-          statusType = 'draft';
-          statusText = 'Draft';
-        }
-        
-        const localVendors = loadLocalVendors();
-        const vMatch = localVendors.find(v => v.name === po.vendor_name || v.id === po.vendor_id);
-        const effectiveGst = (lpMatch && lpMatch.gstNo && lpMatch.gstNo !== '—') 
-          ? lpMatch.gstNo 
-          : (po.gst_no || po.gstin || (vMatch && (vMatch.gstin || vMatch.gstNo)) || '33ABCDE1234F1Z5');
-
-        const rawTotal = Number(po.total || 0);
-        const calcTotalWithGst = (lpMatch && lpMatch.amount && lpMatch.amount !== '₹0.00' && lpMatch.amount !== '₹ 0.00')
-          ? lpMatch.amount
-          : `₹ ${Number(rawTotal * 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-        const effectiveVendor = (lpMatch && lpMatch.vendor && lpMatch.vendor !== 'Fresh Vendor' && lpMatch.vendor !== 'Vendor' && (po.vendor_name === 'Annamalaiyar' ? lpMatch.vendor : (lpMatch.vendor || po.vendor_name))) || (lpMatch ? lpMatch.vendor : null) || po.vendor_name || 'Vendor';
-        const effectiveDelAddr = (lpMatch && lpMatch.deliveryAddress && lpMatch.deliveryAddress !== '—' && lpMatch.deliveryAddress !== 'Tamil Nadu, India') ? lpMatch.deliveryAddress : (lpMatch?.deliveryAddress || '—');
-        const effectiveBillAddr = (lpMatch && lpMatch.billingAddress && lpMatch.billingAddress !== '—') ? lpMatch.billingAddress : (lpMatch?.billingAddress || '—');
-        const effectiveTerms = (lpMatch && lpMatch.terms && lpMatch.terms.length > 50) ? lpMatch.terms : (lpMatch?.terms || po.terms || '');
-        const effectiveItems = (lpMatch && lpMatch.items && Array.isArray(lpMatch.items) && lpMatch.items.length > 0) ? lpMatch.items : [];
-
-        return {
-          id: po.purchaseorder_id,
-          poNo: po.purchaseorder_number,
-          zohoId: po.purchaseorder_id,
-          vendor: effectiveVendor,
-          branch: (lpMatch && lpMatch.branch) ? lpMatch.branch : (po.branch_name || ''),
-          contactPerson: (lpMatch && lpMatch.contactPerson) ? lpMatch.contactPerson : (po.contact_person_name || ''),
-          contactNo: (lpMatch && lpMatch.contactNo) ? lpMatch.contactNo : (po.phone || ''),
-          email: (lpMatch && lpMatch.email) ? lpMatch.email : (po.email || ''),
-          gstNo: effectiveGst,
-          deliveryAddress: effectiveDelAddr,
-          billingAddress: effectiveBillAddr,
-          poDate: (lpMatch && lpMatch.poDate) ? lpMatch.poDate : (po.date || '—'),
-          deliveryDate: po.delivery_date || (lpMatch ? lpMatch.deliveryDate : '—'),
-          paymentTerms: (lpMatch && lpMatch.paymentTerms && lpMatch.paymentTerms !== 'Net 30 Days') ? lpMatch.paymentTerms : (po.payment_terms_label || 'Due on Receipt'),
-          purchaser: (lpMatch && lpMatch.purchaser && lpMatch.purchaser !== '—') ? lpMatch.purchaser : (po.purchaser_name || '—'),
-          shipmentPref: (lpMatch && lpMatch.shipmentPref) ? lpMatch.shipmentPref : (po.shipment_preference || 'Road Transport'),
-          currency: (lpMatch && lpMatch.currency) ? lpMatch.currency : (po.currency_code || 'INR'),
-          project: (lpMatch && lpMatch.project) ? lpMatch.project : (po.project_name || ''),
-          priority: (lpMatch && lpMatch.priority) ? lpMatch.priority : (po.priority || 'High'),
-          scope: (lpMatch && lpMatch.scope) ? lpMatch.scope : 'Vendor Scope',
-          transportName: (lpMatch && lpMatch.transportName) ? lpMatch.transportName : '',
-          shippingCharges: (lpMatch && lpMatch.shippingCharges !== undefined) ? lpMatch.shippingCharges : (po.shipping_charge || 0),
-          otherCharges: (lpMatch && lpMatch.otherCharges !== undefined) ? lpMatch.otherCharges : (po.adjustment || 0),
-          discountPct: (lpMatch && lpMatch.discountPct !== undefined) ? lpMatch.discountPct : (po.discount_percent || 0),
-          notes: (lpMatch && lpMatch.notes) ? lpMatch.notes : (po.notes || ''),
-          terms: effectiveTerms,
-          approvalRequired: lpMatch ? lpMatch.approvalRequired : 'YES',
-          approver: lpMatch ? lpMatch.approver : '',
-          approvalPriority: lpMatch ? lpMatch.approvalPriority : '',
-          amount: calcTotalWithGst,
-          status: statusText,
-          statusType: statusType,
-          order_status: isFullyReceived ? 'closed' : ((isPartial && totalReceived > 0) ? 'received' : (lpMatch?.proceedDetails ? 'proceed_po' : (lpMatch?.paymentDetails ? 'payment_processed' : (lpMatch?.approvedBy ? 'approved' : 'draft')))),
-          totalOrderedQty: totalOrdered,
-          totalReceivedQty: totalReceived,
-          totalRemainingQty: Math.max(0, totalOrdered - totalReceived),
-          receivingProgressPct: totalOrdered > 0 ? ((totalReceived / totalOrdered) * 100).toFixed(1) : (isFullyReceived ? '100.0' : '0.0'),
-          approvedBy: (lpMatch && lpMatch.approvedBy) ? lpMatch.approvedBy : (po.approvedBy || undefined),
-          approvalDate: (lpMatch && lpMatch.approvalDate) ? lpMatch.approvalDate : undefined,
-          approvalTime: (lpMatch && lpMatch.approvalTime) ? lpMatch.approvalTime : undefined,
-          approvalRemarks: (lpMatch && lpMatch.approvalRemarks) ? lpMatch.approvalRemarks : undefined,
-          paymentDetails: (lpMatch && lpMatch.paymentDetails) ? lpMatch.paymentDetails : undefined,
-          proceedDetails: (lpMatch && lpMatch.proceedDetails) ? lpMatch.proceedDetails : undefined,
-          grnCount: matchingGRNs.length,
-          totalReceived,
-          items: effectiveItems
-        };
-      });
-
-      // Apply local status overrides and append newly created local POs that Zoho hasn't indexed yet
-      const finalLocalPOs = loadLocalPOs();
-      finalLocalPOs.forEach(lp => {
-        const lpPoNo = normalize(lp.poNo);
-        const lpId = normalize(lp.id);
-        const lpZohoId = normalize(lp.zohoId);
-        
-        const existsIdx = translated.findIndex(p => {
-          const pNo = normalize(p.poNo);
-          const pId = normalize(p.id);
-          const pZohoId = normalize(p.zohoId);
-          return (lpPoNo && (pNo === lpPoNo || pId === lpPoNo)) || 
-                 (lpId && (pId === lpId || pNo === lpId)) ||
-                 (lpZohoId && (pZohoId === lpZohoId || pId === lpZohoId));
-        });
-
-        if (existsIdx !== -1) {
-          // Always preserve non-empty items if translated currently has empty items
-          if (Array.isArray(lp.items) && lp.items.length > 0) {
-            translated[existsIdx].items = lp.items;
-          }
-          if (lp.vendor && lp.vendor !== 'Vendor' && lp.vendor !== 'Fresh Vendor' && lp.vendor !== 'Annamalaiyar') {
-            translated[existsIdx].vendor = lp.vendor;
-          }
-          if (lp.branch) translated[existsIdx].branch = lp.branch;
-          if (lp.contactPerson) translated[existsIdx].contactPerson = lp.contactPerson;
-          if (lp.gstNo && lp.gstNo !== '—') translated[existsIdx].gstNo = lp.gstNo;
-          if (lp.notes) translated[existsIdx].notes = lp.notes;
-          if (lp.terms && lp.terms.length > 50) translated[existsIdx].terms = lp.terms;
-          if (lp.deliveryAddress && lp.deliveryAddress !== '—' && lp.deliveryAddress !== 'Tamil Nadu, India') {
-            translated[existsIdx].deliveryAddress = lp.deliveryAddress;
-          }
-          if (lp.billingAddress && lp.billingAddress !== '—') {
-            translated[existsIdx].billingAddress = lp.billingAddress;
-          }
-          if (lp.amount && lp.amount !== '₹0.00' && lp.amount !== '₹ 0.00') {
-            translated[existsIdx].amount = lp.amount;
-          }
-          if (lp.priority && !translated[existsIdx].priority) translated[existsIdx].priority = lp.priority;
-          if (lp.scope && !translated[existsIdx].scope) translated[existsIdx].scope = lp.scope;
-          if (lp.transportName && !translated[existsIdx].transportName) translated[existsIdx].transportName = lp.transportName;
-          if (lp.shippingCharges !== undefined && !translated[existsIdx].shippingCharges) translated[existsIdx].shippingCharges = lp.shippingCharges;
-          if (lp.otherCharges !== undefined && !translated[existsIdx].otherCharges) translated[existsIdx].otherCharges = lp.otherCharges;
-          if (lp.discountPct !== undefined && !translated[existsIdx].discountPct) translated[existsIdx].discountPct = lp.discountPct;
-          if (lp.purchaser && lp.purchaser !== '—' && (!translated[existsIdx].purchaser || translated[existsIdx].purchaser === '—')) {
-            translated[existsIdx].purchaser = lp.purchaser;
-          }
-          if (lp.approvedBy) translated[existsIdx].approvedBy = lp.approvedBy;
-          if (lp.approvalDate) translated[existsIdx].approvalDate = lp.approvalDate;
-          if (lp.approvalTime) translated[existsIdx].approvalTime = lp.approvalTime;
-          if (lp.approvalRemarks) translated[existsIdx].approvalRemarks = lp.approvalRemarks;
-          if (lp.paymentDetails) translated[existsIdx].paymentDetails = lp.paymentDetails;
-          if (lp.proceedDetails) translated[existsIdx].proceedDetails = lp.proceedDetails;
-          if (lp.totalOrderedQty !== undefined) translated[existsIdx].totalOrderedQty = lp.totalOrderedQty;
-          if (lp.totalReceivedQty !== undefined) translated[existsIdx].totalReceivedQty = lp.totalReceivedQty;
-          if (lp.totalRemainingQty !== undefined) translated[existsIdx].totalRemainingQty = lp.totalRemainingQty;
-          if (lp.receivingProgressPct !== undefined) translated[existsIdx].receivingProgressPct = lp.receivingProgressPct;
-          if (lp.totalReceived !== undefined && !translated[existsIdx].totalReceived) translated[existsIdx].totalReceived = lp.totalReceived;
-          if (lp.grnCount !== undefined && !translated[existsIdx].grnCount) translated[existsIdx].grnCount = lp.grnCount;
-          if (Array.isArray(lp.grnHistory) && lp.grnHistory.length > 0) translated[existsIdx].grnHistory = lp.grnHistory;
-
-          const lpRec = Number(lp.totalReceivedQty !== undefined ? lp.totalReceivedQty : (lp.totalReceived || 0));
-          if ((lp.status === 'OPEN / PARTIALLY RECEIVED' || lp.statusType === 'partially_received') && lpRec > 0) {
-            translated[existsIdx].status = 'OPEN / PARTIALLY RECEIVED';
-            translated[existsIdx].statusType = 'partially_received';
-          } else if (lp.status === 'CLOSED / FULLY RECEIVED' || lp.statusType === 'closed') {
-            translated[existsIdx].status = 'CLOSED / FULLY RECEIVED';
-            translated[existsIdx].statusType = 'closed';
-          } else if (lp.status === 'Proceed PO' || lp.statusType === 'proceed_po' || Boolean(lp.proceedDetails)) {
-            translated[existsIdx].status = 'Proceed PO';
-            translated[existsIdx].statusType = 'proceed_po';
-          } else if (lp.status === 'Payment Processed' || lp.statusType === 'payment_processed' || Boolean(lp.paymentDetails)) {
-            translated[existsIdx].status = 'Payment Processed';
-            translated[existsIdx].statusType = 'payment_processed';
-          } else if (lp.status === 'MD Approved' || lp.statusType === 'md_approved' || Boolean(lp.approvedBy)) {
-            translated[existsIdx].status = 'MD Approved';
-            translated[existsIdx].statusType = 'md_approved';
-          } else if (lp.status === 'Draft / Pending Approval' || lp.statusType === 'pending') {
-            translated[existsIdx].status = 'Draft / Pending Approval';
-            translated[existsIdx].statusType = 'pending';
-          } else if (lp.status === 'Draft' || lp.statusType === 'draft') {
-            translated[existsIdx].status = 'Draft';
-            translated[existsIdx].statusType = 'draft';
-          } else if (lp.status === 'OPEN' || String(lp.approvalRequired).toUpperCase() === 'NO') {
-            translated[existsIdx].status = 'OPEN';
-            translated[existsIdx].statusType = 'approved';
-          } else if (lp.status === 'REJECTED') {
-            translated[existsIdx].status = 'REJECTED';
-            translated[existsIdx].statusType = 'rejected';
-            translated[existsIdx].rejectedBy = lp.rejectedBy;
-            translated[existsIdx].rejectionReason = lp.rejectionReason;
-          }
-        } else if (lp.poNo || lp.id) {
-          translated.unshift({
-            ...lp,
-            id: lp.zohoId || lp.id || lp.poNo,
-            poNo: lp.poNo || lp.id,
-            zohoId: lp.zohoId || lp.id,
-            vendor: lp.vendor || 'Vendor',
-            branch: lp.branch || '',
-            contactPerson: lp.contactPerson || '',
-            contactNo: lp.contactNo || '',
-            email: lp.email || '',
-            gstNo: lp.gstNo || '',
-            deliveryAddress: lp.deliveryAddress || '—',
-            billingAddress: lp.billingAddress || '—',
-            poDate: lp.poDate || 'Today',
-            deliveryDate: lp.deliveryDate || '—',
-            paymentTerms: lp.paymentTerms || 'Net 30 Days',
-            purchaser: lp.purchaser || '—',
-            shipmentPref: lp.shipmentPref || 'Road Transport',
-            currency: lp.currency || 'INR',
-            project: lp.project || '',
-            priority: lp.priority || 'High',
-            scope: lp.scope || 'Vendor Scope',
-            transportName: lp.transportName || '',
-            shippingCharges: lp.shippingCharges || 0,
-            otherCharges: lp.otherCharges || 0,
-            discountPct: lp.discountPct || 0,
-            notes: lp.notes || '',
-            terms: lp.terms || '',
-            approvalRequired: lp.approvalRequired || 'YES',
-            approver: lp.approver || '',
-            approvalPriority: lp.approvalPriority || '',
-            amount: lp.amount || '₹0.00',
-            status: lp.status || 'Draft',
-            statusType: lp.statusType || 'draft',
-            approvedBy: lp.approvedBy,
-            approvalDate: lp.approvalDate,
-            approvalTime: lp.approvalTime,
-            approvalRemarks: lp.approvalRemarks,
-            paymentDetails: lp.paymentDetails,
-            proceedDetails: lp.proceedDetails,
-            totalOrderedQty: lp.totalOrderedQty !== undefined ? lp.totalOrderedQty : 0,
-            totalReceivedQty: lp.totalReceivedQty !== undefined ? lp.totalReceivedQty : 0,
-            totalRemainingQty: lp.totalRemainingQty !== undefined ? lp.totalRemainingQty : 0,
-            receivingProgressPct: lp.receivingProgressPct || '0.0',
-            order_status: lp.order_status,
-            grnCount: lp.grnCount !== undefined ? lp.grnCount : 0,
-            totalReceived: lp.totalReceived !== undefined ? lp.totalReceived : 0,
-            items: lp.items || []
-          });
-        }
-      });
-
-      const sortedTranslated = [...translated].sort((a, b) => {
-        const parsePoNum = (item) => {
-          const str = String(item.poNo || item.id || '');
-          const match = str.match(/\d+/);
-          return match ? parseInt(match[0], 10) : 0;
-        };
-        return parsePoNum(b) - parsePoNum(a);
-      });
-
-      zohoPurchaseOrdersCache = { data: sortedTranslated, timestamp: Date.now() };
-      saveLocalPOs(sortedTranslated);
-      saveDatabaseStore('po_store', sortedTranslated).catch(() => {});
-      res.json(sortedTranslated);
-    } else {
-      const localPOs = loadLocalPOs();
-      const sortedLocal = [...localPOs].sort((a, b) => {
-        const parsePoNum = (item) => {
-          const str = String(item.poNo || item.id || '');
-          const match = str.match(/\d+/);
-          return match ? parseInt(match[0], 10) : 0;
-        };
-        return parsePoNum(b) - parsePoNum(a);
-      });
-      res.json(sortedLocal);
-    }
-  } catch (err) {
-    console.error('Zoho PO fetch notice:', err.message);
-    const localPOs = loadLocalPOs();
-    const sortedLocal = [...localPOs].sort((a, b) => {
-      const parsePoNum = (item) => {
-        const str = String(item.poNo || item.id || '');
-        const match = str.match(/\d+/);
-        return match ? parseInt(match[0], 10) : 0;
-      };
-      return parsePoNum(b) - parsePoNum(a);
+  const reconciledPOs = localPOs.map(po => {
+    const pNoClean = clean(po.poNo || po.id || po.purchaseorder_number);
+    const pIdClean = clean(po.id);
+    const matchingGRNs = localGRNs.filter(g => {
+      const gRef = clean(g.poRef || g.poNo || g.poId);
+      return gRef && (gRef === pNoClean || gRef === pIdClean);
     });
-    res.json(sortedLocal);
-  }
+
+    let totalReceived = 0;
+    matchingGRNs.forEach(grn => {
+      if (Array.isArray(grn.items) && grn.items.length > 0) {
+        grn.items.forEach(it => {
+          totalReceived += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
+        });
+      } else {
+        totalReceived += Number(grn.acceptedQty !== undefined && grn.acceptedQty !== '' ? grn.acceptedQty : (grn.receivedQty || 0));
+      }
+    });
+
+    let totalOrdered = Number(po.totalOrderedQty) || 0;
+    if (totalOrdered === 0 && Array.isArray(po.items) && po.items.length > 0) {
+      totalOrdered = po.items.reduce((s, it) => s + Number(it.qty || it.quantity || 0), 0);
+    }
+    if (totalOrdered === 0 && matchingGRNs.length > 0) {
+      const gWithOrd = matchingGRNs.find(g => Number(g.totalOrderedQty) > 0);
+      if (gWithOrd) totalOrdered = Number(gWithOrd.totalOrderedQty);
+    }
+    if (totalOrdered === 0 && matchingGRNs.length > 0) {
+      matchingGRNs.forEach(g => {
+        if (Array.isArray(g.items)) {
+          const ordSum = g.items.reduce((s, it) => s + Number(it.ordered || 0), 0);
+          if (ordSum > totalOrdered) totalOrdered = ordSum;
+        }
+      });
+    }
+
+    const matchingClosedGRN = matchingGRNs.some(g => {
+      const gs = String(g.status || '').toUpperCase();
+      return gs.includes('CLOSED') || gs.includes('FULLY') || g.forceClosePO === true;
+    });
+
+    const isFullyReceived = (totalOrdered > 0 && totalReceived >= totalOrdered) || 
+                            matchingClosedGRN || 
+                            po.status === 'CLOSED / FULLY RECEIVED' || po.statusType === 'closed';
+    const isPartial = !isFullyReceived && (totalOrdered > 0 && totalReceived > 0 && totalReceived < totalOrdered);
+
+    let statusType = po.statusType || 'draft';
+    let statusText = po.status || 'Draft';
+
+    if (isFullyReceived) {
+      statusType = 'closed';
+      statusText = 'CLOSED / FULLY RECEIVED';
+    } else if (isPartial && totalReceived > 0) {
+      statusType = 'partially_received';
+      statusText = 'OPEN / PARTIALLY RECEIVED';
+    }
+
+    return {
+      ...po,
+      id: po.id || po.poNo,
+      poNo: po.poNo || po.id,
+      vendor: po.vendor || 'Vendor',
+      totalOrderedQty: totalOrdered,
+      totalReceivedQty: totalReceived > 0 ? totalReceived : (Number(po.totalReceivedQty) || Number(po.totalReceived) || 0),
+      totalRemainingQty: Math.max(0, totalOrdered - totalReceived),
+      receivingProgressPct: totalOrdered > 0 ? ((totalReceived / totalOrdered) * 100).toFixed(1) : (isFullyReceived ? '100.0' : (po.receivingProgressPct || '0.0')),
+      grnCount: matchingGRNs.length > 0 ? matchingGRNs.length : (po.grnCount || 0),
+      totalReceived: totalReceived > 0 ? totalReceived : (Number(po.totalReceived) || 0),
+      status: statusText,
+      statusType: statusType,
+      items: Array.isArray(po.items) ? po.items : []
+    };
+  });
+
+  const sorted = [...reconciledPOs].sort((a, b) => {
+    const parsePoNum = (item) => {
+      const str = String(item.poNo || item.id || '');
+      const match = str.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    return parsePoNum(b) - parsePoNum(a);
+  });
+
+  res.json(sorted);
 });
 
-// Endpoint to GET Sales Invoices from Zoho Books & Local Store
-app.get('/api/zoho/invoices', async (req, res) => {
+// Endpoint to GET Sales Invoices strictly from BUSINZ Local Store & Database
+app.get('/api/invoices', async (req, res) => {
   const getCleanLocalInvoices = () => {
-    const raw = supabaseMemoryStore['invoice_store'];
+    let raw = supabaseMemoryStore['invoice_store'];
+    if (!raw || (Array.isArray(raw) && raw.length === 0)) {
+      try {
+        const filePath = getStoreFilePath('invoice_store.json');
+        if (fs.existsSync(filePath)) {
+          raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        }
+      } catch (e) {}
+    }
     const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Object.keys(raw).length > 0 ? [raw] : []);
     return list.map(inv => {
       if (!inv || typeof inv !== 'object') return inv;
@@ -5775,92 +3847,13 @@ app.get('/api/zoho/invoices', async (req, res) => {
   };
 
   const localInvoices = getCleanLocalInvoices();
-
-  const forceRefresh = req.query.force === 'true';
-
-  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
-  if (!forceRefresh && Array.isArray(localInvoices) && localInvoices.length > 0) {
-    return res.json(localInvoices);
-  }
-
-  if (!zohoSession.connected) {
-    return res.json(localInvoices);
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const invData = await fetchZohoInvoices(accessToken);
-    const zohoInvoices = (invData && Array.isArray(invData.invoices)) ? invData.invoices : [];
-
-    const translated = zohoInvoices.map(inv => ({
-      id: inv.invoice_id,
-      invNo: inv.invoice_number,
-      poNo: inv.reference_number || inv.salesorder_number || 'BOM-001',
-      vendor: inv.customer_name || 'Customer',
-      customerName: inv.customer_name || 'Customer',
-      date: inv.date,
-      dueDate: inv.due_date,
-      invAmt: `₹ ${Number(inv.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-      rawTotal: inv.total,
-      balance: inv.balance,
-      pay: inv.status === 'paid' ? 'Completed & Locked' : (inv.status === 'sent' ? 'Ready for Payment' : 'Draft'),
-      status: inv.status === 'paid' ? 'Invoice Confirmed' : (inv.status === 'sent' ? 'Ready for Payment' : 'Draft'),
-      zohoId: inv.invoice_id
-    }));
-
-    // Merge with local invoice store safely
-    localInvoices.forEach(li => {
-      const matchIdx = translated.findIndex(t => t.invNo === li.invNo || t.id === li.id || (li.zohoId && t.zohoId === li.zohoId));
-      if (matchIdx === -1) {
-        translated.unshift(li);
-      }
-    });
-
-    res.json(translated);
-  } catch (err) {
-    console.error('Error fetching Zoho Invoices:', err?.message || err);
-    res.json(localInvoices);
-  }
+  res.json(localInvoices);
 });
 
-// Endpoint to CREATE / SYNC a Sales Invoice to Zoho Books
-app.post('/api/zoho/invoices', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.json({ success: true, message: 'Saved locally', invoice: req.body });
-  }
-
+// Endpoint to CREATE a Sales Invoice in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post('/api/invoices', async (req, res) => {
   try {
-    const accessToken = await getZohoAccessToken();
-    
-    // Lookup customer or fallback contact in Zoho
-    let customerId = req.body.customerId || req.body.customer_id;
-    const targetCustomer = (req.body.customerName || req.body.vendor || '').trim();
-    if (!customerId && targetCustomer) {
-      try {
-        const custData = await fetchZohoCustomers(accessToken);
-        const contacts = (custData && Array.isArray(custData.contacts)) ? custData.contacts : [];
-        const found = contacts.find(c =>
-          (c.contact_name && c.contact_name.toLowerCase() === targetCustomer.toLowerCase()) ||
-          (c.company_name && c.company_name.toLowerCase() === targetCustomer.toLowerCase())
-        );
-        if (found) {
-          customerId = found.contact_id;
-        } else {
-          const vendorData = await fetchZohoVendors(accessToken);
-          const vContacts = (vendorData && Array.isArray(vendorData.contacts)) ? vendorData.contacts : [];
-          const vFound = vContacts.find(c =>
-            (c.contact_name && c.contact_name.toLowerCase() === targetCustomer.toLowerCase()) ||
-            (c.company_name && c.company_name.toLowerCase() === targetCustomer.toLowerCase())
-          );
-          if (vFound) customerId = vFound.contact_id;
-        }
-      } catch (err) {
-        console.warn('[ZOHO INVOICE CUSTOMER LOOKUP ERROR]', err);
-      }
-    }
-    if (!customerId) customerId = '4080449000000033179'; // Paramount Industrial Supplies (fallback Customer ID in Zoho)
-
-    const normalizeZohoDate = (dateVal) => {
+    const normalizeInvoiceDate = (dateVal) => {
       if (!dateVal) return new Date().toISOString().split('T')[0];
       if (typeof dateVal === 'string') {
         const cleaned = dateVal.trim().replace(/Sept/i, 'Sep');
@@ -5879,241 +3872,59 @@ app.post('/api/zoho/invoices', async (req, res) => {
       return new Date().toISOString().split('T')[0];
     };
 
-    const invDateStr = normalizeZohoDate(req.body.date);
-
-    // Support dynamic distinction: Individual Products vs Preset Packages
-    const hasPresetGroups = Array.isArray(req.body.presetGroups)
-      ? req.body.presetGroups.length > 0
-      : (req.body.presetGroups && typeof req.body.presetGroups === 'object' && Object.keys(req.body.presetGroups).length > 0);
-
-    const isPreset = Boolean(
-      req.body.isPreset === true ||
-      (req.body.isPreset !== false && (hasPresetGroups || (req.body.presetName && req.body.presetName !== 'Solar Mounting Structure Kit')))
-    );
-
-    let lineItems = [];
-
-    if (isPreset) {
-      if (hasPresetGroups) {
-        const groupEntries = Array.isArray(req.body.presetGroups) ? req.body.presetGroups : Object.values(req.body.presetGroups);
-        groupEntries.forEach(grp => {
-          if (!grp) return;
-          const setCount = parseFloat(grp.setCount) || 1;
-          const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
-          const name = grp.presetName || grp.name || req.body.presetName || 'Solar Mounting Structure Preset Kit';
-          lineItems.push({
-            name: name,
-            rate: unitPrice,
-            quantity: setCount,
-            unit: 'SET',
-            account_id: '4080449000000000567',
-            description: `Preset Structure Package: ${name}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
-          });
-        });
-
-        // Add non-preset custom items if present
-        if (Array.isArray(req.body.items)) {
-          req.body.items.forEach(it => {
-            if (it.isPresetItem || Boolean(it.presetGroupId)) return;
-            const q = parseFloat(it.quantity != null ? it.quantity : (it.invQty != null ? it.invQty : it.qty)) || 1;
-            let r = parseFloat(it.rate != null ? it.rate : it.unitPrice);
-            if (isNaN(r) || r < 0) r = 0;
-            lineItems.push({
-              name: it.name || it.productName || 'Solar Structure Component',
-              rate: r,
-              quantity: q,
-              unit: it.unit || it.uom || 'Nos',
-              account_id: '4080449000000000567',
-              description: it.description || it.desc || ''
-            });
-          });
-        }
-      } else {
-        const presetName = req.body.presetName || 'Solar Mounting Structure Preset Kit';
-        const totalPresetPrice = Number(
-          req.body.totalPresetPrice ||
-          (req.body.invAmt ? String(req.body.invAmt).replace(/[^0-9.]/g, '') : null) ||
-          (req.body.items && req.body.items.length === 1 ? req.body.items[0].rate : null) ||
-          5000
-        );
-        lineItems.push({
-          name: presetName,
-          rate: totalPresetPrice,
-          quantity: 1,
-          unit: 'SET',
-          account_id: '4080449000000000567',
-          description: `Preset Structure Package: ${presetName}${req.body.bomCode ? ` (Ref BOM: ${req.body.bomCode})` : ''}`
-        });
-      }
-    } else {
-      // Individual products flow (single product or multiple distinct items)
-      const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
-      if (rawItems.length > 0) {
-        rawItems.forEach(it => {
-          const q = parseFloat(it.quantity != null ? it.quantity : (it.invQty != null ? it.invQty : it.qty)) || 1;
-          let r = parseFloat(it.rate != null ? it.rate : it.unitPrice);
-          if (isNaN(r) || r < 0) r = 0;
-          lineItems.push({
-            name: it.name || it.productName || 'Solar Structure Component',
-            rate: r,
-            quantity: q,
-            unit: it.unit || it.uom || 'Nos',
-            account_id: '4080449000000000567',
-            description: it.description || it.desc || ''
-          });
-        });
-      } else {
-        const fallbackName = req.body.productName || req.body.name || 'Solar Mounting Structure';
-        const fallbackRate = parseFloat(req.body.invAmt || req.body.total || 0) || 1000;
-        lineItems.push({
-          name: fallbackName,
-          rate: fallbackRate,
-          quantity: 1,
-          unit: 'Nos',
-          account_id: '4080449000000000567',
-          description: req.body.bomCode ? `BOM Ref: ${req.body.bomCode}` : ''
-        });
-      }
-    }
+    const invDateStr = normalizeInvoiceDate(req.body.date);
 
     const assignedInvNo = (req.body.invNo && req.body.invNo !== 'Pending Confirmation')
       ? req.body.invNo
       : (req.body.invoiceNo && req.body.invoiceNo !== 'Pending Confirmation')
         ? req.body.invoiceNo
-        : undefined;
-
-    const payload = {
-      customer_id: customerId,
-      ...(assignedInvNo ? { invoice_number: assignedInvNo } : {}),
-      date: invDateStr,
-      due_date: invDateStr,
-      reference_number: req.body.poNo || req.body.bomCode || undefined,
-      line_items: lineItems,
-      notes: req.body.notes || 'Sales Invoice created via Control Room'
-    };
-
-    const postData = JSON.stringify(payload);
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/invoices?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const zohoRes = await new Promise((resolve) => {
-      const r = https.request(options, (resp) => {
-        let data = '';
-        resp.on('data', chunk => data += chunk);
-        resp.on('end', () => {
-          try { resolve(JSON.parse(data)); } catch(e) { resolve(null); }
-        });
-      });
-      r.on('error', () => resolve(null));
-      r.write(postData);
-      r.end();
-    });
+        : `INV-${Date.now()}`;
 
     const invRecord = {
       ...req.body,
-      id: (zohoRes?.invoice && zohoRes.invoice.invoice_id) || req.body.invNo || `INV-${Date.now()}`,
-      zohoId: (zohoRes?.invoice && zohoRes.invoice.invoice_id) || undefined,
-      invNo: (zohoRes?.invoice && zohoRes.invoice.invoice_number) || assignedInvNo || req.body.invNo || `INV-${Date.now()}`,
-      invoiceNo: (zohoRes?.invoice && zohoRes.invoice.invoice_number) || assignedInvNo || req.body.invNo || `INV-${Date.now()}`,
-      status: 'Invoice Confirmed',
-      pay: 'Completed & Locked',
-      syncedToZoho: !!(zohoRes && (zohoRes.code === 0 || zohoRes.invoice))
+      id: req.body.id || assignedInvNo,
+      invNo: assignedInvNo,
+      invoiceNo: assignedInvNo,
+      date: invDateStr,
+      status: req.body.status || 'Invoice Confirmed',
+      pay: req.body.pay || 'Completed & Locked',
+      createdAt: req.body.createdAt || new Date().toISOString()
     };
 
-    try {
-      const invStorePath = getStoreFilePath('invoice_store.json');
-      let localInvList = [];
-      if (fs.existsSync(invStorePath)) {
-        try { localInvList = JSON.parse(fs.readFileSync(invStorePath, 'utf8')); } catch (_) {}
-      }
-      if (!Array.isArray(localInvList)) localInvList = [];
-      const matchIdx = localInvList.findIndex(i => i.invNo === invRecord.invNo || i.id === invRecord.id);
-      if (matchIdx !== -1) {
-        localInvList[matchIdx] = { ...localInvList[matchIdx], ...invRecord };
-      } else {
-        localInvList.unshift(invRecord);
-      }
-      fs.writeFileSync(invStorePath, JSON.stringify(localInvList, null, 2), 'utf8');
-      if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
-      supabaseMemoryStore['invoice_store'] = localInvList;
-      pushStoreToSupabase('invoice_store', localInvList);
-    } catch (e) {
-      console.error('Error persisting invoice to disk store:', e);
+    const invStorePath = getStoreFilePath('invoice_store.json');
+    let localInvList = [];
+    if (fs.existsSync(invStorePath)) {
+      try { localInvList = JSON.parse(fs.readFileSync(invStorePath, 'utf8')); } catch (_) {}
     }
-
-    if (zohoRes && (zohoRes.code === 0 || zohoRes.invoice)) {
-      return res.json({ success: true, message: 'Invoice synced to Zoho Books!', invoice: invRecord, zohoResult: zohoRes });
+    if (!Array.isArray(localInvList)) localInvList = [];
+    const matchIdx = localInvList.findIndex(i => i.invNo === invRecord.invNo || i.id === invRecord.id);
+    if (matchIdx !== -1) {
+      localInvList[matchIdx] = { ...localInvList[matchIdx], ...invRecord };
     } else {
-      return res.json({ success: true, warning: zohoRes?.message || 'Invoice saved locally', invoice: invRecord, zohoResult: zohoRes });
+      localInvList.unshift(invRecord);
     }
+    fs.writeFileSync(invStorePath, JSON.stringify(localInvList, null, 2), 'utf8');
+    if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
+    supabaseMemoryStore['invoice_store'] = localInvList;
+    pushStoreToSupabase('invoice_store', localInvList);
+
+    return res.json({
+      success: true,
+      message: 'Invoice saved in BUSINZ successfully!',
+      invoice: invRecord
+    });
   } catch (err) {
-    console.error('Error creating Zoho Invoice:', err);
-    res.json({ success: true, warning: 'Saved locally', invoice: req.body });
+    console.error('[BUSINZ INVOICE CREATE ERROR]', err);
+    res.status(500).json({ error: 'Failed to create invoice in BUSINZ: ' + err.message });
   }
 });
 
 // Proforma Invoices / Estimates endpoints
-// Returns next sequential PI number matching Zoho Quotes sequence (PI-000XX)
-app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (req, res) => {
+// Returns next sequential PI number matching sequence (PI-000XX) from BUSINZ local stores
+app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) => {
   let maxNum = 0;
 
-  // 1. Check Zoho Books Estimates/Quotes
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const zohoRes = await new Promise((resolve) => {
-        const options = {
-          hostname: 'www.zohoapis.in',
-          port: 443,
-          path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&per_page=200&sort_column=created_time&sort_order=D`,
-          method: 'GET',
-          headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-        };
-        const req = https.request(options, (resp) => {
-          let d = '';
-          resp.on('data', c => d += c);
-          resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-        });
-        req.on('error', () => resolve(null));
-        req.setTimeout(2500, () => {
-          try { req.destroy(); } catch (_) {}
-          resolve(null);
-        });
-        req.end();
-      });
-
-      if (zohoRes && Array.isArray(zohoRes.estimates)) {
-        zohoRes.estimates.forEach(est => {
-          const numStr = String(est.estimate_number || '');
-          // Support VRMS/PI/26-27/XXXX and generic PI-XXXXX
-          const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
-          if (vrmMatch) {
-            const val = parseInt(vrmMatch[1], 10);
-            if (val > maxNum) maxNum = val;
-          } else {
-            const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-            if (match) {
-              const val = parseInt(match[1], 10);
-              if (val > maxNum && val < 1000000) maxNum = val;
-            }
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching next estimate from Zoho:', err);
-    }
-  }
-
-  // 2. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
+  // 1. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
   const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
   for (const sf of storeFiles) {
     try {
@@ -6140,7 +3951,7 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
     } catch (_) {}
   }
 
-  // 3. Check memory stores
+  // 2. Check memory stores
   ['proforma_invoice_store', 'sales_pi_store'].forEach(key => {
     const list = supabaseMemoryStore[key];
     if (Array.isArray(list)) {
@@ -6161,7 +3972,7 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
     }
   });
 
-  const nextNum = maxNum > 0 ? maxNum + 1 : 2287;
+  const nextNum = maxNum > 0 ? maxNum + 1 : 56;
   // Compute fiscal year string: e.g., 2026-2027 => 26-27
   const now = new Date();
   const curYear = now.getFullYear();
@@ -6174,22 +3985,18 @@ app.get(['/api/zoho/next-pi-number', '/api/zoho/next-estimate-number'], async (r
   res.json({ nextPiNo, nextNum, fiscalYear: fyStr });
 });
 
-app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res) => {
+app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
   const p1 = getStoreFilePath('proforma_invoice_store.json');
   const p2 = getStoreFilePath('sales_pi_store.json');
-  const pExport = getStoreFilePath('zoho_quotes_export.json');
-
-  const now = Date.now();
-  const forceRefresh = req.query.force === 'true';
-
-  if (!forceRefresh && zohoEstimatesCache.data && Array.isArray(zohoEstimatesCache.data) && zohoEstimatesCache.data.length > 0 && (now - zohoEstimatesCache.timestamp < ZOHO_CACHE_TTL)) {
-    return res.json(zohoEstimatesCache.data);
-  }
 
   let localEstimates = [];
   try {
-    if (fs.existsSync(p1)) localEstimates = JSON.parse(fs.readFileSync(p1, 'utf8'));
+    if (fs.existsSync(p1)) {
+      const data = JSON.parse(fs.readFileSync(p1, 'utf8'));
+      if (Array.isArray(data)) localEstimates = data;
+    }
   } catch (_) {}
+
   try {
     if (fs.existsSync(p2)) {
       const salesData = JSON.parse(fs.readFileSync(p2, 'utf8'));
@@ -6211,181 +4018,15 @@ app.get(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res)
     }
   } catch (_) {}
 
-  // Check if an exported quotes file from Zoho Books was placed into server/zoho_quotes_export.json
-  try {
-    if (fs.existsSync(pExport)) {
-      const rawExp = JSON.parse(fs.readFileSync(pExport, 'utf8'));
-      const exportList = Array.isArray(rawExp) ? rawExp : (Array.isArray(rawExp.estimates) ? rawExp.estimates : []);
-      if (exportList.length > 0) {
-        const expMap = new Map();
-        localEstimates.forEach(x => { if (x && x.piNo) expMap.set(String(x.piNo).toLowerCase(), x); });
-        exportList.forEach(est => {
-          const piNo = est.estimate_number || est.piNo || est['Estimate Number'] || est['Quote Number'];
-          if (!piNo) return;
-          const k = String(piNo).toLowerCase();
-          if (!expMap.has(k)) {
-            expMap.set(k, {
-              id: est.estimate_id || est.id || piNo,
-              piNo: piNo,
-              piDate: est.date || est.piDate || est['Date'] || '',
-              vendor: est.customer_name || est.vendor || est['Customer Name'] || '',
-              customerName: est.customer_name || est.vendor || est['Customer Name'] || '',
-              customerId: est.customer_id || '',
-              salesPerson: est.salesperson_name || est.salesPerson || est['Salesperson'] || '',
-              salesperson: est.salesperson_name || est.salesPerson || est['Salesperson'] || '',
-              salesPersonCode: est.salesperson_id || '',
-              amount: est.amount || `₹${Number(est.total || est['Total'] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-              total: est.total || est['Total'] || 0,
-              status: est.status === 'invoiced' ? 'Invoiced' : (est.status === 'declined' ? 'Cancelled' : (est.status === 'draft' ? 'Draft' : 'Issued')),
-              statusType: est.status === 'invoiced' ? 'invoiced' : (est.status === 'declined' ? 'cancelled' : (est.status === 'draft' ? 'draft' : 'issued')),
-              zohoSynced: true,
-              zohoEstimateId: String(est.estimate_id || est.id || '').trim(),
-              zohoModule: 'Quotes'
-            });
-          }
-        });
-        localEstimates = Array.from(expMap.values());
-      }
-    }
-  } catch (_) {}
-
-  // Credit Protection Mandate: If local VPS database already has estimates and force is NOT set, serve immediately! Zero Zoho API calls!
-  if (!forceRefresh && localEstimates.length > 0) {
-    return res.json(localEstimates);
+  if (localEstimates.length === 0 && Array.isArray(supabaseMemoryStore['proforma_invoice_store']) && supabaseMemoryStore['proforma_invoice_store'].length > 0) {
+    localEstimates = supabaseMemoryStore['proforma_invoice_store'];
   }
 
-  if (!zohoSession.connected) return res.json(localEstimates);
-
-  // If Zoho daily limit is active, back off and serve local data without hammering Zoho
-  if (now < zohoEstimatesRateLimitedUntil) {
-    return res.json(localEstimates);
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    let allZohoEstimates = [];
-    let page = 1;
-    let hasMore = true;
-
-    // Fetch pages of Zoho Estimates/Quotes (by default latest 200 quotes - page 1; full pagination only when ?all=true)
-    const maxPages = req.query.all === 'true' ? 25 : 1;
-    while (hasMore && page <= maxPages) {
-      const pageData = await new Promise((resolve) => {
-        const options = {
-          hostname: 'www.zohoapis.in',
-          port: 443,
-          path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&page=${page}&per_page=200&sort_column=created_time&sort_order=D`,
-          method: 'GET',
-          headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-        };
-        const req = https.request(options, (resp) => {
-          let d = '';
-          resp.on('data', c => d += c);
-          resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-        });
-        req.on('error', () => resolve(null));
-        req.setTimeout(8000, () => {
-          try { req.destroy(); } catch (_) {}
-          resolve(null);
-        });
-        req.end();
-      });
-
-      if (pageData && pageData.code === 45) {
-        console.warn('[ZOHO ESTIMATES WARNING]: Zoho API daily limit of 5,000 calls reached. Backing off for 10 minutes.');
-        zohoEstimatesRateLimitedUntil = Date.now() + 10 * 60 * 1000;
-        break;
-      }
-
-      if (pageData && Array.isArray(pageData.estimates) && pageData.estimates.length > 0) {
-        allZohoEstimates.push(...pageData.estimates);
-        hasMore = Boolean(pageData.page_context && pageData.page_context.has_more_page);
-        page += 1;
-      } else {
-        hasMore = false;
-      }
-    }
-
-    if (allZohoEstimates.length === 0) {
-      if (localEstimates.length > 0) {
-        zohoEstimatesCache = { data: localEstimates, timestamp: Date.now() };
-      }
-      return res.json(localEstimates);
-    }
-
-    const mappedPIs = allZohoEstimates.map(est => ({
-      id: est.estimate_id || est.id,
-      piNo: est.estimate_number,
-      piDate: est.date,
-      vendor: est.customer_name,
-      customerName: est.customer_name,
-      customerId: est.customer_id,
-      salesPerson: est.salesperson_name || '',
-      salesperson: est.salesperson_name || '',
-      salesPersonCode: est.salesperson_id || '',
-      amount: `₹${Number(est.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-      total: est.total,
-      status: est.status === 'invoiced' ? 'Invoiced' : (est.status === 'declined' ? 'Cancelled' : (est.status === 'draft' ? 'Draft' : 'Issued')),
-      statusType: est.status === 'invoiced' ? 'invoiced' : (est.status === 'declined' ? 'cancelled' : (est.status === 'draft' ? 'draft' : 'issued')),
-      zohoSynced: true,
-      zohoEstimateId: String(est.estimate_id || est.id || '').trim(),
-      zohoModule: 'Quotes'
-    }));
-
-    const piMap = new Map();
-    mappedPIs.forEach(p => piMap.set(String(p.piNo).toLowerCase(), p));
-    localEstimates.forEach(lp => {
-      if (!lp || !lp.piNo) return;
-      const k = String(lp.piNo).toLowerCase();
-      if (!piMap.has(k)) {
-        const isSynced = Boolean(lp.zohoEstimateId && /^\d{15,22}$/.test(String(lp.zohoEstimateId).trim()));
-        piMap.set(k, {
-          ...lp,
-          zohoSynced: isSynced,
-          zohoEstimateId: isSynced ? String(lp.zohoEstimateId).trim() : null,
-          zohoModule: 'Quotes'
-        });
-      } else {
-        const zp = piMap.get(k);
-        const validId = zp.zohoEstimateId || (lp.zohoEstimateId && /^\d{15,22}$/.test(String(lp.zohoEstimateId).trim()) ? String(lp.zohoEstimateId).trim() : null) || zp.id;
-        piMap.set(k, {
-          ...zp,
-          ...lp,
-          zohoSynced: true,
-          zohoEstimateId: validId,
-          zohoModule: 'Quotes',
-          status: lp.status || zp.status,
-          statusType: lp.statusType || zp.statusType
-        });
-      }
-    });
-
-    const finalEstimates = Array.from(piMap.values());
-    zohoEstimatesCache = { data: finalEstimates, timestamp: Date.now() };
-
-    // Update in-memory and database stores so cloud store fetches also return them immediately
-    supabaseMemoryStore['sales_pi_store'] = finalEstimates;
-    supabaseMemoryStore['proforma_invoice_store'] = finalEstimates;
-
-    try {
-      if (finalEstimates.length > 0) {
-        saveDatabaseStore('sales_pi_store', finalEstimates).catch(() => {});
-        saveDatabaseStore('proforma_invoice_store', finalEstimates).catch(() => {});
-        fs.writeFileSync(p1, JSON.stringify(finalEstimates, null, 2), 'utf8');
-        fs.writeFileSync(p2, JSON.stringify(finalEstimates, null, 2), 'utf8');
-        broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: finalEstimates });
-      }
-    } catch (_) {}
-
-    res.json(finalEstimates);
-  } catch (err) {
-    console.error('[ZOHO ESTIMATES ERROR]:', err?.message || err);
-    res.json(localEstimates);
-  }
+  res.json(localEstimates);
 });
 
-// Direct import endpoint to ingest exported Zoho Quotes/Estimates (e.g. from Zoho Books CSV or JSON export)
-app.post('/api/zoho/import-estimates', async (req, res) => {
+// Direct import endpoint to ingest exported Quotes/Estimates
+app.post('/api/import-estimates', async (req, res) => {
   try {
     const rawEstimates = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.estimates) ? req.body.estimates : []);
     if (rawEstimates.length === 0) {
@@ -6408,15 +4049,11 @@ app.post('/api/zoho/import-estimates', async (req, res) => {
       amount: est.amount || `₹${Number(est.total || est['Total'] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
       total: Number(est.total || est['Total'] || 0),
       status: (est.status || '').toLowerCase() === 'invoiced' ? 'Invoiced' : ((est.status || '').toLowerCase() === 'declined' ? 'Cancelled' : ((est.status || '').toLowerCase() === 'draft' ? 'Draft' : 'Issued')),
-      statusType: (est.status || '').toLowerCase() === 'invoiced' ? 'invoiced' : ((est.status || '').toLowerCase() === 'declined' ? 'cancelled' : ((est.status || '').toLowerCase() === 'draft' ? 'draft' : 'issued')),
-      zohoSynced: true,
-      zohoEstimateId: String(est.estimate_id || est.id || '').trim(),
-      zohoModule: 'Quotes'
+      statusType: (est.status || '').toLowerCase() === 'invoiced' ? 'invoiced' : ((est.status || '').toLowerCase() === 'declined' ? 'cancelled' : ((est.status || '').toLowerCase() === 'draft' ? 'draft' : 'issued'))
     })).filter(x => Boolean(x.piNo));
 
     supabaseMemoryStore['sales_pi_store'] = mappedPIs;
     supabaseMemoryStore['proforma_invoice_store'] = mappedPIs;
-    zohoEstimatesCache = { data: mappedPIs, timestamp: Date.now() };
 
     fs.writeFileSync(p1, JSON.stringify(mappedPIs, null, 2), 'utf8');
     fs.writeFileSync(p2, JSON.stringify(mappedPIs, null, 2), 'utf8');
@@ -6424,51 +4061,29 @@ app.post('/api/zoho/import-estimates', async (req, res) => {
     saveDatabaseStore('proforma_invoice_store', mappedPIs).catch(() => {});
     broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: mappedPIs });
 
-    res.json({ success: true, count: mappedPIs.length, message: `Successfully imported ${mappedPIs.length} Zoho Quotes (PIs)` });
+    res.json({ success: true, count: mappedPIs.length, message: `Successfully imported ${mappedPIs.length} Quotes (PIs)` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Diagnostics endpoint to inspect Zoho Books live connection, rate limit and estimates count
-app.get('/api/zoho/debug-estimates', async (req, res) => {
+// Diagnostics endpoint to inspect BUSINZ local stores estimates count
+app.get('/api/debug-estimates', async (req, res) => {
+  const p1 = getStoreFilePath('proforma_invoice_store.json');
+  let count = 0;
   try {
-    const accessToken = await getZohoAccessToken();
-    const zohoRes = await new Promise((resolve) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/estimates?organization_id=${zohoSession.orgId}&per_page=5`,
-        method: 'GET',
-        headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-      };
-      const r = https.request(options, resp => {
-        let b = '';
-        resp.on('data', c => b += c);
-        resp.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { resolve({ parseError: b }); } });
-      });
-      r.on('error', err => resolve({ error: err.message }));
-      r.end();
-    });
-
-    const isRateLimited = zohoRes && zohoRes.code === 45;
-    res.json({
-      connected: zohoSession.connected,
-      orgId: zohoSession.orgId,
-      zohoResponseCode: zohoRes?.code,
-      zohoResponseMessage: zohoRes?.message,
-      isRateLimited,
-      estimatesInSample: (zohoRes?.estimates || []).length,
-      sampleEstimate: zohoRes?.estimates?.[0] || null,
-      cachedCount: (zohoEstimatesCache.data || []).length,
-      rateLimitedUntil: zohoEstimatesRateLimitedUntil > Date.now() ? new Date(zohoEstimatesRateLimitedUntil).toISOString() : null
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    if (fs.existsSync(p1)) count = JSON.parse(fs.readFileSync(p1, 'utf8')).length;
+  } catch (_) {}
+  res.json({
+    connected: false,
+    source: 'BUSINZ_LOCAL_STORE',
+    cachedCount: count,
+    estimatesInSample: count,
+    rateLimitedUntil: null
+  });
 });
 
-app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res) => {
+app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
   let localEstimates = [];
   const pProforma = getStoreFilePath('proforma_invoice_store.json');
   const pSales = getStoreFilePath('sales_pi_store.json');
@@ -6477,29 +4092,16 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
     if (fs.existsSync(pProforma)) localEstimates = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
   } catch (_) {}
 
-  zohoEstimatesCache.timestamp = 0;
   const cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
-
-  // Check if this PI already has a verified 15-22 digit Zoho Estimate ID
-  let verifiedZohoId = (/^\d{15,22}$/.test(String(req.body.zohoEstimateId || '').trim())) ? String(req.body.zohoEstimateId).trim() : null;
-  if (!verifiedZohoId) {
-    const existingLocal = localEstimates.find(x => x && String(x.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase());
-    if (existingLocal?.zohoEstimateId && /^\d{15,22}$/.test(String(existingLocal.zohoEstimateId).trim())) {
-      verifiedZohoId = String(existingLocal.zohoEstimateId).trim();
-    }
-  }
 
   const newPI = {
     ...req.body,
     id: req.body.id || cleanPiNo,
     piNo: cleanPiNo,
-    zohoSynced: Boolean(verifiedZohoId),
-    zohoEstimateId: verifiedZohoId || null,
-    zohoSyncError: null,
-    zohoModule: 'Quotes'
+    createdAt: req.body.createdAt || new Date().toISOString()
   };
 
-  // 1. Immediately persist to BOTH local stores before any Zoho HTTPS network calls
+  // Persist to BOTH local stores and Supabase
   const updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || '').trim() !== cleanPiNo)];
   try {
     fs.writeFileSync(pProforma, JSON.stringify(updatedProforma, null, 2), 'utf8');
@@ -6517,364 +4119,24 @@ app.post(['/api/zoho/estimates', '/api/zoho/proforma-invoices'], async (req, res
   pushStoreToSupabase('proforma_invoice_store', updatedProforma);
   pushStoreToSupabase('sales_pi_store', updatedProforma);
 
-  if (!zohoSession.connected) {
-    return res.json({ success: true, estimate: newPI, zohoSynced: false, notice: 'Zoho not connected' });
-  }
-
-  let zohoEstimateCreated = null;
-  let zohoErrorMsg = null;
-
-  try {
-    const accessToken = await getZohoAccessToken();
-
-    // Helper to send HTTPS requests to Zoho Books Estimates API
-    const callZohoEstimateApi = (method, apiPath, bodyObj) => {
-      return new Promise((resolve) => {
-        const postData = bodyObj ? JSON.stringify(bodyObj) : '';
-        const hasQuery = apiPath.includes('?');
-        const reqPath = `${apiPath}${hasQuery ? '&' : '?'}organization_id=${zohoSession.orgId}`;
-        const opt = {
-          hostname: 'www.zohoapis.in',
-          port: 443,
-          path: reqPath,
-          method: method,
-          headers: {
-            'Authorization': `Zoho-oauthtoken ${accessToken}`,
-            'Content-Type': 'application/json',
-            ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
-          }
-        };
-        const r = https.request(opt, (resp) => {
-          let d = '';
-          resp.on('data', c => d += c);
-          resp.on('end', () => {
-            try { resolve(JSON.parse(d)); } catch (_) { resolve(null); }
-          });
-        });
-        r.on('error', (e) => resolve({ code: -1, message: e.message }));
-        if (postData) r.write(postData);
-        r.end();
-      });
-    };
-
-    // Resolve customer ID from Zoho if name provided
-    let customerId = req.body.customerId;
-    const clientName = (req.body.customerName || req.body.vendor || '').trim();
-    if (!customerId && clientName) {
-      try {
-        const cName = encodeURIComponent(clientName);
-        const contactRes = await callZohoEstimateApi('GET', `/books/v3/contacts?search_text=${cName}`, null);
-
-        if (contactRes && Array.isArray(contactRes.contacts) && contactRes.contacts.length > 0) {
-          customerId = contactRes.contacts[0].contact_id;
-        } else {
-          // Dynamic contact provision in Zoho Books so Quote reflects the real customer name & GST
-          const rawGstVal = (req.body.gstNo || req.body.gstNumber || '').trim();
-          const newCustPayload = {
-            contact_name: clientName,
-            company_name: clientName,
-            contact_type: 'customer',
-            customer_sub_type: 'business',
-            currency_code: 'INR',
-            notes: rawGstVal ? `GSTIN: ${rawGstVal}` : undefined
-          };
-          const createCustRes = await callZohoEstimateApi('POST', `/books/v3/contacts`, newCustPayload);
-          if (createCustRes && createCustRes.contact && createCustRes.contact.contact_id) {
-            customerId = createCustRes.contact.contact_id;
-          }
-        }
-      } catch (_) {}
-    }
-    if (!customerId) customerId = '4080449000000033179'; // Fallback to verified Zoho customer
-
-    // Tax ID mapping based on GST rate in Zoho Books India
-    const taxIdMap = {
-      0: '4080449000000341001',   // GST0
-      5: '4080449000000333019',   // GST5
-      12: '4080449000000324002',  // GST12
-      18: '4080449000000055031',  // GST18
-      28: '4080449000000340001'   // GST28
-    };
-
-    // Build Zoho line items with tax_id and tax_percentage so GST calculates properly
-    const lineItems = [];
-    const pGroups = req.body.presetGroups || {};
-    const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
-    const hasPresetGroups = groupEntries.length > 0;
-
-    // 1. Add Preset Kits as single consolidated line items
-    if (hasPresetGroups) {
-      groupEntries.forEach(grp => {
-        if (!grp) return;
-        const setCount = parseFloat(grp.setCount) || 1;
-        const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
-        const name = grp.presetName || grp.name || req.body.presetName || 'Solar Mounting Structure Preset Kit';
-        lineItems.push({
-          name: name,
-          rate: unitPrice,
-          quantity: setCount,
-          description: `Preset Kit Package (${setCount} Set)`
-        });
-      });
-    }
-
-    // 2. Add individual line items (skipping components already represented in the preset kit)
-    const customItems = Array.isArray(req.body.items) ? req.body.items : [];
-    customItems.forEach(it => {
-      if (hasPresetGroups) {
-        const isPreset = it.isPresetItem || Boolean(it.presetGroupId);
-        if (isPreset) return;
-      }
-      const q = parseFloat(it.qty || it.quantity) || 1;
-      let r = parseFloat(it.rate != null ? it.rate : it.unitValue);
-      if (isNaN(r) || r < 0) r = 0;
-      lineItems.push({
-        name: it.name || it.productName || 'Solar Structure Component',
-        rate: r,
-        quantity: q,
-        description: it.description || it.category || 'Separate Product Scope'
-      });
-    });
-
-    // 3. Fallback if no items were created
-    if (lineItems.length === 0) {
-      const fallbackRate = parseFloat(req.body.total || req.body.subtotal) || 1000;
-      lineItems.push({
-        name: req.body.productName || 'Solar Mounting Structure Kit',
-        rate: fallbackRate,
-        quantity: 1,
-        description: 'Standard Order Scope'
-      });
-    }
-
-    const formatZohoDate = (dStr) => {
-      if (!dStr) return new Date().toISOString().split('T')[0];
-      const s = String(dStr).trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      const dmyMatch = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-      if (dmyMatch) {
-        const day = dmyMatch[1].padStart(2, '0');
-        const month = dmyMatch[2].padStart(2, '0');
-        const year = dmyMatch[3];
-        return `${year}-${month}-${day}`;
-      }
-      const parsed = new Date(s);
-      if (!isNaN(parsed.getTime())) {
-        return parsed.toISOString().split('T')[0];
-      }
-      return new Date().toISOString().split('T')[0];
-    };
-
-    const payload = {
-      customer_id: customerId,
-      estimate_number: cleanPiNo || undefined,
-      date: formatZohoDate(req.body.piDate),
-      expiry_date: (req.body.validUntilDate || req.body.expDate) ? formatZohoDate(req.body.validUntilDate || req.body.expDate) : undefined,
-      line_items: lineItems,
-      notes: (req.body.remarks || req.body.notes || 'Proforma Invoice generated via Control Room').slice(0, 100)
-    };
-
-    let zohoRes = null;
-
-    // If updating an existing estimate with verified ID, send PUT
-    if (verifiedZohoId) {
-      console.log('[ZOHO ESTIMATE UPDATE] Sending PUT to update estimate:', verifiedZohoId);
-      zohoRes = await callZohoEstimateApi('PUT', `/books/v3/estimates/${verifiedZohoId}?ignore_auto_number_generation=true`, payload);
-      if (!zohoRes || (!zohoRes.estimate && zohoRes.code !== 0)) {
-        console.warn('[ZOHO ESTIMATE PUT FAILED, TRYING POST]', zohoRes?.message);
-        zohoRes = null;
-      }
-    }
-
-    // If new or PUT didn't succeed, attempt POST
-    if (!zohoRes) {
-      zohoRes = await callZohoEstimateApi('POST', `/books/v3/estimates?ignore_auto_number_generation=true`, payload);
-    }
-
-    if (zohoRes && (zohoRes.estimate || zohoRes.code === 0)) {
-      const createdEst = zohoRes.estimate;
-      if (createdEst && createdEst.estimate_id) {
-        zohoEstimateCreated = createdEst;
-        newPI.zohoEstimateId = String(createdEst.estimate_id).trim();
-        newPI.piNo = createdEst.estimate_number || cleanPiNo;
-        newPI.zohoSynced = true;
-        newPI.zohoSyncError = null;
-        newPI.zohoModule = 'Quotes';
-
-        // Mark as Sent in Zoho Books so it is directly Issued/active
-        try {
-          await callZohoEstimateApi('POST', `/books/v3/estimates/${createdEst.estimate_id}/status/sent`, null);
-        } catch (_) {}
-      } else {
-        zohoErrorMsg = zohoRes?.message || 'Zoho estimate created but record details unavailable';
-        newPI.zohoSynced = false;
-        newPI.zohoSyncError = zohoErrorMsg;
-      }
-    } else if (zohoRes && (zohoRes.code === 36015 || zohoRes.code === 1001 || (zohoRes.message && String(zohoRes.message).toLowerCase().includes('already exists')))) {
-      // If estimate already exists in Zoho Books, search and UPDATE it via PUT seamlessly
-      try {
-        const estNum = encodeURIComponent(cleanPiNo);
-        let findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?estimate_number=${estNum}`, null);
-
-        // Fallback search by search_text if exact estimate_number param did not return results
-        if (!findRes || !Array.isArray(findRes.estimates) || findRes.estimates.length === 0) {
-          findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?search_text=${estNum}`, null);
-        }
-
-        const found = (findRes && Array.isArray(findRes.estimates))
-          ? (findRes.estimates.find(e => String(e.estimate_number || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) || findRes.estimates[0])
-          : null;
-
-        if (found && found.estimate_id) {
-          const targetEstId = String(found.estimate_id).trim();
-          console.log('[ZOHO ESTIMATE FOUND - UPDATING VIA PUT]:', targetEstId);
-          const putUpdateRes = await callZohoEstimateApi('PUT', `/books/v3/estimates/${targetEstId}?ignore_auto_number_generation=true`, payload);
-          const activeEst = (putUpdateRes && putUpdateRes.estimate) ? putUpdateRes.estimate : found;
-
-          zohoEstimateCreated = activeEst;
-          newPI.zohoEstimateId = targetEstId;
-          newPI.piNo = activeEst.estimate_number || cleanPiNo;
-          newPI.zohoSynced = true;
-          newPI.zohoSyncError = null;
-          newPI.zohoModule = 'Quotes';
-          zohoErrorMsg = null;
-        } else {
-          zohoErrorMsg = zohoRes?.message || `Estimate ${cleanPiNo} already exists in Zoho Books but could not be updated`;
-          newPI.zohoSynced = false;
-          newPI.zohoSyncError = zohoErrorMsg;
-        }
-      } catch (err) {
-        zohoErrorMsg = zohoRes?.message || err.message || 'Estimate already exists in Zoho Books';
-        newPI.zohoSynced = false;
-        newPI.zohoSyncError = zohoErrorMsg;
-      }
-    } else {
-      zohoErrorMsg = zohoRes?.message || (zohoRes?.error ? (typeof zohoRes.error === 'string' ? zohoRes.error : JSON.stringify(zohoRes.error)) : 'Zoho estimate creation rejected by server');
-      newPI.zohoSynced = false;
-      newPI.zohoSyncError = zohoErrorMsg;
-      console.warn('[ZOHO ESTIMATE REJECTED]', zohoRes);
-    }
-  } catch (err) {
-    zohoErrorMsg = err.message || 'Unexpected error during Zoho Books sync';
-    newPI.zohoSynced = false;
-    newPI.zohoSyncError = zohoErrorMsg;
-    console.warn('[ZOHO ESTIMATE POST NOTICE]', err);
-  }
-
-  // 2. Persist enriched newPI (with verified zohoEstimateId) to BOTH stores
-  try {
-    const finalProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || '').trim() !== cleanPiNo)];
-    fs.writeFileSync(pProforma, JSON.stringify(finalProforma, null, 2), 'utf8');
-
-    let finalSales = [];
-    if (fs.existsSync(pSales)) {
-      try { finalSales = JSON.parse(fs.readFileSync(pSales, 'utf8')); } catch (_) {}
-    }
-    finalSales = [newPI, ...finalSales.filter(pi => String(pi.piNo || '').trim() !== cleanPiNo)];
-    fs.writeFileSync(pSales, JSON.stringify(finalSales, null, 2), 'utf8');
-
-    pushStoreToSupabase('proforma_invoice_store', finalProforma);
-    pushStoreToSupabase('sales_pi_store', finalSales);
-  } catch (_) {}
-
-  res.json({
+  return res.json({
     success: true,
+    message: 'Proforma Invoice created in BUSINZ successfully!',
     estimate: newPI,
-    zohoSynced: Boolean(newPI.zohoEstimateId),
-    zohoEstimateId: newPI.zohoEstimateId || null,
-    zohoModule: 'Quotes',
-    zohoError: newPI.zohoEstimateId ? null : (zohoErrorMsg || 'Quote synchronization could not be verified in Zoho Books')
+    pi: newPI
   });
 });
 
-// Cancel / Decline Proforma Invoice (Estimate / Quote) in Zoho Books and local stores
-app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], async (req, res) => {
-  const { piNo, zohoEstimateId, reason = 'Cancelled by user in Businz' } = req.body;
+// Cancel / Decline Proforma Invoice (Estimate / Quote) in BUSINZ local stores (Native BUSINZ Store)
+app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req, res) => {
+  const { piNo, reason = 'Cancelled by user in Businz' } = req.body;
   const cleanPiNo = String(piNo || '').trim();
 
-  if (!cleanPiNo && !zohoEstimateId) {
-    return res.status(400).json({ success: false, error: 'piNo or zohoEstimateId is required to cancel a Proforma Invoice' });
+  if (!cleanPiNo) {
+    return res.status(400).json({ success: false, error: 'piNo is required to cancel a Proforma Invoice' });
   }
 
-  let zohoDeclined = false;
-  let zohoError = null;
-
-  // 1. Sync cancellation to Zoho Books
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const callZohoEstimateApi = (method, apiPath, body = null) => {
-        return new Promise((resolve) => {
-          const sep = apiPath.includes('?') ? '&' : '?';
-          const fullPath = `${apiPath}${sep}organization_id=${zohoSession.orgId}`;
-          const postData = body ? JSON.stringify(body) : null;
-          const options = {
-            hostname: 'www.zohoapis.in',
-            port: 443,
-            path: fullPath,
-            method,
-            headers: {
-              'Authorization': `Zoho-oauthtoken ${accessToken}`,
-              'Content-Type': 'application/json',
-              ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
-            }
-          };
-          const reqEst = https.request(options, (resp) => {
-            let data = '';
-            resp.on('data', chunk => { data += chunk; });
-            resp.on('end', () => {
-              try { resolve(JSON.parse(data)); } catch (_) { resolve(null); }
-            });
-          });
-          reqEst.on('error', () => resolve(null));
-          if (postData) reqEst.write(postData);
-          reqEst.end();
-        });
-      };
-
-      let estIdToDecline = zohoEstimateId;
-
-      // If we don't have zohoEstimateId, search by estimate_number
-      if (!estIdToDecline && cleanPiNo) {
-        const estNum = encodeURIComponent(cleanPiNo);
-        let findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?estimate_number=${estNum}`, null);
-        if (!findRes || !Array.isArray(findRes.estimates) || findRes.estimates.length === 0) {
-          findRes = await callZohoEstimateApi('GET', `/books/v3/estimates?search_text=${estNum}`, null);
-        }
-        const found = (findRes && Array.isArray(findRes.estimates))
-          ? (findRes.estimates.find(e => String(e.estimate_number || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) || findRes.estimates[0])
-          : null;
-        if (found && found.estimate_id) {
-          estIdToDecline = found.estimate_id;
-        }
-      }
-
-      if (estIdToDecline) {
-        // First try to mark as declined directly
-        let declineRes = await callZohoEstimateApi('POST', `/books/v3/estimates/${estIdToDecline}/status/declined`, { reason });
-
-        // If estimate is currently in draft, Zoho requires it to be 'sent' before it can be declined
-        if (declineRes && declineRes.code !== 0 && String(declineRes.message || '').toLowerCase().includes('draft')) {
-          await callZohoEstimateApi('POST', `/books/v3/estimates/${estIdToDecline}/status/sent`, null);
-          declineRes = await callZohoEstimateApi('POST', `/books/v3/estimates/${estIdToDecline}/status/declined`, { reason });
-        }
-
-        if (declineRes && (declineRes.code === 0 || String(declineRes.message || '').toLowerCase().includes('declined'))) {
-          zohoDeclined = true;
-          console.log(`[ZOHO ESTIMATE DECLINED] Quote ${cleanPiNo} (${estIdToDecline}) marked as Declined in Zoho Books.`);
-        } else {
-          zohoError = declineRes?.message || 'Could not decline estimate in Zoho Books';
-        }
-      } else {
-        zohoError = `Estimate ${cleanPiNo} not found in Zoho Books to decline`;
-      }
-    } catch (err) {
-      zohoError = err.message;
-      console.warn('[ZOHO ESTIMATE CANCEL ERROR]', err);
-    }
-  }
-
-  // 2. Persist cancellation in local stores (proforma_invoice_store and sales_pi_store)
+  // Persist cancellation in local stores (proforma_invoice_store and sales_pi_store)
   const cancelledTimestamp = new Date().toISOString();
   try {
     const pProforma = getStoreFilePath('proforma_invoice_store.json');
@@ -6882,7 +4144,7 @@ app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], a
       let localProforma = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
       if (Array.isArray(localProforma)) {
         localProforma = localProforma.map(p => {
-          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase() || (zohoEstimateId && p.zohoEstimateId === zohoEstimateId)) {
+          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
             return { ...p, status: 'Cancelled', statusType: 'cancelled', cancelledAt: cancelledTimestamp, cancelReason: reason };
           }
           return p;
@@ -6897,7 +4159,7 @@ app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], a
       let localSales = JSON.parse(fs.readFileSync(pSales, 'utf8'));
       if (Array.isArray(localSales)) {
         localSales = localSales.map(p => {
-          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase() || (zohoEstimateId && p.zohoEstimateId === zohoEstimateId)) {
+          if (String(p.piNo || '').trim().toLowerCase() === cleanPiNo.toLowerCase()) {
             return { ...p, status: 'Cancelled', statusType: 'cancelled', cancelledAt: cancelledTimestamp, cancelReason: reason };
           }
           return p;
@@ -6910,634 +4172,216 @@ app.post(['/api/zoho/estimates/cancel', '/api/zoho/proforma-invoices/cancel'], a
     console.error('[CANCEL STORE PERSIST ERROR]', e);
   }
 
-  // Invalidate estimates cache
-  zohoEstimatesCache.timestamp = 0;
-
   res.json({
     success: true,
-    message: zohoDeclined
-      ? `Proforma Invoice ${cleanPiNo} cancelled in Businz and marked as Declined in Zoho Books!`
-      : `Proforma Invoice ${cleanPiNo} marked as Cancelled in Businz.${zohoError ? ` (Zoho: ${zohoError})` : ''}`,
-    zohoDeclined,
-    zohoError
+    message: `Proforma Invoice ${cleanPiNo} marked as Cancelled in BUSINZ!`
   });
 });
 
-// Delivery Challans endpoints
-app.get('/api/zoho/deliverychallans', async (req, res) => {
-  const forceRefresh = req.query.force === 'true';
+// Delivery Challans endpoints - served strictly from BUSINZ local stores
+app.get(['/api/deliverychallans', '/api/delivery-challans'], async (req, res) => {
   let localDCs = [];
   try {
     const p = getStoreFilePath('dc_store.json');
     if (fs.existsSync(p)) localDCs = JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch (_) {}
 
-  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
-  if (!forceRefresh && Array.isArray(localDCs) && localDCs.length > 0) {
-    return res.json(localDCs);
+  if (localDCs.length === 0 && Array.isArray(supabaseMemoryStore['dc_store']) && supabaseMemoryStore['dc_store'].length > 0) {
+    localDCs = supabaseMemoryStore['dc_store'];
   }
 
-  if (!zohoSession.connected) return res.json(localDCs);
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const zohoRes = await new Promise((resolve) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/deliverychallans?organization_id=${zohoSession.orgId}&per_page=200&sort_column=created_time&sort_order=D`,
-        method: 'GET',
-        headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-      };
-      const req = https.request(options, (resp) => {
-        let d = '';
-        resp.on('data', c => d += c);
-        resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-      });
-      req.on('error', () => resolve(null));
-      req.end();
-    });
-
-    const mappedDCs = ((zohoRes && zohoRes.deliverychallans) || []).map(dc => ({
-      id: dc.deliverychallan_id || dc.id,
-      dcNo: dc.deliverychallan_number,
-      challanNo: dc.deliverychallan_number,
-      customerName: dc.customer_name,
-      date: dc.date,
-      status: dc.status
-    }));
-
-    const dcMap = new Map();
-    mappedDCs.forEach(d => dcMap.set(String(d.dcNo || d.id).toLowerCase(), d));
-    localDCs.forEach(ld => {
-      const k = String(ld.dcNo || ld.challanNo || ld.id).toLowerCase();
-      if (!dcMap.has(k)) dcMap.set(k, ld);
-    });
-
-    res.json(Array.from(dcMap.values()));
-  } catch (err) {
-    res.json(localDCs);
-  }
+  res.json(localDCs);
 });
 
-app.post('/api/zoho/deliverychallans', async (req, res) => {
+// Endpoint to CREATE a Delivery Challan in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post(['/api/deliverychallans', '/api/delivery-challans'], async (req, res) => {
   let localDCs = [];
   const p = getStoreFilePath('dc_store.json');
   try {
     if (fs.existsSync(p)) localDCs = JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch (_) {}
 
-  const newDC = { ...req.body, id: req.body.id || `DC-${Date.now()}` };
+  const newDC = { 
+    ...req.body, 
+    id: req.body.id || req.body.challanNo || req.body.dcNo || `DC-${Date.now()}`,
+    dcNo: req.body.challanNo || req.body.dcNo || `DC-${Date.now()}`,
+    createdAt: req.body.createdAt || new Date().toISOString()
+  };
   const updated = [newDC, ...localDCs];
-  try { fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8'); } catch (_) {}
-
-  if (!zohoSession.connected) return res.json({ success: true, deliverychallan: newDC });
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const payload = {
-      customer_id: req.body.customerId || '4080449000000039008',
-      deliverychallan_number: req.body.challanNo || req.body.dcNo || undefined,
-      date: req.body.date || new Date().toISOString().split('T')[0],
-      line_items: (req.body.items || []).map(it => ({
-        name: it.name || 'Solar Mounting Components',
-        quantity: Number(it.qty || it.quantity || 1)
-      }))
-    };
-    const postData = JSON.stringify(payload);
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/deliverychallans?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-    const zohoRes = await new Promise((resolve) => {
-      const r = https.request(options, (resp) => {
-        let d = '';
-        resp.on('data', c => d += c);
-        resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { resolve(null); } });
-      });
-      r.on('error', () => resolve(null));
-      r.write(postData);
-      r.end();
-    });
-
-    if (zohoRes && zohoRes.deliverychallan) {
-      newDC.zohoDcId = zohoRes.deliverychallan.deliverychallan_id;
-    }
+  try { 
+    fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8'); 
+    supabaseMemoryStore['dc_store'] = updated;
+    pushStoreToSupabase('dc_store', updated);
   } catch (_) {}
 
-  res.json({ success: true, deliverychallan: newDC });
+  res.json({ 
+    success: true, 
+    message: 'Delivery Challan created in BUSINZ successfully!',
+    deliverychallan: newDC 
+  });
 });
 
-const fetchZohoPurchaseOrderDetail = (accessToken, id) => {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/purchaseorders/${id}?organization_id=${zohoSession.orgId}`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`
-      }
-    };
 
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.end();
-  });
-};
-
-// Real-time synchronization endpoint retrieving live purchase order details from Zoho Books
-app.get('/api/zoho/purchaseorders/{*id}', async (req, res) => {
+// Real-time synchronization endpoint retrieving purchase order details strictly from BUSINZ local stores
+app.get('/api/purchaseorders/{*id}', async (req, res) => {
   const rawId = req.params.id;
   const poNo = decodeURIComponent(Array.isArray(rawId) ? rawId.join('/') : (rawId || ''));
-  if (!zohoSession.connected) {
-    const localGRNs = loadLocalGRNs();
-    const matchingGRNs = localGRNs.filter(g => {
-      const ref = (g.poRef || g.poNo || g.poId || '').toLowerCase();
-      const target = poNo.toLowerCase();
-      return ref === target || ref.includes(target) || target.includes(ref);
-    });
-    
-    const localPOs = loadLocalPOs();
-    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-    const targetClean = normalize(poNo);
-    const matchedLocalPO = localPOs.find(p => 
-      normalize(p.id) === targetClean || 
-      normalize(p.poNo) === targetClean || 
-      normalize(p.zohoId) === targetClean ||
-      normalize(p.purchaseorder_number) === targetClean ||
-      (p.poNo && normalize(p.poNo).includes(targetClean)) ||
-      (targetClean && normalize(p.poNo).length > 0 && targetClean.includes(normalize(p.poNo)))
-    );
 
-    let sampleItems = [];
-    if (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0) {
-      sampleItems = matchedLocalPO.items.map(it => ({
-        id: it.id || it.itemId || `PO-ITEM-${Math.random()}`,
-        name: it.name || it.itemName || 'Material Item',
-        description: it.description || it.desc || '',
-        account: it.account || 'Raw Material',
-        quantity: Number(it.qty || it.quantity || 1),
-        unit: it.unit || 'NOS',
-        rate: Number(it.rate || it.unitPrice || 0),
-        tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
-      }));
-    } else {
-      sampleItems = [];
-    }
+  const localGRNs = loadLocalGRNs();
+  const matchingGRNs = localGRNs.filter(g => {
+    const ref = (g.poRef || g.poNo || g.poId || '').toLowerCase();
+    const target = poNo.toLowerCase();
+    return ref === target || ref.includes(target) || target.includes(ref);
+  });
+  
+  const localPOs = loadLocalPOs();
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const targetClean = normalize(poNo);
+  const matchedLocalPO = localPOs.find(p => 
+    normalize(p.id) === targetClean || 
+    normalize(p.poNo) === targetClean || 
+    normalize(p.purchaseorder_number) === targetClean ||
+    (p.poNo && normalize(p.poNo).includes(targetClean)) ||
+    (targetClean && normalize(p.poNo).length > 0 && targetClean.includes(normalize(p.poNo)))
+  );
 
-    const itemReceivedTotals = {};
-    matchingGRNs.forEach(grn => {
-      (grn.items || []).forEach((it, idx) => {
-        const qty = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
-        const idKey = it.id || it.itemId || it.lineItemId;
-        const nameKey = (it.name || '').trim().toLowerCase();
-        if (idKey) itemReceivedTotals[idKey] = (itemReceivedTotals[idKey] || 0) + qty;
-        if (nameKey) itemReceivedTotals[nameKey] = (itemReceivedTotals[nameKey] || 0) + qty;
-        itemReceivedTotals[`IDX-${idx}`] = (itemReceivedTotals[`IDX-${idx}`] || 0) + qty;
-      });
-    });
-
-    let totalOrderedQty = 0;
-    let totalReceivedQty = 0;
-
-    const items = sampleItems.map((item, idx) => {
-      const idKey = item.id || item.itemId || item.lineItemId;
-      const nameKey = (item.name || '').trim().toLowerCase();
-      let prevReceived = 0;
-      if (idKey && itemReceivedTotals[idKey] !== undefined) {
-        prevReceived = itemReceivedTotals[idKey];
-      } else if (nameKey && itemReceivedTotals[nameKey] !== undefined) {
-        prevReceived = itemReceivedTotals[nameKey];
-      } else if (itemReceivedTotals[`IDX-${idx}`] !== undefined) {
-        prevReceived = itemReceivedTotals[`IDX-${idx}`];
-      }
-      const ordered = item.quantity || 0;
-      const remaining = Math.max(0, ordered - prevReceived);
-
-      totalOrderedQty += ordered;
-      totalReceivedQty += Math.min(ordered, prevReceived);
-
-      return {
-        id: item.id || idKey || `PO-ITEM-${idx}`,
-        name: item.name,
-        sku: item.sku || `SKU-${101 + idx}`,
-        description: item.description,
-        account: item.account || 'Raw Material',
-        qty: ordered,
-        unit: item.unit || 'NOS',
-        rate: item.rate || 0,
-        tax: item.tax !== undefined ? item.tax : 18,
-        previouslyReceived: prevReceived,
-        remainingQty: remaining
-      };
-    });
-
-    return res.json({
-      id: poNo,
-      poNo: poNo,
-      vendor: matchedLocalPO ? matchedLocalPO.vendor : 'Misar Trading Co',
-      branch: matchedLocalPO ? matchedLocalPO.branch : '',
-      contactPerson: matchedLocalPO ? matchedLocalPO.contactPerson : '',
-      contactNo: matchedLocalPO ? matchedLocalPO.contactNo : '',
-      email: matchedLocalPO ? matchedLocalPO.email : '',
-      gstNo: matchedLocalPO ? matchedLocalPO.gstNo : '',
-      deliveryAddress: matchedLocalPO ? (matchedLocalPO.deliveryAddress || '—') : '—',
-      billingAddress: matchedLocalPO ? (matchedLocalPO.billingAddress || '—') : '—',
-      poDate: matchedLocalPO ? matchedLocalPO.poDate : '05 Aug 2026',
-      deliveryDate: matchedLocalPO ? matchedLocalPO.deliveryDate : '12 Aug 2026',
-      paymentTerms: matchedLocalPO ? matchedLocalPO.paymentTerms : 'Net 30 Days',
-      purchaser: matchedLocalPO ? matchedLocalPO.purchaser : '—',
-      shipmentPref: matchedLocalPO ? matchedLocalPO.shipmentPref : 'Road Transport',
-      currency: matchedLocalPO ? matchedLocalPO.currency : 'INR',
-      project: matchedLocalPO ? matchedLocalPO.project : '',
-      priority: matchedLocalPO ? matchedLocalPO.priority : 'High',
-      shippingCharges: matchedLocalPO ? (matchedLocalPO.shippingCharges || 0) : 0,
-      otherCharges: matchedLocalPO ? (matchedLocalPO.otherCharges || 0) : 0,
-      discountPct: matchedLocalPO ? (matchedLocalPO.discountPct || 0) : 0,
-      notes: matchedLocalPO ? (matchedLocalPO.notes || '') : '',
-      terms: matchedLocalPO ? (matchedLocalPO.terms || '') : '',
-      items: items,
-      totalOrderedQty,
-      totalReceivedQty,
-      totalRemainingQty: Math.max(0, totalOrderedQty - totalReceivedQty),
-      receivingProgressPct: totalOrderedQty > 0 ? ((totalReceivedQty / totalOrderedQty) * 100).toFixed(1) : 0,
-      grnHistory: matchingGRNs,
-      amount: matchedLocalPO ? matchedLocalPO.amount : '₹ 13,75,000.00',
-      status: matchedLocalPO ? matchedLocalPO.status : (totalReceivedQty >= totalOrderedQty ? 'CLOSED / FULLY RECEIVED' : (totalReceivedQty > 0 ? 'OPEN / PARTIALLY RECEIVED' : 'OPEN')),
-      statusType: matchedLocalPO ? matchedLocalPO.statusType : (totalReceivedQty >= totalOrderedQty ? 'closed' : (totalReceivedQty > 0 ? 'partially_received' : 'open'))
-    });
+  let sampleItems = [];
+  if (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0) {
+    sampleItems = matchedLocalPO.items.map(it => ({
+      id: it.id || it.itemId || `PO-ITEM-${Math.random()}`,
+      name: it.name || it.itemName || 'Material Item',
+      description: it.description || it.desc || '',
+      account: it.account || 'Raw Material',
+      quantity: Number(it.qty || it.quantity || 1),
+      unit: it.unit || 'NOS',
+      rate: Number(it.rate || it.unitPrice || 0),
+      tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
+    }));
+  } else {
+    sampleItems = [];
   }
 
-  try {
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Zoho PO detail fetch timed out (using local authoritative record)')), 4000)
-    );
-    const fetchZohoPromise = (async () => {
-      const accessToken = await getZohoAccessToken();
-      const realPoId = await resolveZohoPOId(accessToken, poNo);
-      return await fetchZohoPurchaseOrderDetail(accessToken, realPoId || poNo);
-    })();
-    const data = await Promise.race([fetchZohoPromise, timeoutPromise]);
-    
-    if (data.purchaseorder) {
-      const po = data.purchaseorder;
-      const localGRNs = loadLocalGRNs();
-      const matchingGRNs = localGRNs.filter(g => 
-        g.poRef === po.purchaseorder_number || g.poNo === po.purchaseorder_number || g.poId === po.purchaseorder_number ||
-        g.poRef === po.purchaseorder_id || g.poNo === po.purchaseorder_id || g.poId === po.purchaseorder_id ||
-        g.poRef === poNo || g.poNo === poNo || g.poId === poNo
-      );
+  const itemReceivedTotals = {};
+  matchingGRNs.forEach(grn => {
+    (grn.items || []).forEach((it, idx) => {
+      const qty = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
+      const idKey = it.id || it.itemId || it.lineItemId;
+      const nameKey = (it.name || '').trim().toLowerCase();
+      if (idKey) itemReceivedTotals[idKey] = (itemReceivedTotals[idKey] || 0) + qty;
+      if (nameKey) itemReceivedTotals[nameKey] = (itemReceivedTotals[nameKey] || 0) + qty;
+      itemReceivedTotals[`IDX-${idx}`] = (itemReceivedTotals[`IDX-${idx}`] || 0) + qty;
+    });
+  });
 
-      // Compute cumulative received quantities per line item position
-      const itemReceivedTotals = {};
-      matchingGRNs.forEach(grn => {
-        (grn.items || []).forEach((it, idx) => {
-          const qty = Number(it.accepted !== undefined ? it.accepted : (it.now || 0));
-          const idKey = it.id || it.itemId || it.lineItemId;
-          const nameKey = String(it.name || '').trim().toLowerCase();
-          if (idKey) itemReceivedTotals[idKey] = (itemReceivedTotals[idKey] || 0) + qty;
-          if (nameKey) itemReceivedTotals[nameKey] = (itemReceivedTotals[nameKey] || 0) + qty;
-          itemReceivedTotals[`IDX-${idx}`] = (itemReceivedTotals[`IDX-${idx}`] || 0) + qty;
-        });
-      });
+  let totalOrderedQty = 0;
+  let totalReceivedQty = 0;
 
-      let totalOrderedQty = 0;
-      let totalReceivedQty = 0;
-
-      const localPOs = loadLocalPOs();
-      const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-      const cleanZohoId = normalize(po.purchaseorder_id);
-      const cleanPoNo = normalize(po.purchaseorder_number || poNo);
-      const matchedLocalPO = localPOs.find(p => {
-        const lpId = normalize(p.id);
-        const lpNo = normalize(p.poNo);
-        const lpZohoId = normalize(p.zohoId);
-        return (cleanZohoId && (lpId === cleanZohoId || lpZohoId === cleanZohoId || lpNo === cleanZohoId)) ||
-               (cleanPoNo && (lpNo === cleanPoNo || lpId === cleanPoNo || lpZohoId === cleanPoNo));
-      });
-
-      const rawLineItems = (po.line_items && Array.isArray(po.line_items) && po.line_items.length > 0)
-        ? po.line_items
-        : (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0 ? matchedLocalPO.items : (po.line_items || []));
-
-      const items = rawLineItems.map((item, idx) => {
-        const idKey = item.id || item.itemId || item.line_item_id;
-        const nameKey = String(item.name || item.itemName || '').trim().toLowerCase();
-        let prevReceived = 0;
-        if (idKey && itemReceivedTotals[idKey] !== undefined) {
-          prevReceived = itemReceivedTotals[idKey];
-        } else if (nameKey && itemReceivedTotals[nameKey] !== undefined) {
-          prevReceived = itemReceivedTotals[nameKey];
-        } else if (itemReceivedTotals[`IDX-${idx}`] !== undefined) {
-          prevReceived = itemReceivedTotals[`IDX-${idx}`];
-        }
-        const ordered = Number(item.qty !== undefined ? item.qty : (item.quantity || 0));
-        const remaining = Math.max(0, ordered - prevReceived);
-
-        totalOrderedQty += ordered;
-        totalReceivedQty += prevReceived;
-
-        const localItem = matchedLocalPO && matchedLocalPO.items && matchedLocalPO.items[idx];
-        const effectiveTax = (item.tax !== undefined && item.tax !== '' && !isNaN(Number(item.tax)))
-          ? Number(item.tax)
-          : ((localItem && localItem.tax !== undefined && localItem.tax !== '')
-            ? Number(localItem.tax)
-            : (item.tax_percentage > 0 ? Number(item.tax_percentage) : 18));
-
-        return {
-          name: (localItem && localItem.name) ? localItem.name : (item.name || item.itemName || 'Material Item'),
-          description: (localItem && localItem.description) ? localItem.description : (item.description || item.desc || ''),
-          account: (localItem && localItem.account) ? localItem.account : (item.account || item.account_name || 'Cost of Goods Sold'),
-          qty: ordered,
-          unit: item.unit || (localItem ? localItem.unit : 'NOS'),
-          rate: Number(item.rate !== undefined ? item.rate : (item.unitPrice || (localItem ? localItem.rate : 0))),
-          tax: effectiveTax,
-          previouslyReceived: prevReceived,
-          remainingQty: remaining
-        };
-      });
-
-      if (totalReceivedQty === 0 && matchingGRNs.length > 0) {
-        matchingGRNs.forEach(grn => {
-          (grn.items || []).forEach(it => {
-            totalReceivedQty += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
-          });
-        });
-      }
-
-      let statusType = 'open';
-      let statusText = 'OPEN';
-
-      const matchingClosedGRN = matchingGRNs.some(g => 
-        g.status === 'CLOSED / FULLY RECEIVED' || 
-        g.status === 'Fully Accepted' || 
-        g.status === 'Closed' || 
-        g.status === 'CLOSED'
-      );
-
-      const isActuallyClosed = (totalOrderedQty > 0 && totalReceivedQty >= totalOrderedQty) || (matchingClosedGRN && (totalOrderedQty === 0 || totalReceivedQty >= totalOrderedQty)) || (po.status === 'closed' && (totalOrderedQty === 0 || totalReceivedQty >= totalOrderedQty));
-      const isPartiallyReceived = (totalOrderedQty > 0 && totalReceivedQty > 0 && totalReceivedQty < totalOrderedQty) || (matchingGRNs.length > 0 && totalReceivedQty < totalOrderedQty) || po.status === 'partially_received' || (matchedLocalPO && (matchedLocalPO.status === 'OPEN / PARTIALLY RECEIVED' || matchedLocalPO.statusType === 'partially_received'));
-
-      if (isPartiallyReceived && totalOrderedQty > 0 && totalReceivedQty < totalOrderedQty) {
-        statusType = 'partially_received';
-        statusText = 'OPEN / PARTIALLY RECEIVED';
-      } else if (isActuallyClosed) {
-        statusType = 'closed';
-        statusText = 'CLOSED / FULLY RECEIVED';
-      } else if (isPartiallyReceived || (totalReceivedQty > 0 && totalOrderedQty > 0 && totalReceivedQty < totalOrderedQty) || po.status === 'received' || po.is_received === true) {
-        statusType = 'partially_received';
-        statusText = 'OPEN / PARTIALLY RECEIVED';
-      } else if (matchedLocalPO && (matchedLocalPO.status === 'Proceed PO' || matchedLocalPO.statusType === 'proceed_po')) {
-        statusType = 'proceed_po';
-        statusText = 'Proceed PO';
-      } else if (matchedLocalPO && (matchedLocalPO.status === 'Payment Processed' || matchedLocalPO.statusType === 'payment_processed')) {
-        statusType = 'payment_processed';
-        statusText = 'Payment Processed';
-      } else if (matchedLocalPO && (matchedLocalPO.status === 'MD Approved' || matchedLocalPO.statusType === 'md_approved' || Boolean(matchedLocalPO.approvedBy))) {
-        statusType = 'md_approved';
-        statusText = 'MD Approved';
-      } else if (matchedLocalPO && matchedLocalPO.status === 'REJECTED') {
-        statusType = 'rejected';
-        statusText = 'REJECTED';
-      } else if (matchedLocalPO && (matchedLocalPO.status === 'Draft / Pending Approval' || matchedLocalPO.status === 'WAITING FOR APPROVAL' || matchedLocalPO.status === 'Pending Approval' || matchedLocalPO.statusType === 'pending')) {
-        statusType = 'pending';
-        statusText = 'Draft / Pending Approval';
-      } else if (matchedLocalPO && (matchedLocalPO.status === 'Draft' || matchedLocalPO.statusType === 'draft')) {
-        statusType = 'draft';
-        statusText = 'Draft';
-      } else if (po.status === 'draft') {
-        statusType = 'draft';
-        statusText = 'Draft';
-      } else if ((matchedLocalPO && matchedLocalPO.status === 'OPEN') || po.status === 'issued' || po.status === 'open' || po.status === 'approved') {
-        statusType = 'approved';
-        statusText = 'OPEN';
-      }
-
-
-
-      const buildAddrStr = (addrObj) => {
-        if (!addrObj) return '';
-        if (typeof addrObj === 'string') return addrObj;
-        const parts = [
-          addrObj.address,
-          addrObj.address1,
-          addrObj.street2,
-          addrObj.city,
-          addrObj.state,
-          addrObj.zip,
-          addrObj.country
-        ].filter(p => p && String(p).trim().length > 0);
-        return parts.join(', ');
-      };
-
-      const rawDelAddr = buildAddrStr(po.delivery_address);
-      const delAddrFormatted = (matchedLocalPO && matchedLocalPO.deliveryAddress)
-        ? matchedLocalPO.deliveryAddress
-        : (rawDelAddr || '—');
-
-      const rawBillAddr = buildAddrStr(po.billing_address);
-      const billAddrFormatted = (matchedLocalPO && matchedLocalPO.billingAddress)
-        ? matchedLocalPO.billingAddress
-        : (rawBillAddr || '—');
-
-      const effectiveVendor = (matchedLocalPO && matchedLocalPO.vendor && matchedLocalPO.vendor !== 'Fresh Vendor' && matchedLocalPO.vendor !== 'Vendor' && (po.vendor_name === 'Annamalaiyar' ? matchedLocalPO.vendor : (matchedLocalPO.vendor || po.vendor_name))) || (matchedLocalPO ? matchedLocalPO.vendor : null) || po.vendor_name || 'Vendor';
-      const effectiveDelAddr = (matchedLocalPO && matchedLocalPO.deliveryAddress && matchedLocalPO.deliveryAddress !== '—' && matchedLocalPO.deliveryAddress !== 'Tamil Nadu, India') ? matchedLocalPO.deliveryAddress : (delAddrFormatted || '—');
-      const effectiveBillAddr = (matchedLocalPO && matchedLocalPO.billingAddress && matchedLocalPO.billingAddress !== '—') ? matchedLocalPO.billingAddress : (billAddrFormatted || '—');
-      const effectiveTerms = (matchedLocalPO && matchedLocalPO.terms && matchedLocalPO.terms.length > 50) ? matchedLocalPO.terms : (po.terms || matchedLocalPO?.terms || '');
-      const effectiveItems = (items && items.length > 0) ? items : (matchedLocalPO?.items || []);
-      const effectiveAmount = (matchedLocalPO && matchedLocalPO.amount && matchedLocalPO.amount !== '₹0.00' && matchedLocalPO.amount !== '₹ 0.00') ? matchedLocalPO.amount : `₹${Number(po.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-      const translated = {
-        id: po.purchaseorder_id,
-        poNo: po.purchaseorder_number,
-        vendor: effectiveVendor,
-        branch: (matchedLocalPO && matchedLocalPO.branch) ? matchedLocalPO.branch : (po.branch_name || ''),
-        contactPerson: (matchedLocalPO && matchedLocalPO.contactPerson) ? matchedLocalPO.contactPerson : (po.contact_person_name || ''),
-        contactNo: (matchedLocalPO && matchedLocalPO.contactNo) ? matchedLocalPO.contactNo : (po.phone || po.mobile || ''),
-        email: (matchedLocalPO && matchedLocalPO.email) ? matchedLocalPO.email : (po.email || ''),
-        gstNo: (matchedLocalPO && matchedLocalPO.gstNo && matchedLocalPO.gstNo !== '—') ? matchedLocalPO.gstNo : (po.gst_no || po.gstin || po.tax_registration_number || ''),
-        deliveryAddress: effectiveDelAddr,
-        billingAddress: effectiveBillAddr,
-        poDate: po.date,
-        deliveryDate: po.delivery_date || (matchedLocalPO ? matchedLocalPO.deliveryDate : '—'),
-        paymentTerms: (matchedLocalPO && matchedLocalPO.paymentTerms && matchedLocalPO.paymentTerms !== 'Net 30 Days' && matchedLocalPO.paymentTerms !== 'Due on Receipt') ? matchedLocalPO.paymentTerms : (po.payment_terms_label || matchedLocalPO?.paymentTerms || 'Net 30 Days'),
-        purchaser: (matchedLocalPO && matchedLocalPO.purchaser && matchedLocalPO.purchaser !== '—') ? matchedLocalPO.purchaser : (po.purchaser_name || '—'),
-        shipmentPref: (matchedLocalPO && matchedLocalPO.shipmentPref) ? matchedLocalPO.shipmentPref : (po.shipment_preference || 'Road Transport'),
-        currency: po.currency_code || (matchedLocalPO ? matchedLocalPO.currency : 'INR'),
-        project: (matchedLocalPO && matchedLocalPO.project) ? matchedLocalPO.project : (po.project_name || ''),
-        priority: (matchedLocalPO && matchedLocalPO.priority) ? matchedLocalPO.priority : (po.priority || 'High'),
-        items: effectiveItems,
-        totalOrderedQty: (matchedLocalPO && matchedLocalPO.totalOrderedQty) ? matchedLocalPO.totalOrderedQty : totalOrderedQty,
-        totalReceivedQty: (matchedLocalPO && matchedLocalPO.totalReceivedQty) ? matchedLocalPO.totalReceivedQty : totalReceivedQty,
-        totalRemainingQty: (matchedLocalPO && matchedLocalPO.totalRemainingQty) ? matchedLocalPO.totalRemainingQty : Math.max(0, totalOrderedQty - totalReceivedQty),
-        receivingProgressPct: (matchedLocalPO && matchedLocalPO.receivingProgressPct) ? matchedLocalPO.receivingProgressPct : (totalOrderedQty > 0 ? ((totalReceivedQty / totalOrderedQty) * 100).toFixed(1) : 0),
-        grnHistory: matchingGRNs,
-        shippingCharges: (matchedLocalPO && matchedLocalPO.shippingCharges !== undefined) ? matchedLocalPO.shippingCharges : (po.shipping_charge || 0),
-        otherCharges: (matchedLocalPO && matchedLocalPO.otherCharges !== undefined) ? matchedLocalPO.otherCharges : (po.adjustment || 0),
-        discountPct: (matchedLocalPO && matchedLocalPO.discountPct !== undefined) ? matchedLocalPO.discountPct : (po.discount_percent || 0),
-        notes: (matchedLocalPO && matchedLocalPO.notes) ? matchedLocalPO.notes : (po.notes || ''),
-        terms: effectiveTerms,
-        amount: effectiveAmount,
-        status: statusText,
-        statusType: statusType,
-        approvedBy: matchedLocalPO ? matchedLocalPO.approvedBy : undefined,
-        approvalDate: matchedLocalPO ? matchedLocalPO.approvalDate : undefined,
-        approvalTime: matchedLocalPO ? matchedLocalPO.approvalTime : undefined,
-        approvalRemarks: matchedLocalPO ? matchedLocalPO.approvalRemarks : undefined,
-        paymentDetails: matchedLocalPO ? matchedLocalPO.paymentDetails : undefined,
-        proceedDetails: matchedLocalPO ? matchedLocalPO.proceedDetails : undefined
-      };
-
-      // Cache this fully loaded PO record into po_store.json & Supabase cloud store
-      try {
-        const localPOs = loadLocalPOs();
-        const lpIdx = localPOs.findIndex(p => p.id === translated.id || p.poNo === translated.poNo);
-        if (lpIdx !== -1) {
-          localPOs[lpIdx] = { ...localPOs[lpIdx], ...translated };
-        } else {
-          localPOs.unshift(translated);
-        }
-        saveLocalPOs(localPOs);
-        saveDatabaseStore('po_store', localPOs).catch(() => {});
-      } catch (_) {}
-
-      res.json(translated);
-    } else {
-      throw new Error(data.message || 'Failed to fetch purchase order details from Zoho.');
+  const items = sampleItems.map((item, idx) => {
+    const idKey = item.id || item.itemId || item.lineItemId;
+    const nameKey = (item.name || '').trim().toLowerCase();
+    let prevReceived = 0;
+    if (idKey && itemReceivedTotals[idKey] !== undefined) {
+      prevReceived = itemReceivedTotals[idKey];
+    } else if (nameKey && itemReceivedTotals[nameKey] !== undefined) {
+      prevReceived = itemReceivedTotals[nameKey];
+    } else if (itemReceivedTotals[`IDX-${idx}`] !== undefined) {
+      prevReceived = itemReceivedTotals[`IDX-${idx}`];
     }
-  } catch (err) {
-    console.error('Zoho PO detail fetch failed, utilizing local fallback:', err);
-    const localGRNs = loadLocalGRNs();
-    const matchingGRNs = localGRNs.filter(g => g.poRef === poNo || g.poNo === poNo || g.id === poNo);
-    
-    const localPOs = loadLocalPOs();
-    const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-    const targetClean = normalize(poNo);
-    const matchedLocalPO = localPOs.find(p => 
-      normalize(p.id) === targetClean || 
-      normalize(p.poNo) === targetClean || 
-      normalize(p.zohoId) === targetClean ||
-      normalize(p.purchaseorder_number) === targetClean ||
-      (p.poNo && normalize(p.poNo).includes(targetClean)) ||
-      (targetClean && normalize(p.poNo).length > 0 && targetClean.includes(normalize(p.poNo)))
-    );
-    
-    let sampleItems = [];
-    if (matchedLocalPO && Array.isArray(matchedLocalPO.items) && matchedLocalPO.items.length > 0) {
-      sampleItems = matchedLocalPO.items.map(it => ({
-        name: it.name || it.itemName || 'Material Item',
-        description: it.description || it.desc || '',
-        account: it.account || 'Raw Material',
-        quantity: Number(it.qty || it.quantity || 1),
-        unit: it.unit || 'NOS',
-        rate: Number(it.rate || it.unitPrice || 0),
-        tax: (it.tax !== undefined && it.tax !== '' && !isNaN(Number(it.tax))) ? Number(it.tax) : 18
-      }));
-    } else {
-      sampleItems = [];
-    }
+    const ordered = item.quantity || 0;
+    const remaining = Math.max(0, ordered - prevReceived);
 
-    const itemReceivedTotals = {};
+    totalOrderedQty += ordered;
+    totalReceivedQty += Math.min(ordered, prevReceived);
+
+    return {
+      id: item.id || idKey || `PO-ITEM-${idx}`,
+      name: item.name,
+      sku: item.sku || `SKU-${101 + idx}`,
+      description: item.description,
+      account: item.account || 'Raw Material',
+      qty: ordered,
+      unit: item.unit || 'NOS',
+      rate: item.rate || 0,
+      tax: item.tax !== undefined ? item.tax : 18,
+      previouslyReceived: prevReceived,
+      remainingQty: remaining
+    };
+  });
+
+  if (totalReceivedQty === 0 && matchingGRNs.length > 0) {
     matchingGRNs.forEach(grn => {
       (grn.items || []).forEach(it => {
-        const key = (it.name || '').trim().toLowerCase();
-        itemReceivedTotals[key] = (itemReceivedTotals[key] || 0) + Number(it.accepted || it.now || 0);
+        totalReceivedQty += Number(it.accepted !== undefined && it.accepted !== '' ? it.accepted : (it.now || 0));
       });
     });
-
-    let totalOrderedQty = 0;
-    let totalReceivedQty = 0;
-
-    const items = sampleItems.map((item, idx) => {
-      const key = (item.name || '').trim().toLowerCase();
-      const prevReceived = itemReceivedTotals[key] || 0;
-      const ordered = item.quantity || 0;
-      const remaining = Math.max(0, ordered - prevReceived);
-
-      totalOrderedQty += ordered;
-      totalReceivedQty += Math.min(ordered, prevReceived);
-
-      return {
-        name: item.name,
-        sku: item.sku || `SKU-${101 + idx}`,
-        description: item.description,
-        account: item.account || 'Raw Material',
-        qty: ordered,
-        unit: item.unit,
-        rate: item.rate,
-        tax: item.tax !== undefined ? item.tax : 18,
-        previouslyReceived: prevReceived,
-        remainingQty: remaining
-      };
-    });
-
-    return res.json({
-      id: matchedLocalPO ? (matchedLocalPO.zohoId || matchedLocalPO.id || poNo) : poNo,
-      poNo: matchedLocalPO ? (matchedLocalPO.poNo || matchedLocalPO.purchaseorder_number || poNo) : poNo,
-      zohoId: matchedLocalPO ? (matchedLocalPO.zohoId || matchedLocalPO.id) : undefined,
-      vendor: matchedLocalPO ? matchedLocalPO.vendor : 'Misar Trading Co',
-      branch: matchedLocalPO ? matchedLocalPO.branch : '',
-      contactPerson: matchedLocalPO ? matchedLocalPO.contactPerson : '',
-      contactNo: matchedLocalPO ? matchedLocalPO.contactNo : '',
-      email: matchedLocalPO ? matchedLocalPO.email : '',
-      gstNo: matchedLocalPO ? matchedLocalPO.gstNo : '',
-      deliveryAddress: matchedLocalPO ? (matchedLocalPO.deliveryAddress || '—') : '—',
-      billingAddress: matchedLocalPO ? (matchedLocalPO.billingAddress || '—') : '—',
-      poDate: matchedLocalPO ? matchedLocalPO.poDate : '05 Aug 2026',
-      deliveryDate: matchedLocalPO ? matchedLocalPO.deliveryDate : '12 Aug 2026',
-      paymentTerms: matchedLocalPO ? matchedLocalPO.paymentTerms : 'Net 30 Days',
-      purchaser: matchedLocalPO ? matchedLocalPO.purchaser : '—',
-      shipmentPref: matchedLocalPO ? matchedLocalPO.shipmentPref : 'Road Transport',
-      currency: matchedLocalPO ? matchedLocalPO.currency : 'INR',
-      project: matchedLocalPO ? matchedLocalPO.project : '',
-      priority: matchedLocalPO ? matchedLocalPO.priority : 'High',
-      scope: matchedLocalPO ? matchedLocalPO.scope : 'Vendor Scope',
-      transportName: matchedLocalPO ? matchedLocalPO.transportName : '',
-      shippingCharges: matchedLocalPO ? (matchedLocalPO.shippingCharges || 0) : 0,
-      otherCharges: matchedLocalPO ? (matchedLocalPO.otherCharges || 0) : 0,
-      discountPct: matchedLocalPO ? (matchedLocalPO.discountPct || 0) : 0,
-      notes: matchedLocalPO ? (matchedLocalPO.notes || '') : '',
-      terms: matchedLocalPO ? (matchedLocalPO.terms || '') : '',
-      approvalRequired: matchedLocalPO ? matchedLocalPO.approvalRequired : 'YES',
-      approver: matchedLocalPO ? matchedLocalPO.approver : '',
-      approvalPriority: matchedLocalPO ? matchedLocalPO.approvalPriority : '',
-      items: items,
-      totalOrderedQty,
-      totalReceivedQty,
-      totalRemainingQty: Math.max(0, totalOrderedQty - totalReceivedQty),
-      receivingProgressPct: totalOrderedQty > 0 ? ((totalReceivedQty / totalOrderedQty) * 100).toFixed(1) : 0,
-      grnHistory: matchingGRNs,
-      amount: matchedLocalPO ? matchedLocalPO.amount : '₹ 13,75,000.00',
-      status: matchedLocalPO ? matchedLocalPO.status : (totalReceivedQty >= totalOrderedQty ? 'CLOSED / FULLY RECEIVED' : (totalReceivedQty > 0 ? 'OPEN / PARTIALLY RECEIVED' : 'OPEN')),
-      statusType: matchedLocalPO ? matchedLocalPO.statusType : (totalReceivedQty >= totalOrderedQty ? 'closed' : (totalReceivedQty > 0 ? 'partially_received' : 'open')),
-      approvedBy: matchedLocalPO ? matchedLocalPO.approvedBy : undefined,
-      approvalDate: matchedLocalPO ? matchedLocalPO.approvalDate : undefined,
-      approvalTime: matchedLocalPO ? matchedLocalPO.approvalTime : undefined,
-      approvalRemarks: matchedLocalPO ? matchedLocalPO.approvalRemarks : undefined,
-      paymentDetails: matchedLocalPO ? matchedLocalPO.paymentDetails : undefined,
-      proceedDetails: matchedLocalPO ? matchedLocalPO.proceedDetails : undefined
-    });
   }
+
+  const matchingClosedGRN = matchingGRNs.some(g => {
+    const gs = String(g.status || '').toUpperCase();
+    return gs.includes('CLOSED') || gs.includes('FULLY') || g.forceClosePO === true;
+  });
+
+  const isActuallyClosed = (totalOrderedQty > 0 && totalReceivedQty >= totalOrderedQty) || 
+                          matchingClosedGRN || 
+                          (matchedLocalPO && (matchedLocalPO.status === 'CLOSED / FULLY RECEIVED' || matchedLocalPO.statusType === 'closed'));
+  const isPartiallyReceived = !isActuallyClosed && ((totalOrderedQty > 0 && totalReceivedQty > 0 && totalReceivedQty < totalOrderedQty) || (matchedLocalPO && (matchedLocalPO.status === 'OPEN / PARTIALLY RECEIVED' || matchedLocalPO.statusType === 'partially_received')));
+
+  let statusType = matchedLocalPO?.statusType || 'draft';
+  let statusText = matchedLocalPO?.status || 'Draft';
+
+  if (isActuallyClosed) {
+    statusType = 'closed';
+    statusText = 'CLOSED / FULLY RECEIVED';
+  } else if (isPartiallyReceived && totalReceivedQty > 0) {
+    statusType = 'partially_received';
+    statusText = 'OPEN / PARTIALLY RECEIVED';
+  }
+
+  return res.json({
+    id: matchedLocalPO ? (matchedLocalPO.poNo || matchedLocalPO.id || poNo) : poNo,
+    poNo: matchedLocalPO ? (matchedLocalPO.poNo || matchedLocalPO.purchaseorder_number || poNo) : poNo,
+    vendor: matchedLocalPO ? matchedLocalPO.vendor : 'Vendor',
+    branch: matchedLocalPO ? matchedLocalPO.branch : '',
+    contactPerson: matchedLocalPO ? matchedLocalPO.contactPerson : '',
+    contactNo: matchedLocalPO ? matchedLocalPO.contactNo : '',
+    email: matchedLocalPO ? matchedLocalPO.email : '',
+    gstNo: matchedLocalPO ? matchedLocalPO.gstNo : '',
+    deliveryAddress: matchedLocalPO ? (matchedLocalPO.deliveryAddress || '—') : '—',
+    billingAddress: matchedLocalPO ? (matchedLocalPO.billingAddress || '—') : '—',
+    poDate: matchedLocalPO ? matchedLocalPO.poDate : '—',
+    deliveryDate: matchedLocalPO ? matchedLocalPO.deliveryDate : '—',
+    paymentTerms: matchedLocalPO ? matchedLocalPO.paymentTerms : 'Net 30 Days',
+    purchaser: matchedLocalPO ? matchedLocalPO.purchaser : '—',
+    shipmentPref: matchedLocalPO ? matchedLocalPO.shipmentPref : 'Road Transport',
+    currency: matchedLocalPO ? matchedLocalPO.currency : 'INR',
+    project: matchedLocalPO ? matchedLocalPO.project : '',
+    priority: matchedLocalPO ? matchedLocalPO.priority : 'High',
+    scope: matchedLocalPO ? matchedLocalPO.scope : 'Vendor Scope',
+    transportName: matchedLocalPO ? matchedLocalPO.transportName : '',
+    shippingCharges: matchedLocalPO ? (matchedLocalPO.shippingCharges || 0) : 0,
+    otherCharges: matchedLocalPO ? (matchedLocalPO.otherCharges || 0) : 0,
+    discountPct: matchedLocalPO ? (matchedLocalPO.discountPct || 0) : 0,
+    notes: matchedLocalPO ? (matchedLocalPO.notes || '') : '',
+    terms: matchedLocalPO ? (matchedLocalPO.terms || '') : '',
+    approvalRequired: matchedLocalPO ? matchedLocalPO.approvalRequired : 'YES',
+    approver: matchedLocalPO ? matchedLocalPO.approver : '',
+    approvalPriority: matchedLocalPO ? matchedLocalPO.approvalPriority : '',
+    items: items,
+    totalOrderedQty: (matchedLocalPO && matchedLocalPO.totalOrderedQty) ? matchedLocalPO.totalOrderedQty : totalOrderedQty,
+    totalReceivedQty: (matchedLocalPO && matchedLocalPO.totalReceivedQty) ? matchedLocalPO.totalReceivedQty : totalReceivedQty,
+    totalRemainingQty: Math.max(0, (matchedLocalPO?.totalOrderedQty || totalOrderedQty) - totalReceivedQty),
+    receivingProgressPct: totalOrderedQty > 0 ? ((totalReceivedQty / totalOrderedQty) * 100).toFixed(1) : (isActuallyClosed ? '100.0' : 0),
+    grnHistory: matchingGRNs,
+    amount: matchedLocalPO ? matchedLocalPO.amount : '₹ 0.00',
+    status: statusText,
+    statusType: statusType,
+    approvedBy: matchedLocalPO ? matchedLocalPO.approvedBy : undefined,
+    approvalDate: matchedLocalPO ? matchedLocalPO.approvalDate : undefined,
+    approvalTime: matchedLocalPO ? matchedLocalPO.approvalTime : undefined,
+    approvalRemarks: matchedLocalPO ? matchedLocalPO.approvalRemarks : undefined,
+    paymentDetails: matchedLocalPO ? matchedLocalPO.paymentDetails : undefined,
+    proceedDetails: matchedLocalPO ? matchedLocalPO.proceedDetails : undefined
+  });
 });
 
 
@@ -7589,8 +4433,7 @@ app.get('/api/grns', async (req, res) => {
     const matchedPO = localPOs.find(p => {
       const pNo = normalize(p.poNo);
       const pId = normalize(p.id);
-      const pZohoId = normalize(p.zohoId);
-      return pRef && (pNo === pRef || pId === pRef || pZohoId === pRef || (pNo && pRef.includes(pNo)) || (pNo && pNo.includes(pRef)));
+      return pRef && (pNo === pRef || pId === pRef || (pNo && pRef.includes(pNo)) || (pNo && pNo.includes(pRef)));
     });
 
     const isPoClosed = matchedPO && (
@@ -7658,7 +4501,7 @@ app.delete('/api/grns/:id', async (req, res) => {
   res.json({ success: true, deleted: initialLen > grns.length });
 });
 
-// Endpoint to create a new GRN (Saves locally + Posts Draft Bill to Zoho)
+// Endpoint to create a new GRN (Saves locally)
 app.post('/api/grns', async (req, res) => {
   const grnData = req.body;
   let grns = loadLocalGRNs();
@@ -7714,8 +4557,7 @@ app.post('/api/grns', async (req, res) => {
     inspectionRemarks: grnData.inspectionRemarks || '—',
     items: grnData.items || [],
     documents: grnData.documents || [],
-    status: calculatedStatus,
-    zohoBillPosted: false
+    status: calculatedStatus
   };
 
   // 1. SAVE GRN IMMEDIATELY TO LOCAL STORE AND SUPABASE!
@@ -7736,8 +4578,7 @@ app.post('/api/grns', async (req, res) => {
       const updatedPOs = localPOs.map(po => {
         const poNum = normalize(po.poNo);
         const poId = normalize(po.id);
-        const poZohoId = normalize(po.zohoId);
-        if (poRefTarget === poNum || poRefTarget === poId || poRefTarget === poZohoId) {
+        if (poRefTarget === poNum || poRefTarget === poId) {
           matched = true;
           const ord = totalOrdered > 0 ? totalOrdered : Number(po.totalOrderedQty || (po.items ? po.items.reduce((s, it) => s + (Number(it.qty) || 0), 0) : 0));
           const rec = totalReceivedSoFar;
@@ -7779,7 +4620,6 @@ app.post('/api/grns', async (req, res) => {
         updatedPOs.unshift({
           id: grnData.poRef || grnData.poNo || `PO-${Date.now()}`,
           poNo: grnData.poNo || grnData.poRef,
-          zohoId: grnData.poId || grnData.poRef,
           vendor: grnData.vendor || 'Vendor',
           status: calculatedStatus,
           statusType: isFullyReceived ? 'closed' : 'partially_received',
@@ -7909,28 +4749,10 @@ app.post('/api/grns', async (req, res) => {
 
   // 4. RETURN SUCCESS TO CLIENT IMMEDIATELY!
   res.json({ success: true, grn: newGRN });
-
-  // 5. ASYNCHRONOUS BACKGROUND ZOHO SYNC (NON-BLOCKING)
-  if (zohoSession.connected) {
-    setImmediate(async () => {
-      try {
-        const accessToken = await getZohoAccessToken();
-        const poTargetId = grnData.poId || grnData.poRef || grnData.poNo;
-        if (poTargetId) {
-          await createZohoPurchaseReceive(accessToken, poTargetId, newGRN);
-          if (isFullyReceived) {
-            await markZohoPOClosed(accessToken, poTargetId);
-          }
-        }
-      } catch (err) {
-        console.warn('[ZOHO BACKGROUND SYNC NOTICE]:', err?.message || err);
-      }
-    });
-  }
 });
 
-// Endpoint for MD Approval (Draft/Pending -> MD Approved)
-app.post('/api/zoho/purchaseorders/:id/approve', async (req, res) => {
+// Endpoint for MD Approval (Draft/Pending -> MD Approved) (Native BUSINZ Store)
+app.post('/api/purchaseorders/:id/approve', async (req, res) => {
   const targetId = req.params.id;
   const remarks = req.body.remarks || 'Approved by MD';
   const approver = req.body.approver || 'Velmurugan Rathinam (MD)';
@@ -7946,8 +4768,7 @@ app.post('/api/zoho/purchaseorders/:id/approve', async (req, res) => {
   const matchedIdx = localPOs.findIndex(p => {
     const pId = normalize(p.id);
     const pNo = normalize(p.poNo);
-    const pZohoId = normalize(p.zohoId);
-    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget || pZohoId === cleanTarget);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget);
   });
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'MD Approved';
@@ -7977,12 +4798,11 @@ app.post('/api/zoho/purchaseorders/:id/approve', async (req, res) => {
     console.warn('[approve] Supabase sync notice:', sbErr.message);
   }
 
-  // PO status remains Draft in Zoho Books until Accounts and Proceed PO is completed
   res.json({ success: true, message: `PO ${targetId} approved by ${approver} and marked as MD Approved!` });
 });
 
-// Endpoint for Payment Process (MD Approved -> Payment Processed / Credit Verified)
-app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
+// Endpoint for Payment Process (MD Approved -> Payment Processed / Credit Verified) (Native BUSINZ Store)
+app.post('/api/purchaseorders/:id/process-payment', async (req, res) => {
   const targetId = req.params.id;
   const paymentMode = req.body.paymentMode || 'Bank Transfer';
   const paymentRef = req.body.paymentRef || 'TXN-PAID';
@@ -8004,8 +4824,7 @@ app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
   const matchedIdx = localPOs.findIndex(p => {
     const pId = normalize(p.id);
     const pNo = normalize(p.poNo);
-    const pZohoId = normalize(p.zohoId);
-    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget || pZohoId === cleanTarget);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget);
   });
   if (matchedIdx !== -1) {
     localPOs[matchedIdx].status = 'Payment Processed';
@@ -8062,8 +4881,8 @@ app.post('/api/zoho/purchaseorders/:id/process-payment', async (req, res) => {
   });
 });
 
-// Endpoint to Proceed PO (Payment Processed -> Proceed PO -> Ready for GRN & Auto Vendor Dispatch)
-app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
+// Endpoint to Proceed PO (Payment Processed -> Proceed PO -> Ready for GRN & Auto Vendor Dispatch) (Native BUSINZ Store)
+app.post('/api/purchaseorders/:id/proceed', async (req, res) => {
   const targetId = req.params.id;
   const remarks = req.body.remarks || 'Proceeded for dispatch and GRN';
   const authorizedBy = req.body.authorizedBy || 'Procurement Head';
@@ -8079,8 +4898,7 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
   const matchedIdx = localPOs.findIndex(p => {
     const pId = normalize(p.id);
     const pNo = normalize(p.poNo);
-    const pZohoId = normalize(p.zohoId);
-    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget || pZohoId === cleanTarget);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget);
   });
   const matchedPO = matchedIdx !== -1 ? localPOs[matchedIdx] : null;
   const vendorEmail = (incomingEmail && incomingEmail !== '—' && incomingEmail.includes('@'))
@@ -8124,23 +4942,6 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
     console.warn('[proceed] Supabase sync notice:', sbErr.message);
   }
 
-  // Transition Zoho Books PO status from Draft to Issued / Open once PO is Proceeded, and email vendor (non-blocking)
-  let zohoEmailResult = null;
-  if (zohoSession.connected) {
-    (async () => {
-      try {
-        const accessToken = await getZohoAccessToken();
-        await approveOrOpenZohoPO(accessToken, targetId);
-        if (vendorEmail && vendorEmail.includes('@')) {
-          const emailRes = await emailZohoPOToVendor(accessToken, targetId, vendorEmail, remarks);
-          console.log(`[Zoho PO Email] Dispatched PO ${targetId} to vendor ${vendorEmail}:`, emailRes);
-        }
-      } catch (err) {
-        console.warn('Failed to transition PO or email vendor in Zoho on Proceed PO:', err.message);
-      }
-    })();
-  }
-
   const message = vendorEmail
     ? `PO ${targetId} marked as Proceed PO! An official copy was automatically dispatched to vendor (${vendorEmail}). Ready for GRN receiving.`
     : `PO ${targetId} marked as Proceed PO! Ready for GRN receiving.`;
@@ -8149,13 +4950,12 @@ app.post('/api/zoho/purchaseorders/:id/proceed', async (req, res) => {
     success: true,
     vendorEmail,
     emailDispatched: Boolean(vendorEmail),
-    zohoEmailResult,
     message
   });
 });
 
-// Endpoint to explicitly reject a Purchase Order (Pending -> Rejected)
-app.post('/api/zoho/purchaseorders/:id/reject', async (req, res) => {
+// Endpoint to explicitly reject a Purchase Order (Pending -> Rejected) (Native BUSINZ Store)
+app.post('/api/purchaseorders/:id/reject', async (req, res) => {
   const targetId = req.params.id;
   const reason = req.body.reason || req.body.rejectionReason;
   const rejectedBy = req.body.rejectedBy || 'CEO / Operations Manager';
@@ -8196,95 +4996,73 @@ app.post('/api/zoho/purchaseorders/:id/reject', async (req, res) => {
   res.json({ success: true, message: `PO ${targetId} rejected by ${rejectedBy}.` });
 });
 
-
-
-// Endpoint to explicitly close a Purchase Order in Zoho Books
-app.post('/api/zoho/purchaseorders/:id/close', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.json({ success: true, message: 'PO marked as closed locally in Control Room.' });
+// Endpoint to explicitly close a Purchase Order in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post('/api/purchaseorders/:id/close', async (req, res) => {
+  const targetId = req.params.id;
+  const localPOs = loadLocalPOs();
+  const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
+  const cleanTarget = normalize(targetId);
+  const matchedIdx = localPOs.findIndex(p => {
+    const pId = normalize(p.id);
+    const pNo = normalize(p.poNo);
+    return cleanTarget && (pId === cleanTarget || pNo === cleanTarget);
+  });
+  if (matchedIdx !== -1) {
+    localPOs[matchedIdx].status = 'CLOSED / FULLY RECEIVED';
+    localPOs[matchedIdx].statusType = 'closed';
+    localPOs[matchedIdx].order_status = 'closed';
+    saveLocalPOs(localPOs);
   }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const targetId = req.params.id;
-    const result = await markZohoPOClosed(accessToken, targetId);
-    res.json({ success: true, result, message: 'Purchase Order marked as CLOSED in Zoho Books!' });
-  } catch (err) {
-    console.error('Failed to close PO in Zoho Books:', err);
-    res.status(500).json({ error: err.message });
-  }
+  res.json({ success: true, message: `Purchase Order ${targetId} marked as CLOSED in BUSINZ!` });
 });
 
-// Endpoint to delete a Purchase Order in Zoho Books & Control Room
-app.delete('/api/zoho/purchaseorders/:id', async (req, res) => {
+// Endpoint to delete a Purchase Order in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.delete('/api/purchaseorders/:id', async (req, res) => {
   const targetId = req.params.id;
 
-  // 1. Remove from local store
+  // Remove from local store
   const localPOs = loadLocalPOs();
   const targetClean = String(targetId).trim().toLowerCase();
   const updatedPOs = localPOs.filter(p => {
     const pId = String(p.id || '').toLowerCase();
     const pNo = String(p.poNo || '').toLowerCase();
-    const zId = String(p.zohoId || '').toLowerCase();
-    return pId !== targetClean && pNo !== targetClean && zId !== targetClean;
+    return pId !== targetClean && pNo !== targetClean;
   });
   saveLocalPOs(updatedPOs);
 
-  // 2. Delete in Zoho Books if connected
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const zohoResult = await deleteZohoPurchaseOrder(accessToken, targetId);
-      return res.json({ success: true, message: `PO ${targetId} deleted from Control Room and Zoho Books!`, zohoResult });
-    } catch (err) {
-      console.error('Failed to delete PO in Zoho Books:', err);
-      return res.json({ success: true, warning: 'PO deleted locally in Control Room, but Zoho deletion encountered an issue.' });
-    }
-  }
-
-  res.json({ success: true, message: `PO ${targetId} deleted from Control Room!` });
+  res.json({ success: true, message: `PO ${targetId} deleted from BUSINZ!` });
 });
 
-// Real-time synchronization endpoint retrieving approval pending counts from Zoho Books
-app.get('/api/zoho/approvals-pending', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.json({ posPending: 0, grnsPending: 0, invoicesPending: 0 });
-  }
-
+// Real-time synchronization endpoint retrieving approval pending counts strictly from BUSINZ local stores
+app.get('/api/approvals-pending', async (req, res) => {
   try {
-    const accessToken = await getZohoAccessToken();
+    const pos = loadLocalPOs();
+    const grns = loadLocalGRNs();
+    let invoices = [];
+    try {
+      const invPath = getStoreFilePath('invoice_store.json');
+      if (fs.existsSync(invPath)) invoices = JSON.parse(fs.readFileSync(invPath, 'utf8'));
+    } catch (_) {}
+    if (invoices.length === 0 && Array.isArray(supabaseMemoryStore.invoice_store)) {
+      invoices = supabaseMemoryStore.invoice_store;
+    }
 
-    // Fetch POs, Bills (GRNs), and Invoices from Zoho Books API in parallel
-    const [poData, invoiceData, billData] = await Promise.all([
-      fetchZohoPurchaseOrders(accessToken).catch(() => ({ purchaseorders: [] })),
-      fetchZohoInvoices(accessToken).catch(() => ({ invoices: [] })),
-      new Promise((resolve) => {
-        const options = {
-          hostname: 'www.zohoapis.in',
-          port: 443,
-          path: `/books/v3/bills?organization_id=${zohoSession.orgId}&status=pending_approval`,
-          method: 'GET',
-          headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-        };
-        const r = https.request(options, (res) => {
-          let d = '';
-          res.on('data', (chunk) => { d += chunk; });
-          res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { resolve({ bills: [] }); } });
-        });
-        r.on('error', () => resolve({ bills: [] }));
-        r.end();
-      })
-    ]);
+    const posPending = pos.filter(po => {
+      const st = String(po.status || '').toLowerCase();
+      const stt = String(po.statusType || '').toLowerCase();
+      return st.includes('pending') || st.includes('draft') || st.includes('waiting') || stt === 'pending' || stt === 'draft';
+    }).length;
 
-    const pos = poData.purchaseorders || [];
-    const invoices = invoiceData.invoices || [];
-    const bills = billData.bills || [];
+    const grnsPending = grns.filter(g => {
+      const st = String(g.status || '').toLowerCase();
+      return st.includes('pending') || st.includes('draft');
+    }).length;
 
-    // Filter live pending approval status
-    const posPending = pos.filter(po => po.status === 'pending_approval' || po.status === 'draft').length;
-    // Count draft Vendor Bills in Zoho Books as GRNs Pending Approval
-    const grnsPending = bills.filter(b => b.status === 'draft' || b.status === 'pending_approval').length;
-    const invoicesPending = invoices.filter(inv => inv.status === 'draft' || inv.status === 'pending_approval' || inv.status === 'unpaid').length;
+    const invoicesPending = invoices.filter(inv => {
+      const st = String(inv.status || '').toLowerCase();
+      const pay = String(inv.pay || '').toLowerCase();
+      return st.includes('draft') || st.includes('pending') || pay.includes('draft') || pay.includes('ready');
+    }).length;
 
     res.json({
       posPending,
@@ -8292,152 +5070,15 @@ app.get('/api/zoho/approvals-pending', async (req, res) => {
       invoicesPending
     });
   } catch (err) {
-    console.error("Error fetching approval counts from Zoho:", err);
     res.json({ posPending: 0, grnsPending: 0, invoicesPending: 0 });
   }
 });
 
 
 
-const fetchZohoItems = async (accessToken, forceRefresh = false) => {
-  if (!forceRefresh && zohoItemsCache.data && (Date.now() - zohoItemsCache.timestamp < ZOHO_CACHE_TTL)) {
-    return zohoItemsCache.data;
-  }
-
-  let allItems = [];
-  let page = 1;
-  let hasMore = true;
-
-  while (hasMore && page <= 10) {
-    const pageData = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'www.zohoapis.in',
-        port: 443,
-        path: `/books/v3/items?organization_id=${zohoSession.orgId}&per_page=200&page=${page}`,
-        method: 'GET',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`
-        }
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            resolve(parsed);
-          } catch (e) {
-            reject(e);
-          }
-        });
-      });
-
-      req.on('error', (e) => reject(e));
-      req.end();
-    });
-
-    if (pageData && Array.isArray(pageData.items)) {
-      allItems.push(...pageData.items);
-      hasMore = pageData.page_context ? Boolean(pageData.page_context.has_more_page) : false;
-      page++;
-    } else {
-      hasMore = false;
-    }
-  }
-
-  const result = { items: allItems };
-  if (allItems.length > 0) {
-    zohoItemsCache = { data: result, timestamp: Date.now() };
-  }
-  return result;
-};
-
-// Real-time synchronization endpoint retrieving live items catalog from Zoho Books
-app.get('/api/zoho/items', async (req, res) => {
-  const forceRefresh = req.query.force === 'true';
+// Real-time endpoint retrieving items catalog strictly from BUSINZ local stores
+app.get('/api/items', async (req, res) => {
   const localItems = loadLocalItems();
-
-  // Credit-Protection: Serve from local Hostinger VPS store by default. 0 Zoho calls!
-  if (!forceRefresh && Array.isArray(localItems) && localItems.length > 0) {
-    return res.json(localItems);
-  }
-
-  try {
-    if (zohoSession.connected) {
-      const accessToken = await getZohoAccessToken();
-      const data = await fetchZohoItems(accessToken, req.query.force === 'true');
-      
-      if (data && data.items && Array.isArray(data.items)) {
-        // Map local items by Code, SKU, itemId, and name fingerprint to preserve live deducted stock
-        const localMap = new Map();
-        localItems.forEach(i => {
-          if (i.itemId) localMap.set(String(i.itemId).toLowerCase().trim(), i);
-          if (i.code && i.code !== '—') localMap.set(String(i.code).toLowerCase().trim(), i);
-          if (i.sku && i.sku !== '—') localMap.set(String(i.sku).toLowerCase().trim(), i);
-          const res = resolveProductCode(i);
-          if (res) localMap.set(String(res).toLowerCase().trim(), i);
-          if (i.name) localMap.set(String(i.name).toLowerCase().trim(), i);
-          const fp = wordFingerprint(i.name);
-          if (fp) localMap.set(fp, i);
-        });
-
-        const translatedZoho = data.items.map(item => {
-          const keyId = String(item.item_id || item.id || '').toLowerCase().trim();
-          const keySku = String(item.sku || '').toLowerCase().trim();
-          const keyName = String(item.name || '').toLowerCase().trim();
-          const keyRes = resolveProductCode(item).toLowerCase().trim();
-          const keyFp = wordFingerprint(item.name);
-          const localMatch = localMap.get(keyId) ||
-            (keySku && localMap.get(keySku)) ||
-            (keyRes && localMap.get(keyRes)) ||
-            (keyName && localMap.get(keyName)) ||
-            (keyFp && localMap.get(keyFp));
-
-          const calculatedStock = (localMatch?.stock !== undefined && localMatch.stock !== null)
-            ? Number(localMatch.stock)
-            : 0;
-
-          return {
-            id: item.item_id || item.id,
-            itemId: item.item_id || item.id,
-            code: item.sku || item.item_id || '—',
-            name: item.name,
-            rate: item.rate || 0,
-            price: item.rate || 0,
-            sku: item.sku || '—',
-            status: localMatch?.status ? localMatch.status : (item.status === 'active' ? 'Active' : 'Inactive'),
-            description: item.description || localMatch?.description || '—',
-            purchaseRate: item.purchase_rate || localMatch?.purchaseRate || 0,
-            purchaseDescription: item.purchase_description || localMatch?.purchaseDescription || '',
-            productType: item.product_type || localMatch?.productType || 'goods',
-            unit: item.unit || localMatch?.unit || 'NOS',
-            uom: item.unit || localMatch?.uom || 'NOS',
-            material: localMatch?.material || 'General Component',
-            category: localMatch?.category || 'General',
-            stock: calculatedStock,
-            openingStock: (localMatch?.openingStock !== undefined && localMatch.openingStock !== null) ? Number(localMatch.openingStock) : 0,
-            reorderLevel: localMatch?.reorderLevel || 100
-          };
-        });
-
-        const zohoKeys = new Set(translatedZoho.map(z => String(z.sku || z.itemId || z.name).toLowerCase()));
-        const uniqueLocal = localItems.filter(l => !zohoKeys.has(String(l.sku || l.itemId || l.name).toLowerCase())).map(l => ({
-          ...l,
-          stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 0,
-          openingStock: (l.openingStock !== undefined && l.openingStock !== null) ? Number(l.openingStock) : 0
-        }));
-        const mergedAll = [...uniqueLocal, ...translatedZoho];
-
-        // Save fresh merged items back to server local store & Supabase
-        saveLocalItems(mergedAll);
-
-        return res.json(mergedAll);
-      }
-    }
-  } catch (err) {
-    console.error('Zoho items fetch notice:', err.message);
-  }
   const guaranteedItems = (localItems || []).map(l => ({
     ...l,
     stock: (l.stock !== undefined && l.stock !== null) ? Number(l.stock) : 0,
@@ -8627,54 +5268,10 @@ app.post('/api/raw-materials/deduct', async (req, res) => {
   }
 });
 
-// Helper to delete an Item in Zoho Books
-const deleteZohoItem = async (accessToken, itemRefOrId) => {
-  let targetId = itemRefOrId;
 
-  if (!String(itemRefOrId).match(/^\d+$/)) {
-    const localItems = loadLocalItems();
-    const matched = localItems.find(i => String(i.itemId) === String(itemRefOrId) || String(i.sku) === String(itemRefOrId) || String(i.name).toLowerCase() === String(itemRefOrId).toLowerCase());
-    if (matched && String(matched.itemId).match(/^\d+$/)) {
-      targetId = matched.itemId;
-    }
-  }
 
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/items/${encodeURIComponent(targetId)}?organization_id=${zohoSession.orgId}`,
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          console.log(`[ZOHO ITEM DELETE] Deleted item ${targetId} in Zoho:`, parsed.message || 'Success');
-          resolve(parsed);
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    });
-
-    req.on('error', (e) => {
-      console.error('[ZOHO ITEM DELETE ERROR]', e);
-      resolve(null);
-    });
-    req.end();
-  });
-};
-
-// Endpoint to delete an Item in Zoho Books & Control Room
-app.delete('/api/zoho/items/:id', async (req, res) => {
+// Endpoint to delete an Item in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.delete('/api/items/:id', async (req, res) => {
   const targetId = req.params.id;
 
   const localItems = loadLocalItems();
@@ -8686,243 +5283,84 @@ app.delete('/api/zoho/items/:id', async (req, res) => {
     return iId !== targetClean && iSku !== targetClean && iName !== targetClean;
   });
   saveLocalItems(updatedItems);
-  zohoItemsCache.timestamp = 0;
 
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const zohoResult = await deleteZohoItem(accessToken, targetId);
-      return res.json({ success: true, message: `Item ${targetId} deleted from Control Room and Zoho Books!`, zohoResult });
-    } catch (err) {
-      console.error('Failed to delete item in Zoho Books:', err);
-      return res.json({ success: true, warning: 'Item deleted locally in Control Room, but Zoho deletion encountered an issue.' });
-    }
-  }
-
-  res.json({ success: true, message: `Item ${targetId} deleted from Control Room!` });
+  res.json({ success: true, message: `Item ${targetId} deleted from BUSINZ!` });
 });
 
-const fetchZohoItemDetail = (accessToken, id) => {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/items/${id}?organization_id=${zohoSession.orgId}`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`
-      }
-    };
+// Real-time synchronization endpoint retrieving item details strictly from BUSINZ local stores
+app.get('/api/items/:id', async (req, res) => {
+  const targetId = String(req.params.id || '').trim().toLowerCase();
+  const localItems = loadLocalItems();
+  const item = localItems.find(i => 
+    String(i.itemId || '').toLowerCase() === targetId ||
+    String(i.id || '').toLowerCase() === targetId ||
+    String(i.sku || '').toLowerCase() === targetId ||
+    String(i.code || '').toLowerCase() === targetId
+  );
 
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
+  if (item) {
+    res.json({
+      itemId: item.itemId || item.id,
+      name: item.name,
+      sku: item.sku || item.code || '—',
+      status: item.status || 'Active',
+      description: item.description || '—',
+      unit: item.unit || item.uom || 'NOS',
+      rate: item.rate || item.price || 0,
+      purchaseRate: item.purchaseRate || item.purchase_rate || item.rate || 0,
+      purchaseDescription: item.purchaseDescription || item.purchase_description || item.description || '—',
+      stockOnHand: item.stock !== undefined ? item.stock : (item.stockOnHand !== undefined ? item.stockOnHand : '—'),
+      reorderLevel: item.reorderLevel || '—',
+      itemType: item.itemType || 'sales_and_purchase',
+      productType: item.productType || 'goods',
+      purchaseAccount: item.purchaseAccount || 'Cost of Goods Sold',
+      salesAccount: item.salesAccount || 'Sales',
+      taxName: item.taxName || 'GST 18%',
+      taxPercentage: item.taxPercentage !== undefined ? item.taxPercentage : 18
     });
-
-    req.on('error', (e) => reject(e));
-    req.end();
-  });
-};
-
-// Real-time synchronization endpoint retrieving live item details from Zoho Books
-app.get('/api/zoho/items/:id', async (req, res) => {
-  if (!zohoSession.connected) {
-    return res.status(401).json({ error: 'Zoho not connected.' });
-  }
-
-  try {
-    const accessToken = await getZohoAccessToken();
-    const data = await fetchZohoItemDetail(accessToken, req.params.id);
-    
-    if (data.item) {
-      const item = data.item;
-      res.json({
-        itemId: item.item_id,
-        name: item.name,
-        sku: item.sku || '—',
-        status: item.status === 'active' ? 'Active' : 'Inactive',
-        description: item.description || '—',
-        unit: item.unit || 'NOS',
-        rate: item.rate || 0,
-        purchaseRate: item.purchase_rate || 0,
-        purchaseDescription: item.purchase_description || '—',
-        stockOnHand: item.stock_on_hand !== undefined ? item.stock_on_hand : '—',
-        reorderLevel: item.reorder_level || '—',
-        itemType: item.item_type || 'sales_and_purchase',
-        productType: item.product_type || 'goods',
-        purchaseAccount: item.purchase_account_name || 'Cost of Goods Sold',
-        salesAccount: item.account_name || 'Sales',
-        taxName: item.tax_name || '—',
-        taxPercentage: item.tax_percentage || 0
-      });
-    } else {
-      res.status(500).json({ error: data.message || 'Failed to fetch item details.' });
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Connection to Zoho Books failed.' });
+  } else {
+    res.status(404).json({ error: 'Item not found in local catalog.' });
   }
 });
 
-const updateZohoItem = (accessToken, id, itemData) => {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({
-      name: itemData.name,
-      rate: itemData.rate,
-      sku: itemData.sku,
-      description: itemData.description,
-      unit: itemData.unit,
-      purchase_rate: itemData.purchaseRate || itemData.purchase_rate || itemData.rate,
-      purchase_description: itemData.purchaseDescription || itemData.purchase_description || itemData.description,
-      is_purchase: true,
-      can_be_purchased: true,
-      item_type: 'sales_and_purchases',
-      purchase_account_id: itemData.purchase_account_id || "4080449000000000567"
-    });
-
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/items/${id}?organization_id=${zohoSession.orgId}`,
-      method: 'PUT',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.write(payload);
-    req.end();
-  });
-};
-
-// Real-time synchronization endpoint updating item details in Zoho Books
-app.put('/api/zoho/items/:id', async (req, res) => {
+// Endpoint to update item details in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.put('/api/items/:id', async (req, res) => {
   const targetId = req.params.id;
   const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
 
-  // Always update local & Supabase store immediately
+  let updatedItem = null;
   try {
     const localItems = loadLocalItems();
     const updated = localItems.map(it => {
       if (String(it.itemId || it.id) === String(targetId) || String(it.sku) === String(targetId)) {
-        return {
+        updatedItem = {
           ...it,
           ...req.body,
           status: reqStatus
         };
+        return updatedItem;
       }
       return it;
     });
     saveLocalItems(updated);
-    zohoItemsCache.timestamp = 0;
-  } catch (e) {}
-
-  if (!zohoSession.connected) {
-    return res.json({ success: true, message: 'Updated locally (Zoho disconnected mode).' });
+  } catch (e) {
+    console.error('Error updating local item:', e);
   }
 
-  try {
-    const accessToken = await getZohoAccessToken();
-    const data = await updateZohoItem(accessToken, targetId, req.body);
-    if (data.code === 0 || data.item) {
-      res.json({ success: true, item: data.item, message: 'Item updated successfully in Zoho Books.' });
-    } else {
-      res.json({ success: true, message: 'Item updated locally and saved to Control Room.' });
-    }
-  } catch (err) {
-    console.error(err);
-    res.json({ success: true, message: 'Item updated locally and saved to Control Room.' });
-  }
+  return res.json({ 
+    success: true, 
+    item: updatedItem || { id: targetId, ...req.body, status: reqStatus }, 
+    message: 'Item updated successfully in BUSINZ.' 
+  });
 });
 
-const createZohoItem = (accessToken, itemData) => {
-  return new Promise((resolve, reject) => {
-    const payloadObj = {
-      name: itemData.name ? itemData.name.trim() : '',
-      rate: Number(itemData.rate) || 0,
-      product_type: (itemData.productType === 'service' || itemData.productType === 'services') ? 'service' : 'goods'
-    };
-
-    if (itemData.sku && itemData.sku.trim() && itemData.sku !== '—') {
-      payloadObj.sku = itemData.sku.trim();
-    }
-    if (itemData.description && itemData.description.trim() && itemData.description !== '—') {
-      payloadObj.description = itemData.description.trim();
-    }
-    if (itemData.unit && itemData.unit.trim()) {
-      payloadObj.unit = itemData.unit.trim();
-    }
-    if (itemData.purchaseRate && Number(itemData.purchaseRate) > 0) {
-      payloadObj.purchase_rate = Number(itemData.purchaseRate);
-    }
-    if (itemData.purchaseDescription && itemData.purchaseDescription.trim() && itemData.purchaseDescription !== '—') {
-      payloadObj.purchase_description = itemData.purchaseDescription.trim();
-    }
-
-    const payload = JSON.stringify(payloadObj);
-
-    const options = {
-      hostname: 'www.zohoapis.in',
-      port: 443,
-      path: `/books/v3/items?organization_id=${zohoSession.orgId}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          console.log(`[ZOHO ITEM CREATE] Result for "${payloadObj.name}":`, parsed.code === 0 ? 'Success' : parsed.message);
-          resolve(parsed);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.write(payload);
-    req.end();
-  });
-};
-
-// Real-time creation endpoint adding new product into Zoho Books
-app.post('/api/zoho/items', async (req, res) => {
-  const newItemId = 'ITEM-' + Date.now();
+// Endpoint to create a new product in BUSINZ Authoritative Store (Native BUSINZ Store)
+app.post('/api/items', async (req, res) => {
+  const newItemId = req.body.itemId || req.body.id || ('ITEM-' + Date.now());
   const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
-  const fallbackItem = {
+  const itemToSave = {
     itemId: newItemId,
+    id: newItemId,
     name: req.body.name,
     rate: Number(req.body.rate) || 0,
     sku: req.body.sku || '—',
@@ -8931,58 +5369,24 @@ app.post('/api/zoho/items', async (req, res) => {
     unit: req.body.unit || 'NOS',
     purchaseRate: Number(req.body.purchaseRate) || 0,
     purchaseDescription: req.body.purchaseDescription || '—',
-    productType: req.body.productType || 'goods'
+    productType: req.body.productType || 'goods',
+    stock: req.body.stock !== undefined ? Number(req.body.stock) : 0,
+    createdAt: req.body.createdAt || new Date().toISOString()
   };
 
-  let itemToSave = fallbackItem;
-  let zohoError = null;
-
-  if (zohoSession.connected) {
-    try {
-      const accessToken = await getZohoAccessToken();
-      const data = await createZohoItem(accessToken, req.body);
-      if (data && data.code === 0 && data.item) {
-        const created = data.item;
-        itemToSave = {
-          itemId: created.item_id,
-          name: created.name,
-          rate: created.rate || 0,
-          sku: created.sku || '—',
-          status: reqStatus, // Strictly honor user's chosen status (Active vs Inactive)
-          description: created.description || '—',
-          unit: created.unit || 'NOS',
-          purchaseRate: created.purchase_rate || 0,
-          purchaseDescription: created.purchase_description || '—',
-          productType: created.product_type || 'goods'
-        };
-      } else if (data && data.code !== 0) {
-        zohoError = data.message || 'Zoho Books returned an error';
-        console.warn('Zoho returned error code when creating item:', data);
-      }
-    } catch (err) {
-      zohoError = err.message;
-      console.error('Zoho item creation notice:', err.message);
-    }
-  }
-
-  // Persist newly created product into local item_store.json & Supabase cloud store
   try {
     const localItems = loadLocalItems();
     const filtered = localItems.filter(i => String(i.itemId || i.id || i.sku).toLowerCase() !== String(itemToSave.itemId || itemToSave.sku || itemToSave.name).toLowerCase());
     const updated = [itemToSave, ...filtered];
     saveLocalItems(updated);
-    zohoItemsCache.timestamp = 0;
   } catch (e) {
     console.error('Failed to save newly created item to item_store:', e);
   }
 
-  res.json({ 
+  return res.json({ 
     success: true, 
     item: itemToSave, 
-    zohoError,
-    message: itemToSave.itemId.startsWith('ITEM-') && zohoError 
-      ? `Saved locally. Zoho sync pending: ${zohoError}`
-      : 'Item saved successfully and synced with Zoho Books.'
+    message: 'Item saved successfully in BUSINZ.'
   });
 });
 
@@ -8992,7 +5396,7 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
     const localItems = loadLocalItems();
     const existingRaw = supabaseMemoryStore.raw_materials_store || [];
     
-    // Step 1: Combine VRM standardized products, Zoho items, and existing raw profiles
+    // Step 1: Combine VRM standardized products, catalog items, and existing raw profiles
     const itemMap = new Map();
 
     // 1. Add all 285 VRM standardized products
@@ -9038,7 +5442,7 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
       });
     });
 
-    // 3. Merge local Zoho items
+    // 3. Merge local catalog items
     (localItems || []).forEach(it => {
       const code = it.code || it.sku || it.itemId || it.name;
       if (!code) return;
@@ -9081,7 +5485,7 @@ app.all('/api/inventory/reset-to-5000', async (req, res) => {
     supabaseMemoryStore.raw_materials_store = unified5000List;
     await saveDatabaseStore('raw_materials_store', unified5000List);
 
-    // Step 4: Persist to item_store (used by Item Directory & Zoho Catalog)
+    // Step 4: Persist to item_store (used by Item Directory & Catalog)
     const itemsPath = getStoreFilePath('item_store.json');
     try {
       fs.writeFileSync(itemsPath, JSON.stringify(unified5000List, null, 2), 'utf8');
@@ -9757,8 +6161,12 @@ if (fs.existsSync(distPath)) {
   });
 }
 
+app.supabaseMemoryStore = supabaseMemoryStore;
+
 app.listen(PORT, () => {
-  console.log(`Zoho Integration Proxy Server running on port ${PORT}`);
+  console.log(`BUSINZ Native Server running on port ${PORT}`);
 });
 
 export default app;
+export { supabaseMemoryStore };
+

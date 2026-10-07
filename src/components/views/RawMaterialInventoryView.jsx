@@ -270,7 +270,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       });
     });
 
-    // 2. Load all items from itemsList / Zoho Catalog
+    // 2. Load all items from itemsList / Items Directory
     const completedGrnMapInitial = getCompletedGrnItems();
     if (itemsList && itemsList.length > 0) {
       itemsList.forEach(it => {
@@ -547,7 +547,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         });
       });
 
-      // Load all items from itemsList / Zoho Catalog
+      // Load all items from itemsList / Items Directory
       const completedGrnMapSync = getCompletedGrnItems();
       if (itemsList && itemsList.length > 0) {
         itemsList.forEach(it => {

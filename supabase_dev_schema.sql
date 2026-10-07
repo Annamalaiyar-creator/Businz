@@ -148,7 +148,6 @@ CREATE TABLE IF NOT EXISTS public.customers (
   payment_terms TEXT DEFAULT 'Due on Receipt',
   assigned_salesperson TEXT,
   source TEXT DEFAULT 'Manual',
-  zoho_contact_id TEXT,
   primary_contact JSONB DEFAULT '{}'::jsonb,
   email TEXT,
   phone TEXT,
@@ -160,7 +159,6 @@ CREATE TABLE IF NOT EXISTS public.customers (
 
 CREATE INDEX IF NOT EXISTS idx_customers_code ON public.customers(customer_code);
 CREATE INDEX IF NOT EXISTS idx_customers_company ON public.customers(company_name);
-CREATE INDEX IF NOT EXISTS idx_customers_zoho ON public.customers(zoho_contact_id);
 
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to customers" ON public.customers;
@@ -491,8 +489,6 @@ CREATE TABLE IF NOT EXISTS public.proforma_invoices (
   grand_total NUMERIC DEFAULT 0,
   items JSONB DEFAULT '[]'::jsonb,
   preset_groups JSONB DEFAULT '[]'::jsonb,
-  zoho_synced BOOLEAN DEFAULT false,
-  zoho_estimate_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -727,10 +723,8 @@ CREATE TABLE IF NOT EXISTS public.invoices (
   inv_amt NUMERIC DEFAULT 0,
   vendor TEXT,
   bom_code TEXT,
-  zoho_id TEXT,
   status TEXT DEFAULT 'Draft',
   pay TEXT,
-  synced_to_zoho BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

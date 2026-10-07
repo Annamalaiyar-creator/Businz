@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
 import { fetchLiveActiveSessions, revokeSession, revokeAllOtherSessions } from '../services/sessionService';
-import ZohoIntegrationView from './ZohoIntegrationView';
 import BackupVaultView from './views/BackupVaultView';
 
 export default function DeveloperPortalView({ userRole, onSignOut, showCustomAlert, onSwitchToErp }) {
@@ -83,13 +82,13 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
     { id: 'JOB-902', name: 'Send WhatsApp Dispatch Notification', status: 'Completed', started: '25 mins ago', completed: '25 mins ago', duration: '1.1s', attempts: 1, error: null },
     { id: 'JOB-903', name: 'Process Meta Webhook Event (Ref: #8841)', status: 'Completed', started: '1 hour ago', completed: '1 hour ago', duration: '0.8s', attempts: 1, error: null },
     { id: 'JOB-904', name: 'Nightly Database Backup & GCS Sync', status: 'Completed', started: '13 hours ago', completed: '13 hours ago', duration: '142s', attempts: 1, error: null },
-    { id: 'JOB-905', name: 'Sync Inventory Balances to Zoho Books', status: 'Failed', started: '2 hours ago', completed: '2 hours ago', duration: '15.4s', attempts: 3, error: 'Zoho API HTTP 503 Service Unavailable' }
+    { id: 'JOB-905', name: 'Sync Inventory Balances to Remote Replica', status: 'Completed', started: '2 hours ago', completed: '2 hours ago', duration: '5.4s', attempts: 1, error: null }
   ]);
 
   // Error Logs State
   const [errorLogs, setErrorLogs] = useState([
     { id: 'ERR-20491', timestamp: '26 Aug 2026 11:42:22', severity: 'Error', service: 'Production API', endpoint: '/api/work-orders', message: 'Internal server error during material calculation', user: 'USER-8841', status: 500, resolved: false, stack: 'Error: Cannot read property "cutLength" of undefined\n  at productionModuleEngine.js:324:18\n  at handleCreateWorkOrder (CreateWorkOrderPage.jsx:107:22)' },
-    { id: 'ERR-20490', timestamp: '26 Aug 2026 10:15:04', severity: 'Warning', service: 'Zoho Sync', endpoint: '/api/zoho/purchaseorders', message: 'Zoho API rate limit threshold reached (80%)', user: 'SYSTEM', status: 429, resolved: true, stack: 'Warning: 80 requests/min exceeded. Throttling active.' },
+    { id: 'ERR-20490', timestamp: '26 Aug 2026 10:15:04', severity: 'Info', service: 'Egress Monitor', endpoint: '/api/purchaseorders', message: 'Read quota within normal parameters (0% remote egress)', user: 'SYSTEM', status: 200, resolved: true, stack: 'Healthy: 0 remote requests required.' },
     { id: 'ERR-20489', timestamp: '26 Aug 2026 09:30:11', severity: 'Critical', service: 'Database Proxy', endpoint: '/api/db/connect', message: 'Pool connection timeout (Max pool size 50 reached)', user: 'SYSTEM', status: 504, resolved: true, stack: 'ConnectionTimeoutError: Timeout acquiring connection from pool.\n  at Pool.acquire (/node_modules/pg-pool/index.js:88:14)' },
     { id: 'ERR-20488', timestamp: '25 Aug 2026 18:22:40', severity: 'Info', service: 'Auth Service', endpoint: '/api/auth/login', message: 'Suspicious login attempt blocked from IP 185.220.101.4', user: 'dev@vrm.com', status: 401, resolved: true, stack: 'SecurityAlert: 5 consecutive failed password attempts.' }
   ]);
@@ -754,7 +753,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                     { name: 'Meta WhatsApp Webhook Service', status: 'Healthy', ping: '45ms' },
                     { name: 'Storage & Object Store (GCS)', status: 'Healthy', ping: '32ms' },
                     { name: 'Email Delivery Gateway (SMTP)', status: 'Healthy', ping: '65ms' },
-                    { name: 'Zoho Books Integration Service', status: 'Healthy', ping: '110ms' }
+                    { name: 'Enterprise Data Service', status: 'Healthy', ping: '11ms' }
                   ].map((s, idx) => (
                     <div key={idx} style={{ backgroundColor: '#0F172A', padding: '12px 14px', borderRadius: '8px', border: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -827,7 +826,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                       { key: 'OPENAI_API_KEY', val: '************************************' },
                       { key: 'META_ACCESS_TOKEN', val: '************************************' },
                       { key: 'JWT_SECRET_KEY', val: '************************************' },
-                      { key: 'ZOHO_CLIENT_SECRET', val: '************************************' }
+                      { key: 'ENCRYPTION_KEY', val: '************************************' }
                     ].map((sec, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #334155' }}>
                         <td style={{ padding: '12px 10px', fontFamily: 'monospace', fontWeight: '700', color: '#38BDF8' }}>{sec.key}</td>
@@ -1467,8 +1466,12 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
 
           {/* THIRD PARTY & WHATSAPP / META INTEGRATIONS VIEW */}
           {(activeDevTab === 'ThirdPartyIntegrations' || activeDevTab === 'WhatsAppIntegration') && (
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '24px', border: '1px solid #CBD5E1', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-              <ZohoIntegrationView userRole={userRole} />
+            <div style={{ backgroundColor: '#1E293B', borderRadius: '16px', padding: '32px', border: '1px solid #334155', textAlign: 'center' }}>
+              <GitBranch style={{ width: '44px', height: '44px', color: '#38BDF8', marginBottom: '14px' }} />
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '800', color: '#F8FAFC' }}>External Integrations Hub</h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#94A3B8', maxWidth: '480px', marginInline: 'auto' }}>
+                WhatsApp Webhooks and Cloud Storage connections are active and monitored directly through native telemetry.
+              </p>
             </div>
           )}
 
