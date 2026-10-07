@@ -158,9 +158,18 @@ export default function AccountsVerificationModal({
     : (accVerif.paymentStatus || null);
   const hardCopy = isAlreadyCompleted ? true : Boolean(accVerif.hardCopyReceived);
   const bomCodeText = (accountsVerificationModal && (accountsVerificationModal.bomCode || accountsVerificationModal.code)) || 'BOM-2026';
-  const custNameText = (accountsVerificationModal && (accountsVerificationModal.customerName || accountsVerificationModal.c2)) || 'Customer';
+  const custNameText = (() => {
+    if (!accountsVerificationModal) return 'Customer';
+    const m = accountsVerificationModal;
+    if (m.customerName && m.customerName !== 'Customer' && m.customerName !== '-') return m.customerName;
+    if (m.companyName && m.companyName !== '-') return m.companyName;
+    if (m.c2 && m.c2 !== 'Customer') return m.c2;
+    if (m.vendor && m.vendor !== 'Customer') return m.vendor;
+    if (m.clientName) return m.clientName;
+    return m.customerName || m.companyName || 'Customer';
+  })();
   const payTypeText = (accountsVerificationModal && (accountsVerificationModal.paymentType || accountsVerificationModal.c3)) || 'Net 30 Days';
-  const orderValue = cleanNum(accountsVerificationModal.grandTotal, 0);
+  const orderValue = cleanNum(accountsVerificationModal?.grandTotal, 0) || cleanNum(accountsVerificationModal?.subTotal, 0) || cleanNum(accountsVerificationModal?.totalAmount, 0) || (Array.isArray(accountsVerificationModal?.items) ? accountsVerificationModal.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0) : 0);
 
   // Accounts Verification State & Derived Variables (NOT prefilled by default)
   const [assignedInvoiceNo, setAssignedInvoiceNo] = useState(() => {

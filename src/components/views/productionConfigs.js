@@ -270,14 +270,23 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     }
                   }
 
-                  // Format Total Amount (should NOT be prefilled if accounts haven't verified/entered it)
+                  const customerDisplayName = (b.customerName && b.customerName !== 'Customer' && b.customerName !== '-')
+                    ? b.customerName
+                    : (b.companyName && b.companyName !== '-')
+                      ? b.companyName
+                      : (b.vendor || b.clientName || b.customer || 'Customer Order');
+
+                  // Format Total Amount
                   let totalAmtFormatted = '—';
-                  if (acc.totalAmount !== undefined && acc.totalAmount !== null && acc.totalAmount !== '') {
-                    const val = parseFloat(acc.totalAmount) || 0;
-                    totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                  } else if (isVerified && b.grandTotal) {
-                    const val = parseFloat(b.grandTotal) || 0;
-                    totalAmtFormatted = `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  const rawAmt = Number(acc.totalAmount || b.grandTotal || b.subTotal || b.totalAmount || 0);
+                  if (rawAmt > 0) {
+                    totalAmtFormatted = `₹ ${rawAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                  } else if (isVerified) {
+                    const itemsArr = Array.isArray(b.items) && b.items.length > 0 ? b.items : (Array.isArray(b.dispatchPacking) ? b.dispatchPacking : []);
+                    const calculated = itemsArr.reduce((sum, it) => sum + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0);
+                    if (calculated > 0) {
+                      totalAmtFormatted = `₹ ${calculated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+                    }
                   }
 
                   const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(
@@ -296,7 +305,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   return {
                     ...b,
                     code: b.bomCode,
-                    c2: b.customerName,
+                    c2: customerDisplayName,
                     c3: b.paymentType,
                     c4: paymentDateFormatted,
                     c5: totalAmtFormatted,
@@ -485,8 +494,22 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     packingProgressText = 'Items Pending Packing';
                   }
 
-                  const customerDisplayName = b.customerName || b.companyName || b.vendor || b.clientName || 'Customer Order';
-                  const salesPersonName = (b.salesPerson || b.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim();
+                  const customerDisplayName = (b.customerName && b.customerName !== 'Customer' && b.customerName !== '-')
+                    ? b.customerName
+                    : (b.companyName && b.companyName !== '-')
+                      ? b.companyName
+                      : (b.vendor || b.clientName || b.customer || 'Customer Order');
+
+                  const isDispatchUser = (name) => {
+                    if (!name) return false;
+                    const lower = String(name).toLowerCase().trim();
+                    return lower === 'anu' || lower.includes('dispatch') || lower.includes('fulfillment');
+                  };
+                  let rawSales = b.salesPerson || b.createdBy || '';
+                  if (isDispatchUser(rawSales) && b.createdBy && !isDispatchUser(b.createdBy)) {
+                    rawSales = b.createdBy;
+                  }
+                  const salesPersonName = (rawSales && !isDispatchUser(rawSales) ? rawSales : (b.createdBy && !isDispatchUser(b.createdBy) ? b.createdBy : 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim();
                   
                   let totalAmt = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
                   if (!totalAmt && itemsArray.length > 0) {

@@ -41,26 +41,33 @@ export default function InvoiceDetailModal({
   const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
   const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
   const [selectedProofVersionIdx, setSelectedProofVersionIdx] = useState(null);
+
+  const bomRefText = inv.poNo || inv.bomCode || inv.c3 || 'BOM-00007';
+
+  // Look up matching BOM from bomStore to sync items & dispatch checkboxes
+  const matchingBom = (bomStore || []).find(b =>
+    b && (
+      b.bomCode === inv.poNo ||
+      b.bomCode === inv.code ||
+      b.bomCode === inv.c3 ||
+      b.bomCode === inv.invNo ||
+      b.bomCode === bomRefText ||
+      b.code === inv.poNo ||
+      b.code === bomRefText ||
+      (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
+      (b.bomCode && inv.invNo && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+    )
+  );
+
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
   const invNoText = isEditingInvoice
     ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'))
     : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'));
-  const bomRefText = inv.poNo || inv.c3 || 'BOM-00007';
-  const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.c2 || 'ABC Industries') : (inv.vendor || inv.c2 || 'ABC Industries');
+  const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer') : (inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer');
   const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
-  const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || '100% Advance') : (inv.paymentType || '100% Advance');
+  const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || matchingBom?.paymentType || '100% Advance') : (inv.paymentType || matchingBom?.paymentType || '100% Advance');
   const isFullAdvance = paymentTypeText === '100% Advance';
   const is50Percent = paymentTypeText.includes('50%') || paymentTypeText === '50% Advance / 50% Dispatch';
-
-  // Look up matching BOM from bomStore to sync items & dispatch checkboxes
-  const matchingBom = bomStore.find(b =>
-    b.bomCode === inv.poNo ||
-    b.bomCode === inv.code ||
-    b.bomCode === inv.c3 ||
-    b.bomCode === bomRefText ||
-    (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
-    (b.bomCode && inv.invNo && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
-  );
 
   const handleAutoCancelForMissingProof = useCallback(() => {
     const nowIso = new Date().toISOString();

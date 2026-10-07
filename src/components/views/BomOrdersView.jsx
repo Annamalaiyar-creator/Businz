@@ -439,15 +439,15 @@ export default function BomOrdersView(props) {
       }
     }
 
-    // 5. Payment Proof for 100% Paid / Partial Paid Orders (optional if converted from authorized PI)
-    const isPaidOrder = newBomPaymentType === '100% Paid';
+    // 5. Payment Proof for 100% Paid / Partial Paid Orders (Mandatory per policy)
+    const isPaidOrder = newBomPaymentType === '100% Paid' || newBomPaymentType === '100% Advance';
     const isPartialOrder = newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment';
     if (!isDraft && (isPaidOrder || isPartialOrder)) {
-      if (!newBomPaymentProofDoc && !newBomSourcePiNo) {
-        errors.paymentProof = 'Payment Attachment / Slip is required';
+      if (!newBomPaymentProofDoc) {
+        errors.paymentProof = 'Payment Attachment / Slip is mandatory';
         missingList.push({
-          field: 'Payment Slip / Advice',
-          message: `Payment proof attachment is mandatory for "${newBomPaymentType}" orders. Please attach the payment advice/slip, or choose "Payment While Dispatch" or "Credit Payment".`,
+          field: 'Payment Attachment / Slip *',
+          message: `Payment Attachment / Slip * is strictly mandatory for "${newBomPaymentType}" orders. Please attach the bank slip/advice to proceed.`,
           targetId: 'field-newBomPaymentProofDoc'
         });
       }
@@ -5129,6 +5129,20 @@ export default function BomOrdersView(props) {
                   const unconfirmedItems = currentItemsList.filter(it => !it.confirmed);
                   if (unconfirmedItems.length > 0) {
                     alert(`⚠️ Please confirm all products first!\n\n${unconfirmedItems.length} product(s) still need to be verified with the tick mark (✓) or click "Confirm All Products" below before sending BOM to Dispatch.`);
+                    return;
+                  }
+
+                  const currentPayType = confirmingBomModal.paymentType;
+                  const is100OrPartial = currentPayType === '100% Paid' || currentPayType === '100% Advance' || currentPayType === 'Partial Paid' || currentPayType === 'Partial Payment';
+                  const hasProof = Boolean(
+                    confirmingBomModal.paymentProofDoc ||
+                    confirmingBomModal.payments?.proofDocObj ||
+                    confirmingBomModal.payments?.proofDoc ||
+                    confirmingBomModal.proofDoc ||
+                    confirmingBomModal.proofDocData
+                  );
+                  if (is100OrPartial && !hasProof) {
+                    alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${currentPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
                     return;
                   }
 

@@ -574,12 +574,21 @@ export default function ProductionViewsEngine(props) {
       }
     }
 
-    if (!isDraft && (newBomPaymentType === '100% Paid' || newBomPaymentType.includes('Advance'))) {
+    const isPaymentProofRequired = (
+      newBomPaymentType === '100% Paid' ||
+      newBomPaymentType === '100% Advance' ||
+      newBomPaymentType === 'Partial Paid' ||
+      newBomPaymentType === 'Partial Payment' ||
+      String(newBomPaymentType || '').toLowerCase().includes('advance') ||
+      String(newBomPaymentType || '').toLowerCase().includes('partial')
+    );
+
+    if (!isDraft && isPaymentProofRequired) {
       if (!newBomPaymentProofDoc) {
-        errors.paymentProof = 'Payment Attachment / Slip is required';
+        errors.paymentProof = `Payment Attachment / Slip * is strictly mandatory for ${newBomPaymentType}`;
         missingList.push({
-          field: 'Payment Slip / Advice',
-          message: `Payment proof attachment is mandatory for "${newBomPaymentType}" orders.`,
+          field: 'Payment Attachment / Slip *',
+          message: `Payment Attachment / Slip * is strictly mandatory for "${newBomPaymentType}". Please attach the bank transfer slip/receipt to proceed.`,
           targetId: 'prod-field-newBomPaymentProofDoc'
         });
       }

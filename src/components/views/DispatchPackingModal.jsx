@@ -243,14 +243,43 @@ export default function DispatchPackingModal({
     const packedByName = (localStorage.getItem('controlroom_logged_user_name') || userRole || 'Dispatch Executive').trim();
     const packedAt = new Date().toISOString();
 
+    const isDispatchUser = (name) => {
+      if (!name) return false;
+      const lower = String(name).toLowerCase().trim();
+      return lower === 'anu' || lower.includes('dispatch') || lower.includes('fulfillment');
+    };
+
     const matchingBom = (bomStore || []).find(b => b.bomCode === dispatchPackingModal.bomCode || b.code === dispatchPackingModal.bomCode || b.id === dispatchPackingModal.id);
-    const resolvedSpName = dispatchPackingModal.salesPerson || matchingBom?.salesPerson || dispatchPackingModal.createdBy || matchingBom?.createdBy || 'Sales Department';
+    let resolvedSpName = dispatchPackingModal.salesPerson || matchingBom?.salesPerson || dispatchPackingModal.createdBy || matchingBom?.createdBy || 'Sales Department';
+    if (isDispatchUser(resolvedSpName)) {
+      if (matchingBom?.createdBy && !isDispatchUser(matchingBom.createdBy)) {
+        resolvedSpName = matchingBom.createdBy;
+      } else if (dispatchPackingModal.createdBy && !isDispatchUser(dispatchPackingModal.createdBy)) {
+        resolvedSpName = dispatchPackingModal.createdBy;
+      } else {
+        resolvedSpName = 'Sales Department';
+      }
+    }
     const resolvedSpCode = dispatchPackingModal.salesPersonCode || matchingBom?.salesPersonCode || dispatchPackingModal.createdById || matchingBom?.createdById || '';
-    const resolvedCreatedBy = dispatchPackingModal.createdBy || matchingBom?.createdBy || resolvedSpName;
+    const resolvedCreatedBy = (dispatchPackingModal.createdBy && !isDispatchUser(dispatchPackingModal.createdBy))
+      ? dispatchPackingModal.createdBy
+      : (matchingBom?.createdBy && !isDispatchUser(matchingBom.createdBy))
+        ? matchingBom.createdBy
+        : resolvedSpName;
     const resolvedCreatedById = dispatchPackingModal.createdById || matchingBom?.createdById || resolvedSpCode;
+
+    const resolvedCustomer = (dispatchPackingModal.customerName && dispatchPackingModal.customerName !== 'Customer' && dispatchPackingModal.customerName !== '-')
+      ? dispatchPackingModal.customerName
+      : (dispatchPackingModal.companyName && dispatchPackingModal.companyName !== '-')
+        ? dispatchPackingModal.companyName
+        : (matchingBom?.customerName && matchingBom?.customerName !== 'Customer')
+          ? matchingBom.customerName
+          : (matchingBom?.companyName || 'Customer Order');
 
     const updatedPackedBom = {
       ...dispatchPackingModal,
+      customerName: resolvedCustomer,
+      companyName: resolvedCustomer,
       dispatchPacking: confirmedItems,
       dispatchPackingMedia: cleanMedia,
       status: nextStatus,
@@ -335,9 +364,8 @@ export default function DispatchPackingModal({
     setDispatchPackingModal(null);
 
     // Safely resolve the salesperson who created the BOM and customer name
-    const resolvedSalesPerson = (dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || dispatchPackingModal.salesperson || matchingBom?.salesPerson || matchingBom?.createdBy || matchingBom?.salesperson || '').replace(/\s*\([^)]*\)/g, '').trim();
-    const resolvedSalesPersonCode = dispatchPackingModal.salesPersonCode || dispatchPackingModal.createdById || matchingBom?.salesPersonCode || matchingBom?.createdById || '';
-    const resolvedCustomer = dispatchPackingModal.customerName || dispatchPackingModal.companyName || matchingBom?.customerName || matchingBom?.companyName || 'Customer';
+    const resolvedSalesPerson = resolvedSpName.replace(/\s*\([^)]*\)/g, '').trim();
+    const resolvedSalesPersonCode = resolvedSpCode;
 
     addLiveNotification({
       id: `notif-pack-${targetBomCode}-${Date.now()}`,

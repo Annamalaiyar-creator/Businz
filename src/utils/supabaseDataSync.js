@@ -730,16 +730,21 @@ export function toConsumerBom(row) {
 
   const id = row.id || row.bom_code || '';
   const bomCode = row.bom_code || row.id || '';
-  const customerName = row.customer_name || row.company_name || '';
-  const companyName = row.company_name || row.customer_name || '';
+  const rawCustomer = (row.customer_name || row.company_name || extraData.customerName || extraData.companyName || extraData.vendor || extraData.clientName || '').trim();
+  const customerName = (rawCustomer && rawCustomer !== 'Customer' && rawCustomer !== '-')
+    ? rawCustomer
+    : (row.company_name && row.company_name !== '-' && row.company_name !== 'Customer')
+      ? row.company_name
+      : (extraData.companyName || extraData.customerName || (rawCustomer || 'Customer Order'));
+  const companyName = (row.company_name && row.company_name !== '-') ? row.company_name : customerName;
   const phone = row.mobile || '';
   const email = row.email || '';
   const billingAddr = row.billing_address || '';
   const deliveryAddr = row.delivery_address || '';
-  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || '';
+  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || 'Sales Department';
   const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
-  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || '';
-  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || '';
+  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || salesRep;
+  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || salesPersonCode;
 
   return {
     ...extraData,
@@ -748,7 +753,7 @@ export function toConsumerBom(row) {
     code: bomCode,
     customerName,
     companyName,
-    c2: companyName,
+    c2: customerName,
     c3: customerName,
     date: row.date || '',
     deliveryDate: row.delivery_date || '',
@@ -827,10 +832,6 @@ export function toConsumerBom(row) {
  */
 export function toDatabaseBomRow(item) {
   if (!item || typeof item !== 'object') return null;
-  const cust = (item.customerName || item.customer_name || item.vendor || '').trim();
-  if (cust === 'Customer' && !item.sourcePiNo && !item.source_pi_no) {
-    return null;
-  }
 
   const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
   const bomCode = item.bomCode || item.code || id;
@@ -910,8 +911,8 @@ export function toDatabaseBomRow(item) {
     source_pi_no: sourcePiNo,
     date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
     delivery_date: sanitizeDate(item.deliveryDate),
-    customer_name: item.customerName || item.companyName || 'Customer',
-    company_name: item.companyName || item.customerName || '',
+    customer_name: item.customerName || item.companyName || item.vendor || item.clientName || 'Customer',
+    company_name: item.companyName || item.customerName || item.vendor || item.clientName || '',
     mobile: item.mobile || item.phone || '',
     email: item.email || '',
     billing_address: item.billingAddress || item.c6 || '',
