@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
-import { getSafeZohoVendors, getSafeZohoItems } from '../../services/zohoSafeSync';
+import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 
@@ -326,9 +326,9 @@ export default function VendorPerformanceView(props) {
     setEditingGrnId(null);
   };
 
-  // Fetch live Zoho Purchase Orders & stored GRNs for GRN selection and performance calculations
+  // Fetch live Purchase Orders & stored GRNs for GRN selection and performance calculations
   const fetchPerformanceData = useCallback(() => {
-    fetch('/api/zoho/purchaseorders')
+    fetch('/api/purchaseorders')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -397,7 +397,7 @@ export default function VendorPerformanceView(props) {
     setSelectedGRNVendor(vendorName);
 
     Promise.all([
-      fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`).then(res => res.ok ? res.json().catch(() => null) : null),
+      fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`).then(res => res.ok ? res.json().catch(() => null) : null),
       fetch(`/api/po-receiving-history/${encodeURIComponent(poRef)}`).then(res => res.ok ? res.json().catch(() => null) : null)
     ])
       .then(([detail, historyData]) => {
@@ -458,7 +458,7 @@ export default function VendorPerformanceView(props) {
       const found = livePOs.find(p => p.poNo === selectedPOForDetail || p.id === selectedPOForDetail);
       const targetId = found ? found.id : selectedPOForDetail;
 
-      fetch(`/api/zoho/purchaseorders/${targetId}`)
+      fetch(`/api/purchaseorders/${targetId}`)
         .then(res => res.json())
         .then(data => setPoDetailData(data))
         .catch(err => console.error('Error fetching PO detail:', err));
@@ -604,11 +604,11 @@ export default function VendorPerformanceView(props) {
               }
             });
 
-          fetch('/api/zoho/purchaseorders')
+          fetch('/api/purchaseorders')
             .then(res => res.json())
             .then(d => { if (Array.isArray(d)) setLivePOs(d); });
 
-          fetch('/api/zoho/items')
+          fetch('/api/items')
             .then(res => res.json())
             .then(items => { if (Array.isArray(items)) setItemsList(items); });
         }
@@ -721,11 +721,11 @@ export default function VendorPerformanceView(props) {
             }
           });
 
-        fetch('/api/zoho/purchaseorders')
+        fetch('/api/purchaseorders')
           .then(res => res.json())
           .then(d => { if (Array.isArray(d)) setLivePOs(d); });
 
-        fetch('/api/zoho/items')
+        fetch('/api/items')
           .then(res => res.json())
           .then(items => { if (Array.isArray(items)) setItemsList(items); });
 
@@ -777,7 +777,7 @@ export default function VendorPerformanceView(props) {
         setGrnList(prev => prev.filter(g => g.id !== targetId && g.grnNo !== targetId));
         setGrnToDelete(null);
         // Refresh live POs list
-        fetch('/api/zoho/purchaseorders')
+        fetch('/api/purchaseorders')
           .then(res => res.json())
           .then(d => { if (Array.isArray(d)) setLivePOs(d); });
       })
@@ -1042,21 +1042,21 @@ export default function VendorPerformanceView(props) {
   const [vendorList, setVendorList] = useState([]);
   const [vendorLoading, setVendorLoading] = useState(false);
 
-  const loadVendorsFromZoho = async () => {
+  const loadVendorsFromBackend = async () => {
     setVendorLoading(true);
     try {
-      const zohoVendors = await getSafeZohoVendors();
-      if (Array.isArray(zohoVendors) && zohoVendors.length > 0) {
-        setVendorList(zohoVendors);
+      const backendVendors = await getVendors();
+      if (Array.isArray(backendVendors) && backendVendors.length > 0) {
+        setVendorList(backendVendors);
       } else {
-        const res = await fetch('/api/zoho/vendors').catch(() => null);
+        const res = await fetch('/api/vendors').catch(() => null);
         if (res && res.ok) {
           const vData = await res.json().catch(() => []);
           setVendorList(Array.isArray(vData) ? vData : []);
         }
       }
     } catch (e) {
-      console.error("Failed to load Zoho vendors", e);
+      console.error("Failed to load vendors", e);
     } finally {
       setVendorLoading(false);
     }
@@ -1064,7 +1064,7 @@ export default function VendorPerformanceView(props) {
 
   useEffect(() => {
     if (activeTab === 'Vendor Management' || activeTab === 'Vendor Performance') {
-      loadVendorsFromZoho();
+      loadVendorsFromBackend();
     }
   }, [activeTab]);
 
@@ -1073,26 +1073,20 @@ export default function VendorPerformanceView(props) {
 
   useEffect(() => {
     if (activeTab === 'Invoice Management') {
-      const fetchZohoInvoices = async () => {
+      const fetchInvoicesFromBackend = async () => {
         try {
-          const response = await fetch('/api/zoho/invoices');
+          const response = await fetch('/api/invoices');
           if (response.ok) {
-            const zohoInvoices = await response.json();
-            if (Array.isArray(zohoInvoices)) {
-              setInvoicesList(zohoInvoices);
+            const backendInvoices = await response.json();
+            if (Array.isArray(backendInvoices)) {
+              setInvoicesList(backendInvoices);
             }
           }
         } catch (err) {
-          console.error("Error fetching Zoho Invoices:", err);
+          console.error("Error fetching Invoices:", err);
         }
       };
-      fetchZohoInvoices();
-
-      const pollInterval = setInterval(() => {
-        fetchZohoInvoices();
-      }, 15000);
-
-      return () => clearInterval(pollInterval);
+      fetchInvoicesFromBackend();
     }
   }, [activeTab]);
 
@@ -1109,13 +1103,13 @@ export default function VendorPerformanceView(props) {
       setVendorModalLoading(true);
       try {
         const vendorId = vendor.id || vendor.code;
-        const res = await fetch(`/api/zoho/vendors/${vendorId}`);
+        const res = await fetch(`/api/vendors/${vendorId}`);
         if (res.ok) {
           const detail = await res.json();
           setViewingVendor(detail);
         }
       } catch (e) {
-        console.error("Failed to load detailed vendor info from Zoho", e);
+        console.error("Failed to load detailed vendor info from database", e);
       } finally {
         setVendorModalLoading(false);
       }
@@ -1165,7 +1159,7 @@ export default function VendorPerformanceView(props) {
   const [viewingItem, setViewingItem] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [isSavingItem, setIsSavingItem] = useState(false);
-  const [isSyncingZohoItems, setIsSyncingZohoItems] = useState(false);
+  const [isSyncingItems, setIsSyncingItems] = useState(false);
   const [itemSaveStatus, setItemSaveStatus] = useState(null);
   const [isCreatingItem, setIsCreatingItem] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
@@ -1194,22 +1188,22 @@ export default function VendorPerformanceView(props) {
 
   useEffect(() => {
     let isMounted = true;
-    const fetchZohoItems = async () => {
+    const fetchItemsFromBackend = async () => {
       try {
         setItemsLoading(true);
-        const zohoItems = await getSafeZohoItems();
-        if (isMounted && Array.isArray(zohoItems) && zohoItems.length > 0) {
+        const backendItems = await getItems();
+        if (isMounted && Array.isArray(backendItems) && backendItems.length > 0) {
           setItemsList(prev => {
             const itemMap = new Map();
             (prev || []).forEach(it => itemMap.set(it.code || it.sku || it.itemId || it.id || it.name, it));
-            zohoItems.forEach(it => {
+            backendItems.forEach(it => {
               const key = it.code || it.sku || it.itemId || it.id || it.name;
               if (key) itemMap.set(key, { ...itemMap.get(key), ...it });
             });
             return Array.from(itemMap.values());
           });
         } else {
-          const response = await fetch('/api/zoho/items').catch(() => null);
+          const response = await fetch('/api/items').catch(() => null);
           if (response && response.ok) {
             const zItems = await response.json().catch(() => []);
             if (isMounted && Array.isArray(zItems) && zItems.length > 0) {
@@ -1226,16 +1220,16 @@ export default function VendorPerformanceView(props) {
           }
         }
       } catch (err) {
-        console.error("Error fetching Zoho Items:", err);
+        console.error("Error fetching Catalog Items:", err);
       } finally {
         if (isMounted) setItemsLoading(false);
       }
     };
-    fetchZohoItems();
+    fetchItemsFromBackend();
     return () => { isMounted = false; };
   }, []);
 
-  const handleCreateProductInZoho = async () => {
+  const handleCreateProduct = async () => {
     if (!newItemData.name || !newItemData.name.trim()) {
       setCreateStatus({ type: 'warning', text: 'Item Name is required.' });
       return;
@@ -1256,7 +1250,7 @@ export default function VendorPerformanceView(props) {
         status: newItemData.status || 'Active'
       };
 
-      const res = await fetch('/api/zoho/items', {
+      const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1283,7 +1277,7 @@ export default function VendorPerformanceView(props) {
         return updated;
       });
 
-      setCreateStatus({ type: 'success', text: result.message || 'Product created successfully and added to Zoho Books!' });
+      setCreateStatus({ type: 'success', text: result.message || 'Product created successfully!' });
 
       setTimeout(() => {
         setIsCreatingItem(false);
@@ -1332,7 +1326,7 @@ export default function VendorPerformanceView(props) {
     }
   };
 
-  const handleSaveItemToZoho = async () => {
+  const handleSaveItem = async () => {
     if (!editingItem) return;
     try {
       setIsSavingItem(true);
@@ -1350,14 +1344,14 @@ export default function VendorPerformanceView(props) {
         status: targetStatus
       };
 
-      const res = await fetch(`/api/zoho/items/${editingItem.itemId}`, {
+      const res = await fetch(`/api/items/${editingItem.itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       if (res.ok) {
-        setItemSaveStatus({ type: 'success', text: 'Item updated successfully and synced with Zoho Books!' });
+        setItemSaveStatus({ type: 'success', text: 'Item updated successfully!' });
       } else {
         setItemSaveStatus({ type: 'warning', text: 'Saved locally in Control Room.' });
       }
@@ -1470,7 +1464,7 @@ export default function VendorPerformanceView(props) {
     }
 
     try {
-      const res = await fetch(`/api/zoho/gst-lookup?gstin=${g}`);
+      const res = await fetch(`/api/gst-lookup?gstin=${g}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -1939,21 +1933,21 @@ export default function VendorPerformanceView(props) {
       pan: vPAN || ''
     };
 
-    // Push new vendor to Zoho Books API & refresh live list so official Zoho Contact ID is assigned as Vendor Code
-    fetch('/api/zoho/vendors', {
+    // Save new vendor and refresh live list
+    fetch('/api/vendors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newVendorPayload)
     }).then(res => res.json()).then(data => {
       if (data.success) {
-        console.log('Vendor created in Zoho Books successfully!', data);
+        console.log('Vendor created successfully in BUSINZ!', data);
       } else {
-        console.warn('Zoho Vendor creation notice:', data);
+        console.warn('Vendor creation notice:', data);
       }
-      loadVendorsFromZoho();
+      loadVendorsFromBackend();
     }).catch(err => {
-      console.error('Failed to sync vendor to Zoho:', err);
-      loadVendorsFromZoho();
+      console.error('Failed to save vendor:', err);
+      loadVendorsFromBackend();
     });
 
     // Reset states
@@ -2299,7 +2293,7 @@ export default function VendorPerformanceView(props) {
     setIsRefreshingMetrics(true);
     try {
       fetchPerformanceData();
-      await loadVendorsFromZoho();
+      await loadVendorsFromBackend();
     } finally {
       setTimeout(() => setIsRefreshingMetrics(false), 600);
     }

@@ -58,8 +58,37 @@ export async function initPostgresDatabase() {
       );
     `);
 
+    // Ensure bom_orders has contact_person and gst_no columns if table already exists
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'bom_orders') THEN
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
+            
+            -- 1-to-1 Sync order values, items, and salesperson from source PI if missing
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN
+              UPDATE public.bom_orders b
+              SET grand_total = COALESCE(NULLIF(p.grand_total, 0), b.grand_total),
+                  sub_total = COALESCE(NULLIF(p.sub_total, 0), b.sub_total),
+                  customer_name = COALESCE(NULLIF(b.customer_name, ''), NULLIF(p.customer_name, ''), b.customer_name),
+                  company_name = COALESCE(NULLIF(b.company_name, ''), NULLIF(p.customer_name, ''), b.company_name),
+                  sales_person = COALESCE(NULLIF(b.sales_person, ''), NULLIF(p.sales_person, ''), NULLIF(p.created_by, ''), 'Sales Department'),
+                  sales_person_code = COALESCE(NULLIF(b.sales_person_code, ''), NULLIF(p.sales_person_code, ''), NULLIF(p.created_by_id, ''), ''),
+                  items = CASE WHEN (b.items IS NULL OR jsonb_array_length(b.items) = 0 OR b.grand_total = 0) AND jsonb_array_length(p.items) > 0 THEN p.items ELSE b.items END
+              FROM public.proforma_invoices p
+              WHERE (b.source_pi_no = p.pi_no OR b.source_pi_no = p.id)
+                AND (b.grand_total IS NULL OR b.grand_total = 0 OR b.sales_person IS NULL OR b.sales_person = '' OR b.sales_person = 'Sales Department' OR b.sales_person = 'Sales Executive');
+            END IF;
+          END IF;
+        END $$;
+      `);
+    } catch (_) {}
+
     // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
     const storesToSeed = [
+      'bom_store',
       'employees_store',
       'po_store',
       'grn_store',
@@ -69,7 +98,13 @@ export async function initPostgresDatabase() {
       'vrm_prod_workorders',
       'vendor_store',
       'presets_store',
-      'company_branding_store'
+      'company_branding_store',
+      'invoice_store',
+      'proforma_invoice_store',
+      'sales_pi_store',
+      'payment_store',
+      'customer_store',
+      'crm_customers'
     ];
 
     for (const storeKey of storesToSeed) {
@@ -313,7 +348,14 @@ async function executeSql(state) {
           const keys = Object.keys(row).filter(k => row[k] !== undefined);
           if (keys.length === 0) continue;
           const cols = keys.map(k => `"${k}"`).join(', ');
-          const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+          const jsonbCols = new Set([
+            'items', 'payments', 'dispatch_packing', 'accounts_verification', 
+            'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
+            'dispatch_packing_media', 'vehicle_loading', 'data'
+          ]);
+          const placeholders = keys.map((k, i) => {
+            return jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`;
+          }).join(', ');
           const updateSet = keys
             .filter(k => k !== state.conflictTarget)
             .map(k => `"${k}" = EXCLUDED."${k}"`)

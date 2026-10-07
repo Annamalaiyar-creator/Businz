@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2 } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
-import { getSafeZohoPOs, getSafeZohoVendors, getSafeZohoItems, saveSafeZohoPO } from '../services/zohoSafeSync';
+import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
 import NotificationToast from './NotificationToast';
 import ModernDateRangePicker from './ModernDateRangePicker';
@@ -223,7 +223,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       setTableLoading(true);
     }
     try {
-      const safePOs = await getSafeZohoPOs();
+      const safePOs = await getPurchaseOrders();
       const normalize = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
 
       const mergeWithPrev = (incomingList, currentPrev) => {
@@ -332,7 +332,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       if (Array.isArray(safePOs) && safePOs.length > 0) {
         updateIfChanged(safePOs);
       } else {
-        const response = await fetchWithTimeout('/api/zoho/purchaseorders', { timeout: 25000 }).catch(() => null);
+        const response = await fetchWithTimeout('/api/purchaseorders', { timeout: 25000 }).catch(() => null);
         if (response && response.ok) {
           const zohoPOs = await response.json().catch(() => []);
           if (Array.isArray(zohoPOs)) {
@@ -341,7 +341,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         }
       }
     } catch (err) {
-      console.error("Error fetching Zoho POs:", err);
+      console.error("Error fetching POs:", err);
     } finally {
       if (!isBackground) {
         setTableLoading(false);
@@ -362,13 +362,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     const fetchZohoDropdowns = async () => {
       try {
         const [safeVendors, safeItems] = await Promise.all([
-          getSafeZohoVendors(),
-          getSafeZohoItems()
+          getVendors(),
+          getItems()
         ]);
         if (Array.isArray(safeVendors) && safeVendors.length > 0) {
           setZohoVendors(safeVendors);
         } else {
-          const vRes = await fetchWithTimeout('/api/zoho/vendors', { timeout: 25000 }).catch(() => null);
+          const vRes = await fetchWithTimeout('/api/vendors', { timeout: 25000 }).catch(() => null);
           if (vRes && vRes.ok) {
             const vData = await vRes.json().catch(() => []);
             setZohoVendors(vData || []);
@@ -378,14 +378,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
         if (Array.isArray(safeItems) && safeItems.length > 0) {
           setZohoItems(safeItems);
         } else {
-          const iRes = await fetchWithTimeout('/api/zoho/items', { timeout: 25000 }).catch(() => null);
+          const iRes = await fetchWithTimeout('/api/items', { timeout: 25000 }).catch(() => null);
           if (iRes && iRes.ok) {
             const iData = await iRes.json().catch(() => []);
             setZohoItems(iData || []);
           }
         }
       } catch (err) {
-        console.error("Failed to fetch dropdown resources from Zoho:", err);
+        console.error("Failed to fetch dropdown resources:", err);
       }
     };
     fetchZohoPOs();
@@ -435,16 +435,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     window.addEventListener('controlroom_storage_update', handlePoPush);
     window.addEventListener('controlroom_grn_completed', handleGrnCompleted);
 
-    // Auto-poll Zoho Books POs silently in background every 30 seconds as fallback
-    const pollInterval = setInterval(() => {
-      fetchZohoPOs(true);
-    }, 30000);
-
     return () => {
       window.removeEventListener('controlroom_po_updated', handlePoPush);
       window.removeEventListener('controlroom_storage_update', handlePoPush);
       window.removeEventListener('controlroom_grn_completed', handleGrnCompleted);
-      clearInterval(pollInterval);
     };
   }, []);
 
@@ -493,7 +487,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const todayStr = new Date().toISOString().split('T')[0];
           setPoDate(todayStr);
           
-          fetch('/api/zoho/next-po-number')
+          fetch('/api/next-po-number')
             .then(res => res.ok ? res.json() : null)
             .then(data => {
               if (data && data.nextPoNumber) {
@@ -802,11 +796,11 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     };
 
     // Save immediately to local & Supabase cloud store so PO is preserved permanently
-    saveSafeZohoPO(newPO);
+    savePurchaseOrder(newPO);
 
     const syncPOToServer = async (isEdit) => {
       try {
-        const res = await fetch('/api/zoho/purchaseorders', {
+        const res = await fetch('/api/purchaseorders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newPO)
@@ -837,10 +831,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               items: (newPO.items && newPO.items.length > 0) ? newPO.items : (data.po.items || [])
             };
             setPoList(prev => prev.map(p => (p.poNo === newPO.poNo || p.id === newPO.id) ? { ...p, ...mergedSavedPO } : p));
-            saveSafeZohoPO(mergedSavedPO);
-            showCustomAlert(data.message || 'Purchase Order created successfully in Zoho Books!', 'PO Created', 'success');
+            savePurchaseOrder(mergedSavedPO);
+            showCustomAlert(data.message || 'Purchase Order created successfully in BUSINZ!', 'PO Created', 'success');
           } else if (data.message) {
-            showCustomAlert(data.message, 'Zoho Sync Notice', 'warning');
+            showCustomAlert(data.message, 'Notice', 'warning');
           }
         } else {
           // Live web server returned HTML (static SPA or 404/502). PO is safely stored in local & cloud.
@@ -892,9 +886,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       }
       return p;
     }));
-    saveSafeZohoPO(updatedApprovedPo);
+    savePurchaseOrder(updatedApprovedPo);
 
-    fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/approve`, {
+    fetch(`/api/purchaseorders/${encodeURIComponent(poId)}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1016,9 +1010,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     // Persist immediately to cloud & disk
     try {
-      await saveSafeZohoPO(updatedPaymentPo);
+      await savePurchaseOrder(updatedPaymentPo);
     } catch (saveErr) {
-      console.warn('saveSafeZohoPO notice:', saveErr);
+      console.warn('savePurchaseOrder notice:', saveErr);
     }
 
     // Broadcast update to other tabs (Procurement team, etc.)
@@ -1029,7 +1023,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     // Call backend endpoint to ensure server memory & disk are updated synchronously
     try {
-      await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/process-payment`, {
+      await fetch(`/api/purchaseorders/${encodeURIComponent(poId)}/process-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1111,9 +1105,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     // 2. Persist immediately to cloud & disk
     try {
-      await saveSafeZohoPO(updatedProceedPo);
+      await savePurchaseOrder(updatedProceedPo);
     } catch (saveErr) {
-      console.warn('saveSafeZohoPO notice:', saveErr);
+      console.warn('savePurchaseOrder notice:', saveErr);
     }
 
     try {
@@ -1123,7 +1117,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     // 3. Call backend endpoint to update server memory and disk store synchronously
     try {
-      await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/proceed`, {
+      await fetch(`/api/purchaseorders/${encodeURIComponent(poId)}/proceed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1162,7 +1156,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       return p;
     }));
 
-    fetch(`/api/zoho/purchaseorders/${encodeURIComponent(poId)}/reject`, {
+    fetch(`/api/purchaseorders/${encodeURIComponent(poId)}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1374,17 +1368,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       sessionStorage.setItem('controlroom_viewing_po', JSON.stringify(enrichedPo));
     } catch (_) {}
     setActiveDropdownIdx(null);
-    const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
-      ? po.id 
-      : ((/^\d{15,}$/.test(String(po.zohoId || ''))) 
-        ? po.zohoId 
-        : (po.id || po.poNo || po.zohoId));
+    const targetId = po.poNo || po.id;
     if (targetId) {
       if (!enrichedPo.items || enrichedPo.items.length === 0) {
         setPoDetailLoading(true);
       }
       try {
-        const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
+        const res = await fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
           if (detail && detail.poNo) {
@@ -1414,14 +1404,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             };
             populateFormStates(merged);
             setPoList(prev => prev.map(p => (p.poNo === (merged.poNo || po.poNo) || p.id === (merged.id || po.id)) ? { ...p, ...merged } : p));
-            saveSafeZohoPO(merged);
+            savePurchaseOrder(merged);
             try {
               sessionStorage.setItem('controlroom_viewing_po', JSON.stringify(merged));
             } catch (_) {}
           }
         }
       } catch (err) {
-        console.error("Failed to load PO details from Zoho", err);
+        console.error("Failed to load PO details", err);
       } finally {
         setPoDetailLoading(false);
       }
@@ -1444,17 +1434,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       sessionStorage.setItem('controlroom_viewing_po', JSON.stringify(enrichedPo));
     } catch (_) {}
     setActiveDropdownIdx(null);
-    const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
-      ? po.id 
-      : ((/^\d{15,}$/.test(String(po.zohoId || ''))) 
-        ? po.zohoId 
-        : (po.id || po.poNo || po.zohoId));
+    const targetId = po.poNo || po.id;
     if (targetId) {
       if (!enrichedPo.items || enrichedPo.items.length === 0) {
         setPoDetailLoading(true);
       }
       try {
-        const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
+        const res = await fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
             const isAdv = (p) => {
@@ -1506,13 +1492,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             };
             populateFormStates(merged);
             setPoList(prev => prev.map(p => (p.poNo === (merged.poNo || po.poNo) || p.id === (merged.id || po.id)) ? { ...p, ...merged } : p));
-            saveSafeZohoPO(merged);
+            savePurchaseOrder(merged);
             try {
               sessionStorage.setItem('controlroom_viewing_po', JSON.stringify(merged));
             } catch (_) {}
           }
       } catch (err) {
-        console.error("Failed to load PO details from Zoho", err);
+        console.error("Failed to load PO details", err);
       } finally {
         setPoDetailLoading(false);
       }
@@ -1536,7 +1522,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     setPoDate(todayStr);
 
     try {
-      const res = await fetch('/api/zoho/next-po-number');
+      const res = await fetch('/api/next-po-number');
       if (res.ok) {
         const data = await res.json();
         if (data.nextPoNumber) {
@@ -1549,17 +1535,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
     setViewMode('create');
 
-    const targetId = (/^\d{15,}$/.test(String(po.id || ''))) 
-      ? po.id 
-      : ((/^\d{15,}$/.test(String(po.zohoId || ''))) 
-        ? po.zohoId 
-        : (po.id || po.poNo || po.zohoId));
+    const targetId = po.poNo || po.id;
     if (targetId) {
       if (!enrichedPo.items || enrichedPo.items.length === 0) {
         setPoDetailLoading(true);
       }
       try {
-        const res = await fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`);
+        const res = await fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`);
         if (res.ok) {
           const detail = await res.json();
           if (detail && detail.poNo) {
@@ -1575,7 +1557,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             populateFormStates(merged);
           }
           setPoDate(todayStr);
-          const nextRes = await fetch('/api/zoho/next-po-number');
+          const nextRes = await fetch('/api/next-po-number');
           if (nextRes.ok) {
             const nextData = await nextRes.json();
             if (nextData.nextPoNumber) {
@@ -1584,14 +1566,14 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           }
         }
       } catch (err) {
-        console.error("Failed to load PO details for cloning from Zoho", err);
+        console.error("Failed to load PO details for cloning", err);
       } finally {
         setPoDetailLoading(false);
       }
     }
   };
 
-  // Helper to calculate next PO number matching Zoho Books format (PO-000XX)
+  // Helper to calculate next PO number matching standard sequential format (PO-000XX)
   const getNextPoNumber = (list) => {
     let maxNum = 43;
     (list || []).forEach(p => {
@@ -1611,7 +1593,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const handleStartFreshPO = () => {
     setEditIdx(null);
     setPoNumber(getNextPoNumber(poList));
-    fetch('/api/zoho/next-po-number')
+    fetch('/api/next-po-number')
       .then(res => res.json())
       .then(data => {
         if (data && data.nextPoNo) {
@@ -1657,16 +1639,16 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const executeDeletePO = () => {
     if (deleteIdx !== null && poList[deleteIdx]) {
       const targetPO = poList[deleteIdx];
-      const targetId = targetPO.id || targetPO.poNo || targetPO.zohoId;
+      const targetId = targetPO.poNo || targetPO.id;
 
       setPoList(prev => prev.filter((_, i) => i !== deleteIdx));
       setDeleteIdx(null);
 
       if (targetId) {
-        fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`, {
+        fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`, {
           method: 'DELETE'
         }).then(res => res.json()).then(data => {
-          console.log('PO deleted from Zoho & Control Room:', data);
+          console.log('PO deleted:', data);
           fetchZohoPOs();
         }).catch(err => {
           console.error('Failed to delete PO in backend:', err);
@@ -2815,7 +2797,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
           {/* Form Content Cards */}
 
-          {/* Skeleton loader — shown while Zoho PO detail is fetching */}
+          {/* Skeleton loader — shown while PO detail is fetching */}
           {poDetailLoading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div className="section-card" style={{ padding: '30px', borderRadius: '16px', borderTop: '4px solid #0E7490', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -2854,7 +2836,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', backgroundColor: '#EFF6FF', borderRadius: '10px', border: '1px solid #BFDBFE' }}>
                 <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', flexShrink: 0, color: '#2563EB' }} />
-                <span style={{ fontSize: '13px', color: '#1D4ED8', fontWeight: '600' }}>Loading PO details from Zoho Books…</span>
+                <span style={{ fontSize: '13px', color: '#1D4ED8', fontWeight: '600' }}>Loading PO details…</span>
               </div>
             </div>
           )}
@@ -3689,7 +3671,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       required
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', width: '100%', cursor: 'pointer', outline: 'none' }}
                     >
-                      <option value="" disabled>Select Zoho Vendor...</option>
+                      <option value="" disabled>Select Vendor...</option>
                       {zohoVendors.map((v, idx) => (
                         <option key={idx} value={v.name}>{v.name}</option>
                       ))}

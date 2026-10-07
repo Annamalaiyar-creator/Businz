@@ -1,10 +1,10 @@
 import { supabase } from '../supabaseClient.js';
 
-// Canonical column projection for BOM list/table queries (uses PostgREST JSON paths for small verification fields, strictly excludes heavy _extra_data/documents)
-export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, mobile, email, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verified:accounts_verification->verified, accounts_verified_by:accounts_verification->verifiedBy, accounts_payment_status:accounts_verification->paymentStatus, accounts_payment_date:accounts_verification->paymentDate, accounts_total_amount:accounts_verification->totalAmount, created_at, updated_at';
+// Canonical column projection for BOM list/table queries (includes accounts_verification JSON for full metadata & extra data retention)
+export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
 
 // Canonical column projection for Invoice list/table queries
-export const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+export const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, status, pay, created_at, updated_at';
 
 // Preserve local browser caches for zero-data-loss protection per project guidelines
 
@@ -110,8 +110,7 @@ export function toConsumerCustomer(c) {
     assignedSalesperson: rep,
     salesPerson: rep,
     c8: rep,
-    source: c.source || (c.zoho_contact_id ? 'Zoho Books' : 'Manual'),
-    zohoContactId: c.zoho_contact_id || null,
+    source: c.source || 'Manual',
     primaryContact: c.primary_contact || {
       name: name,
       phone: phone,
@@ -166,8 +165,7 @@ export function toDatabaseCustomerRow(item) {
     credit_days: Number(item.creditDays || item.credit_days || 0),
     payment_terms: item.paymentTerms || item.payment_terms || 'Due on Receipt',
     assigned_salesperson: item.assignedSalesperson || item.assigned_salesperson || item.salesPerson || item.c8 || 'Sales Rep',
-    source: item.source || (item.zohoContactId || item.zoho_contact_id ? 'Zoho Books' : 'Manual'),
-    zoho_contact_id: item.zohoContactId || item.zoho_contact_id || null,
+    source: item.source || 'Manual',
     primary_contact: item.primaryContact || item.primary_contact || {},
     email: item.email || item.c5 || '—',
     phone: item.phone || item.c4 || '—',
@@ -416,7 +414,6 @@ export function toConsumerInvoice(row) {
     balance: meta.balance !== undefined ? meta.balance : invAmt,
     status: row.status || 'Draft',
     pay: row.pay || row.status || 'Pending',
-    syncedToZoho: Boolean(row.synced_to_zoho),
     items: meta.items || [],
     deliveryAddress: meta.deliveryAddress || '',
     billingAddress: meta.billingAddress || '',
@@ -427,7 +424,6 @@ export function toConsumerInvoice(row) {
     lrCopyDoc: meta.lrCopyDoc || null,
     deliveryAddressProofDoc: meta.deliveryAddressProofDoc || null,
     presetName: meta.presetName || '',
-    zohoId: row.zoho_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -442,10 +438,8 @@ export function toDatabaseInvoiceRow(item) {
   const invNo = item.invNo || item.invoiceNumber || item.code || id;
   const vendor = item.vendor || item.customerName || item.customer_name || 'Customer';
   const bomCode = item.bomCode || item.poNo || item.bom_code || '';
-  const zohoId = item.zohoId || item.zoho_id || null;
   const status = item.status || 'Draft';
   const pay = item.pay || status || 'Pending';
-  const synced = Boolean(item.syncedToZoho || item.synced_to_zoho);
   const invAmt = Number(item.invAmt !== undefined ? String(item.invAmt).replace(/[^0-9.]/g, '') : (item.total || item.grandTotal || item.amount || 0)) || 0;
 
   const extraMetadata = {
@@ -476,10 +470,8 @@ export function toDatabaseInvoiceRow(item) {
     inv_amt: invAmt,
     vendor,
     bom_code: bomCode,
-    zoho_id: zohoId,
     status,
     pay,
-    synced_to_zoho: synced,
     created_at: item.createdAt || item.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -701,14 +693,22 @@ export async function deleteCloudLeadRow(leadId) {
  */
 export function toConsumerBom(row) {
   if (!row || typeof row !== 'object') return row;
-  const custName = (row.customer_name || row.customerName || row.vendor || '').trim();
-  if (custName === 'Customer' && !row.source_pi_no && !row.sourcePiNo) {
-    return null;
+
+  let av = row.accounts_verification || row.accountsVerification;
+  if (typeof av === 'string' && (av.startsWith('{') || av.startsWith('['))) {
+    try { av = JSON.parse(av); } catch (_) {}
+  }
+  let extraData = {};
+  if (av && typeof av === 'object' && av._extra_data) {
+    extraData = { ...av._extra_data };
   }
 
-  let extraData = {};
-  if (row.accounts_verification && typeof row.accounts_verification === 'object' && row.accounts_verification._extra_data) {
-    extraData = { ...row.accounts_verification._extra_data };
+  let cleanDispatchPacking = row.dispatch_packing || row.dispatchPacking || extraData.dispatchPacking || [];
+  if (typeof cleanDispatchPacking === 'string' && (cleanDispatchPacking.startsWith('[') || cleanDispatchPacking.startsWith('{'))) {
+    try { cleanDispatchPacking = JSON.parse(cleanDispatchPacking); } catch (_) {}
+  }
+  if (!Array.isArray(cleanDispatchPacking)) {
+    cleanDispatchPacking = [];
   }
 
   const isAccVerified = row.accounts_verified !== undefined
@@ -718,8 +718,8 @@ export function toConsumerBom(row) {
         row.invoice_confirmed ||
         row.invoice_no
       );
-  const cleanAccountsVerification = (row.accounts_verification && typeof row.accounts_verification === 'object')
-    ? { ...row.accounts_verification }
+  const cleanAccountsVerification = (av && typeof av === 'object')
+    ? { ...av }
     : {
         verified: isAccVerified,
         verifiedBy: row.accounts_verified_by || '',
@@ -742,13 +742,23 @@ export function toConsumerBom(row) {
 
   const id = row.id || row.bom_code || '';
   const bomCode = row.bom_code || row.id || '';
-  const customerName = row.customer_name || row.company_name || '';
-  const companyName = row.company_name || row.customer_name || '';
+  const rawCustomer = (row.customer_name || row.company_name || extraData.customerName || extraData.companyName || extraData.vendor || extraData.clientName || '').trim();
+  const customerName = (rawCustomer && rawCustomer !== 'Customer' && rawCustomer !== '-')
+    ? rawCustomer
+    : (row.company_name && row.company_name !== '-' && row.company_name !== 'Customer')
+      ? row.company_name
+      : (extraData.companyName || extraData.customerName || (rawCustomer || 'Customer Order'));
+  const companyName = (row.company_name && row.company_name !== '-') ? row.company_name : customerName;
   const phone = row.mobile || '';
   const email = row.email || '';
   const billingAddr = row.billing_address || '';
   const deliveryAddr = row.delivery_address || '';
-  const salesRep = row.sales_person || '';
+  const contactPerson = row.contact_person || extraData.contactPerson || '';
+  const gstNo = row.gst_no || extraData.gstNo || extraData.gstin || '';
+  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || 'Sales Department';
+  const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
+  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || salesRep;
+  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || salesPersonCode;
 
   return {
     ...extraData,
@@ -757,7 +767,12 @@ export function toConsumerBom(row) {
     code: bomCode,
     customerName,
     companyName,
-    c2: companyName,
+    contactPerson,
+    contactPersonName: contactPerson,
+    gstNo,
+    gstNumber: gstNo,
+    gstin: gstNo,
+    c2: customerName,
     c3: customerName,
     date: row.date || '',
     deliveryDate: row.delivery_date || '',
@@ -779,7 +794,7 @@ export function toConsumerBom(row) {
     transporterName: row.transporter_name || '',
     vehicleNo: row.vehicle_no || '',
     lrNo: row.lr_no || '',
-    paymentType: row.payment_type || 'Credit Payment',
+    paymentType: row.payment_type || '100% Paid',
     partialAmount: Number(row.partial_amount || 0),
     balanceAmount: Number(row.balance_amount || 0),
     creditDays: Number(row.credit_days || 0),
@@ -789,14 +804,23 @@ export function toConsumerBom(row) {
     salesConfirmed: Boolean(row.sales_confirmed),
     salesConfirmedAt: row.sales_confirmed_at || null,
     salesPerson: salesRep,
-    salesPersonCode: row.sales_person_code || extraData.salesPersonCode || '',
+    salesPersonCode: salesPersonCode,
     c8: salesRep,
-    createdBy: row.created_by || '',
-    createdById: row.created_by_id || extraData.createdById || '',
+    createdBy: createdBy,
+    createdById: createdById,
+    dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     items: Array.isArray(row.items) ? row.items : [],
     payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
-    dispatchPacking: (Array.isArray(row.dispatch_packing) || (row.dispatch_packing && typeof row.dispatch_packing === 'object')) ? row.dispatch_packing : [],
+    dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
+    packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
+      cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
+    ),
+    packedAt: row.packed_at || row.packedAt || extraData.packedAt || cleanAccountsVerification?.packedAt || null,
+    packedBy: row.packed_by || row.packedBy || extraData.packedBy || cleanAccountsVerification?.packedBy || null,
+    packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
+    packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
     invoiceConfirmed: Boolean(row.invoice_confirmed),
     invoiceDeducted: Boolean(row.invoice_deducted),
     invoiceNo: row.invoice_no || extraData.invoiceNo || '',
@@ -817,7 +841,7 @@ export function toConsumerBom(row) {
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
-    dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || []),
+    dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || { photos: [], videos: [] }),
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
     vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
@@ -835,10 +859,6 @@ export function toConsumerBom(row) {
  */
 export function toDatabaseBomRow(item) {
   if (!item || typeof item !== 'object') return null;
-  const cust = (item.customerName || item.customer_name || item.vendor || '').trim();
-  if (cust === 'Customer' && !item.sourcePiNo && !item.source_pi_no) {
-    return null;
-  }
 
   const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
   const bomCode = item.bomCode || item.code || id;
@@ -879,7 +899,7 @@ export function toDatabaseBomRow(item) {
 
   const standardFields = new Set([
     'id', 'bomCode', 'code', 'sourcePiNo', 'date', 'deliveryDate',
-    'customerName', 'companyName', 'mobile', 'phone', 'email', 'billingAddress',
+    'customerName', 'companyName', 'contactPerson', 'contact_person', 'gstNo', 'gst_no', 'gstNumber', 'gstin', 'mobile', 'phone', 'email', 'billingAddress',
     'billingAddressObj', 'deliveryAddress', 'deliveryAddressObj',
     'deliveryAddressProofDoc', 'transportMode', 'transportScope',
     'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
@@ -902,9 +922,22 @@ export function toDatabaseBomRow(item) {
     }
   });
 
+  const existingExtra = (item.accountsVerification && typeof item.accountsVerification === 'object' && item.accountsVerification._extra_data) || {};
+  const mergedExtra = { ...existingExtra, ...extraData };
+  if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
+  if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
+  if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
+  if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
+  if (item.packedAt) mergedExtra.packedAt = item.packedAt;
+  if (item.packedBy) mergedExtra.packedBy = item.packedBy;
+  if (item.packedById) mergedExtra.packedById = item.packedById;
+  if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
+  if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
+  if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
+
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
-    ? { ...item.accountsVerification, _extra_data: extraData }
-    : { _extra_data: extraData };
+    ? { ...item.accountsVerification, _extra_data: mergedExtra }
+    : { _extra_data: mergedExtra };
 
   return {
     id,
@@ -913,8 +946,10 @@ export function toDatabaseBomRow(item) {
     source_pi_no: sourcePiNo,
     date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
     delivery_date: sanitizeDate(item.deliveryDate),
-    customer_name: item.customerName || item.companyName || 'Customer',
-    company_name: item.companyName || item.customerName || '',
+    customer_name: item.customerName || item.companyName || item.vendor || item.clientName || 'Customer',
+    company_name: item.companyName || item.customerName || item.vendor || item.clientName || '',
+    contact_person: item.contactPerson || item.contact_person || extraData.contactPerson || '',
+    gst_no: item.gstNo || item.gst_no || item.gstNumber || extraData.gstNo || '',
     mobile: item.mobile || item.phone || '',
     email: item.email || '',
     billing_address: item.billingAddress || item.c6 || '',
@@ -923,11 +958,11 @@ export function toDatabaseBomRow(item) {
     delivery_address_obj: item.deliveryAddressObj || {},
     delivery_address_proof_doc: serializeDoc(item.deliveryAddressProofDoc),
     transport_mode: item.transportMode || 'Transport',
-    transport_scope: item.transportScope || 'VRM Structures',
+    transportScope: item.transportScope || 'VRM Structures',
     transporter_name: item.transporterName || '',
     vehicle_no: item.vehicleNo || '',
     lr_no: item.lrNo || '',
-    payment_type: item.paymentType || 'Credit Payment',
+    payment_type: item.paymentType || '100% Paid',
     partial_amount: sanitizeNumber(item.partialAmount, 0),
     balance_amount: sanitizeNumber(item.balanceAmount, 0),
     credit_days: Math.round(sanitizeNumber(item.creditDays, 0)),
@@ -937,10 +972,10 @@ export function toDatabaseBomRow(item) {
     status: item.status || 'Draft',
     sales_confirmed: Boolean(item.salesConfirmed),
     sales_confirmed_at: sanitizeTimestamp(item.salesConfirmedAt),
-    sales_person: item.salesPerson || item.c8 || '',
-    sales_person_code: item.salesPersonCode || extraData.salesPersonCode || '',
-    created_by: item.createdBy || '',
-    created_by_id: item.createdById || extraData.createdById || '',
+    sales_person: item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
+    sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
+    created_by: item.createdBy || item.created_by || item.salesPerson || item.sales_person || '',
+    created_by_id: item.createdById || item.created_by_id || item.salesPersonCode || item.sales_person_code || extraData.createdById || '',
     items: Array.isArray(item.items) ? item.items : [],
     payments: typeof item.payments === 'object' && item.payments !== null ? item.payments : {},
     dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
@@ -1132,7 +1167,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
           gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
           dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-          source, zoho_contact_id, primary_contact, email, phone, status, notes, created_at, updated_at
+          source, primary_contact, email, phone, status, notes, created_at, updated_at
         `)
         .order('company_name', { ascending: true });
 
@@ -1191,11 +1226,11 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
 
   // CANONICAL INVOICE READ PATH: Query via local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'invoice_store' || storeKey === 'INVOICE_STORE') {
-    // 1. Try local server memory/zoho cache first (Zero Supabase PostgREST egress)
+    // 1. Try local server memory/cache first (Zero Supabase PostgREST egress)
     try {
       const controller = new AbortController();
       const tId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch('/api/zoho/invoices', { signal: controller.signal }).catch(() => null);
+      const res = await fetch('/api/invoices', { signal: controller.signal }).catch(() => null);
       clearTimeout(tId);
       if (res && res.ok) {
         const json = await res.json().catch(() => null);
@@ -1207,7 +1242,7 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
 
     // 2. Direct query fallback: SELECT from public.invoices (with limit 200)
     try {
-      const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, zoho_id, status, pay, synced_to_zoho, created_at, updated_at';
+      const INVOICE_SUMMARY_COLUMNS = 'id, inv_no, preset_name, inv_amt, vendor, bom_code, status, pay, created_at, updated_at';
       const { data: dbInvoices, error: invErr } = await supabase
         .from('invoices')
         .select(INVOICE_SUMMARY_COLUMNS)
@@ -1691,25 +1726,33 @@ export function saveCloudStore(storeKey, storeData) {
   }, 300);
 }
 
+export function getWorkflowRank(b) {
+  if (!b) return 0;
+  const s = String(b.status || '').toLowerCase();
+  if (b.cancelled || s.includes('cancel')) return -1;
+  // Final completed / closed
+  if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
+  // Vehicle loaded & dispatched, awaiting LR receipt from transporter
+  if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
+  // Invoice confirmed & ready for vehicle loading
+  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
+  // Accounts verified & forwarded to billing
+  if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
+  // Goods packing in dispatch
+  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
+  if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
+  // Sales confirmed BOM
+  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
+  return 1;
+}
+
 /**
  * Deduplicates BOM list by unique bomCode and unique sourcePiNo (Strict 1-to-1 PI Rule).
  * Merges duplicate entries in place without fabricating clone BOM codes.
  */
-export function resolveBomCollisions(bomList, sequenceMax = 658) {
+export function resolveBomCollisions(bomList, sequenceMax = 662) {
   if (!Array.isArray(bomList)) return { list: [], maxSeq: sequenceMax };
-  let maxSeq = Math.max(sequenceMax, 658);
-
-  const getWorkflowRank = (b) => {
-    if (!b) return 0;
-    const s = String(b.status || '').toLowerCase();
-    if (s.includes('invoice confirmed') || s.includes('closed') || s.includes('completed')) return 60;
-    if (s.includes('passed to invoice') || s.includes('accounts verified')) return 50;
-    if (s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 40;
-    if (s.includes('packed') || s.includes('awaiting accounts')) return 30;
-    if (s.includes('partially packed')) return 20;
-    if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production')) return 10;
-    return 1;
-  };
+  let maxSeq = Math.max(sequenceMax, 662);
 
   const seenCodes = new Map();
   const seenPiNos = new Map();
@@ -1717,10 +1760,6 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
 
   for (const b of bomList) {
     if (!b) continue;
-    const cust = (b.customerName || b.customer_name || b.vendor || '').trim();
-    if (cust === 'Customer' && !b.sourcePiNo && !b.source_pi_no) {
-      continue;
-    }
     const code = String(b.bomCode || b.code || b.id || '').trim();
     if (!code || code === 'BOM-PENDING' || code === 'BOM-AUTO') {
       continue;
@@ -1734,7 +1773,60 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
       const existing = resolvedList[idx];
       const existingRank = getWorkflowRank(existing);
       const newRank = getWorkflowRank(b);
-      resolvedList[idx] = newRank >= existingRank ? { ...existing, ...b } : { ...b, ...existing };
+
+      const existingPacking = Array.isArray(existing.dispatchPacking) ? existing.dispatchPacking : [];
+      const newPacking = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+      const existingPackedCount = existingPacking.filter(p => p && p.packed).length;
+      const newPackedCount = newPacking.filter(p => p && p.packed).length;
+      const mergedPacking = (existingPackedCount > 0 && existingPackedCount >= newPackedCount) 
+        ? existingPacking 
+        : (newPackedCount > 0 ? newPacking : (existingPacking.length > 0 ? existingPacking : newPacking));
+
+      const mergedPackingStatus = (existing.packingStatus === 'PACKING_VERIFIED' || b.packingStatus === 'PACKING_VERIFIED')
+        ? 'PACKING_VERIFIED'
+        : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
+          ? 'PARTIALLY_PACKED'
+          : (b.packingStatus || existing.packingStatus || null);
+
+      resolvedList[idx] = newRank >= existingRank ? {
+        ...existing,
+        ...b,
+        dispatchPacking: mergedPacking,
+        packingStatus: mergedPackingStatus,
+        accountsVerification: {
+          ...(existing.accountsVerification || {}),
+          ...(b.accountsVerification || {})
+        },
+        dispatchPackingMedia: (b.dispatchPackingMedia?.photos?.length > 0 || b.dispatchPackingMedia?.videos?.length > 0)
+          ? b.dispatchPackingMedia
+          : (existing.dispatchPackingMedia || { photos: [], videos: [] }),
+        vehicleLoading: b.vehicleLoading || existing.vehicleLoading || null,
+        lrCopyDoc: b.lrCopyDoc || existing.lrCopyDoc || null,
+        packedAt: b.packedAt || existing.packedAt || null,
+        packedBy: b.packedBy || existing.packedBy || null,
+        packedById: b.packedById || existing.packedById || null,
+        packingCompletedAt: b.packingCompletedAt || existing.packingCompletedAt || null,
+        fullyCompleted: b.fullyCompleted !== undefined ? b.fullyCompleted : existing.fullyCompleted
+      } : {
+        ...b,
+        ...existing,
+        dispatchPacking: mergedPacking,
+        packingStatus: mergedPackingStatus,
+        accountsVerification: {
+          ...(b.accountsVerification || {}),
+          ...(existing.accountsVerification || {})
+        },
+        dispatchPackingMedia: (existing.dispatchPackingMedia?.photos?.length > 0 || existing.dispatchPackingMedia?.videos?.length > 0)
+          ? existing.dispatchPackingMedia
+          : (b.dispatchPackingMedia || { photos: [], videos: [] }),
+        vehicleLoading: existing.vehicleLoading || b.vehicleLoading || null,
+        lrCopyDoc: existing.lrCopyDoc || b.lrCopyDoc || null,
+        packedAt: existing.packedAt || b.packedAt || null,
+        packedBy: existing.packedBy || b.packedBy || null,
+        packedById: existing.packedById || b.packedById || null,
+        packingCompletedAt: existing.packingCompletedAt || b.packingCompletedAt || null,
+        fullyCompleted: existing.fullyCompleted !== undefined ? existing.fullyCompleted : b.fullyCompleted
+      };
       continue;
     }
 
@@ -1745,12 +1837,64 @@ export function resolveBomCollisions(bomList, sequenceMax = 658) {
       const existingRank = getWorkflowRank(existing);
       const newRank = getWorkflowRank(b);
 
-      if (newRank > existingRank) {
+      const existingPacking = Array.isArray(existing.dispatchPacking) ? existing.dispatchPacking : [];
+      const newPacking = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
+      const existingPackedCount = existingPacking.filter(p => p && p.packed).length;
+      const newPackedCount = newPacking.filter(p => p && p.packed).length;
+      const mergedPacking = (existingPackedCount > 0 && existingPackedCount >= newPackedCount) 
+        ? existingPacking 
+        : (newPackedCount > 0 ? newPacking : (existingPacking.length > 0 ? existingPacking : newPacking));
+
+      const mergedPackingStatus = (existing.packingStatus === 'PACKING_VERIFIED' || b.packingStatus === 'PACKING_VERIFIED')
+        ? 'PACKING_VERIFIED'
+        : (existing.packingStatus === 'PARTIALLY_PACKED' || b.packingStatus === 'PARTIALLY_PACKED')
+          ? 'PARTIALLY_PACKED'
+          : (b.packingStatus || existing.packingStatus || null);
+
+      if (newRank >= existingRank) {
         seenCodes.delete(String(existing.bomCode || existing.code || existing.id || '').trim());
-        resolvedList[idx] = { ...existing, ...b };
+        resolvedList[idx] = {
+          ...existing,
+          ...b,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus,
+          accountsVerification: {
+            ...(existing.accountsVerification || {}),
+            ...(b.accountsVerification || {})
+          },
+          dispatchPackingMedia: (b.dispatchPackingMedia?.photos?.length > 0 || b.dispatchPackingMedia?.videos?.length > 0)
+            ? b.dispatchPackingMedia
+            : (existing.dispatchPackingMedia || { photos: [], videos: [] }),
+          vehicleLoading: b.vehicleLoading || existing.vehicleLoading || null,
+          lrCopyDoc: b.lrCopyDoc || existing.lrCopyDoc || null,
+          packedAt: b.packedAt || existing.packedAt || null,
+          packedBy: b.packedBy || existing.packedBy || null,
+          packedById: b.packedById || existing.packedById || null,
+          packingCompletedAt: b.packingCompletedAt || existing.packingCompletedAt || null,
+          fullyCompleted: b.fullyCompleted !== undefined ? b.fullyCompleted : existing.fullyCompleted
+        };
         seenCodes.set(code, idx);
       } else {
-        resolvedList[idx] = { ...b, ...existing };
+        resolvedList[idx] = {
+          ...b,
+          ...existing,
+          dispatchPacking: mergedPacking,
+          packingStatus: mergedPackingStatus,
+          accountsVerification: {
+            ...(b.accountsVerification || {}),
+            ...(existing.accountsVerification || {})
+          },
+          dispatchPackingMedia: (existing.dispatchPackingMedia?.photos?.length > 0 || existing.dispatchPackingMedia?.videos?.length > 0)
+            ? existing.dispatchPackingMedia
+            : (b.dispatchPackingMedia || { photos: [], videos: [] }),
+          vehicleLoading: existing.vehicleLoading || b.vehicleLoading || null,
+          lrCopyDoc: existing.lrCopyDoc || b.lrCopyDoc || null,
+          packedAt: existing.packedAt || b.packedAt || null,
+          packedBy: existing.packedBy || b.packedBy || null,
+          packedById: existing.packedById || b.packedById || null,
+          packingCompletedAt: existing.packingCompletedAt || b.packingCompletedAt || null,
+          fullyCompleted: existing.fullyCompleted !== undefined ? existing.fullyCompleted : b.fullyCompleted
+        };
       }
       continue;
     }
@@ -1801,7 +1945,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     }
   } catch (_) {}
 
-  let highestNum = 658;
+  let highestNum = 662;
 
   try {
     // High-speed single-row query for sequence counter (50ms)
@@ -1847,6 +1991,22 @@ export async function getAndReserveNextBomCode(commit = true) {
           });
         }
       }
+
+      // Also inspect sales PI store in localStorage
+      const piSavedStr = localStorage.getItem('controlroom_sales_pi_store');
+      if (piSavedStr) {
+        const piList = JSON.parse(piSavedStr);
+        if (Array.isArray(piList)) {
+          piList.forEach(p => {
+            const raw = String(p?.convertedBomCode || p?.convertedBomNo || '');
+            const match = raw.match(/BOM-(\d+)/i);
+            if (match) {
+              const parsed = parseInt(match[1], 10);
+              if (Number.isFinite(parsed) && parsed > storeMax) storeMax = parsed;
+            }
+          });
+        }
+      }
     } catch (_) {}
 
     // High-speed query directly to canonical public.bom_orders (prevents sequence drift)
@@ -1871,7 +2031,7 @@ export async function getAndReserveNextBomCode(commit = true) {
 
     const safeSeq = Number.isFinite(seqCounter) && seqCounter > 0 ? seqCounter : 0;
     const safeStore = Number.isFinite(storeMax) && storeMax > 0 ? storeMax : 0;
-    highestNum = Math.max(safeSeq, safeStore, 658);
+    highestNum = Math.max(safeSeq, safeStore, 662);
     const nextNum = highestNum + 1;
     const formattedCode = `BOM-${String(nextNum).padStart(3, '0')}`;
 

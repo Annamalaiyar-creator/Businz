@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Users, Search, Plus, Phone, MessageSquare, Mail, Building2, MapPin,
   CreditCard, FileText, CheckCircle2, ChevronRight, ChevronDown, X, AlertTriangle,
   Layers, Truck, DollarSign, Calendar, Eye, Edit3, ShieldAlert, RotateCcw,
   Trash2, Save, ArrowLeft, Check, RefreshCw, Briefcase, UserCheck,
-  Clock, Tag, MoreHorizontal, Sparkles, ExternalLink, Send, AlertCircle
+  Clock, Tag, MoreHorizontal, Sparkles, ExternalLink, Send, AlertCircle,
+  UploadCloud, FileSpreadsheet, Download, FileCheck, ArrowRight
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
 import Customer360PageView from './Customer360PageView';
@@ -23,8 +25,8 @@ export default function CrmCustomersView({
 }) {
   // Page mode: 'table' | 'create' | 'details' (Dedicated full-page views)
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'create' | 'details'
-  const [isSyncingZoho, setIsSyncingZoho] = useState(false);
-  const [zohoSyncMessage, setZohoSyncMessage] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomerType, setFilterCustomerType] = useState('All');
@@ -171,18 +173,17 @@ export default function CrmCustomersView({
 
   const [formCust, setFormCust] = useState(initialFormState);
 
-  // Sync with Zoho Books on component mount & manual trigger
-  // Sync with Zoho Books on component mount & manual trigger
-  const handleSyncWithZoho = async (isManual = false) => {
-    // Only perform the heavy POST sync if manually triggered by user clicking 'Sync Zoho Books'
+  // Sync with Central Database on component mount & manual trigger
+  const handleSyncWithBackend = async (isManual = false) => {
+    // Only perform the heavy POST sync if manually triggered by user clicking sync button
     if (isManual) {
-      setIsSyncingZoho(true);
+      setIsSyncing(true);
       try {
         if (Array.isArray(customers) && customers.length > 0) {
-          const unsynced = customers.filter(c => !c.zohoContactId && (c.customerCode || c.companyName));
+          const unsynced = customers.filter(c => (c.customerCode || c.companyName));
           for (const cust of unsynced) {
             try {
-              await fetch('/api/zoho/customers', {
+              await fetch('/api/customers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(cust)
@@ -193,7 +194,7 @@ export default function CrmCustomersView({
           }
         }
 
-        const res = await fetch('/api/zoho/customers');
+        const res = await fetch('/api/customers');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -202,15 +203,15 @@ export default function CrmCustomersView({
             } else if (typeof onSaveCustomer === 'function') {
               data.forEach(c => onSaveCustomer(c));
             }
-            setZohoSyncMessage({
+            setSyncMessage({
               type: 'success',
-              title: 'Zoho Books Synchronized',
-              message: `Synchronized ${data.length} customer account(s) with Zoho Books!`
+              title: 'Customers Synchronized',
+              message: `Synchronized ${data.length} customer account(s) with Central Database!`
             });
             addLiveNotification({
-              id: 'zoho_cust_sync_' + Date.now(),
-              title: 'Zoho Books Synchronized',
-              message: `Synchronized ${data.length} customer account(s) with Zoho Books!`,
+              id: 'cust_sync_' + Date.now(),
+              title: 'Customers Synchronized',
+              message: `Synchronized ${data.length} customer account(s) with Central Database!`,
               time: 'Just now',
               type: 'success',
               role: 'All',
@@ -219,20 +220,20 @@ export default function CrmCustomersView({
           }
         }
       } catch (err) {
-        console.warn('Zoho customer sync notice:', err.message);
-        setZohoSyncMessage({
+        console.warn('Customer sync notice:', err.message);
+        setSyncMessage({
           type: 'error',
-          title: 'Zoho Books Sync Notice',
-          message: err.message || 'Unable to synchronize customer accounts with Zoho Books.'
+          title: 'Customer Sync Notice',
+          message: err.message || 'Unable to synchronize customer accounts.'
         });
       } finally {
-        setIsSyncingZoho(false);
+        setIsSyncing(false);
       }
     } else {
-      // Background sync on mount: only query Zoho if customers list has not been populated yet
+      // Background sync on mount: only query database if customers list has not been populated yet
       if (!Array.isArray(customers) || customers.length === 0) {
         try {
-          const res = await fetch('/api/zoho/customers');
+          const res = await fetch('/api/customers');
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0 && typeof onBatchUpdateCustomers === 'function') {
@@ -247,7 +248,7 @@ export default function CrmCustomersView({
   // Single mount check: only sync if customers prop is currently empty
   useEffect(() => {
     if (!Array.isArray(customers) || customers.length === 0) {
-      handleSyncWithZoho(false);
+      handleSyncWithBackend(false);
     }
   }, []);
 
@@ -338,6 +339,291 @@ export default function CrmCustomersView({
     );
   };
 
+  // Bulk Upload Modal State & Handlers
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [importStep, setImportStep] = useState(1); // 1: Upload File, 2: Map Fields (Zoho Books style), 3: Preview & Import
+  const [bulkFile, setBulkFile] = useState(null);
+  const [rawFileRows, setRawFileRows] = useState([]);
+  const [fileHeaders, setFileHeaders] = useState([]);
+  const [fieldMapping, setFieldMapping] = useState({});
+  const [bulkParsedData, setBulkParsedData] = useState([]);
+  const [bulkError, setBulkError] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const bulkFileInputRef = useRef(null);
+
+  // Zoho-style Field Definitions for B2B Customer Mapping
+  const BUSINZ_IMPORT_FIELDS = useMemo(() => [
+    { key: 'companyName', label: 'Company Name', required: true, hint: 'Legal business name or organization' },
+    { key: 'customerName', label: 'Customer / Contact Name', required: false, hint: 'Display name or contact person' },
+    { key: 'customerType', label: 'Customer Type', required: false, hint: 'e.g. EPC Contractor, Developer, Reseller' },
+    { key: 'contactPerson', label: 'Primary Contact Person', required: false, hint: 'Key contact person or manager' },
+    { key: 'phone', label: 'Phone / Mobile', required: true, hint: 'Primary phone or WhatsApp number' },
+    { key: 'email', label: 'Email Address', required: false, hint: 'Official billing or communication email' },
+    { key: 'gstin', label: 'GSTIN / Tax ID', required: false, hint: '15-digit GST identification number' },
+    { key: 'pan', label: 'PAN Number', required: false, hint: '10-character PAN number' },
+    { key: 'address', label: 'Billing Address', required: false, hint: 'Street address, building, premises' },
+    { key: 'city', label: 'City', required: false, hint: 'City or town' },
+    { key: 'state', label: 'State', required: false, hint: 'State / province' },
+    { key: 'pincode', label: 'Pincode / ZIP', required: false, hint: 'Postal PIN code' },
+    { key: 'paymentTerms', label: 'Payment Terms', required: false, hint: 'e.g. 50% Advance + 50% Dispatch, Net 30' },
+    { key: 'creditLimit', label: 'Credit Limit (₹)', required: false, hint: 'Approved credit limit in INR' }
+  ], []);
+
+  // Smart Header Auto-detection
+  const guessFieldMapping = (headers) => {
+    const used = new Set();
+    const findMatch = (patterns) => {
+      for (const pattern of patterns) {
+        const found = headers.find(h => !used.has(h) && pattern.test(String(h || '').trim()));
+        if (found) {
+          used.add(found);
+          return found;
+        }
+      }
+      return '';
+    };
+
+    return {
+      companyName: findMatch([/^company\s*name/i, /^company/i, /^firm/i, /^account\s*name/i, /^legal\s*name/i, /^organization/i]),
+      customerName: findMatch([/^customer\s*name/i, /^customer/i, /^client\s*name/i, /^name/i]),
+      customerType: findMatch([/^customer\s*type/i, /^type/i, /^category/i, /^nature/i]),
+      contactPerson: findMatch([/^primary\s*contact/i, /^contact\s*person/i, /^contact\s*name/i, /^contact/i, /^person/i]),
+      phone: findMatch([/^phone/i, /^mobile/i, /^contact\s*number/i, /^cell/i, /^whatsapp/i, /^tel/i]),
+      email: findMatch([/^email/i, /^e-mail/i, /^mail/i]),
+      gstin: findMatch([/^gstin/i, /^gst\s*number/i, /^gst\s*no/i, /^gst/i, /^tax\s*id/i]),
+      pan: findMatch([/^pan\s*number/i, /^pan\s*no/i, /^pan/i]),
+      address: findMatch([/^billing\s*address/i, /^address/i, /^street/i, /^premises/i, /^location/i]),
+      city: findMatch([/^city/i, /^district/i, /^town/i]),
+      state: findMatch([/^state/i, /^province/i]),
+      pincode: findMatch([/^pincode/i, /^pin\s*code/i, /^pin/i, /^zip/i, /^postal/i]),
+      paymentTerms: findMatch([/^payment\s*terms/i, /^terms/i, /^payment\s*condition/i, /^credit\s*days/i]),
+      creditLimit: findMatch([/^credit\s*limit/i, /^limit/i, /^credit/i])
+    };
+  };
+
+  const handleDownloadSampleTemplate = () => {
+    const templateRows = [
+      {
+        "Company Name": "Apex Solar Energy Pvt Ltd",
+        "Customer Name": "Apex Solar Energy",
+        "Customer Type": "EPC Contractor",
+        "GSTIN": "33AABCA1234D1Z5",
+        "PAN": "AABCA1234D",
+        "Contact Person": "Ramesh Kumar",
+        "Phone": "9840123456",
+        "Email": "ramesh@apexsolar.in",
+        "Billing Address": "Plot 12, Industrial Estate, Ambattur",
+        "City": "Chennai",
+        "State": "Tamil Nadu",
+        "Pincode": "600058",
+        "Payment Terms": "50% Advance + 50% Dispatch",
+        "Credit Limit": "2500000"
+      },
+      {
+        "Company Name": "Bright Sun Infra LLP",
+        "Customer Name": "Bright Sun Infra",
+        "Customer Type": "Developer",
+        "GSTIN": "29AABCB5678E1Z9",
+        "PAN": "AABCB5678E",
+        "Contact Person": "Priya Sharma",
+        "Phone": "9880198765",
+        "Email": "priya@brightsun.com",
+        "Billing Address": "45/2, Outer Ring Road, Bellandur",
+        "City": "Bangalore",
+        "State": "Karnataka",
+        "Pincode": "560103",
+        "Payment Terms": "Net 30",
+        "Credit Limit": "5000000"
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Customers_Template");
+    XLSX.writeFile(wb, "BUSINZ_Customer_Import_Template.xlsx");
+  };
+
+  const handleBulkFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkFile(file);
+    setBulkError(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawJson = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!Array.isArray(rawJson) || rawJson.length === 0) {
+          setBulkError('The uploaded sheet contains no data rows.');
+          setRawFileRows([]);
+          setFileHeaders([]);
+          return;
+        }
+
+        // Extract headers in exact left-to-right spreadsheet column order
+        const headerRow = (XLSX.utils.sheet_to_json(ws, { header: 1 })[0] || [])
+          .map(h => String(h || '').trim())
+          .filter(h => h && !h.startsWith('__EMPTY'));
+
+        // Collect all column headers from the uploaded spreadsheet
+        const headersSet = new Set(headerRow);
+        rawJson.forEach(row => {
+          Object.keys(row).forEach(k => {
+            const trimmed = String(k || '').trim();
+            if (trimmed && !trimmed.startsWith('__EMPTY')) {
+              headersSet.add(trimmed);
+            }
+          });
+        });
+        const headersList = Array.from(headersSet);
+
+        if (headersList.length === 0) {
+          setBulkError('Could not detect any column headers in the uploaded file.');
+          return;
+        }
+
+        setRawFileRows(rawJson);
+        setFileHeaders(headersList);
+
+        // Auto-match headers and advance to Step 2 (Field Mapping)
+        const initialMapping = guessFieldMapping(headersList);
+        setFieldMapping(initialMapping);
+        setImportStep(2);
+      } catch (err) {
+        console.error('Error reading excel/csv file:', err);
+        setBulkError('Failed to parse file: ' + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleProceedToPreview = () => {
+    // Validation: Require at least companyName or customerName or contactPerson
+    const hasNameMapping = Boolean(fieldMapping.companyName || fieldMapping.customerName || fieldMapping.contactPerson);
+    if (!hasNameMapping) {
+      setBulkError('Please map at least "Company Name" or "Customer / Contact Name" to a column from your spreadsheet.');
+      return;
+    }
+
+    setBulkError(null);
+
+    // Compile rows using the selected fieldMapping
+    const mapped = rawFileRows.map((row, idx) => {
+      const getVal = (key) => {
+        const headerName = fieldMapping[key];
+        if (!headerName) return '';
+        return String(row[headerName] ?? '').trim();
+      };
+
+      const companyName = getVal('companyName');
+      const customerName = getVal('customerName') || companyName;
+      const contactName = getVal('contactPerson') || customerName;
+      const customerType = getVal('customerType') || 'EPC Contractor';
+      const phone = getVal('phone');
+      const email = getVal('email');
+      const gstin = getVal('gstin').toUpperCase();
+      const pan = getVal('pan').toUpperCase() || (gstin.length === 15 ? gstin.substring(2, 12) : '');
+      const address = getVal('address');
+      const city = getVal('city');
+      const state = getVal('state');
+      const pincode = getVal('pincode');
+      const paymentTerms = getVal('paymentTerms') || '50% Advance + 50% Dispatch';
+      const limitRaw = getVal('creditLimit');
+      const creditLimit = limitRaw ? (parseFloat(limitRaw.replace(/[^0-9.]/g, '')) || 2500000) : 2500000;
+
+      return {
+        id: 'CUST-VRM-' + String(100 + customers.length + idx + 1),
+        customerCode: 'CUST-VRM-' + String(100 + customers.length + idx + 1),
+        companyName: companyName || customerName || ('Customer ' + (idx + 1)),
+        customerName: customerName || companyName || ('Customer ' + (idx + 1)),
+        customerType,
+        gstNumber: gstin,
+        panNumber: pan,
+        primaryContact: {
+          name: contactName,
+          phone: phone,
+          whatsapp: phone,
+          email: email
+        },
+        address,
+        city,
+        state,
+        pincode,
+        dispatchAddress: address,
+        dispatchCity: city,
+        dispatchState: state,
+        dispatchPincode: pincode,
+        sameAsBilling: true,
+        paymentTerms,
+        creditLimit,
+        creditDays: 30,
+        assignedSalesperson: activeAccountUser,
+        source: 'Bulk Import',
+        status: 'ACTIVE',
+        code: customerName || companyName,
+        c2: companyName || customerName,
+        c3: contactName,
+        c4: phone,
+        c5: email,
+        c6: address,
+        c7: address
+      };
+    }).filter(c => c.companyName || c.customerName);
+
+    if (mapped.length === 0) {
+      setBulkError('No valid customer records could be compiled. Please check your mapped columns.');
+      return;
+    }
+
+    setBulkParsedData(mapped);
+    setImportStep(3); // Advance to preview
+  };
+
+  const handleExecuteBulkImport = async () => {
+    if (bulkParsedData.length === 0) return;
+    setIsImporting(true);
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bulkParsedData)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (typeof onBatchUpdateCustomers === 'function') {
+          onBatchUpdateCustomers(bulkParsedData);
+        }
+        setSyncMessage({
+          type: 'success',
+          text: '✓ Successfully imported ' + bulkParsedData.length + ' customers into BUSINZ!'
+        });
+        addLiveNotification({
+          title: 'Bulk Customer Import',
+          message: bulkParsedData.length + ' new customer accounts were imported into the directory.',
+          type: 'success'
+        });
+        setIsBulkModalOpen(false);
+        setBulkFile(null);
+        setRawFileRows([]);
+        setFileHeaders([]);
+        setFieldMapping({});
+        setBulkParsedData([]);
+        setImportStep(1);
+      } else {
+        throw new Error(data.error || 'Failed to save imported customers');
+      }
+    } catch (err) {
+      console.error('Bulk import error:', err);
+      setBulkError('Import failed: ' + err.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
   // Open Create Customer Page
   const handleOpenCreatePage = () => {
     setEditingCustomer(null);
@@ -385,7 +671,7 @@ export default function CrmCustomersView({
     setViewMode('create');
   };
 
-  // Submit Handler for Dedicated Customer Creation & Dual Sync with Zoho Books
+  // Submit Handler for Dedicated Customer Creation & Central Sync
   const handleSaveCustomerForm = async (e) => {
     if (e) e.preventDefault();
 
@@ -482,9 +768,9 @@ export default function CrmCustomersView({
       console.error('Error syncing customer to cloud store:', e);
     }
 
-    // 3. Post to Zoho Books sync API
+    // 3. Post to Central Customers API
     try {
-      const response = await fetch('/api/zoho/customers', {
+      const response = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(record)
@@ -495,15 +781,15 @@ export default function CrmCustomersView({
         onSaveCustomer(mergedFinal);
         saveCloudStore('customer_store', mergedFinal);
       }
-      setZohoSyncMessage({
+      setSyncMessage({
         type: 'success',
-        text: resJson.message || '✅ Customer created and synchronized with Zoho Books!'
+        text: resJson.message || '✅ Customer created and synchronized successfully!'
       });
     } catch (err) {
-      console.warn('Zoho Customer Sync warning:', err);
-      setZohoSyncMessage({
+      console.warn('Customer Sync warning:', err);
+      setSyncMessage({
         type: 'info',
-        text: 'Customer created locally in Businz. Zoho Books sync will retry automatically.'
+        text: 'Customer created locally in Businz. Central sync will retry automatically.'
       });
     }
 
@@ -557,7 +843,7 @@ export default function CrmCustomersView({
                 {editingCustomer ? `Edit Customer Account: ${editingCustomer.companyName}` : 'Add New B2B Solar Customer'}
               </h1>
               <p style={{ fontSize: '13px', color: '#CFFAFE', margin: '4px 0 0 0' }}>
-                Configure client directory, enterprise KYC, billing & delivery addresses, commercial payment terms & Zoho Books sync
+                Configure client directory, enterprise KYC, billing & delivery addresses, commercial payment terms & directory sync
               </p>
             </div>
           </div>
@@ -576,7 +862,7 @@ export default function CrmCustomersView({
               style={{ border: 'none', background: '#10B981', color: 'white', padding: '10px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
               <Save size={16} />
-              {editingCustomer ? 'Update & Sync to Zoho →' : 'Save & Sync to Zoho →'}
+              {editingCustomer ? 'Update Customer →' : 'Save Customer →'}
             </button>
           </div>
         </div>
@@ -647,7 +933,7 @@ export default function CrmCustomersView({
                 <option value="WhatsApp">WhatsApp Business</option>
                 <option value="Referral">Client / EPC Referral</option>
                 <option value="Trade Exhibition">Intersolar / Renewable Expo</option>
-                <option value="Zoho Books">Zoho Books Integrated</option>
+                <option value="ERP">ERP Database Import</option>
               </select>
             </div>
           </div>
@@ -1055,7 +1341,7 @@ export default function CrmCustomersView({
             style={{ backgroundColor: '#0E7490', border: 'none', color: '#FFFFFF', padding: '12px 32px', borderRadius: '10px', fontSize: '14px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)' }}
           >
             <Save size={16} />
-            {editingCustomer ? 'Update & Synchronize to Zoho Books' : 'Save Customer & Synchronize to Zoho Books'}
+            {editingCustomer ? 'Update Customer' : 'Save Customer'}
           </button>
         </div>
       </div>
@@ -1090,10 +1376,10 @@ export default function CrmCustomersView({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
       
       {/* ─── CUSTOM TOAST NOTIFICATION (MATCHING SYSTEM-WIDE NOTIFICATIONS) ─── */}
-      {zohoSyncMessage && (
+      {syncMessage && (
         <NotificationToast
-          alert={zohoSyncMessage}
-          onClose={() => setZohoSyncMessage(null)}
+          alert={syncMessage}
+          onClose={() => setSyncMessage(null)}
         />
       )}
 
@@ -1104,11 +1390,48 @@ export default function CrmCustomersView({
             Customer Directory
           </h2>
           <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-            Centralized repository with 11-point 360° account intelligence, credit limits & automatic Zoho Books synchronization
+            Centralized repository with 11-point 360° account intelligence, credit limits & automatic database synchronization
           </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => {
+              setBulkError(null);
+              setBulkFile(null);
+              setRawFileRows([]);
+              setFileHeaders([]);
+              setFieldMapping({});
+              setBulkParsedData([]);
+              setImportStep(1);
+              setIsBulkModalOpen(true);
+            }}
+            style={{
+              backgroundColor: "#FFFFFF",
+              border: "1.5px solid #0E7490",
+              color: "#0E7490",
+              height: "40px",
+              padding: "0 16px",
+              borderRadius: "50px",
+              fontSize: "13px",
+              fontWeight: "700",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              cursor: "pointer",
+              boxShadow: "0 1px 3px rgba(14, 116, 144, 0.1)",
+              transition: "all 0.2s ease"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#F0FDFA";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "#FFFFFF";
+            }}
+          >
+            <UploadCloud size={16} strokeWidth={2.5} />
+            <span>Upload Customer</span>
+          </button>
 
           <button
             onClick={handleOpenCreatePage}
@@ -1304,7 +1627,7 @@ export default function CrmCustomersView({
                               </span>
                             </div>
                             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                              Retrieving customer directory from Businz Cloud & Zoho...
+                              Retrieving customer directory from Businz Cloud...
                             </span>
                           </div>
                         </div>
@@ -1394,11 +1717,6 @@ export default function CrmCustomersView({
                       >
                         <div style={{ fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{cust.companyName}</span>
-                          {cust.source === 'Zoho Books' && (
-                            <span style={{ fontSize: '10px', backgroundColor: '#F3E8FF', color: '#7E22CE', border: '1px solid #E9D5FF', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
-                              ZOHO
-                            </span>
-                          )}
                         </div>
                         <div style={{ fontSize: '11px', color: '#64748B' }}>{cust.city || '—'}, {cust.state || ''}</div>
                       </td>
@@ -1632,6 +1950,773 @@ export default function CrmCustomersView({
         </div>
       )}
 
+
+      {/* 5. BULK CUSTOMER UPLOAD MODAL (WITH ZOHO BOOKS-STYLE FIELD MAPPING) */}
+      {isBulkModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            animation: 'fadeIn 0.15s ease'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isImporting) {
+              setIsBulkModalOpen(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '820px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 24px',
+                borderBottom: '1px solid #F1F5F9',
+                backgroundColor: '#F8FAFC'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <UploadCloud size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>
+                    Import Customers (Zoho-Style Column Mapping)
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                    Upload any spreadsheet and map your columns directly to BUSINZ customer fields
+                  </p>
+                </div>
+              </div>
+
+              <button
+                disabled={isImporting}
+                onClick={() => setIsBulkModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94A3B8',
+                  cursor: isImporting ? 'not-allowed' : 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Zoho-style 3-Step Wizard Progress Bar */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 24px',
+                backgroundColor: '#F1F5F9',
+                borderBottom: '1px solid #E2E8F0',
+                fontSize: '12px',
+                fontWeight: '700'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  onClick={() => { if (importStep > 1 && !isImporting) setImportStep(1); }}
+                  style={{
+                    cursor: importStep > 1 ? 'pointer' : 'default',
+                    color: importStep === 1 ? '#0E7490' : (importStep > 1 ? '#16A34A' : '#64748B'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: importStep === 1 ? '#0E7490' : (importStep > 1 ? '#DCFCE7' : '#E2E8F0'),
+                    color: importStep === 1 ? '#FFFFFF' : (importStep > 1 ? '#16A34A' : '#64748B'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px'
+                  }}>
+                    {importStep > 1 ? '✓' : '1'}
+                  </span>
+                  <span>1. Select File</span>
+                </div>
+
+                <ChevronRight size={14} style={{ color: '#94A3B8' }} />
+
+                <div
+                  onClick={() => { if (rawFileRows.length > 0 && !isImporting) setImportStep(2); }}
+                  style={{
+                    cursor: rawFileRows.length > 0 ? 'pointer' : 'default',
+                    color: importStep === 2 ? '#0E7490' : (importStep > 2 ? '#16A34A' : '#64748B'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: importStep === 2 ? '#0E7490' : (importStep > 2 ? '#DCFCE7' : '#E2E8F0'),
+                    color: importStep === 2 ? '#FFFFFF' : (importStep > 2 ? '#16A34A' : '#64748B'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px'
+                  }}>
+                    {importStep > 2 ? '✓' : '2'}
+                  </span>
+                  <span>2. Map Fields</span>
+                </div>
+
+                <ChevronRight size={14} style={{ color: '#94A3B8' }} />
+
+                <div
+                  style={{
+                    color: importStep === 3 ? '#0E7490' : '#64748B',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: importStep === 3 ? '#0E7490' : '#E2E8F0',
+                    color: importStep === 3 ? '#FFFFFF' : '#64748B',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px'
+                  }}>
+                    3
+                  </span>
+                  <span>3. Preview & Import</span>
+                </div>
+              </div>
+
+              {bulkFile && (
+                <div style={{ fontSize: '11.5px', color: '#475569', fontWeight: '500' }}>
+                  File: <strong>{bulkFile.name}</strong> ({rawFileRows.length} rows)
+                </div>
+              )}
+            </div>
+
+            {/* Error Message Banner */}
+            {bulkError && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  padding: '12px 20px',
+                  backgroundColor: '#FEF2F2',
+                  borderBottom: '1px solid #FCA5A5',
+                  color: '#991B1B',
+                  fontSize: '12.5px'
+                }}
+              >
+                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ flex: 1 }}>{bulkError}</div>
+                <button
+                  type="button"
+                  onClick={() => setBulkError(null)}
+                  style={{ background: 'none', border: 'none', color: '#991B1B', cursor: 'pointer', padding: 0 }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* ========================================================================= */}
+              {/* STEP 1: SELECT FILE */}
+              {/* ========================================================================= */}
+              {importStep === 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Sample Template Download Callout */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 18px',
+                      backgroundColor: '#F0FDFA',
+                      borderRadius: '12px',
+                      border: '1px solid #CCFBF1',
+                      gap: '16px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <FileSpreadsheet size={22} style={{ color: '#0E7490', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#134E4A' }}>
+                          Need the standard Excel format?
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#115E59' }}>
+                          Download our pre-structured template or upload your existing customer file.
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleTemplate}
+                      style={{
+                        backgroundColor: '#0E7490',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 14px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        boxShadow: '0 1px 2px rgba(14, 116, 144, 0.2)'
+                      }}
+                    >
+                      <Download size={14} /> Download Sample Template
+                    </button>
+                  </div>
+
+                  {/* Upload Drop Area */}
+                  <div>
+                    <input
+                      type="file"
+                      ref={bulkFileInputRef}
+                      accept=".xlsx, .xls, .csv"
+                      onChange={handleBulkFileChange}
+                      style={{ display: 'none' }}
+                    />
+
+                    <div
+                      onClick={() => {
+                        if (!isImporting && bulkFileInputRef.current) {
+                          bulkFileInputRef.current.click();
+                        }
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (isImporting) return;
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          const droppedFile = e.dataTransfer.files[0];
+                          const fakeEvent = { target: { files: [droppedFile] } };
+                          handleBulkFileChange(fakeEvent);
+                        }
+                      }}
+                      style={{
+                        border: '2px dashed #CBD5E1',
+                        borderRadius: '12px',
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#0E7490';
+                        e.currentTarget.style.backgroundColor = '#F0FDFA';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = '#CBD5E1';
+                        e.currentTarget.style.backgroundColor = '#FFFFFF';
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: '50%',
+                          backgroundColor: '#F1F5F9',
+                          color: '#0E7490',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginBottom: '4px'
+                        }}
+                      >
+                        <UploadCloud size={28} />
+                      </div>
+                      <div style={{ fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
+                        Click to select an Excel (.xlsx, .xls) or CSV file
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                        or drag and drop your spreadsheet here to configure column mapping
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* STEP 2: ZOHO-STYLE FIELD MAPPING TABLE */}
+              {/* ========================================================================= */}
+              {importStep === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      backgroundColor: '#F8FAFC',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      fontSize: '12px',
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span>
+                      Map your file headers to BUSINZ customer fields. If your actual company name is in <strong>Primary Contact</strong> or another column, select it in the dropdown below.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (bulkFileInputRef.current) bulkFileInputRef.current.click();
+                      }}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        color: '#0E7490',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Change File
+                    </button>
+                  </div>
+
+                  {/* Zoho Books Style Mapping Table */}
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '42% 58%',
+                        backgroundColor: '#F8FAFC',
+                        borderBottom: '1px solid #E2E8F0',
+                        padding: '10px 16px',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        color: '#475569',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                      }}
+                    >
+                      <div>BUSINZ FIELD</div>
+                      <div>IMPORTED FILE HEADERS ({fileHeaders.length} Columns Found)</div>
+                    </div>
+
+                    <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                      {BUSINZ_IMPORT_FIELDS.map((field, idx) => {
+                        const selectedHeader = fieldMapping[field.key] || '';
+                        const sampleVal = selectedHeader && rawFileRows[0] ? rawFileRows[0][selectedHeader] : null;
+
+                        return (
+                          <div
+                            key={field.key}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '42% 58%',
+                              alignItems: 'center',
+                              padding: '10px 16px',
+                              borderBottom: idx < BUSINZ_IMPORT_FIELDS.length - 1 ? '1px solid #F1F5F9' : 'none',
+                              backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
+                            }}
+                          >
+                            {/* Left: BUSINZ Target Field */}
+                            <div style={{ paddingRight: '12px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>{field.label}</span>
+                                {field.required && (
+                                  <span style={{ color: '#EF4444', fontWeight: '800' }}>*</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
+                                {field.hint}
+                              </div>
+                            </div>
+
+                            {/* Right: Dropdown of File Headers + Sample Value */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <select
+                                  value={selectedHeader}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setFieldMapping(prev => ({
+                                      ...prev,
+                                      [field.key]: val
+                                    }));
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    height: '34px',
+                                    borderRadius: '6px',
+                                    border: selectedHeader ? '1.5px solid #0E7490' : '1px solid #CBD5E1',
+                                    backgroundColor: selectedHeader ? '#F0FDFA' : '#FFFFFF',
+                                    color: selectedHeader ? '#0F172A' : '#64748B',
+                                    fontSize: '12.5px',
+                                    fontWeight: selectedHeader ? '600' : '400',
+                                    padding: '0 8px',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <option value="">Select</option>
+                                  {fileHeaders.map(hdr => {
+                                    const isUsedElsewhere = Object.entries(fieldMapping).some(
+                                      ([k, v]) => k !== field.key && v === hdr
+                                    );
+                                    return (
+                                      <option key={hdr} value={hdr} disabled={isUsedElsewhere}>
+                                        {hdr} {isUsedElsewhere ? '(Already mapped)' : ''}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+
+                                {selectedHeader && (
+                                  <button
+                                    type="button"
+                                    title="Unmap this field"
+                                    onClick={() => {
+                                      setFieldMapping(prev => ({ ...prev, [field.key]: '' }));
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#94A3B8',
+                                      cursor: 'pointer',
+                                      padding: '4px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}
+                                  >
+                                    <X size={15} />
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Sample Value from Row 1 */}
+                              {selectedHeader && sampleVal !== null && sampleVal !== undefined && (
+                                <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', paddingLeft: '2px' }}>
+                                  <span style={{ color: '#0E7490', fontWeight: '700' }}>Row 1 Sample:</span>
+                                  <span style={{ color: '#334155', fontStyle: 'italic', maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    "{String(sampleVal).trim() || '(empty)'}"
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* STEP 3: PREVIEW COMPILED DATA */}
+              {/* ========================================================================= */}
+              {importStep === 3 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      backgroundColor: '#F0FDFA',
+                      borderRadius: '8px',
+                      border: '1px solid #CCFBF1'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#134E4A' }}>
+                        Ready to Import {bulkParsedData.length} Customers
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#115E59' }}>
+                        Records compiled using your custom column mapping from <strong>{bulkFile?.name}</strong>.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setImportStep(2)}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #0E7490',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: '#0E7490',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ← Adjust Mapping
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
+                    Preview (First {Math.min(bulkParsedData.length, 5)} rows):
+                  </div>
+
+                  <div
+                    style={{
+                      maxHeight: '260px',
+                      overflowY: 'auto',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Company Name</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Customer / Contact</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Type</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Phone</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Email</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>GSTIN</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>City / State</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkParsedData.slice(0, 5).map((row, idx) => (
+                          <tr
+                            key={idx}
+                            style={{
+                              borderBottom: idx < 4 ? '1px solid #F1F5F9' : 'none',
+                              backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
+                            }}
+                          >
+                            <td style={{ padding: '8px 12px', fontWeight: '700', color: '#0F172A' }}>
+                              {row.companyName}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: '#334155' }}>
+                              {row.primaryContact?.name || row.customerName}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: '#475569' }}>{row.customerType || 'Customer'}</td>
+                            <td style={{ padding: '8px 12px', color: '#475569' }}>{row.phone || '-'}</td>
+                            <td style={{ padding: '8px 12px', color: '#475569' }}>{row.email || '-'}</td>
+                            <td style={{ padding: '8px 12px', color: '#475569' }}>{row.gstNumber || '-'}</td>
+                            <td style={{ padding: '8px 12px', color: '#475569' }}>
+                              {[row.city, row.state].filter(Boolean).join(', ') || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {bulkParsedData.length > 5 && (
+                    <div style={{ fontSize: '11.5px', color: '#64748B', textAlign: 'right' }}>
+                      + {bulkParsedData.length - 5} more customer accounts will be created
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Navigation */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 24px',
+                borderTop: '1px solid #F1F5F9',
+                backgroundColor: '#F8FAFC'
+              }}
+            >
+              <div>
+                {importStep > 1 ? (
+                  <button
+                    type="button"
+                    disabled={isImporting}
+                    onClick={() => setImportStep(prev => prev - 1)}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      color: '#475569',
+                      borderRadius: '8px',
+                      padding: '9px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: isImporting ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    ← Previous
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isImporting}
+                    onClick={() => setIsBulkModalOpen(false)}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      color: '#475569',
+                      borderRadius: '8px',
+                      padding: '9px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: isImporting ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {importStep === 1 && (
+                  <button
+                    type="button"
+                    disabled={rawFileRows.length === 0}
+                    onClick={() => setImportStep(2)}
+                    style={{
+                      backgroundColor: rawFileRows.length > 0 ? '#0E7490' : '#94A3B8',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '9px 20px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: rawFileRows.length > 0 ? 'pointer' : 'not-allowed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: rawFileRows.length > 0 ? '0 2px 4px rgba(14, 116, 144, 0.25)' : 'none'
+                    }}
+                  >
+                    <span>Next: Map Fields</span>
+                    <ArrowRight size={15} />
+                  </button>
+                )}
+
+                {importStep === 2 && (
+                  <button
+                    type="button"
+                    onClick={handleProceedToPreview}
+                    style={{
+                      backgroundColor: '#0E7490',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '9px 22px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>Next: Preview Data ({rawFileRows.length} Rows)</span>
+                    <ArrowRight size={15} />
+                  </button>
+                )}
+
+                {importStep === 3 && (
+                  <button
+                    type="button"
+                    disabled={isImporting || bulkParsedData.length === 0}
+                    onClick={handleExecuteBulkImport}
+                    style={{
+                      backgroundColor: bulkParsedData.length > 0 ? '#0E7490' : '#94A3B8',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '9px 24px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: isImporting || bulkParsedData.length === 0 ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: bulkParsedData.length > 0 ? '0 2px 4px rgba(14, 116, 144, 0.25)' : 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {isImporting ? (
+                      <>
+                        <RefreshCw size={15} className="animate-spin" />
+                        <span>Importing Customers...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud size={16} />
+                        <span>Import & Save ({bulkParsedData.length}) Customers</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

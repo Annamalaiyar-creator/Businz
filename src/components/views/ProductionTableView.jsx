@@ -556,12 +556,23 @@ export default function ProductionTableView({
                   (() => {
                     const targetCode = selectedRows[0];
                     const targetRow = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode);
-                    const isAwaitingLr = targetRow && (
+                    const isClosed = targetRow && (
+                      targetRow.tabGroup === 'Closed' ||
+                      targetRow.status === 'Closed' ||
+                      targetRow.status === 'CLOSED' ||
+                      targetRow.status === 'Completed' ||
+                      targetRow.status === 'COMPLETED' ||
+                      targetRow.status === 'COMPLETED & DISPATCHED' ||
+                      targetRow.status === 'Completed & Dispatched' ||
+                      targetRow.status === 'Fully Dispatched & Delivered' ||
+                      Boolean(targetRow.fullyCompleted && targetRow.tabGroup !== 'AwaitingLrCopy')
+                    );
+                    const isAwaitingLr = !isClosed && targetRow && (
                       targetRow.status === 'AWAITING LR COPY' ||
                       targetRow.status === 'Dispatched - Awaiting LR Copy' ||
                       targetRow.tabGroup === 'AwaitingLrCopy'
                     );
-                    const isAwaitingLoading = targetRow && (
+                    const isAwaitingLoading = !isClosed && !isAwaitingLr && targetRow && (
                       targetRow.status === 'AWAITING VEHICLE LOADING' || 
                       targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || 
                       targetRow.status === 'Invoice Confirmed' ||
@@ -569,8 +580,15 @@ export default function ProductionTableView({
                       Boolean(targetRow.invoiceConfirmed) ||
                       Boolean(targetRow.isAccountsDone) ||
                       targetRow.status === 'Accounts Verified & Passed to Invoice' ||
-                      Boolean(targetRow.invoiceNo && targetRow.status !== 'Closed' && targetRow.status !== 'Dispatched - Awaiting LR Copy')
+                      Boolean(targetRow.invoiceNo && targetRow.status !== 'Closed')
                     );
+                    if (isClosed) {
+                      return (
+                        <>
+                          <Eye size={14} style={{ color: '#166534' }} /> View Dispatch Info
+                        </>
+                      );
+                    }
                     if (isAwaitingLr) {
                       return (
                         <>

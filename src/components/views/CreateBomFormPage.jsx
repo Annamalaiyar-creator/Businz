@@ -8,7 +8,7 @@ import {
   cleanNum, stripDataUrlsFromRecord, compressAndSaveFile, saveMediaToCache, normalizePaymentTerm
 } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
-import { saveCloudStoreImmediate } from "../../utils/supabaseDataSync";
+import { saveCloudStoreImmediate, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { getFullProductsCatalogWithStock } from "../../utils/productCatalogService";
 import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
@@ -1550,12 +1550,29 @@ export default function CreateBomFormPage(props) {
                         }
                       }
                     }}
-                    style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '24px 16px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}
+                    id="prod-field-newBomPaymentProofDoc"
+                    style={{
+                      border: (bomFormErrors?.paymentProof) ? '2px dashed #EF4444' : '2px dashed #CBD5E1',
+                      borderRadius: '12px',
+                      padding: '24px 16px',
+                      textAlign: 'center',
+                      backgroundColor: (bomFormErrors?.paymentProof) ? '#FEF2F2' : '#FAFAFA',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '10px',
+                      transition: 'all 0.2s ease'
+                    }}
                   >
-                    <UploadCloud style={{ width: '34px', height: '34px', color: '#6366F1' }} />
-                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: '600' }}>
+                    <UploadCloud style={{ width: '34px', height: '34px', color: (bomFormErrors?.paymentProof) ? '#EF4444' : '#6366F1' }} />
+                    <span style={{ fontSize: '13px', color: (bomFormErrors?.paymentProof) ? '#DC2626' : '#475569', fontWeight: '700' }}>
                       Drag & drop payment slip / bank advice here or
                     </span>
+                    {bomFormErrors?.paymentProof && (
+                      <div style={{ color: '#DC2626', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertCircle style={{ width: '14px', height: '14px' }} /> {bomFormErrors.paymentProof}
+                      </div>
+                    )}
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <label style={{
@@ -2049,10 +2066,20 @@ export default function CreateBomFormPage(props) {
                         return true;
                       });
                       const combined = [sanitizedNewBom, ...filtered];
-                      const { list: updatedList } = resolveBomCollisions(combined, 658);
+                      const { list: updatedList } = resolveBomCollisions(combined, 662);
 
                       try {
                         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedList.map(stripDataUrlsFromRecord)));
+                      } catch (_) {}
+
+                      // Atomically push created BOM order to Supabase and Node server API
+                      saveCloudBomRow(sanitizedNewBom);
+                      try {
+                        fetch('/api/boms', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false })
+                        }).catch(err => console.error('Error syncing created BOM to server:', err));
                       } catch (_) {}
 
                       setShowBOMForm(false);

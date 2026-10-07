@@ -49,13 +49,35 @@ class CentralInventoryStore {
   }
 
   initStore() {
+    const getDeletedCodes = () => {
+      try {
+        const raw = localStorage.getItem('controlroom_deleted_raw_materials');
+        return raw ? JSON.parse(raw).map(c => String(c).toUpperCase().trim()) : [];
+      } catch (_) {
+        return [];
+      }
+    };
+    const delCodes = getDeletedCodes();
+    const isDeletedItem = (item) => {
+      const c = String(item?.code || item?.sku || item?.itemId || '').toUpperCase().trim();
+      const n = String(item?.name || '').toUpperCase().trim();
+      return (c && delCodes.includes(c)) || (n && delCodes.includes(n));
+    };
+
     // 1. Load Item Master with localStorage and Supabase Cloud Database fallback
-    let seeded = [...INITIAL_CENTRAL_ITEMS];
+    let seeded = [...INITIAL_CENTRAL_ITEMS].filter(it => !isDeletedItem(it));
     try {
       const savedItems = localStorage.getItem(this.storageKeyItems);
       if (savedItems) {
         const parsed = JSON.parse(savedItems);
-        if (Array.isArray(parsed) && parsed.length > 0) seeded = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          seeded = parsed.filter(item => {
+            const c = String(item?.code || item?.sku || item?.itemId || '').trim();
+            const n = String(item?.name || '').trim();
+            if (isDeletedItem(item)) return false;
+            return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+          });
+        }
       }
     } catch (_) {}
 
@@ -281,7 +303,18 @@ class CentralInventoryStore {
   // DYNAMIC INVENTORY & LEDGER COMPUTATION
   // ----------------------------------------------------
   getInventoryItems() {
-    return this.items.map(item => {
+    let delCodes = [];
+    try {
+      const raw = localStorage.getItem('controlroom_deleted_raw_materials');
+      if (raw) delCodes = JSON.parse(raw).map(c => String(c).toUpperCase().trim());
+    } catch (_) {}
+    const isDeletedItem = (item) => {
+      const c = String(item?.code || item?.sku || item?.itemId || '').toUpperCase().trim();
+      const n = String(item?.name || '').toUpperCase().trim();
+      return (c && delCodes.includes(c)) || (n && delCodes.includes(n));
+    };
+
+    return this.items.filter(i => !isDeletedItem(i)).map(item => {
       // Base physical opening stock (defaults to 0 if not set)
       const baseOpening = Math.max(0, parseFloat(item.openingStock !== undefined ? item.openingStock : (item.stock !== undefined ? item.stock : 0)) || 0);
 

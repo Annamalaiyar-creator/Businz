@@ -21,9 +21,9 @@ const C = {
   line: '#E2E8F0',
   lineSoft: '#F1F5F9',
   bg: '#F8FAFC',
-  zoho: '#7E22CE',
-  zohoSoft: '#F3E8FF',
-  zohoBorder: '#E9D5FF',
+  purple: '#7E22CE',
+  purpleSoft: '#F3E8FF',
+  purpleBorder: '#E9D5FF',
   green: '#16A34A',
   greenSoft: '#F0FDF4',
   amber: '#D97706',
@@ -71,18 +71,18 @@ function Card({ children, style }) {
 }
 
 function SourceChip({ type }) {
-  const isZoho = type === 'zoho';
-  const Icon = isZoho ? Zap : Sparkles;
+  const isLedger = type === 'zoho' || type === 'ledger';
+  const Icon = isLedger ? Zap : Sparkles;
   return (
     <span style={{
       fontSize: '10px', fontWeight: '800', letterSpacing: '0.3px',
       padding: '2px 8px', borderRadius: '50px',
-      backgroundColor: isZoho ? C.zohoSoft : C.tealSoft,
-      color: isZoho ? C.zoho : C.teal,
-      border: `1px solid ${isZoho ? C.zohoBorder : C.tealBorder}`,
+      backgroundColor: isLedger ? C.purpleSoft : C.tealSoft,
+      color: isLedger ? C.purple : C.teal,
+      border: `1px solid ${isLedger ? C.purpleBorder : C.tealBorder}`,
       display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
     }}>
-      <Icon size={10} /> {isZoho ? 'ZOHO BOOKS' : 'BUSINZ CRM'}
+      <Icon size={10} /> {isLedger ? 'CENTRAL LEDGER' : 'BUSINZ CRM'}
     </span>
   );
 }
@@ -301,7 +301,7 @@ export default function Customer360PageView({
 
   const currentNotes = customerNotes[custKey] || [
     { id: 'def_n1', author: customer.assignedSalesperson || customer.salesPerson || activeAccountUser, date: '08 Sep, 2026 01:15 PM', text: `Initial customer onboarding completed. Commercial terms set to ${customer.paymentTerms || '50% Advance + 50% Dispatch'}. Ready for sales BOM generation.` },
-    { id: 'def_n2', author: 'System Sync', date: '08 Sep, 2026 12:59 PM', text: customer.source === 'Zoho Books' ? 'Contact details imported and verified via Zoho Books API v2.' : 'Direct customer registration initialized in BUSINZ.' }
+    { id: 'def_n2', author: 'System Sync', date: '08 Sep, 2026 12:59 PM', text: (customer.source === 'Zoho Books' || customer.source === 'Central Ledger') ? 'Contact details imported and verified via Central Ledger.' : 'Direct customer registration initialized in BUSINZ.' }
   ];
 
   const custQuotations = quotations.filter(q =>
@@ -318,7 +318,7 @@ export default function Customer360PageView({
   // ─── Derived display values (read-only, no business logic changes) ───
   const repName = customer.assignedSalesperson || customer.salesPerson || activeAccountUser;
   const contactName = customer.primaryContact?.name || customer.customerName || customer.companyName;
-  const isZohoLinked = customer.source === 'Zoho Books' || !!customer.zohoContactId;
+  const isLinked = customer.source === 'Zoho Books' || !!customer.zohoContactId || !!customer.customerCode;
   const quoteAmount = (q) => Number(q.totalAmount || q.amount || 1500000);
   const openDeals = custDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
   const pipelineValue = openDeals.reduce((s, d) => s + (Number(d.dealValue) || 0), 0);
@@ -359,8 +359,8 @@ export default function Customer360PageView({
       body: <>Assigned to Lead Owner <strong>{repName}</strong>. Commercial terms configured for B2B solar structure dispatch.</>
     },
     {
-      icon: Zap, color: C.zoho, title: 'Zoho Books Integration Link', meta: 'Zoho API v2',
-      body: <>Contact synchronized with Zoho Books Contact ID: <strong>{customer.zohoContactId || 'ZOHO_AUTO_LINKED'}</strong>. Accounting ledgers and invoices connected.</>
+      icon: Zap, color: C.purple, title: 'Central Accounting Link', meta: 'Master Store',
+      body: <>Contact linked with Reference ID: <strong>{customer.zohoContactId || customer.customerCode || 'AUTO_LINKED'}</strong>. Accounting ledgers and invoices connected.</>
     },
     {
       icon: ShieldCheck, color: '#10B981', title: 'Payment & Commercial Terms Verified', meta: 'Finance Checked',
@@ -430,8 +430,8 @@ export default function Customer360PageView({
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
                 {metaChip(Hash, customer.customerCode || customer.id)}
-                {isZohoLinked
-                  ? metaChip(Zap, `Zoho Connected${customer.zohoContactId ? ` · ${customer.zohoContactId}` : ''}`, { fg: C.zoho, bg: C.zohoSoft, border: C.zohoBorder })
+                {isLinked
+                  ? metaChip(Zap, `Ledger Connected${customer.zohoContactId ? ` · ${customer.zohoContactId}` : customer.customerCode ? ` · ${customer.customerCode}` : ''}`, { fg: C.purple, bg: C.purpleSoft, border: C.purpleBorder })
                   : metaChip(Sparkles, 'BUSINZ Account', { fg: C.teal, bg: C.tealSoft, border: '#A5F3FC' })}
                 {metaChip(User, repName)}
                 {locationText !== '—' && metaChip(MapPin, locationText)}
@@ -445,7 +445,7 @@ export default function Customer360PageView({
               WhatsApp Chat
             </PrimaryButton>
             <PrimaryButton icon={Edit3} onClick={() => onEditCustomer(customer)}>
-              Edit & Sync to Zoho
+              Edit Contact
             </PrimaryButton>
           </div>
         </div>
@@ -504,17 +504,17 @@ export default function Customer360PageView({
             </div>
           </Card>
 
-          {/* Contact Information (Zoho core fields) */}
+          {/* Contact Information (Core accounting fields) */}
           <Card>
             <CardHeader
               icon={User}
               title="Contact Information"
-              subtitle="Synced with Zoho Books"
+              subtitle="Synced with Central Accounting"
               borderless={!isContactInfoExpanded}
               onClick={() => setIsContactInfoExpanded(!isContactInfoExpanded)}
               right={
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <SourceChip type="zoho" />
+                  <SourceChip type="ledger" />
                   {isContactInfoExpanded ? <ChevronDown size={16} color={C.faint} /> : <ChevronRight size={16} color={C.faint} />}
                 </div>
               }
@@ -527,7 +527,7 @@ export default function Customer360PageView({
                 <InfoRow icon={Phone} label="Phone" value={customer.primaryContact?.phone || '—'} />
                 <InfoRow icon={Briefcase} label="Designation / Role" value={customer.primaryContact?.designation || 'Purchase / Commercial Head'} />
                 <InfoRow icon={MapPin} label="Location" value={locationText} />
-                <InfoRow icon={Zap} label="Lead Source" value={customer.source || 'Zoho Books'} />
+                <InfoRow icon={Zap} label="Lead Source" value={customer.source || 'Direct Master'} />
               </div>
             )}
           </Card>
@@ -870,22 +870,22 @@ export default function Customer360PageView({
               </div>
             )}
 
-            {/* 8. DETAILS: ZOHO CORE VS BUSINZ ADD-ONS */}
+            {/* 8. DETAILS: CORE ACCOUNTING VS BUSINZ ADD-ONS */}
             {profileTab === 'Details' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <TabHeading
-                  title="Field-by-Field Breakdown: Zoho Books vs BUSINZ Add-ons"
-                  subtitle="Distinguishes accounting data synchronized with Zoho Books from engineering intelligence in BUSINZ."
-                  action={<PrimaryButton icon={Edit3} onClick={() => onEditCustomer(customer)}>Modify & Sync</PrimaryButton>}
+                  title="Field-by-Field Breakdown: Core Accounting vs BUSINZ Add-ons"
+                  subtitle="Distinguishes accounting data from engineering intelligence in BUSINZ."
+                  action={<PrimaryButton icon={Edit3} onClick={() => onEditCustomer(customer)}>Modify Contact</PrimaryButton>}
                 />
 
                 <div className="c360-details">
-                  <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: `1px solid ${C.zohoBorder}`, overflow: 'hidden' }}>
-                    <div style={{ padding: '12px 16px', backgroundColor: '#FAF5FF', borderBottom: `1px solid ${C.zohoSoft}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                      <h5 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: C.zoho, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Zap size={14} /> Zoho Books Core (Synced)
+                  <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: `1px solid ${C.purpleBorder}`, overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 16px', backgroundColor: '#FAF5FF', borderBottom: `1px solid ${C.purpleSoft}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <h5 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: C.purple, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Zap size={14} /> Core Accounting (Synced)
                       </h5>
-                      <span style={{ fontSize: '10px', backgroundColor: C.zohoSoft, color: C.zoho, padding: '2px 8px', borderRadius: '50px', fontWeight: '800' }}>Required for Invoicing</span>
+                      <span style={{ fontSize: '10px', backgroundColor: C.purpleSoft, color: C.purple, padding: '2px 8px', borderRadius: '50px', fontWeight: '800' }}>Required for Invoicing</span>
                     </div>
                     <div style={{ padding: '6px 16px 12px' }}>
                       <KeyValue label="Company Name" value={customer.companyName} />
@@ -898,7 +898,7 @@ export default function Customer360PageView({
                       <KeyValue label="GSTIN" value={customer.gstNumber || 'Not Registered'} mono />
                       <KeyValue label="PAN" value={customer.panNumber || '—'} mono />
                       <KeyValue label="Payment Terms" value={customer.paymentTerms || '50% Advance + 50% Dispatch'} />
-                      <KeyValue label="Zoho Contact ID" value={customer.zohoContactId || 'Auto-generated on Sync'} mono />
+                      <KeyValue label="Contact ID" value={customer.zohoContactId || customer.customerCode || 'Auto-generated on Sync'} mono />
                     </div>
                   </div>
 
@@ -958,7 +958,7 @@ export default function Customer360PageView({
               onClick={() => setIsCompanyOpen(!isCompanyOpen)}
               right={
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <SourceChip type="zoho" />
+                  <SourceChip type="ledger" />
                   {isCompanyOpen ? <ChevronDown size={16} color={C.faint} /> : <ChevronRight size={16} color={C.faint} />}
                 </div>
               }
@@ -966,11 +966,11 @@ export default function Customer360PageView({
             {isCompanyOpen && (
               <div style={{ padding: '6px 16px 14px' }}>
                 <KeyValue
-                  label="Zoho Status"
+                  label="Ledger Status"
                   value={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Zap size={11} /> Connected</span>}
-                  valueColor={C.zoho}
+                  valueColor={C.purple}
                 />
-                <KeyValue label="Zoho Contact ID" value={customer.zohoContactId || 'AUTO_SYNCED'} mono />
+                <KeyValue label="Contact ID" value={customer.zohoContactId || customer.customerCode || 'AUTO_SYNCED'} mono />
                 <KeyValue label="GSTIN" value={customer.gstNumber || 'Not Registered'} mono />
                 <KeyValue label="PAN" value={customer.panNumber || '—'} mono />
                 <KeyValue label="Payment Terms" value={customer.paymentTerms || '50% Advance'} valueColor="#B45309" />

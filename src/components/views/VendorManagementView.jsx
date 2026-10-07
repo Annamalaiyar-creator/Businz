@@ -11,9 +11,10 @@ import {
 } from 'lucide-react';
 import TopSpendingCategories from '../TopSpendingCategories';
 import POTrendChart from '../POTrendChart';
-import { getSafeZohoVendors, getSafeZohoItems } from '../../services/zohoSafeSync';
+import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
+import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
 
 
 export default function VendorManagementView(props) {
@@ -326,9 +327,9 @@ export default function VendorManagementView(props) {
     setEditingGrnId(null);
   };
 
-  // Fetch live Zoho Purchase Orders & stored GRNs for GRN selection and list display
+  // Fetch live Purchase Orders & stored GRNs for GRN selection and list display
   useEffect(() => {
-    fetch('/api/zoho/purchaseorders')
+    fetch('/api/purchaseorders')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -384,7 +385,7 @@ export default function VendorManagementView(props) {
     setSelectedGRNVendor(vendorName);
 
     Promise.all([
-      fetch(`/api/zoho/purchaseorders/${encodeURIComponent(targetId)}`).then(res => res.ok ? res.json().catch(() => null) : null),
+      fetch(`/api/purchaseorders/${encodeURIComponent(targetId)}`).then(res => res.ok ? res.json().catch(() => null) : null),
       fetch(`/api/po-receiving-history/${encodeURIComponent(poRef)}`).then(res => res.ok ? res.json().catch(() => null) : null)
     ])
       .then(([detail, historyData]) => {
@@ -445,7 +446,7 @@ export default function VendorManagementView(props) {
       const found = livePOs.find(p => p.poNo === selectedPOForDetail || p.id === selectedPOForDetail);
       const targetId = found ? found.id : selectedPOForDetail;
 
-      fetch(`/api/zoho/purchaseorders/${targetId}`)
+      fetch(`/api/purchaseorders/${targetId}`)
         .then(res => res.json())
         .then(data => setPoDetailData(data))
         .catch(err => console.error('Error fetching PO detail:', err));
@@ -591,11 +592,11 @@ export default function VendorManagementView(props) {
               }
             });
 
-          fetch('/api/zoho/purchaseorders')
+          fetch('/api/purchaseorders')
             .then(res => res.json())
             .then(d => { if (Array.isArray(d)) setLivePOs(d); });
 
-          fetch('/api/zoho/items')
+          fetch('/api/items')
             .then(res => res.json())
             .then(items => { if (Array.isArray(items)) setItemsList(items); });
         }
@@ -708,11 +709,11 @@ export default function VendorManagementView(props) {
             }
           });
 
-        fetch('/api/zoho/purchaseorders')
+        fetch('/api/purchaseorders')
           .then(res => res.json())
           .then(d => { if (Array.isArray(d)) setLivePOs(d); });
 
-        fetch('/api/zoho/items')
+        fetch('/api/items')
           .then(res => res.json())
           .then(items => { if (Array.isArray(items)) setItemsList(items); });
 
@@ -764,7 +765,7 @@ export default function VendorManagementView(props) {
         setGrnList(prev => prev.filter(g => g.id !== targetId && g.grnNo !== targetId));
         setGrnToDelete(null);
         // Refresh live POs list
-        fetch('/api/zoho/purchaseorders')
+        fetch('/api/purchaseorders')
           .then(res => res.json())
           .then(d => { if (Array.isArray(d)) setLivePOs(d); });
       })
@@ -1029,29 +1030,79 @@ export default function VendorManagementView(props) {
   const [vendorList, setVendorList] = useState([]);
   const [vendorLoading, setVendorLoading] = useState(false);
 
-  const loadVendorsFromZoho = async () => {
+  const loadVendorsFromBackend = async () => {
     setVendorLoading(true);
     try {
-      const zohoVendors = await getSafeZohoVendors();
-      if (Array.isArray(zohoVendors) && zohoVendors.length > 0) {
-        setVendorList(zohoVendors);
+      const backendVendors = await getVendors();
+      if (Array.isArray(backendVendors) && backendVendors.length > 0) {
+        setVendorList(backendVendors);
       } else {
-        const res = await fetch('/api/zoho/vendors').catch(() => null);
+        const res = await fetch('/api/vendors').catch(() => null);
         if (res && res.ok) {
           const vData = await res.json().catch(() => []);
           setVendorList(Array.isArray(vData) ? vData : []);
         }
       }
     } catch (e) {
-      console.error("Failed to load Zoho vendors", e);
+      console.error("Failed to load vendors", e);
     } finally {
       setVendorLoading(false);
     }
   };
 
+  // Vendor Bulk Import Modal State & Handlers (Zoho Books Style)
+  const [isUploadVendorModalOpen, setIsUploadVendorModalOpen] = useState(false);
+
+  const VENDOR_IMPORT_FIELDS = useMemo(() => [
+    { key: 'name', label: 'Vendor / Company Name', required: true, hint: 'e.g. Apex Industrial Supplies Pvt Ltd', guessPatterns: [/^vendor\s*name/i, /^company\s*name/i, /^vendor/i, /^company/i, /^supplier/i, /^name/i] },
+    { key: 'contact', label: 'Primary Contact Person', required: false, hint: 'Key contact person or manager', guessPatterns: [/^contact\s*person/i, /^primary\s*contact/i, /^contact\s*name/i, /^contact/i] },
+    { key: 'phone', label: 'Phone / Mobile', required: true, hint: '10-digit primary phone or WhatsApp', guessPatterns: [/^phone/i, /^mobile/i, /^contact\s*number/i, /^tel/i, /^cell/i] },
+    { key: 'email', label: 'Email Address', required: false, hint: 'Official billing/communication email', guessPatterns: [/^email/i, /^e-mail/i, /^mail/i] },
+    { key: 'gstin', label: 'GSTIN / Tax ID', required: false, hint: '15-digit GST identification number', guessPatterns: [/^gstin/i, /^gst\s*number/i, /^gst\s*no/i, /^gst/i] },
+    { key: 'pan', label: 'PAN Number', required: false, hint: '10-character PAN number', guessPatterns: [/^pan\s*number/i, /^pan\s*no/i, /^pan/i] },
+    { key: 'type', label: 'Vendor Type', required: false, hint: 'Manufacturer, Supplier, Trader', guessPatterns: [/^vendor\s*type/i, /^type/i, /^category/i] },
+    { key: 'cat', label: 'Category / Nature of Supply', required: false, hint: 'e.g. Steel & Metals, Fasteners, Cables', guessPatterns: [/^category/i, /^cat/i, /^material/i] },
+    { key: 'terms', label: 'Payment Terms', required: false, hint: 'e.g. Net 30 Days, 50% Advance', guessPatterns: [/^payment\s*terms/i, /^terms/i, /^credit/i] },
+    { key: 'address', label: 'Address', required: false, hint: 'Factory or office street address', guessPatterns: [/^address/i, /^street/i, /^location/i] },
+    { key: 'city', label: 'City', required: false, hint: 'City or town', guessPatterns: [/^city/i, /^district/i] },
+    { key: 'state', label: 'State', required: false, hint: 'State / province', guessPatterns: [/^state/i] },
+    { key: 'pincode', label: 'Pincode / ZIP', required: false, hint: 'Postal PIN code', guessPatterns: [/^pincode/i, /^pin\s*code/i, /^zip/i] }
+  ], []);
+
+  const VENDOR_SAMPLE_ROWS = useMemo(() => [
+    {
+      "Vendor Name": "Apex Steel & Alloys Pvt Ltd",
+      "Contact Person": "Ramesh Kumar",
+      "Phone": "9840123456",
+      "Email": "sales@apexsteel.in",
+      "GSTIN": "33AABCA1234D1Z5",
+      "PAN": "AABCA1234D",
+      "Vendor Type": "Manufacturer",
+      "Category": "Steel & Metals",
+      "Payment Terms": "Net 30 Days",
+      "Address": "Plot 45, SIPCOT Industrial Park",
+      "City": "Chennai",
+      "State": "Tamil Nadu",
+      "Pincode": "602105"
+    }
+  ], []);
+
+  const handleBulkImportVendors = async (mappedRows) => {
+    const res = await fetch('/api/vendors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mappedRows)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to import vendors');
+    }
+    await loadVendorsFromBackend();
+  };
+
   useEffect(() => {
     if (activeTab === 'Vendor Management') {
-      loadVendorsFromZoho();
+      loadVendorsFromBackend();
     }
   }, [activeTab]);
 
@@ -1060,26 +1111,20 @@ export default function VendorManagementView(props) {
 
   useEffect(() => {
     if (activeTab === 'Invoice Management') {
-      const fetchZohoInvoices = async () => {
+      const fetchInvoicesFromBackend = async () => {
         try {
-          const response = await fetch('/api/zoho/invoices');
+          const response = await fetch('/api/invoices');
           if (response.ok) {
-            const zohoInvoices = await response.json();
-            if (Array.isArray(zohoInvoices)) {
-              setInvoicesList(zohoInvoices);
+            const backendInvoices = await response.json();
+            if (Array.isArray(backendInvoices)) {
+              setInvoicesList(backendInvoices);
             }
           }
         } catch (err) {
-          console.error("Error fetching Zoho Invoices:", err);
+          console.error("Error fetching Invoices:", err);
         }
       };
-      fetchZohoInvoices();
-
-      const pollInterval = setInterval(() => {
-        fetchZohoInvoices();
-      }, 15000);
-
-      return () => clearInterval(pollInterval);
+      fetchInvoicesFromBackend();
     }
   }, [activeTab]);
 
@@ -1096,13 +1141,13 @@ export default function VendorManagementView(props) {
       setVendorModalLoading(true);
       try {
         const vendorId = vendor.id || vendor.code;
-        const res = await fetch(`/api/zoho/vendors/${vendorId}`);
+        const res = await fetch(`/api/vendors/${vendorId}`);
         if (res.ok) {
           const detail = await res.json();
           setViewingVendor(detail);
         }
       } catch (e) {
-        console.error("Failed to load detailed vendor info from Zoho", e);
+        console.error("Failed to load detailed vendor info from database", e);
       } finally {
         setVendorModalLoading(false);
       }
@@ -1152,7 +1197,7 @@ export default function VendorManagementView(props) {
   const [viewingItem, setViewingItem] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [isSavingItem, setIsSavingItem] = useState(false);
-  const [isSyncingZohoItems, setIsSyncingZohoItems] = useState(false);
+  const [isSyncingItems, setIsSyncingItems] = useState(false);
   const [itemSaveStatus, setItemSaveStatus] = useState(null);
   const [isCreatingItem, setIsCreatingItem] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
@@ -1181,22 +1226,22 @@ export default function VendorManagementView(props) {
 
   useEffect(() => {
     let isMounted = true;
-    const fetchZohoItems = async () => {
+    const fetchItemsFromBackend = async () => {
       try {
         setItemsLoading(true);
-        const zohoItems = await getSafeZohoItems();
-        if (isMounted && Array.isArray(zohoItems) && zohoItems.length > 0) {
+        const backendItems = await getItems();
+        if (isMounted && Array.isArray(backendItems) && backendItems.length > 0) {
           setItemsList(prev => {
             const itemMap = new Map();
             (prev || []).forEach(it => itemMap.set(it.code || it.sku || it.itemId || it.id || it.name, it));
-            zohoItems.forEach(it => {
+            backendItems.forEach(it => {
               const key = it.code || it.sku || it.itemId || it.id || it.name;
               if (key) itemMap.set(key, { ...itemMap.get(key), ...it });
             });
             return Array.from(itemMap.values());
           });
         } else {
-          const response = await fetch('/api/zoho/items').catch(() => null);
+          const response = await fetch('/api/items').catch(() => null);
           if (response && response.ok) {
             const zItems = await response.json().catch(() => []);
             if (isMounted && Array.isArray(zItems) && zItems.length > 0) {
@@ -1213,16 +1258,16 @@ export default function VendorManagementView(props) {
           }
         }
       } catch (err) {
-        console.error("Error fetching Zoho Items:", err);
+        console.error("Error fetching Catalog Items:", err);
       } finally {
         if (isMounted) setItemsLoading(false);
       }
     };
-    fetchZohoItems();
+    fetchItemsFromBackend();
     return () => { isMounted = false; };
   }, []);
 
-  const handleCreateProductInZoho = async () => {
+  const handleCreateProduct = async () => {
     if (!newItemData.name || !newItemData.name.trim()) {
       setCreateStatus({ type: 'warning', text: 'Item Name is required.' });
       return;
@@ -1243,7 +1288,7 @@ export default function VendorManagementView(props) {
         status: newItemData.status || 'Active'
       };
 
-      const res = await fetch('/api/zoho/items', {
+      const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1270,7 +1315,7 @@ export default function VendorManagementView(props) {
         return updated;
       });
 
-      setCreateStatus({ type: 'success', text: result.message || 'Product created successfully and added to Zoho Books!' });
+      setCreateStatus({ type: 'success', text: result.message || 'Product created successfully!' });
 
       setTimeout(() => {
         setIsCreatingItem(false);
@@ -1319,7 +1364,7 @@ export default function VendorManagementView(props) {
     }
   };
 
-  const handleSaveItemToZoho = async () => {
+  const handleSaveItem = async () => {
     if (!editingItem) return;
     try {
       setIsSavingItem(true);
@@ -1337,14 +1382,14 @@ export default function VendorManagementView(props) {
         status: targetStatus
       };
 
-      const res = await fetch(`/api/zoho/items/${editingItem.itemId}`, {
+      const res = await fetch(`/api/items/${editingItem.itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       if (res.ok) {
-        setItemSaveStatus({ type: 'success', text: 'Item updated successfully and synced with Zoho Books!' });
+        setItemSaveStatus({ type: 'success', text: 'Item updated successfully!' });
       } else {
         setItemSaveStatus({ type: 'warning', text: 'Saved locally in Control Room.' });
       }
@@ -1457,7 +1502,7 @@ export default function VendorManagementView(props) {
     }
 
     try {
-      const res = await fetch(`/api/zoho/gst-lookup?gstin=${g}`);
+      const res = await fetch(`/api/gst-lookup?gstin=${g}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -1895,21 +1940,21 @@ export default function VendorManagementView(props) {
       pan: vPAN || ''
     };
 
-    // Push new vendor to Zoho Books API & refresh live list so official Zoho Contact ID is assigned as Vendor Code
-    fetch('/api/zoho/vendors', {
+    // Save new vendor and refresh live list
+    fetch('/api/vendors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newVendorPayload)
     }).then(res => res.json()).then(data => {
       if (data.success) {
-        console.log('Vendor created in Zoho Books successfully!', data);
+        console.log('Vendor created successfully in BUSINZ!', data);
       } else {
-        console.warn('Zoho Vendor creation notice:', data);
+        console.warn('Vendor creation notice:', data);
       }
-      loadVendorsFromZoho();
+      loadVendorsFromBackend();
     }).catch(err => {
-      console.error('Failed to sync vendor to Zoho:', err);
-      loadVendorsFromZoho();
+      console.error('Failed to save vendor:', err);
+      loadVendorsFromBackend();
     });
 
     // Reset states
@@ -2099,44 +2144,72 @@ export default function VendorManagementView(props) {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setShowForm(true)}
-                    style={{
-                      backgroundColor: '#0E7490',
-                      border: 'none',
-                      color: 'white',
-                      height: '40px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '0 6px 0 20px',
-                      borderRadius: '50px',
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                      boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
-                      transition: 'all 0.2s ease',
-                      letterSpacing: '0.2px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                  >
-                    <span>Onboard Vendor</span>
-                    <div style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      backgroundColor: '#FFFFFF',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#0E7490',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                    }}>
-                      <ArrowRight size={16} strokeWidth={2.5} />
-                    </div>
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsUploadVendorModalOpen(true)}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1.5px solid #0E7490',
+                        color: '#0E7490',
+                        height: '40px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '0 16px',
+                        borderRadius: '50px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 3px rgba(14, 116, 144, 0.15)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDFA'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                    >
+                      <UploadCloud size={16} strokeWidth={2.5} />
+                      <span>Upload Vendor</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowForm(true)}
+                      style={{
+                        backgroundColor: '#0E7490',
+                        border: 'none',
+                        color: 'white',
+                        height: '40px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '0 6px 0 20px',
+                        borderRadius: '50px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
+                        transition: 'all 0.2s ease',
+                        letterSpacing: '0.2px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                    >
+                      <span>Onboard Vendor</span>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        backgroundColor: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#0E7490',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}>
+                        <ArrowRight size={16} strokeWidth={2.5} />
+                      </div>
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -2497,7 +2570,7 @@ export default function VendorManagementView(props) {
                         {renderStatusBadge(viewingVendor.status)}
                       </div>
                       <span style={{ fontSize: '12px', color: '#64748B', display: 'block', marginTop: '2px' }}>
-                        Zoho Contact ID: <strong style={{ color: '#2563EB' }}>{viewingVendor.code || viewingVendor.id}</strong> | Currency: <strong>{viewingVendor.currency || 'INR'}</strong>
+                        Vendor ID: <strong style={{ color: '#2563EB' }}>{viewingVendor.code || viewingVendor.id}</strong> | Currency: <strong>{viewingVendor.currency || 'INR'}</strong>
                       </span>
                     </div>
                   </div>
@@ -2514,7 +2587,7 @@ export default function VendorManagementView(props) {
                 {vendorModalLoading ? (
                   <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '60px 0', alignItems: 'center', justifyContent: 'center' }}>
                     <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: '#2563EB' }} />
-                    <span style={{ fontSize: '14px', color: '#2563EB', fontWeight: '600' }}>Fetching live contact details & addresses from Zoho Books…</span>
+                    <span style={{ fontSize: '14px', color: '#2563EB', fontWeight: '600' }}>Fetching live contact details & addresses…</span>
                   </div>
                 ) : (
                   <>
@@ -2633,7 +2706,7 @@ export default function VendorManagementView(props) {
                       </div>
                     </div>
 
-                    {/* Section 3: Other Details (Tax & GST Information from Zoho) */}
+                    {/* Section 3: Other Details (Tax & GST Information) */}
                     <div className="section-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}>
                       <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1E3A8A', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>Other Details</h3>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px 20px' }}>
@@ -3272,10 +3345,10 @@ export default function VendorManagementView(props) {
                         setDeleteConfirmVendor(null);
 
                         if (targetId) {
-                          fetch(`/api/zoho/vendors/${encodeURIComponent(targetId)}`, { method: 'DELETE' })
+                          fetch(`/api/vendors/${encodeURIComponent(targetId)}`, { method: 'DELETE' })
                             .then(res => res.json())
                             .then(data => {
-                              console.log('Vendor deleted from Zoho & Control Room:', data);
+                              console.log('Vendor deleted from BUSINZ:', data);
                               fetchVendors();
                             })
                             .catch(err => console.error('Failed to delete vendor in backend:', err));
@@ -3325,6 +3398,19 @@ export default function VendorManagementView(props) {
                 </div>
               </div>
             )}
+
+            {/* Zoho-Style Bulk Vendor Import Modal */}
+            <ZohoStyleBulkImportModal
+              isOpen={isUploadVendorModalOpen}
+              onClose={() => setIsUploadVendorModalOpen(false)}
+              title="Import Vendors (Zoho-Style Column Mapping)"
+              subtitle="Upload an Excel or CSV file and map your columns directly to BUSINZ vendor fields"
+              entityName="Vendors"
+              fields={VENDOR_IMPORT_FIELDS}
+              sampleTemplateRows={VENDOR_SAMPLE_ROWS}
+              sampleFileName="BUSINZ_Vendor_Import_Template.xlsx"
+              onImport={handleBulkImportVendors}
+            />
           </div>
         );
       })()}

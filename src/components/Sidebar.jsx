@@ -285,7 +285,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'SYSTEM & CONFIG',
           items: [
-            { label: 'Zoho Integration', targetTab: 'Integration', icon: GitBranch },
             { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' }
           ]
         }
@@ -298,7 +297,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director');
     const isTa = (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA'));
 
-    // Zoho Integration is strictly for CEO Alone (or general integrations for TA)
     const isProcurementRole = role === 'Procurement Head' || role === 'Procurement Admin' || (role || '').includes('Procurement');
     const templateLabel = isProcurementRole ? 'PO Template' : 'Templates';
     const templateIcon = isProcurementRole ? ShoppingCart : Palette;
@@ -310,18 +308,10 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     if (sysSection) {
       if (!hasTemplates && !isCeo) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
       if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
-      if (!isCeo && !isTa) {
-        sysSection.items = sysSection.items.filter(i => i.targetTab !== 'Integration');
-      }
     } else {
       const sysItems = [];
       if (!hasTemplates && !isCeo) {
         sysItems.push({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
-      }
-      if (isCeo) {
-        sysItems.push({ label: 'Zoho Integration', targetTab: 'Integration', icon: GitBranch });
-      } else if (isTa) {
-        sysItems.push({ label: 'Integration', targetTab: 'Integration', icon: GitBranch });
       }
       sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
       sections.push({
@@ -338,7 +328,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
     if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes' || tab === 'PO Template') return 'Templates';
-    if (tab === 'Zoho Integration' || tab === 'Integration') return 'Integration';
     return tab;
   };
 

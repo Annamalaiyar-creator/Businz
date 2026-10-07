@@ -5,7 +5,7 @@ Enterprise-grade CRM, Sales, Bill of Materials (BOM), Procurement, and Operation
 ## Tech Stack
 - **Frontend**: React 19, Vite, Lucide React, Custom Responsive UI Design System
 - **UI/Layout**: Fully Responsive Web Design System (Desktop, Tablet, Mobile)
-- **Integrations**: Zoho Books API, Tally ERP / Prime Sync Engine
+- **Integrations**: PostgreSQL / Native Data Engine, Tally ERP / Prime Sync Engine
 
 ## Project Structure
 - `src/` - React frontend application and components

@@ -239,15 +239,68 @@ export default function DispatchPackingModal({
       })
     } : null;
 
+    const packedByUserId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+    const packedByName = (localStorage.getItem('controlroom_logged_user_name') || userRole || 'Dispatch Executive').trim();
+    const packedAt = new Date().toISOString();
+
+    const isDispatchUser = (name) => {
+      if (!name) return false;
+      const lower = String(name).toLowerCase().trim();
+      return lower === 'anu' || lower.includes('dispatch') || lower.includes('fulfillment');
+    };
+
+    const matchingBom = (bomStore || []).find(b => b.bomCode === dispatchPackingModal.bomCode || b.code === dispatchPackingModal.bomCode || b.id === dispatchPackingModal.id);
+    let resolvedSpName = dispatchPackingModal.salesPerson || matchingBom?.salesPerson || dispatchPackingModal.createdBy || matchingBom?.createdBy || 'Sales Department';
+    if (isDispatchUser(resolvedSpName)) {
+      if (matchingBom?.createdBy && !isDispatchUser(matchingBom.createdBy)) {
+        resolvedSpName = matchingBom.createdBy;
+      } else if (dispatchPackingModal.createdBy && !isDispatchUser(dispatchPackingModal.createdBy)) {
+        resolvedSpName = dispatchPackingModal.createdBy;
+      } else {
+        resolvedSpName = 'Sales Department';
+      }
+    }
+    const resolvedSpCode = dispatchPackingModal.salesPersonCode || matchingBom?.salesPersonCode || dispatchPackingModal.createdById || matchingBom?.createdById || '';
+    const resolvedCreatedBy = (dispatchPackingModal.createdBy && !isDispatchUser(dispatchPackingModal.createdBy))
+      ? dispatchPackingModal.createdBy
+      : (matchingBom?.createdBy && !isDispatchUser(matchingBom.createdBy))
+        ? matchingBom.createdBy
+        : resolvedSpName;
+    const resolvedCreatedById = dispatchPackingModal.createdById || matchingBom?.createdById || resolvedSpCode;
+
+    const resolvedCustomer = (dispatchPackingModal.customerName && dispatchPackingModal.customerName !== 'Customer' && dispatchPackingModal.customerName !== '-')
+      ? dispatchPackingModal.customerName
+      : (dispatchPackingModal.companyName && dispatchPackingModal.companyName !== '-')
+        ? dispatchPackingModal.companyName
+        : (matchingBom?.customerName && matchingBom?.customerName !== 'Customer')
+          ? matchingBom.customerName
+          : (matchingBom?.companyName || 'Customer Order');
+
     const updatedPackedBom = {
       ...dispatchPackingModal,
+      customerName: resolvedCustomer,
+      companyName: resolvedCustomer,
       dispatchPacking: confirmedItems,
       dispatchPackingMedia: cleanMedia,
       status: nextStatus,
+      packingStatus: isFullyConfirmed ? 'PACKING_VERIFIED' : 'PARTIALLY_PACKED',
+      packedAt: packedAt,
+      packedBy: packedByName,
+      packedById: packedByUserId,
+      packingCompletedAt: isFullyConfirmed ? packedAt : null,
+      salesPerson: resolvedSpName,
+      salesPersonCode: resolvedSpCode,
+      createdBy: resolvedCreatedBy,
+      createdById: resolvedCreatedById,
       pendingSalesDispatchPayment: needsSalesPaymentNotification,
       reissuedByAccounts: false,
       isAccountsDone: false,
-      accountsVerification: accountsVerificationData,
+      accountsVerification: {
+        ...accountsVerificationData,
+        packedAt: packedAt,
+        packedBy: packedByName,
+        packedById: packedByUserId
+      },
       isUpdate: true
     };
     delete updatedPackedBom.c2;
@@ -266,7 +319,7 @@ export default function DispatchPackingModal({
       return updated;
     });
 
-    // 3. Persist to cloud store and localStorage
+    // 3. Persist atomically to Supabase cloud store and localStorage
     saveCloudBomRow(updatedPackedBom);
     try {
       const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
@@ -311,10 +364,8 @@ export default function DispatchPackingModal({
     setDispatchPackingModal(null);
 
     // Safely resolve the salesperson who created the BOM and customer name
-    const matchingBom = (bomStore || []).find(b => b.bomCode === targetBomCode || b.code === targetBomCode || b.id === dispatchPackingModal.id);
-    const resolvedSalesPerson = (dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || dispatchPackingModal.salesperson || matchingBom?.salesPerson || matchingBom?.createdBy || matchingBom?.salesperson || '').replace(/\s*\([^)]*\)/g, '').trim();
-    const resolvedSalesPersonCode = dispatchPackingModal.salesPersonCode || dispatchPackingModal.createdById || matchingBom?.salesPersonCode || matchingBom?.createdById || '';
-    const resolvedCustomer = dispatchPackingModal.customerName || dispatchPackingModal.companyName || matchingBom?.customerName || matchingBom?.companyName || 'Customer';
+    const resolvedSalesPerson = resolvedSpName.replace(/\s*\([^)]*\)/g, '').trim();
+    const resolvedSalesPersonCode = resolvedSpCode;
 
     addLiveNotification({
       id: `notif-pack-${targetBomCode}-${Date.now()}`,
@@ -439,7 +490,7 @@ export default function DispatchPackingModal({
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.customerName}</strong></span>
               <span>•</span>
-              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {(dispatchPackingModal.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
+              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {(dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
               <span>•</span>
               <span>Payment: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.paymentType}</strong></span>
             </div>

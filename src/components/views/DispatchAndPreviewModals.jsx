@@ -22,7 +22,7 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
                 Order & BOM Flow Successfully Completed!
               </h2>
               <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0' }}>
-                BOM Reference: <strong style={{ color: '#2563EB' }}>{completedBomSummaryModal.bomCode}</strong> • Sales Creator: <strong style={{ color: '#0E7490' }}>👤 {(completedBomSummaryModal.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Customer: <strong>{completedBomSummaryModal.customer}</strong>
+                BOM Reference: <strong style={{ color: '#2563EB' }}>{completedBomSummaryModal.bomCode}</strong> • Sales Creator: <strong style={{ color: '#0E7490' }}>👤 {(completedBomSummaryModal.salesPerson || completedBomSummaryModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Customer: <strong>{completedBomSummaryModal.customer}</strong>
               </p>
             </div>
 
@@ -724,7 +724,7 @@ export function BomCancelPromptModal({
           }}>
             <strong>⚠️ Why are you cancelling this BOM?</strong>
             <br />
-            The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
+            The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || bomCancelPromptModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
           </div>
 
           <div>

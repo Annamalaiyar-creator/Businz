@@ -152,7 +152,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   const [invoices, setInvoices] = useState(() => getCached('controlroom_invoice_store'));
   const [customers, setCustomers] = useState(() => getCached('controlroom_customer_store'));
   const [boms, setBoms] = useState(() => getCached('controlroom_bom_store'));
-  const [isZohoConnected, setIsZohoConnected] = useState(true);
+  const [isCloudConnected, setIsCloudConnected] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
 
@@ -181,13 +181,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
-      // 1. Fetch Zoho connection status
-      fetchWithTimeout('/api/zoho/status', { timeout: 3000 })
+      // 1. Fetch connection status
+      fetchWithTimeout('/api/health', { timeout: 3000 })
         .then(r => r.json())
         .then(st => {
-          if (st && st.connected !== undefined) setIsZohoConnected(Boolean(st.connected));
+          if (st && st.connected !== undefined) setIsCloudConnected(Boolean(st.connected));
         })
-        .catch(() => setIsZohoConnected(false));
+        .catch(() => setIsCloudConnected(true));
 
       // 2. Fetch all collections in parallel from authoritative cloud stores with timeout protection
       const [
@@ -207,7 +207,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         fetchCloudStore('crm_followups', []).catch(() => []),
         fetchCloudStore('sales_pi_store', []).catch(() => []),
         fetchCloudStore('proforma_invoice_store', []).catch(() => []),
-        fetchWithTimeout('/api/zoho/invoices', { timeout: 8000 })
+        fetchWithTimeout('/api/invoices', { timeout: 8000 })
           .then(r => r.json())
           .then(j => {
             if (Array.isArray(j)) return j;
@@ -216,7 +216,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             return [];
           })
           .catch(() => fetchCloudStore('invoice_store', [])),
-        fetchWithTimeout('/api/zoho/customers', { timeout: 8000 })
+        fetchWithTimeout('/api/customers', { timeout: 8000 })
           .then(r => r.json())
           .then(j => Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []))
           .catch(() => fetchCloudStore('customer_store', [])),
@@ -328,7 +328,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       const localCustomers = getCached('controlroom_customer_store') || getCached('controlroom_crm_customers') || [];
       const custMap = new Map();
       [...(Array.isArray(cloudCustomers) ? cloudCustomers : []), ...(Array.isArray(localCustomers) ? localCustomers : [])].forEach(c => {
-        const id = c?.customerCode || c?.id || c?.zohoContactId || c?.customerName;
+        const id = c?.customerCode || c?.id || c?.customerName;
         if (id) {
           const k = String(id).trim().toLowerCase();
           if (!custMap.has(k)) custMap.set(k, c);
@@ -1047,7 +1047,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </span>
             </div>
             <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0', fontWeight: '500' }}>
-              Real-time Zoho revenue sync, active proforma invoices & conversion performance. Updated {lastSyncedTime}.
+              Real-time revenue sync, active proforma invoices & conversion performance. Updated {lastSyncedTime}.
             </p>
           </div>
         </div>
@@ -1111,14 +1111,14 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
           <div style={{ width: '1px', height: '32px', backgroundColor: '#E2E8F0' }} />
 
-          {/* Zoho Integration Status */}
+          {/* Cloud Database Status */}
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              ZOHO INTEGRATION
+              CLOUD DATABASE
             </div>
-            <div style={{ fontSize: '12.5px', fontWeight: '700', color: isZohoConnected ? '#0284C7' : '#D97706', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: isZohoConnected ? '#0284C7' : '#F59E0B', boxShadow: `0 0 6px ${isZohoConnected ? '#38BDF8' : '#FBBF24'}` }} />
-              {isZohoConnected ? 'Connected & Synced' : 'Sync Active'}
+            <div style={{ fontSize: '12.5px', fontWeight: '700', color: isCloudConnected ? '#0284C7' : '#D97706', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: isCloudConnected ? '#0284C7' : '#F59E0B', boxShadow: `0 0 6px ${isCloudConnected ? '#38BDF8' : '#FBBF24'}` }} />
+              {isCloudConnected ? 'Connected & Synced' : 'Sync Active'}
             </div>
           </div>
 

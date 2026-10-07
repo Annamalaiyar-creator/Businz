@@ -3,14 +3,14 @@ import {
   Boxes, Search, Filter, Layers, Tag, Eye, CheckCircle, Package,
   ExternalLink, ArrowRight, RefreshCw, ShieldCheck
 } from 'lucide-react';
-import { getSafeZohoItems } from '../../services/zohoSafeSync';
+import { getItems } from '../../services/businzDataService';
 
 export default function CrmProductCatalog({ onNavigateTab }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
   // Load directly from Central Product Master
-  const items = getSafeZohoItems();
+  const items = getItems();
 
   const categories = ['All', 'Aluminium', 'HDG Steel', 'Clamps', 'Hardware & Fasteners', 'Walkway'];
 

@@ -158,9 +158,18 @@ export default function AccountsVerificationModal({
     : (accVerif.paymentStatus || null);
   const hardCopy = isAlreadyCompleted ? true : Boolean(accVerif.hardCopyReceived);
   const bomCodeText = (accountsVerificationModal && (accountsVerificationModal.bomCode || accountsVerificationModal.code)) || 'BOM-2026';
-  const custNameText = (accountsVerificationModal && (accountsVerificationModal.customerName || accountsVerificationModal.c2)) || 'Customer';
+  const custNameText = (() => {
+    if (!accountsVerificationModal) return 'Customer';
+    const m = accountsVerificationModal;
+    if (m.customerName && m.customerName !== 'Customer' && m.customerName !== '-') return m.customerName;
+    if (m.companyName && m.companyName !== '-') return m.companyName;
+    if (m.c2 && m.c2 !== 'Customer') return m.c2;
+    if (m.vendor && m.vendor !== 'Customer') return m.vendor;
+    if (m.clientName) return m.clientName;
+    return m.customerName || m.companyName || 'Customer';
+  })();
   const payTypeText = (accountsVerificationModal && (accountsVerificationModal.paymentType || accountsVerificationModal.c3)) || 'Net 30 Days';
-  const orderValue = cleanNum(accountsVerificationModal.grandTotal, 0);
+  const orderValue = cleanNum(accountsVerificationModal?.grandTotal, 0) || cleanNum(accountsVerificationModal?.subTotal, 0) || cleanNum(accountsVerificationModal?.totalAmount, 0) || (Array.isArray(accountsVerificationModal?.items) ? accountsVerificationModal.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0) : 0);
 
   // Accounts Verification State & Derived Variables (NOT prefilled by default)
   const [assignedInvoiceNo, setAssignedInvoiceNo] = useState(() => {
@@ -172,7 +181,7 @@ export default function AccountsVerificationModal({
   useEffect(() => {
     if (!assignedInvoiceNo || assignedInvoiceNo === 'Pending Confirmation') {
       setIsFetchingInvNo(true);
-      fetch('/api/zoho/next-invoice-number')
+      fetch('/api/next-invoice-number')
         .then(res => res.json())
         .then(data => {
           if (data && data.nextInvNo) {
@@ -248,7 +257,7 @@ export default function AccountsVerificationModal({
     let finalInvNo = assignedInvoiceNo;
     if (!finalInvNo || finalInvNo === 'Pending Confirmation') {
       try {
-        const res = await fetch('/api/zoho/next-invoice-number');
+        const res = await fetch('/api/next-invoice-number');
         if (res.ok) {
           const data = await res.json();
           if (data && data.nextInvNo) {
@@ -330,7 +339,8 @@ export default function AccountsVerificationModal({
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       vendor: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
       customerName: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
-      salesPerson: (verifiedBOM.salesPerson || verifiedBOM.createdBy || localStorage.getItem('controlroom_logged_user_name') || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim(),
+      salesPerson: (verifiedBOM.salesPerson || verifiedBOM.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
+      salesPersonCode: verifiedBOM.salesPersonCode || verifiedBOM.createdById || '',
       poNo: targetCode,
       bomCode: targetCode,
       grnNo: 'GRN-VERIFIED',
@@ -366,6 +376,11 @@ export default function AccountsVerificationModal({
       try {
         saveCloudInvoiceRow(newInvEntry);
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+        fetch('/api/store/invoice_store', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(stripDataUrlsFromRecord(newInvEntry))
+        }).catch(() => {});
       } catch (e) { }
       return updated;
     });
@@ -386,7 +401,7 @@ export default function AccountsVerificationModal({
 
     setAccountsVerificationModal(null);
     if (typeof showCustomAlert === 'function') {
-      showCustomAlert(`Accounts Verification approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches Zoho Books sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`, 'Accounts Verification Completed', 'success');
+      showCustomAlert(`Accounts Verification approved for ${bomCodeText}.\n\nOfficial Invoice Number Assigned: ${finalInvNo} (Matches BUSINZ Native Catalog sequence).\n\nOrder passed directly to Invoice Management with invoice number ready.`, 'Accounts Verification Completed', 'success');
     }
   };
 
@@ -425,7 +440,7 @@ export default function AccountsVerificationModal({
                 display: 'inline-flex', alignItems: 'center', gap: '6px'
               }}>
                 <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
-                Zoho Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
+                Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
               </span>
               <StatusBadge
                 status={(isAlreadyCompleted || isVerified) ? 'ACCOUNTS VERIFIED' : isPartialVerified ? 'PARTIALLY VERIFIED' : 'PENDING VERIFICATION'}
@@ -435,7 +450,7 @@ export default function AccountsVerificationModal({
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
               <span>•</span>
-              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {((accountsVerificationModal.salesPerson || accountsVerificationModal.c4 || 'Mohith JV')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
+              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
               <span>•</span>
               <span>Payment Terms: <strong style={{ color: '#FFFFFF' }}>{payTypeText}</strong></span>
             </div>

@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 
 const defaultStatusItems = [
-  { name: 'Completed & Approved', count: '16', color: '#16A34A', pct: 0.40 },
-  { name: 'In Production', count: '14', color: '#0284C7', pct: 0.35 },
-  { name: 'Pending Verification', count: '8', color: '#0E7490', pct: 0.20 },
-  { name: 'Draft / Pending', count: '2', color: '#EA580C', pct: 0.05 }
+  { name: 'Completed & Approved', count: '0', color: '#16A34A', pct: 0 },
+  { name: 'In Production', count: '0', color: '#0284C7', pct: 0 },
+  { name: 'Pending Verification', count: '0', color: '#0E7490', pct: 0 },
+  { name: 'Draft / Pending', count: '0', color: '#EA580C', pct: 0 }
 ];
 
 export default function POStatusOverview({ 
   title = "Work Orders by Status",
   items = defaultStatusItems,
-  totalCount = "40",
+  totalCount = "0",
   totalLabel = "TOTAL ORDERS"
 }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
@@ -108,7 +108,11 @@ export default function POStatusOverview({
         {/* LEFT SIDE: Normal Pie / Donut SVG with Center Counter */}
         <div style={{ position: 'relative', width: statusItems.length > 4 ? '118px' : '126px', height: statusItems.length > 4 ? '118px' : '126px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ width: '100%', height: '100%' }}>
-            {segmentPaths}
+            {Number(totalCount) === 0 || segmentPaths.every(p => p === null) ? (
+              <circle cx={cx} cy={cy} r={75} stroke="#E2E8F0" strokeWidth="18" fill="none" />
+            ) : (
+              segmentPaths
+            )}
           </svg>
 
           {/* Center Counter */}

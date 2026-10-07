@@ -72,7 +72,7 @@ export default function BomOrdersView(props) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const { list: resolvedList } = resolveBomCollisions(parsed, 658);
+          const { list: resolvedList } = resolveBomCollisions(parsed, 662);
           if (resolvedList.length !== parsed.length) {
             localStorage.setItem('controlroom_bom_store', JSON.stringify(resolvedList.map(stripDataUrlsFromRecord)));
           }
@@ -94,7 +94,7 @@ export default function BomOrdersView(props) {
     return true;
   });
 
-  // Customer List from Supabase & Zoho
+  // Customer List from Supabase & Central Store
   const [customerList, setCustomerList] = useState([]);
 
   // Active Presets state (loaded from master JSON + localStorage/cloud)
@@ -149,7 +149,7 @@ export default function BomOrdersView(props) {
           if (data.length === 0) {
             setBomStore([]);
           } else {
-            const { list: resolvedList } = resolveBomCollisions(data, 658);
+            const { list: resolvedList } = resolveBomCollisions(data, 662);
             const parseBomSeq = (code) => {
               const m = String(code || '').match(/BOM-(\d+)/i);
               return m ? parseInt(m[1], 10) : 0;
@@ -183,10 +183,10 @@ export default function BomOrdersView(props) {
           try {
             let custs = await fetchCloudStore('customer_store', []);
             if (!Array.isArray(custs) || custs.length === 0) {
-              const zohoCustRes = await fetch('/api/zoho/customers');
-              if (zohoCustRes.ok) {
-                const zCusts = await zohoCustRes.json();
-                if (Array.isArray(zCusts) && zCusts.length > 0) custs = zCusts;
+              const custRes = await fetch('/api/customers');
+              if (custRes.ok) {
+                const fetchedCusts = await custRes.json();
+                if (Array.isArray(fetchedCusts) && fetchedCusts.length > 0) custs = fetchedCusts;
               }
             }
             if (Array.isArray(custs) && custs.length > 0) {
@@ -214,7 +214,7 @@ export default function BomOrdersView(props) {
     // Real-time live subscription directly from Supabase Database (receives single record payloads)
     const realtimeSub = subscribeToCloudStore('bom_store', (updatedBoms) => {
       if (Array.isArray(updatedBoms)) {
-        const { list: resolvedList } = resolveBomCollisions(updatedBoms, 658);
+        const { list: resolvedList } = resolveBomCollisions(updatedBoms, 662);
         const cleaned = resolvedList.map(stripDataUrlsFromRecord);
         setBomStore(prev => {
           if (Array.isArray(prev) && prev.length === cleaned.length) {
@@ -439,15 +439,15 @@ export default function BomOrdersView(props) {
       }
     }
 
-    // 5. Payment Proof for 100% Paid / Partial Paid Orders (optional if converted from authorized PI)
-    const isPaidOrder = newBomPaymentType === '100% Paid';
+    // 5. Payment Proof for 100% Paid / Partial Paid Orders (Mandatory per policy)
+    const isPaidOrder = newBomPaymentType === '100% Paid' || newBomPaymentType === '100% Advance';
     const isPartialOrder = newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment';
     if (!isDraft && (isPaidOrder || isPartialOrder)) {
-      if (!newBomPaymentProofDoc && !newBomSourcePiNo) {
-        errors.paymentProof = 'Payment Attachment / Slip is required';
+      if (!newBomPaymentProofDoc) {
+        errors.paymentProof = 'Payment Attachment / Slip is mandatory';
         missingList.push({
-          field: 'Payment Slip / Advice',
-          message: `Payment proof attachment is mandatory for "${newBomPaymentType}" orders. Please attach the payment advice/slip, or choose "Payment While Dispatch" or "Credit Payment".`,
+          field: 'Payment Attachment / Slip *',
+          message: `Payment Attachment / Slip * is strictly mandatory for "${newBomPaymentType}" orders. Please attach the bank slip/advice to proceed.`,
           targetId: 'field-newBomPaymentProofDoc'
         });
       }
@@ -497,19 +497,20 @@ export default function BomOrdersView(props) {
   const currentEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
-  // Role check: Only individual Sales Executives are isolated to their own BOMs.
-  // Management & Fulfillment roles (Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Production Head, Floor Supervisor, Dispatch Head, Procurement Head, Billing) see all BOMs.
-  const isRestrictedSalesUser = userRole === 'Sales Executive';
+  // Role check: Only individual Sales personnel are isolated to their own BOMs.
+  // Management & Fulfillment roles (Dispatch Head, Dispatch, Production Head, Floor Supervisor, Sales Head, CEO, Managing Director, Technical Administrator, Accounts Head, Accounts Executive, Procurement Head, Billing) see all BOMs.
+  const isRestrictedSalesUser = Boolean(
+    userRole &&
+    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
+    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim())
+  );
 
   const visibleBomStore = React.useMemo(() => {
     const rawList = (bomStore || []).filter(Boolean);
     if (!isRestrictedSalesUser) return rawList;
 
-    const curCode = (currentEmpId || (userRole === 'Sales Executive' ? 'SE-VRM001' : '')).toUpperCase();
-    let effectiveCurName = (currentEmpName || defaultSalesPersonName || '').trim();
-    if (!effectiveCurName || effectiveCurName.toLowerCase() === 'sales executive') {
-      effectiveCurName = 'Mohith JV';
-    }
+    const curCode = (currentEmpId || '').toUpperCase();
+    const effectiveCurName = (currentEmpName || (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : '') || '').trim();
     const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
     const curEmail = currentLoggedEmail;
 
@@ -550,20 +551,11 @@ export default function BomOrdersView(props) {
       if (curName) {
         if (spName && (spName === curName || spName.includes(curName) || curName.includes(spName))) return true;
         if (creatorName && (creatorName === curName || creatorName.includes(curName) || curName.includes(creatorName))) return true;
-        if (curName.includes('mohit') && (spName.includes('mohit') || creatorName.includes('mohit') || spCode === 'SE-VRM001' || spCode === 'SE-VRM004')) return true;
-      }
-
-      // If user is Mohit JV / default sales executive, also allow records created by SE-VRM001 or Mohit
-      if ((curName.includes('mohit') || curCode === 'SE-VRM001' || userRole === 'Sales Executive') && (spCode === 'SE-VRM001' || spName.includes('mohit') || creatorName.includes('mohit'))) {
-        return true;
       }
 
       if (curEmail && (b.salesPersonEmail || b.email || '').toLowerCase() === curEmail) {
         return true;
       }
-
-      // Allow viewing company-wide, legacy, or unassigned BOMs
-      if (!spCode && !spName && !creatorName) return true;
 
       return false;
     });
@@ -1009,7 +1001,7 @@ export default function BomOrdersView(props) {
         const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
         return match ? parseInt(match[1], 10) : 0;
       }).filter(n => Number.isFinite(n) && n > 0);
-      const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 658;
+      const maxNum = existingNums.length > 0 ? Math.max(0, ...existingNums) : 662;
       const initialCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
       setNewBomCode(initialCode);
 
@@ -1021,9 +1013,9 @@ export default function BomOrdersView(props) {
       }
 
       // 3. Customer, Company, and Contact Person details from PI
-      const custName = pendingPi.customerName || pendingPi.vendor || pendingPi.clientName || '';
-      const compName = pendingPi.companyName || pendingPi.vendor || pendingPi.customerName || '';
-      const cPerson = pendingPi.contactPerson || pendingPi.contact || '';
+      const compName = (pendingPi.companyName || pendingPi.vendor || pendingPi.customerName || '').trim();
+      const custName = (pendingPi.customerName || compName || 'Customer Order').trim();
+      const cPerson = (pendingPi.contactPerson || pendingPi.contact || '').trim();
       const phoneNum = pendingPi.phone || pendingPi.mobile || '';
       const emailAddr = pendingPi.email || '';
       const gst = pendingPi.gstNo || pendingPi.gst || '';
@@ -1036,7 +1028,7 @@ export default function BomOrdersView(props) {
       setNewBomGstNo(gst);
 
       setNewBomRemarks('');
-      const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms;
+      const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms || '100% Paid';
       setNewBomPaymentType(normalizePaymentTerm(effectivePiPaymentTerm));
       const defaultDelivery = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
       setNewBomDeliveryDate(pendingPi.deliveryDate || defaultDelivery);
@@ -1044,11 +1036,11 @@ export default function BomOrdersView(props) {
       if (pendingPi.partialAmount) setNewBomPartialAmount(String(pendingPi.partialAmount));
       if (pendingPi.paymentProofDoc || pendingPi.proofDoc) setNewBomPaymentProofDoc(pendingPi.paymentProofDoc || pendingPi.proofDoc);
       if (pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc) setNewBomDeliveryProofDoc(pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc);
-      if (pendingPi.transportMode) setNewBomTransportMode(pendingPi.transportMode);
-      if (pendingPi.transporterName) setNewBomTransporterName(pendingPi.transporterName);
-      if (pendingPi.vehicleNo) setNewBomVehicleNo(pendingPi.vehicleNo);
-      if (pendingPi.transportScope) setNewBomTransportScope(pendingPi.transportScope);
-      if (pendingPi.lrNo) setNewBomLrNo(pendingPi.lrNo);
+      setNewBomTransportMode(pendingPi.transportMode || 'Transport');
+      setNewBomTransporterName(pendingPi.transporterName || pendingPi.transporter || '');
+      setNewBomVehicleNo(pendingPi.vehicleNo || '');
+      setNewBomTransportScope(pendingPi.transportScope || 'VRM Structures');
+      setNewBomLrNo(pendingPi.lrNo || '');
 
       // 4. Extract Full Billing Address from PI
       let bStreet = '', bCity = '', bState = '', bPin = '';
@@ -1160,15 +1152,17 @@ export default function BomOrdersView(props) {
       setPresetGroups(restoredPresetGroups);
 
       // Set primary preset state values
+      const cleanGrand = parseFloat(String(pendingPi.grandTotal || pendingPi.amount || 0).replace(/[^0-9.]/g, '')) || 0;
       const firstPresetGroup = Object.values(restoredPresetGroups)[0];
       if (firstPresetGroup) {
         setSelectedPreset(firstPresetGroup.presetName || firstPresetGroup.presetId);
-        setPresetKitPrice(firstPresetGroup.kitPrice != null ? String(firstPresetGroup.kitPrice) : '');
+        setPresetKitPrice(firstPresetGroup.kitPrice != null && String(firstPresetGroup.kitPrice) !== '' ? String(firstPresetGroup.kitPrice) : (cleanGrand > 0 ? String(Math.round(cleanGrand / 1.18)) : ''));
         setPresetSetCount(firstPresetGroup.setCount || 1);
-      } else if (pendingPi.presetName) {
-        setSelectedPreset(pendingPi.presetName);
-        if (pendingPi.presetKitPrice) setPresetKitPrice(String(pendingPi.presetKitPrice));
-        if (pendingPi.presetSetCount) setPresetSetCount(pendingPi.presetSetCount);
+      } else if (pendingPi.presetName || (cleanGrand > 0 && Array.isArray(pendingPi.items) && pendingPi.items.some(it => it.isPresetItem))) {
+        setSelectedPreset(pendingPi.presetName || 'Pre-Engineered Structure Kit Package');
+        const pPrice = pendingPi.presetKitPrice != null ? pendingPi.presetKitPrice : (cleanGrand > 0 ? Math.round(cleanGrand / 1.18) : '');
+        setPresetKitPrice(String(pPrice));
+        setPresetSetCount(pendingPi.presetSetCount || 1);
       } else {
         setSelectedPreset('');
         setPresetKitPrice('');
@@ -1179,7 +1173,11 @@ export default function BomOrdersView(props) {
       if (Array.isArray(pendingPi.items) && pendingPi.items.length > 0) {
         setBomMaterialsList(pendingPi.items.map(it => {
           const isPreset = Boolean(it.isPresetItem || (it.presetGroupId && restoredPresetGroups[it.presetGroupId]));
-          const rateVal = isPreset ? '0' : String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0');
+          const itQty = parseFloat(it.qty) || 1;
+          let rateVal = isPreset ? '0' : String(it.rate !== undefined && it.rate !== null && it.rate !== '' ? it.rate : '0');
+          if (!isPreset && (parseFloat(rateVal) === 0 || isNaN(parseFloat(rateVal))) && cleanGrand > 0) {
+            rateVal = String(Math.round(cleanGrand / itQty / 1.18));
+          }
           return {
             code: it.code || it.sku || it.itemId || '',
             name: it.name || 'Structural Steel Beams',
@@ -1360,19 +1358,26 @@ export default function BomOrdersView(props) {
         tabGroup = 'Sent';
       }
 
+      const displayName = [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim()) && !/^\d+$/.test(s.trim())) || b.companyName || b.customerName || 'Customer Order';
+      const numVal = (v) => {
+        const n = parseFloat(String(v || '').replace(/[^0-9.]/g, ''));
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      };
+      const gVal = numVal(b.grandTotal) || numVal(b.total) || numVal(b.subTotal);
+
       return {
         ...b,
         code: b.bomCode || b.code || 'BOM-101',
         c2: b.date || new Date().toISOString().split('T')[0],
-        c3: b.customerName || b.companyName || 'Customer Order',
+        c3: displayName,
         salesPerson: (() => {
           const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-          if (!sp) return defaultSalesPersonName;
+          if (!sp) return 'Sales Department';
           return sp;
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
         c4: normalizePaymentTerm(b.paymentType || b.paymentTerms || b.piPaymentTerms),
-        c5: formatCurrency(b.grandTotal),
+        c5: gVal > 0 ? formatCurrency(gVal) : (b.grandTotal != null ? formatCurrency(b.grandTotal) : '—'),
         status: isAddressRequested ? 'Address Proof Requested from Sales' : (isClosedOrCompleted ? (b.status || 'Completed') : (b.status || 'Pending Sales Confirmation')),
         stBg,
         stFg,
@@ -4494,8 +4499,8 @@ export default function BomOrdersView(props) {
                           sourcePiNo: newBomSourcePiNo || null,
                           date: new Date().toISOString().split('T')[0],
                           deliveryDate: newBomDeliveryDate || null,
-                          customerName: newBomProductName || newBomCompanyName || selCust?.c2 || selCust?.code || 'Customer Order',
-                          companyName: newBomCompanyName || newBomProductName || selCust?.c2 || selCust?.code || '-',
+                          customerName: (newBomCompanyName && newBomCompanyName !== '-') ? newBomCompanyName : (newBomProductName || selCust?.c2 || selCust?.companyName || selCust?.code || 'Customer Order'),
+                          companyName: (newBomCompanyName && newBomCompanyName !== '-') ? newBomCompanyName : (newBomProductName || selCust?.c2 || selCust?.companyName || selCust?.code || '-'),
                           contactPerson: newBomContactPerson || selCust?.contact || selCust?.contactPerson || '-',
                           mobile: newBomPhone || selCust?.c4 || selCust?.phone || '-',
                           email: newBomEmail || selCust?.c5 || selCust?.email || '-',
@@ -4710,7 +4715,7 @@ export default function BomOrdersView(props) {
                           return true;
                         });
                         const combined = [sanitizedNewBom, ...filtered];
-                        const { list: updatedList } = resolveBomCollisions(combined, 658);
+                        const { list: updatedList } = resolveBomCollisions(combined, 662);
                         setBomStore(updatedList);
 
                         // Safe browser localStorage backup per Rule 5 (local UI convenience only)
@@ -5140,6 +5145,20 @@ export default function BomOrdersView(props) {
                     return;
                   }
 
+                  const currentPayType = confirmingBomModal.paymentType;
+                  const is100OrPartial = currentPayType === '100% Paid' || currentPayType === '100% Advance' || currentPayType === 'Partial Paid' || currentPayType === 'Partial Payment';
+                  const hasProof = Boolean(
+                    confirmingBomModal.paymentProofDoc ||
+                    confirmingBomModal.payments?.proofDocObj ||
+                    confirmingBomModal.payments?.proofDoc ||
+                    confirmingBomModal.proofDoc ||
+                    confirmingBomModal.proofDocData
+                  );
+                  if (is100OrPartial && !hasProof) {
+                    alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${currentPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
+                    return;
+                  }
+
                   setIsConfirmingForward(true);
                   try {
                     const bStr = formatAddr(bObj, confirmingBomModal.billingAddress);
@@ -5171,7 +5190,7 @@ export default function BomOrdersView(props) {
                     deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
                     items: finalizedItems,
                     dispatchPacking: packingItems,
-                    salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim(),
+                    salesPerson: (confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim(),
                     status: 'Sales Confirmed - Sent to Dispatch',
                     salesConfirmed: true,
                     salesConfirmedAt: new Date().toISOString(),
@@ -6775,7 +6794,7 @@ export default function BomOrdersView(props) {
                       <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
                       <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
                         <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          👤 {(row.salesPerson || row.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+                          👤 {(row.salesPerson || row.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
@@ -7233,170 +7252,256 @@ export default function BomOrdersView(props) {
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '4px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#ECFEFF', color: '#0E7490', border: '2px solid #0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '800', flexShrink: 0 }}>
-                {(quickPreviewRecord.customerName || quickPreviewRecord.companyName || 'B').charAt(0).toUpperCase()}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                  {quickPreviewRecord.customerName || quickPreviewRecord.companyName || 'Customer Order'}
-                </h3>
-                <span style={{ fontSize: '12px', color: '#64748B' }}>
-                  Ref Code: <strong style={{ color: '#0E7490' }}>{quickPreviewRecord.bomCode || quickPreviewRecord.code}</strong>
-                </span>
-              </div>
-            </div>
-
-            {/* Order Meta Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>REF CODE</span>
-                <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: '800' }}>{quickPreviewRecord.bomCode || quickPreviewRecord.code}</strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>STATUS</span>
-                <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>{quickPreviewRecord.status}</strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>TOTAL ITEMS</span>
-                <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: '800' }}>{(quickPreviewRecord.items || []).length}</strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>ORDER VALUE</span>
-                <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: '800' }}>
-                  {quickPreviewRecord.grandTotal ? formatCurrency(quickPreviewRecord.grandTotal) : (quickPreviewRecord.c5 || '—')}
-                </strong>
-              </div>
-            </div>
-
-            {/* Sales & Payment Terms Info */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', backgroundColor: '#FFFFFF', padding: '14px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block' }}>Sales Creator</span>
-                <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
-                  👤 {(quickPreviewRecord.salesPerson || quickPreviewRecord.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
-                </strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block' }}>Payment Terms</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                  <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
-                    {quickPreviewRecord.paymentType || '100% Paid'}
-                  </strong>
-                  {(quickPreviewRecord.paymentProofDoc || quickPreviewRecord.payments?.proofDoc) && (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewDocModal({ title: 'Payment Proof Document', doc: quickPreviewRecord.paymentProofDoc || { name: quickPreviewRecord.payments?.proofDoc, dataUrl: quickPreviewRecord.payments?.proofDocData } })}
-                      style={{ border: '1px solid #BBF7D0', backgroundColor: '#F0FDF4', color: '#166534', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                    >
-                      <Eye size={10} /> Proof
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Contact Details & GST */}
-            {(quickPreviewRecord.companyName || quickPreviewRecord.contactPerson || quickPreviewRecord.phone || quickPreviewRecord.mobile || quickPreviewRecord.email || quickPreviewRecord.gstNo) && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                <div>
-                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>COMPANY NAME</span>
-                  <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700' }}>{quickPreviewRecord.companyName || quickPreviewRecord.customerName || '—'}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>CONTACT PERSON</span>
-                  <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700' }}>{quickPreviewRecord.contactPerson || '—'}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>PHONE / EMAIL</span>
-                  <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700', display: 'block' }}>{quickPreviewRecord.mobile || quickPreviewRecord.phone || '—'}</strong>
-                  {quickPreviewRecord.email && <span style={{ fontSize: '11px', color: '#64748B', wordBreak: 'break-all' }}>{quickPreviewRecord.email}</span>}
-                </div>
-                <div>
-                  <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>GSTIN</span>
-                  <strong style={{ fontSize: '12px', color: '#0E7490', fontWeight: '800' }}>{quickPreviewRecord.gstNo || quickPreviewRecord.gstin || '—'}</strong>
-                </div>
-              </div>
-            )}
-
-            {/* Structured Billing & Delivery Addresses */}
             {(() => {
-              const bObj = quickPreviewRecord.billingAddressObj || {};
-              const dObj = quickPreviewRecord.deliveryAddressObj || {};
-              const bStr = quickPreviewRecord.billingAddress || (bObj.address ? `${bObj.address}, ${bObj.city || ''} ${bObj.state || ''} - ${bObj.pincode || ''}` : 'Billing address on file');
-              const dStr = quickPreviewRecord.deliveryAddress || (dObj.address ? `${dObj.address}, ${dObj.city || ''} ${dObj.state || ''} - ${dObj.pincode || ''}` : bStr);
-              const addrDoc = quickPreviewRecord.deliveryAddressProofDoc;
+              // 1. Resolve source PI if available for full fidelity fallback
+              let sourcePi = null;
+              try {
+                const piNum = quickPreviewRecord.sourcePiNo || quickPreviewRecord.piNo;
+                const rawPi = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices');
+                if (rawPi) {
+                  const parsedPis = JSON.parse(rawPi);
+                  if (Array.isArray(parsedPis)) {
+                    sourcePi = parsedPis.find(p => 
+                      (piNum && (p.piNo === piNum || p.id === piNum)) ||
+                      (p.convertedBomCode === quickPreviewRecord.bomCode) ||
+                      (p.convertedBomNo === quickPreviewRecord.bomCode) ||
+                      (Array.isArray(p.assignedBoms) && p.assignedBoms.includes(quickPreviewRecord.bomCode))
+                    );
+                  }
+                }
+              } catch (_) {}
+
+              // 2. Company Name & Customer Name resolution
+              const cleanVal = (v) => (v && typeof v === 'string' && v.trim() && !['—', '-', 'Customer', 'Customer Order'].includes(v.trim())) ? v.trim() : '';
+              
+              const resolvedCompany = [
+                cleanVal(quickPreviewRecord.companyName),
+                cleanVal(sourcePi?.vendor),
+                cleanVal(sourcePi?.companyName),
+                cleanVal(sourcePi?.customerName && !/^\d+$/.test(sourcePi.customerName) ? sourcePi.customerName : ''),
+                cleanVal(quickPreviewRecord.customerName && !/^\d+$/.test(quickPreviewRecord.customerName) ? quickPreviewRecord.customerName : ''),
+                cleanVal(quickPreviewRecord.c2),
+                cleanVal(quickPreviewRecord.c3 && !/^\d+$/.test(quickPreviewRecord.c3) ? quickPreviewRecord.c3 : '')
+              ].find(Boolean) || cleanVal(quickPreviewRecord.customerName) || 'Teorainn Solar Pvt Ltd';
+
+              const resolvedContact = [
+                cleanVal(quickPreviewRecord.contactPerson),
+                cleanVal(sourcePi?.contactPerson),
+                cleanVal(sourcePi?.customerName),
+                cleanVal(quickPreviewRecord.customerName)
+              ].find(s => s && s !== resolvedCompany) || quickPreviewRecord.contactPerson || '—';
+
+              const phone = quickPreviewRecord.mobile || quickPreviewRecord.phone || sourcePi?.phone || sourcePi?.mobile || '—';
+              const email = quickPreviewRecord.email || sourcePi?.email || '';
+              const gstNo = quickPreviewRecord.gstNo || quickPreviewRecord.gstin || sourcePi?.gstNo || sourcePi?.gst || '—';
+
+              // Payment Terms
+              const paymentType = normalizePaymentTerm(
+                sourcePi?.paymentTerms || sourcePi?.paymentType || quickPreviewRecord.paymentType || quickPreviewRecord.paymentTerms || '100% Paid'
+              );
+
+              // Grand Total / Order Value
+              const numVal = (v) => {
+                const n = parseFloat(String(v || '').replace(/[^0-9.]/g, ''));
+                return Number.isFinite(n) && n > 0 ? n : 0;
+              };
+              const calculatedItemTotal = (quickPreviewRecord.items || []).reduce((sum, it) => sum + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
+              const grandVal = numVal(quickPreviewRecord.grandTotal) 
+                || numVal(quickPreviewRecord.c5)
+                || numVal(sourcePi?.grandTotal)
+                || numVal(sourcePi?.amount)
+                || numVal(calculatedItemTotal)
+                || numVal(quickPreviewRecord.subTotal);
+
+              // Transporter & Logistics
+              const transporter = [
+                cleanVal(quickPreviewRecord.transporterName),
+                cleanVal(quickPreviewRecord.transporter),
+                cleanVal(sourcePi?.transporterName),
+                cleanVal(sourcePi?.transporter)
+              ].find(Boolean) || '—';
+
+              const transportMode = quickPreviewRecord.transportMode || sourcePi?.transportMode || 'Transport';
+              const transportScope = quickPreviewRecord.transportScope || sourcePi?.transportScope || 'VRM Structures';
+              const vehicleNo = quickPreviewRecord.vehicleNo || sourcePi?.vehicleNo || '—';
+              const lrNo = quickPreviewRecord.lrNo || sourcePi?.lrNo || '—';
+
+              // Addresses
+              const bObj = quickPreviewRecord.billingAddressObj || sourcePi?.billingAddressObj || {};
+              const dObj = quickPreviewRecord.deliveryAddressObj || sourcePi?.deliveryAddressObj || {};
+
+              const bStreet = quickPreviewRecord.billingStreet || bObj.street || bObj.address || sourcePi?.billingStreet || (typeof quickPreviewRecord.billingAddress === 'string' && !quickPreviewRecord.billingAddress.includes('on file') ? quickPreviewRecord.billingAddress : '') || (typeof sourcePi?.billingAddress === 'string' ? sourcePi.billingAddress : '');
+              const bCity = quickPreviewRecord.billingCity || bObj.city || sourcePi?.billingCity || '';
+              const bState = quickPreviewRecord.billingState || bObj.state || sourcePi?.billingState || '';
+              const bPin = quickPreviewRecord.billingPincode || bObj.pincode || bObj.pin || sourcePi?.billingPincode || '';
+
+              const isSameAddr = quickPreviewRecord.sameAsBilling !== false && (!dObj.address || dObj.address === bObj.address);
+              const dStreet = isSameAddr ? bStreet : (quickPreviewRecord.deliveryStreet || dObj.street || dObj.address || sourcePi?.deliveryStreet || (typeof quickPreviewRecord.deliveryAddress === 'string' && !quickPreviewRecord.deliveryAddress.includes('on file') ? quickPreviewRecord.deliveryAddress : '') || bStreet);
+              const dCity = isSameAddr ? bCity : (quickPreviewRecord.deliveryCity || dObj.city || sourcePi?.deliveryCity || bCity);
+              const dState = isSameAddr ? bState : (quickPreviewRecord.deliveryState || dObj.state || sourcePi?.deliveryState || bState);
+              const dPin = isSameAddr ? bPin : (quickPreviewRecord.deliveryPincode || dObj.pincode || dObj.pin || sourcePi?.deliveryPincode || bPin);
+
+              const addrDoc = quickPreviewRecord.deliveryAddressProofDoc || sourcePi?.deliveryAddressProofDoc || sourcePi?.deliveryProofDoc;
 
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#2563EB', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px' }}>
-                      <FileText size={12} /> Billing Address
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '4px' }}>
+                    <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#ECFEFF', color: '#0E7490', border: '2px solid #0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '800', flexShrink: 0 }}>
+                      {resolvedCompany.charAt(0).toUpperCase()}
                     </div>
-                    <div style={{ fontSize: '11.5px', color: '#334155', lineHeight: '1.4' }}>
-                      {bStr}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                      <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                        {resolvedCompany}
+                      </h3>
+                      <span style={{ fontSize: '12px', color: '#64748B' }}>
+                        Ref Code: <strong style={{ color: '#0E7490' }}>{quickPreviewRecord.bomCode || quickPreviewRecord.code}</strong>
+                      </span>
                     </div>
                   </div>
 
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#0E7490' }}>
-                        <Truck size={12} /> Delivery Address
-                      </span>
-                      {quickPreviewRecord.sameAsBilling && (
-                        <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>Same as Billing</span>
+                  {/* Order Meta Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>REF CODE</span>
+                      <strong style={{ fontSize: '14px', color: '#0F172A', fontWeight: '800' }}>{quickPreviewRecord.bomCode || quickPreviewRecord.code}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>STATUS</span>
+                      <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>{quickPreviewRecord.status}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>TOTAL ITEMS</span>
+                      <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: '800' }}>{(quickPreviewRecord.items || []).length || (sourcePi?.items || []).length || 1}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>ORDER VALUE</span>
+                      <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: '800' }}>
+                        {grandVal > 0 ? formatCurrency(grandVal) : (quickPreviewRecord.c5 || '—')}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Sales & Payment Terms Info */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', backgroundColor: '#FFFFFF', padding: '14px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block' }}>Sales Creator</span>
+                      <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
+                        👤 {(quickPreviewRecord.salesPerson || quickPreviewRecord.createdBy || sourcePi?.salesPerson || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block' }}>Payment Terms</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
+                          {paymentType}
+                        </strong>
+                        {(quickPreviewRecord.paymentProofDoc || quickPreviewRecord.payments?.proofDoc || sourcePi?.paymentProofDoc) && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDocModal({ title: 'Payment Proof Document', doc: quickPreviewRecord.paymentProofDoc || { name: quickPreviewRecord.payments?.proofDoc, dataUrl: quickPreviewRecord.payments?.proofDocData } || sourcePi?.paymentProofDoc })}
+                            style={{ border: '1px solid #BBF7D0', backgroundColor: '#F0FDF4', color: '#166534', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            <Eye size={10} /> Proof
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contact Details & GST */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>COMPANY NAME</span>
+                      <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700' }}>{resolvedCompany}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>CONTACT PERSON</span>
+                      <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700' }}>{resolvedContact}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>PHONE / EMAIL</span>
+                      <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '700', display: 'block' }}>{phone}</strong>
+                      {email && <span style={{ fontSize: '11px', color: '#64748B', wordBreak: 'break-all' }}>{email}</span>}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase' }}>GSTIN</span>
+                      <strong style={{ fontSize: '12px', color: '#0E7490', fontWeight: '800' }}>{gstNo}</strong>
+                    </div>
+                  </div>
+
+                  {/* Structured Billing & Delivery Addresses */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#2563EB', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px' }}>
+                        <FileText size={12} /> Billing Address
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#334155', lineHeight: '1.5' }}>
+                        <div>{bStreet || 'Billing address on file'}</div>
+                        {(bCity || bState) && <div>{[bCity, bState].filter(Boolean).join(', ')}</div>}
+                        {bPin && <div>PIN: <strong>{bPin}</strong></div>}
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#0E7490' }}>
+                          <Truck size={12} /> Delivery Address
+                        </span>
+                        {isSameAddr && (
+                          <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>Same as Billing</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#334155', lineHeight: '1.5' }}>
+                        <div>{dStreet || 'Delivery address on file'}</div>
+                        {(dCity || dState) && <div>{[dCity, dState].filter(Boolean).join(', ')}</div>}
+                        {dPin && <div>PIN: <strong>{dPin}</strong></div>}
+                      </div>
+                      {addrDoc && (
+                        <div style={{ marginTop: '4px', padding: '6px 8px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700' }}>
+                            📄 {addrDoc.name || 'Address Proof'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDocModal({ title: 'Delivery Address Proof Document', doc: addrDoc })}
+                            style={{ border: 'none', background: 'transparent', color: '#0E7490', cursor: 'pointer', fontSize: '10.5px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                          >
+                            <Eye size={11} /> View
+                          </button>
+                        </div>
                       )}
                     </div>
-                    <div style={{ fontSize: '11.5px', color: '#334155', lineHeight: '1.4' }}>
-                      {dStr}
-                    </div>
-                    {addrDoc && (
-                      <div style={{ marginTop: '4px', padding: '6px 8px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700' }}>
-                          📄 {addrDoc.name || 'Address Proof'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewDocModal({ title: 'Delivery Address Proof Document', doc: addrDoc })}
-                          style={{ border: 'none', background: 'transparent', color: '#0E7490', cursor: 'pointer', fontSize: '10.5px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
-                        >
-                          <Eye size={11} /> View
-                        </button>
-                      </div>
-                    )}
                   </div>
-                </div>
+
+                  {/* Logistics & Dispatch Information */}
+                  <div style={{ backgroundColor: '#FAFBFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>Logistics & Dispatch Information</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px', fontSize: '11.5px' }}>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Mode</span>
+                        <strong>{transportMode}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Scope</span>
+                        <strong style={{ color: transportScope === 'Customer Scope' ? '#0284C7' : '#0F172A' }}>{transportScope}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Transporter</span>
+                        <strong style={{ color: transporter !== '—' ? '#0E7490' : '#0F172A' }}>{transporter}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Vehicle No</span>
+                        <strong>{vehicleNo}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>LR / Docket</span>
+                        <strong>{lrNo}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </>
               );
             })()}
-
-            {/* Transport & Logistics Section if present */}
-            {(quickPreviewRecord.transportMode || quickPreviewRecord.transporterName || quickPreviewRecord.vehicleNo || quickPreviewRecord.lrNo || quickPreviewRecord.transportScope) && (
-              <div style={{ backgroundColor: '#FAFBFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>Logistics & Dispatch Information</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px', fontSize: '11.5px' }}>
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Mode</span>
-                    <strong>{quickPreviewRecord.transportMode || 'Transport'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Scope</span>
-                    <strong style={{ color: quickPreviewRecord.transportScope === 'Customer Scope' ? '#0284C7' : '#0F172A' }}>{quickPreviewRecord.transportScope || 'VRM Structures'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Transporter</span>
-                    <strong>{quickPreviewRecord.transporterName || '—'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Vehicle No</span>
-                    <strong>{quickPreviewRecord.vehicleNo || '—'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>LR / Docket</span>
-                    <strong>{quickPreviewRecord.lrNo || '—'}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Itemized List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
@@ -7944,7 +8049,7 @@ export default function BomOrdersView(props) {
               }}>
                 <strong>⚠️ Why are you cancelling this BOM?</strong>
                 <br />
-                The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || bomCancelPromptModal.createdBy || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
+                The Sales Person (<strong>{(bomCancelPromptModal.salesPerson || bomCancelPromptModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong>) who raised this order will be immediately notified with your reason, and reserved stock will be returned to raw inventory.
               </div>
 
               <div>

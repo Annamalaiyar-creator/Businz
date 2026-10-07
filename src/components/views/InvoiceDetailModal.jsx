@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Check, Eye, FileText, AlertCircle, X, CheckCircle, Clock,
+  Check, Eye, FileText, AlertCircle, AlertTriangle, X, CheckCircle, Clock,
   FileCheck, CheckSquare, XCircle, ChevronLeft, RotateCcw,
   Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode
 } from "lucide-react";
@@ -41,26 +41,34 @@ export default function InvoiceDetailModal({
   const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
   const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
   const [selectedProofVersionIdx, setSelectedProofVersionIdx] = useState(null);
-  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed;
-  const invNoText = isEditingInvoice
-    ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'))
-    : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || matchingBom?.invoiceNo || (isConfirmed ? (inv.code || 'INV-00012') : 'Pending Confirmation'));
-  const bomRefText = inv.poNo || inv.c3 || 'BOM-00007';
-  const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.c2 || 'ABC Industries') : (inv.vendor || inv.c2 || 'ABC Industries');
-  const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
-  const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || '100% Advance') : (inv.paymentType || '100% Advance');
-  const isFullAdvance = paymentTypeText === '100% Advance';
-  const is50Percent = paymentTypeText.includes('50%') || paymentTypeText === '50% Advance / 50% Dispatch';
+
+  const bomRefText = inv.poNo || inv.bomCode || inv.c3 || 'BOM-00007';
 
   // Look up matching BOM from bomStore to sync items & dispatch checkboxes
-  const matchingBom = bomStore.find(b =>
-    b.bomCode === inv.poNo ||
-    b.bomCode === inv.code ||
-    b.bomCode === inv.c3 ||
-    b.bomCode === bomRefText ||
-    (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
-    (b.bomCode && inv.invNo && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+  const matchingBom = (bomStore || []).find(b =>
+    b && (
+      b.bomCode === inv.poNo ||
+      b.bomCode === inv.code ||
+      b.bomCode === inv.c3 ||
+      b.bomCode === inv.invNo ||
+      b.bomCode === bomRefText ||
+      b.code === inv.poNo ||
+      b.code === bomRefText ||
+      (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
+      (b.bomCode && inv.invNo && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+    )
   );
+
+  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
+  const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'INV-000012'));
+  const invNoText = isEditingInvoice
+    ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'))
+    : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'));
+  const customerText = isEditingInvoice ? (invoiceEditForm.vendor || inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer') : (inv.vendor || inv.customerName || matchingBom?.customerName || inv.c2 || 'Customer');
+  const invDateText = isEditingInvoice ? (invoiceEditForm.date || inv.date || inv.c4 || '21 May 2025') : (inv.date || inv.c4 || '21 May 2025');
+  const paymentTypeText = isEditingInvoice ? (invoiceEditForm.paymentType || inv.paymentType || matchingBom?.paymentType || '100% Advance') : (inv.paymentType || matchingBom?.paymentType || '100% Advance');
+  const isFullAdvance = paymentTypeText === '100% Advance';
+  const is50Percent = paymentTypeText.includes('50%') || paymentTypeText === '50% Advance / 50% Dispatch';
 
   const handleAutoCancelForMissingProof = useCallback(() => {
     const nowIso = new Date().toISOString();
@@ -734,30 +742,78 @@ export default function InvoiceDetailModal({
                 // 5. Update Invoice status & persist to localStorage / cloud store
                 const unpackedItems = (itemsList || []).filter(it => it.selected === false);
                 const disclaimerClause = 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.';
+                const targetInvNumber = (invNoText && invNoText !== 'Pending Confirmation')
+                  ? invNoText
+                  : (inv.invNo && inv.invNo !== 'Pending Confirmation'
+                    ? inv.invNo
+                    : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation'
+                      ? matchingBom.invoiceNo
+                      : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'INV-000012')));
+
+                const confirmedInvRecord = {
+                  ...inv,
+                  id: inv.id || targetInvNumber,
+                  invNo: targetInvNumber,
+                  code: targetInvNumber,
+                  invoiceNo: targetInvNumber,
+                  invoiceNumber: targetInvNumber,
+                  poNo: bomRefText,
+                  bomCode: bomRefText,
+                  vendor: customerText,
+                  customerName: customerText,
+                  date: invDateText || new Date().toISOString().split('T')[0],
+                  invAmt: totalAmtRaw || inv.invAmt || (matchingBom ? (matchingBom.grandTotal || matchingBom.subTotal) : 0),
+                  status: 'Invoice Confirmed',
+                  match: 'Matched',
+                  pay: 'Completed & Locked',
+                  stockDeducted: true,
+                  stockDeductionDate: new Date().toISOString(),
+                  packedItemsDeducted: packedItemsToDeduct,
+                  unpackedItemsRemaining: unpackedItems,
+                  addressProofReuploadRequested: false,
+                  processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(inv.processedWithoutAddressProof),
+                  addressProofWaived: waiveProofDisclaimer ? true : Boolean(inv.addressProofWaived),
+                  disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : inv.disclaimerTerm,
+                  terms: waiveProofDisclaimer
+                    ? ((inv.terms ? inv.terms + '\n• ' : '') + disclaimerClause)
+                    : inv.terms,
+                  items: packedItemsToDeduct.length > 0 ? packedItemsToDeduct : (inv.items || matchingBom?.dispatchPacking || matchingBom?.items || [])
+                };
+
                 setInvoiceList(prev => {
-                  const updatedInvoices = prev.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
-                    ...item,
-                    status: 'Invoice Confirmed',
-                    match: 'Matched',
-                    pay: 'Completed & Locked',
-                    stockDeducted: true,
-                    stockDeductionDate: new Date().toISOString(),
-                    packedItemsDeducted: packedItemsToDeduct,
-                    unpackedItemsRemaining: unpackedItems,
-                    addressProofReuploadRequested: false,
-                    processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(item.processedWithoutAddressProof),
-                    addressProofWaived: waiveProofDisclaimer ? true : Boolean(item.addressProofWaived),
-                    disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : item.disclaimerTerm,
-                    terms: waiveProofDisclaimer
-                      ? ((item.terms ? item.terms + '\n• ' : '') + disclaimerClause)
-                      : item.terms
-                  } : item);
+                  const currentList = Array.isArray(prev) ? prev : [];
+                  const matchKey = (item) =>
+                    (item.invNo && item.invNo === targetInvNumber) ||
+                    (item.code && item.code === targetInvNumber) ||
+                    (item.id && item.id === confirmedInvRecord.id) ||
+                    (item.bomCode && item.bomCode === bomRefText) ||
+                    (item.poNo && item.poNo === bomRefText) ||
+                    (inv.invNo && item.invNo === inv.invNo) ||
+                    (inv.id && item.id === inv.id);
+
+                  const exists = currentList.some(matchKey);
+                  const updatedInvoices = exists
+                    ? currentList.map(item => matchKey(item) ? { ...item, ...confirmedInvRecord } : item)
+                    : [confirmedInvRecord, ...currentList];
+
                   try {
-                    const confirmedInv = updatedInvoices.find(item => (item.invNo === invNoText || item.code === invNoText || item.id === inv.id));
-                    if (confirmedInv) saveCloudInvoiceRow(confirmedInv);
+                    localStorage.setItem('controlroom_invoice_store', JSON.stringify(updatedInvoices.map(stripDataUrlsFromRecord)));
+                    saveCloudInvoiceRow(confirmedInvRecord);
                   } catch (e) { }
                   return updatedInvoices;
                 });
+
+                // Update viewing modal state directly
+                setViewingInvoiceModal(confirmedInvRecord);
+
+                // Broadcast local event matching existing listeners
+                try {
+                  window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
+                    detail: { invoice: confirmedInvRecord }
+                  }));
+                  window.dispatchEvent(new Event('controlroom_storage_update'));
+                  window.dispatchEvent(new Event('storage'));
+                } catch (_) {}
 
                 // 6. Update matching BOM status to 'Awaiting Vehicle Loading & Dispatch'
                 const targetBomCode = matchingBom?.bomCode || matchingBom?.code || inv.bomCode || inv.poNo || inv.code || bomRefText;
@@ -771,9 +827,9 @@ export default function InvoiceDetailModal({
                     (targetBomCode && (b.bomCode === targetBomCode || b.code === targetBomCode))
                   ) ? {
                     ...b,
-                    status: 'Awaiting Vehicle Loading & Dispatch',
+                    status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch',
                     invoiceConfirmed: true,
-                    invoiceNo: invNoText,
+                    invoiceNo: targetInvNumber,
                     stockDeducted: true,
                     stockDeductionDate: new Date().toISOString(),
                     packedItemsDeducted: packedItemsToDeduct,
@@ -804,7 +860,7 @@ export default function InvoiceDetailModal({
                   return updatedBoms;
                 });
 
-                // 7. Post Invoice to Zoho Books API (/api/zoho/invoices) - Dynamic support for Individual Products vs Preset Packages
+                // 7. Post Invoice to BUSINZ Native Catalog API (/api/invoices) - Dynamic support for Individual Products vs Preset Packages
                 const rawPresetGroups = matchingBom?.presetGroups || inv.presetGroups;
                 const presetGroupsList = Array.isArray(rawPresetGroups)
                   ? rawPresetGroups
@@ -816,7 +872,7 @@ export default function InvoiceDetailModal({
                   (inv.presetName && inv.presetName !== 'Solar Mounting Structure Kit')
                 );
 
-                let zohoItems = [];
+                let backendItems = [];
                 let totalAmt = 0;
                 let invoiceNotes = '';
 
@@ -831,7 +887,7 @@ export default function InvoiceDetailModal({
                       const setCount = parseFloat(grp.setCount) || 1;
                       const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
                       const gName = grp.presetName || grp.name || presetName;
-                      zohoItems.push({
+                      backendItems.push({
                         name: gName,
                         rate: unitPrice,
                         quantity: setCount,
@@ -845,7 +901,7 @@ export default function InvoiceDetailModal({
                     extraItems.forEach(it => {
                       const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
                       const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
-                      zohoItems.push({
+                      backendItems.push({
                         name: it.name || it.productName || 'Solar Structure Component',
                         rate: r,
                         quantity: q,
@@ -854,7 +910,7 @@ export default function InvoiceDetailModal({
                       });
                     });
                   } else {
-                    zohoItems.push({
+                    backendItems.push({
                       name: presetName,
                       rate: totalPresetPrice,
                       quantity: 1,
@@ -868,7 +924,7 @@ export default function InvoiceDetailModal({
                   const billedItems = (itemsList || []).filter(it => it.selected !== false);
                   const itemsToInclude = billedItems.length > 0 ? billedItems : (itemsList || []);
 
-                  zohoItems = itemsToInclude.map(it => {
+                  backendItems = itemsToInclude.map(it => {
                     const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
                     const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
                     return {
@@ -889,12 +945,12 @@ export default function InvoiceDetailModal({
                 }
 
                 try {
-                  fetch('/api/zoho/invoices', {
+                  fetch('/api/invoices', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      invNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
-                      invoiceNo: (invNoText && invNoText !== 'Pending Confirmation') ? invNoText : undefined,
+                      invNo: targetInvNumber,
+                      invoiceNo: targetInvNumber,
                       poNo: bomRefText,
                       bomCode: bomRefText,
                       vendor: customerText,
@@ -904,7 +960,7 @@ export default function InvoiceDetailModal({
                       isPreset: isPresetOrder,
                       presetName: isPresetOrder ? (matchingBom?.presetName || inv.presetName) : undefined,
                       presetGroups: isPresetOrder ? presetGroupsList : undefined,
-                      items: zohoItems,
+                      items: backendItems,
                       notes: invoiceNotes,
                       terms: waiveProofDisclaimer ? disclaimerClause : (inv.terms || undefined)
                     })
@@ -912,30 +968,44 @@ export default function InvoiceDetailModal({
                     .then(res => res.json())
                     .then(data => {
                       if (data && data.invoice) {
-                        const zohoInv = data.invoice;
-                        const finalConfirmedInvNo = zohoInv.invoice_number || zohoInv.invNo || invNoText;
-                        setInvoiceList(prev => (prev || []).map(item =>
-                          (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText)
-                            ? {
-                                ...item,
-                                invNo: finalConfirmedInvNo,
-                                code: finalConfirmedInvNo,
-                                invoiceNo: finalConfirmedInvNo,
-                                zohoId: zohoInv.zohoId || zohoInv.id,
-                                zohoInvoiceNumber: finalConfirmedInvNo,
-                                syncedToZoho: true
-                              }
-                            : item
-                        ));
-                        setBomStore(prev => (prev || []).map(b =>
-                          (b.bomCode === bomRefText || b.code === bomRefText)
-                            ? { ...b, invoiceNo: finalConfirmedInvNo }
-                            : b
-                        ));
+                        const createdInv = data.invoice;
+                        const finalConfirmedInvNo = createdInv.invoice_number || createdInv.invNo || targetInvNumber;
+                        setInvoiceList(prev => {
+                          const updated = (prev || []).map(item =>
+                            (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText || item.invNo === targetInvNumber)
+                              ? {
+                                  ...item,
+                                  invNo: finalConfirmedInvNo,
+                                  code: finalConfirmedInvNo,
+                                  invoiceNo: finalConfirmedInvNo,
+                                  id: createdInv.id || item.id,
+                                  invoiceNumber: finalConfirmedInvNo,
+                                  status: 'Invoice Confirmed',
+                                  pay: 'Completed & Locked',
+                                  synced: true
+                                }
+                              : item
+                          );
+                          try {
+                            localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+                          } catch (_) {}
+                          return updated;
+                        });
+                        setBomStore(prev => {
+                          const updated = (prev || []).map(b =>
+                            (b.bomCode === bomRefText || b.code === bomRefText)
+                              ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
+                              : b
+                          );
+                          try {
+                            localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+                          } catch (_) {}
+                          return updated;
+                        });
                       }
                     })
-                    .catch(err => console.warn('Zoho invoice sync notice:', err));
-                } catch (e) { console.error('Zoho invoice fetch trigger error:', e); }
+                    .catch(err => console.warn('Invoice sync notice:', err));
+                } catch (e) { console.error('Invoice fetch trigger error:', e); }
 
                 // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch
                 try {
@@ -1036,7 +1106,7 @@ export default function InvoiceDetailModal({
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Sales Person</div>
-              <strong style={{ color: '#0E7490' }}>👤 {((inv.salesPerson || matchingBom?.salesPerson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV')).replace(/\s*\([^)]*\)/g, '').trim()}</strong>
+              <strong style={{ color: '#0E7490' }}>👤 {((inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong>
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Due Date</div>

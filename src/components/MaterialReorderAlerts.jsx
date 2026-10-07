@@ -8,95 +8,20 @@ export default function MaterialReorderAlerts({ items = [], isLoading = false })
     return reorder > 0 && stock <= reorder;
   });
 
-  const defaultAlerts = [
-    {
-      id: 1,
-      item: 'Alu. Rail 100 mm',
-      code: 'Req: 12,500 Nos | Avail: 8,200 Nos',
-      currentStock: '8,200 Nos',
-      reorderLevel: '12,500 Nos',
-      eta: 'Shortage: 4,300 Nos (High)',
-      supplier: 'AKEYEM SONS',
-      etaColor: '#ef4444',
-      tags: [
-        { label: 'SHORTAGE: 4,300 NOS', color: '#dc2626', bg: '#fef2f2', border: '#fee2e2' },
-        { label: 'HIGH PRIORITY', color: '#ea580c', bg: '#fff7ed', border: '#ffedd5' }
-      ]
-    },
-    {
-      id: 2,
-      item: 'Alu. Rail 60 mm',
-      code: 'Req: 7,800 Nos | Avail: 5,100 Nos',
-      currentStock: '5,100 Nos',
-      reorderLevel: '7,800 Nos',
-      eta: 'Shortage: 2,700 Nos (High)',
-      supplier: 'ARUMUGA STEEL',
-      etaColor: '#ef4444',
-      tags: [
-        { label: 'SHORTAGE: 2,700 NOS', color: '#dc2626', bg: '#fef2f2', border: '#fee2e2' },
-        { label: 'HIGH PRIORITY', color: '#ea580c', bg: '#fff7ed', border: '#ffedd5' }
-      ]
-    },
-    {
-      id: 3,
-      item: 'Mid Clamp 35 mm',
-      code: 'Req: 18,000 Nos | Avail: 14,800 Nos',
-      currentStock: '14,800 Nos',
-      reorderLevel: '18,000 Nos',
-      eta: 'Shortage: 3,200 Nos (Medium)',
-      supplier: 'VAIBOV POLES',
-      etaColor: '#eab308',
-      tags: [
-        { label: 'SHORTAGE: 3,200 NOS', color: '#d97706', bg: '#fffbeb', border: '#fef3c7' },
-        { label: 'MEDIUM PRIORITY', color: '#ca8a04', bg: '#fef9c3', border: '#fef08a' }
-      ]
-    },
-    {
-      id: 4,
-      item: 'T Nut M10',
-      code: 'Req: 25,000 Nos | Avail: 21,600 Nos',
-      currentStock: '21,600 Nos',
-      reorderLevel: '25,000 Nos',
-      eta: 'Shortage: 3,400 Nos (Medium)',
-      supplier: 'KPR Mill',
-      etaColor: '#eab308',
-      tags: [
-        { label: 'SHORTAGE: 3,400 NOS', color: '#d97706', bg: '#fffbeb', border: '#fef3c7' },
-        { label: 'MEDIUM PRIORITY', color: '#ca8a04', bg: '#fef9c3', border: '#fef08a' }
-      ]
-    },
-    {
-      id: 5,
-      item: 'HDG Pipe 50 NB',
-      code: 'Req: 15,000 Kg | Avail: 10,900 Kg',
-      currentStock: '10,900 Kg',
-      reorderLevel: '15,000 Kg',
-      eta: 'Shortage: 4,100 Kg (High)',
-      supplier: 'SHREE GANESH TRADERS',
-      etaColor: '#ef4444',
-      tags: [
-        { label: 'SHORTAGE: 4,100 KG', color: '#dc2626', bg: '#fef2f2', border: '#fee2e2' },
-        { label: 'HIGH PRIORITY', color: '#ea580c', bg: '#fff7ed', border: '#ffedd5' }
-      ]
-    }
-  ];
-
-  const alerts = lowStockItems.length > 0 
-    ? lowStockItems.map((item, idx) => ({
-        id: idx + 1,
-        item: item.name,
-        code: `Alert: #${item.sku || item.itemId}`,
-        currentStock: `${item.stockOnHand || 0} ${item.unit || 'nos'}`,
-        reorderLevel: `${item.reorderLevel || 0} ${item.unit || 'nos'}`,
-        eta: '3 Days (Medium)',
-        supplier: 'Zoho Sync',
-        etaColor: '#eab308',
-        tags: [
-          { label: 'LOW STOCK', color: '#d97706', bg: '#fffbeb', border: '#fef3c7' },
-          { label: (item.productType || 'Goods').toUpperCase(), color: '#2563eb', bg: '#eff6ff', border: '#dbeafe' }
-        ]
-      }))
-    : defaultAlerts;
+  const alerts = lowStockItems.map((item, idx) => ({
+    id: idx + 1,
+    item: item.name,
+    code: `Alert: #${item.sku || item.itemId || item.code}`,
+    currentStock: `${item.stockOnHand || item.stock || 0} ${item.unit || 'nos'}`,
+    reorderLevel: `${item.reorderLevel || item.minLevel || 0} ${item.unit || 'nos'}`,
+    eta: 'Reorder Needed',
+    supplier: 'Central Inventory',
+    etaColor: '#eab308',
+    tags: [
+      { label: 'LOW STOCK', color: '#d97706', bg: '#fffbeb', border: '#fef3c7' },
+      { label: (item.productType || 'Goods').toUpperCase(), color: '#2563eb', bg: '#eff6ff', border: '#dbeafe' }
+    ]
+  }));
 
   return (
     <div 
@@ -173,6 +98,25 @@ export default function MaterialReorderAlerts({ items = [], isLoading = false })
               </div>
             </div>
           ))
+        ) : alerts.length === 0 ? (
+          <div style={{
+            gridColumn: '1 / -1',
+            padding: '28px 16px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '12px',
+            border: '1px dashed #CBD5E1',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#DCFCE7', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+              ✓
+            </div>
+            <span style={{ fontSize: '13px', fontWeight: '700', color: '#1E293B' }}>All Stock Levels Healthy</span>
+            <span style={{ fontSize: '12px', color: '#64748B' }}>Zero materials or items currently require reordering.</span>
+          </div>
         ) : (
           alerts.map((alert) => (
             <div 

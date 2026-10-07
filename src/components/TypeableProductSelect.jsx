@@ -118,12 +118,28 @@ export default function TypeableProductSelect({
 
   // Resolved active items list with fallback to full products catalog
   const activeItemsList = useMemo(() => {
-    if (Array.isArray(itemsList) && itemsList.length > 0) return itemsList;
-    try {
-      return getFullProductsCatalogWithStock();
-    } catch (_) {
-      return [];
+    let list = [];
+    if (Array.isArray(itemsList) && itemsList.length > 0) {
+      list = itemsList;
+    } else {
+      try {
+        list = getFullProductsCatalogWithStock();
+      } catch (_) {
+        list = [];
+      }
     }
+    try {
+      const delRaw = localStorage.getItem('controlroom_deleted_raw_materials');
+      const delCodes = delRaw ? JSON.parse(delRaw).map(c => String(c).toUpperCase().trim()) : [];
+      if (delCodes.length > 0) {
+        return list.filter(it => {
+          const c = String(it?.code || it?.sku || it?.itemId || it?.id || '').toUpperCase().trim();
+          const n = String(it?.name || '').toUpperCase().trim();
+          return !delCodes.includes(c) && !delCodes.includes(n);
+        });
+      }
+    } catch (_) {}
+    return list;
   }, [itemsList]);
 
   // Filter items based on query
