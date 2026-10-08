@@ -150,16 +150,12 @@ const loadDatabaseCustomers = async () => {
     console.warn('[loadDatabaseCustomers] Supabase fetch notice:', err?.message || err);
   }
 
-  // Fallback to disk JSON
-  try {
-    const diskPath = path.resolve(__dirname, 'customer_store.json');
-    if (fs.existsSync(diskPath)) {
-      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
-      supabaseMemoryStore.customer_store = diskData;
-      supabaseMemoryStore.crm_customers = diskData;
-      return diskData;
-    }
-  } catch (_) {}
+  // Fallback to local and auto-extracted customers
+  const localList = loadLocalCustomers();
+  if (localList && localList.length > 0) {
+    saveLocalCustomers(localList).catch(() => {});
+    return localList;
+  }
 
   return supabaseMemoryStore.customer_store || [];
 };
@@ -168,28 +164,183 @@ const loadLocalCustomers = () => {
   if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
     return supabaseMemoryStore.customer_store;
   }
+  const custMap = new Map();
+  const register = (c) => {
+    if (!c || typeof c !== 'object') return;
+    const name = (c.companyName || c.c2 || c.name || c.customerName || c.code || '').trim();
+    if (!name || name === 'Customer Order' || name === 'Customer' || name === 'New Customer') return;
+    const k = name.toLowerCase();
+    const idKey = (c.customerCode || c.id || '').toLowerCase().trim();
+    const existing = custMap.get(k) || (idKey ? custMap.get(idKey) : null) || {};
+    const merged = {
+      ...existing,
+      ...c,
+      id: c.customerCode || c.id || existing.id || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      customerCode: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      code: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      companyName: name,
+      c2: name,
+      customerName: c.customerName || existing.customerName || name,
+      c3: c.customerName || existing.customerName || name,
+      customerType: c.customerType || existing.customerType || 'EPC Contractor',
+      industry: c.industry || existing.industry || 'Solar Energy / Infrastructure',
+      gstNumber: c.gstNumber || c.gstNo || existing.gstNumber || '—',
+      gstNo: c.gstNumber || c.gstNo || existing.gstNo || '—',
+      panNumber: c.panNumber || existing.panNumber || '—',
+      address: c.billingAddress || c.address || existing.address || '',
+      c6: c.billingAddress || c.address || existing.address || '',
+      city: c.city || existing.city || '',
+      state: c.state || existing.state || '',
+      pincode: c.pincode || existing.pincode || '',
+      billingAddressObj: c.billingAddressObj || existing.billingAddressObj || {},
+      dispatchAddress: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || '',
+      deliveryAddress: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || '',
+      c7: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || '',
+      dispatchCity: c.dispatchCity || existing.dispatchCity || '',
+      dispatchState: c.dispatchState || existing.dispatchState || '',
+      dispatchPincode: c.dispatchPincode || existing.dispatchPincode || '',
+      deliveryAddressObj: c.deliveryAddressObj || existing.deliveryAddressObj || {},
+      sameAsBilling: c.sameAsBilling !== undefined ? c.sameAsBilling : true,
+      creditLimit: Number(c.creditLimit || existing.creditLimit || 2500000),
+      creditDays: Number(c.creditDays || existing.creditDays || 30),
+      paymentTerms: c.paymentTerms || existing.paymentTerms || 'Due on Receipt',
+      assignedSalesperson: c.assignedSalesperson || c.salesPerson || existing.assignedSalesperson || 'Sales Executive',
+      salesPerson: c.assignedSalesperson || c.salesPerson || existing.assignedSalesperson || 'Sales Executive',
+      c8: c.assignedSalesperson || c.salesPerson || existing.assignedSalesperson || 'Sales Executive',
+      source: c.source || existing.source || 'Direct Client',
+      primaryContact: c.primaryContact || existing.primaryContact || {
+        name: c.customerName || name,
+        phone: c.phone || '',
+        whatsapp: c.phone || '',
+        email: c.email || ''
+      },
+      phone: c.phone || existing.phone || '—',
+      c4: c.phone || existing.phone || '—',
+      email: c.email || existing.email || '—',
+      c5: c.email || existing.email || '—',
+      status: c.status || existing.status || 'ACTIVE',
+      createdAt: c.createdAt || existing.createdAt || new Date().toISOString()
+    };
+    custMap.set(k, merged);
+    if (idKey) custMap.set(idKey, merged);
+  };
+
   try {
     const p1 = getStoreFilePath('crm_customers.json');
     if (fs.existsSync(p1)) {
       const data = JSON.parse(fs.readFileSync(p1, 'utf8'));
-      if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore.customer_store = data;
-        supabaseMemoryStore.crm_customers = data;
-        return data;
-      }
+      if (Array.isArray(data)) data.forEach(register);
     }
   } catch (_) {}
+
   try {
     const p2 = getStoreFilePath('customer_store.json');
     if (fs.existsSync(p2)) {
       const data = JSON.parse(fs.readFileSync(p2, 'utf8'));
-      if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore.customer_store = data;
-        return data;
-      }
+      if (Array.isArray(data)) data.forEach(register);
     }
   } catch (_) {}
-  return [];
+
+  // Auto-enrich with any customer referenced in PIs
+  const piSources = [];
+  try {
+    const p = getStoreFilePath('sales_pi_store.json');
+    if (fs.existsSync(p)) piSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
+  } catch (_) {}
+  try {
+    const p = getStoreFilePath('proforma_invoice_store.json');
+    if (fs.existsSync(p)) piSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
+  } catch (_) {}
+
+  piSources.forEach(pi => {
+    const comp = (pi.vendor || pi.customerName || pi.companyName || '').trim();
+    if (comp) {
+      register({
+        id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        companyName: comp,
+        customerName: pi.contactPerson || comp,
+        customerType: pi.customerType || 'EPC Contractor',
+        industry: 'Solar Energy / Infrastructure',
+        gstNumber: pi.gstNo || pi.gstNumber || '—',
+        panNumber: pi.panNumber || '—',
+        address: (typeof pi.billingAddress === 'string' ? pi.billingAddress : pi.billingAddress?.street) || '',
+        city: (typeof pi.billingAddress === 'object' ? pi.billingAddress.city : '') || '',
+        state: (typeof pi.billingAddress === 'object' ? pi.billingAddress.state : '') || '',
+        pincode: (typeof pi.billingAddress === 'object' ? pi.billingAddress.pincode : '') || '',
+        dispatchAddress: (typeof pi.deliveryAddress === 'string' ? pi.deliveryAddress : pi.deliveryAddress?.street) || '',
+        dispatchCity: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.city : '') || '',
+        dispatchState: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.state : '') || '',
+        dispatchPincode: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.pincode : '') || '',
+        sameAsBilling: pi.sameAsBilling !== undefined ? pi.sameAsBilling : true,
+        creditLimit: 2500000,
+        creditDays: Number(pi.creditDays || 30),
+        paymentTerms: pi.paymentTerms || 'Due on Receipt',
+        assignedSalesperson: pi.salesPerson || pi.salesperson || 'Sales Executive',
+        primaryContact: {
+          name: pi.contactPerson || comp,
+          phone: pi.phone || '',
+          whatsapp: pi.phone || '',
+          email: pi.email || ''
+        },
+        phone: pi.phone || '—',
+        email: pi.email || '—',
+        status: 'ACTIVE',
+        createdAt: pi.createdAt || new Date().toISOString()
+      });
+    }
+  });
+
+  // Auto-enrich with any customer referenced in BOMs
+  const bomSources = [];
+  try {
+    const p = getStoreFilePath('bom_store.json');
+    if (fs.existsSync(p)) bomSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
+  } catch (_) {}
+
+  bomSources.forEach(b => {
+    const comp = (b.customerName || b.companyName || '').trim();
+    if (comp) {
+      register({
+        id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        companyName: comp,
+        customerName: b.contactPerson || comp,
+        customerType: b.customerType || 'EPC Contractor',
+        industry: 'Solar Energy / Infrastructure',
+        gstNumber: b.gstNo || '—',
+        address: b.billingAddress || '',
+        dispatchAddress: b.deliveryAddress || '',
+        paymentTerms: b.paymentType || 'Due on Receipt',
+        assignedSalesperson: b.salesPerson || 'Sales Executive',
+        primaryContact: {
+          name: b.contactPerson || comp,
+          phone: b.mobile || '',
+          whatsapp: b.mobile || '',
+          email: b.email || ''
+        },
+        phone: b.mobile || '—',
+        email: b.email || '—',
+        status: 'ACTIVE',
+        createdAt: b.createdAt || new Date().toISOString()
+      });
+    }
+  });
+
+  // Deduplicate strictly by company name
+  const finalMap = new Map();
+  for (const val of custMap.values()) {
+    const k = (val.companyName || val.name || '').toLowerCase().trim();
+    if (k && !finalMap.has(k)) {
+      finalMap.set(k, val);
+    }
+  }
+  const result = Array.from(finalMap.values());
+  if (result.length > 0) {
+    supabaseMemoryStore.customer_store = result;
+    supabaseMemoryStore.crm_customers = result;
+  }
+  return result;
 };
 
 // Canonical Supabase Opportunities Data Layer (Zero leaves table egress)
@@ -2721,8 +2872,8 @@ app.post('/api/customers', async (req, res) => {
 
 // BUSINZ Native Customers endpoint (Native BUSINZ Store)
 app.get('/api/customers', async (req, res) => {
-  const localCustomers = loadLocalCustomers();
-  res.json(localCustomers);
+  const customers = await loadDatabaseCustomers();
+  res.json(customers && customers.length > 0 ? customers : loadLocalCustomers());
 });
 
 // BUSINZ Native Vendors endpoint (Native BUSINZ Store)
