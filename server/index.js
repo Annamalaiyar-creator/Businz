@@ -2329,6 +2329,31 @@ const saveLocalGRNs = (grns) => {
   saveDatabaseStore('grn_store', grns);
 };
 
+// Health & PostgreSQL Database Status Check
+app.get('/api/db-status', async (req, res) => {
+  try {
+    const isConn = isDbConnected();
+    const result = await query('SELECT current_database(), current_user, version(), NOW() as server_time;');
+    const storeCount = await query('SELECT count(*) as total_tables FROM public.controlroom_store;');
+    res.json({
+      status: 'online',
+      connected: true,
+      database: result.rows[0]?.current_database || 'unknown',
+      user: result.rows[0]?.current_user || 'unknown',
+      serverTime: result.rows[0]?.server_time,
+      storeTablesCount: Number(storeCount.rows[0]?.total_tables || 0),
+      isPoolActive: isConn
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      connected: false,
+      message: err.message,
+      isPoolActive: isDbConnected()
+    });
+  }
+});
+
 // ⚡ Real-Time Push Gateway (Server-Sent Events)
 // Enables sub-second instant updates across all 10+ users without page refresh
 app.get('/api/realtime-events', (req, res) => {
