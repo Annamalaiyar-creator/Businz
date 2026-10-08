@@ -609,6 +609,7 @@ const toConsumerBomServer = (row) => {
     dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
     packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      (String(row.status || '').toLowerCase().includes('packed') || String(row.status || '').toLowerCase().includes('awaiting vehicle loading') || String(row.status || '').toLowerCase().includes('invoice confirmed')) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
     ),
