@@ -14,6 +14,7 @@ import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
+import { getNextSequence } from '../../utils/sequenceGenerator';
 
 const QUOTATION_TERMS_PRESETS = [
   {
@@ -744,8 +745,16 @@ export default function CrmQuotationsView({
 
   // Open Create BOM-style Quote
   const handleOpenCreateForm = () => {
-    const nextCode = `QT-2026-${String(10 + quotations.length + 1)}`;
+    const nextCode = getNextSequence('QT', quotations || []).code;
     setQuoteCode(nextCode);
+    fetch('/api/next-quotation-number')
+      .then(r => r.json())
+      .then(d => {
+        if (d && (d.nextQuoteNo || d.nextQuotationNumber)) {
+          setQuoteCode(d.nextQuoteNo || d.nextQuotationNumber);
+        }
+      })
+      .catch(() => {});
     setQuoteDate(new Date().toISOString().split('T')[0]);
     setValidUntilDate(new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
     setDeliveryDate(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
@@ -991,10 +1000,22 @@ export default function CrmQuotationsView({
   const handleConvertToPI = async (quote) => {
     if (!quote) return;
 
-    // 1. Generate Next Sales PI Number
-    const existingPIs = await fetchCloudStore('sales_pi_store', []);
-    const nextPiIndex = (Array.isArray(existingPIs) ? existingPIs.length : 0) + 101;
-    const piNumber = `SPI-2026-${nextPiIndex}`;
+    // 1. Generate Next Sales PI Number (VRM-PI-[YYYY]-[SEQ])
+    let piNumber = '';
+    try {
+      const res = await fetch('/api/next-pi-number');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextPiNo || data.nextEstimateNo) {
+          piNumber = data.nextPiNo || data.nextEstimateNo;
+        }
+      }
+    } catch (_) {}
+
+    if (!piNumber) {
+      const existingPIs = await fetchCloudStore('sales_pi_store', []);
+      piNumber = getNextSequence('PI', existingPIs || []).code;
+    }
 
     // 2. Prepare items and amounts
     const cleanAmount = Number(quote.grandTotal || quote.totalAmount || quote.numericTotal || 0);

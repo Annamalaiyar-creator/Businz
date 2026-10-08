@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient.js';
+import { getFinancialYear, formatSequenceCode, extractMaxSequence } from './sequenceGenerator.js';
 
 // Canonical column projection for BOM list/table queries (includes accounts_verification JSON for full metadata & extra data retention)
 export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
@@ -1940,20 +1941,21 @@ export async function getAndReserveNextBomCode(commit = true) {
     if (apiRes && apiRes.ok) {
       const data = await apiRes.json().catch(() => null);
       const resolved = data?.nextBomCode || data?.nextCode;
-      if (resolved && /^BOM-\d+$/i.test(resolved)) {
+      if (resolved && (/^VRM-BOM-\d{4}-\d+$/i.test(resolved) || /^BOM-\d+$/i.test(resolved))) {
         return resolved;
       }
     }
   } catch (_) {}
 
-  let highestNum = 663;
+  const fy = getFinancialYear();
+  let maxFoundSeq = 0;
 
   try {
     // High-speed single-row query for sequence counter (50ms)
     const seqRes = await supabase
       .from('leaves')
       .select('id, reason, duration')
-      .eq('employee', 'BOM_SEQUENCE')
+      .eq('employee', `BOM_SEQUENCE_${fy}`)
       .order('id', { ascending: false })
       .limit(1);
 
@@ -1975,42 +1977,20 @@ export async function getAndReserveNextBomCode(commit = true) {
       }
     }
 
-    // Instant local cache inspection (0ms) to ensure no collisions with locally cached BOMs
-    let storeMax = 0;
+    let allLocalRecords = [];
     try {
       const savedStr = localStorage.getItem('controlroom_bom_store');
       if (savedStr) {
         const list = JSON.parse(savedStr);
-        if (Array.isArray(list)) {
-          list.forEach(b => {
-            const raw = String(b.bomCode || b.code || b.id || '');
-            const match = raw.match(/BOM-(\d+)/i);
-            if (match) {
-              const parsed = parseInt(match[1], 10);
-              if (Number.isFinite(parsed) && parsed > storeMax) storeMax = parsed;
-            }
-          });
-        }
+        if (Array.isArray(list)) allLocalRecords.push(...list);
       }
-
-      // Also inspect sales PI store in localStorage
       const piSavedStr = localStorage.getItem('controlroom_sales_pi_store');
       if (piSavedStr) {
         const piList = JSON.parse(piSavedStr);
-        if (Array.isArray(piList)) {
-          piList.forEach(p => {
-            const raw = String(p?.convertedBomCode || p?.convertedBomNo || '');
-            const match = raw.match(/BOM-(\d+)/i);
-            if (match) {
-              const parsed = parseInt(match[1], 10);
-              if (Number.isFinite(parsed) && parsed > storeMax) storeMax = parsed;
-            }
-          });
-        }
+        if (Array.isArray(piList)) allLocalRecords.push(...piList);
       }
     } catch (_) {}
 
-    // High-speed query directly to canonical public.bom_orders (prevents sequence drift)
     try {
       const { data: dbBoms } = await supabase
         .from('bom_orders')
@@ -2018,26 +1998,18 @@ export async function getAndReserveNextBomCode(commit = true) {
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (Array.isArray(dbBoms)) {
-        dbBoms.forEach(b => {
-          const raw = String(b.bom_code || b.id || '');
-          const match = raw.match(/BOM-(\d+)/i);
-          if (match) {
-            const parsed = parseInt(match[1], 10);
-            if (Number.isFinite(parsed) && parsed > storeMax) storeMax = parsed;
-          }
-        });
-      }
+      if (Array.isArray(dbBoms)) allLocalRecords.push(...dbBoms);
     } catch (_) {}
 
+    const storeMax = extractMaxSequence('BOM', fy, allLocalRecords);
     const safeSeq = Number.isFinite(seqCounter) && seqCounter > 0 ? seqCounter : 0;
-    const safeStore = Number.isFinite(storeMax) && storeMax > 0 ? storeMax : 0;
-    highestNum = Math.max(safeSeq, safeStore, 663);
-    const nextNum = highestNum + 1;
-    const formattedCode = `BOM-${String(nextNum).padStart(3, '0')}`;
+    maxFoundSeq = Math.max(safeSeq, storeMax);
+    const nextNum = maxFoundSeq + 1;
+    const formattedCode = formatSequenceCode('BOM', nextNum);
 
     if (commit) {
       const seqPayload = JSON.stringify({
+        fy,
         lastNumber: nextNum,
         updatedAt: new Date().toISOString(),
         reservedBy: 'Sales Rep'
@@ -2057,7 +2029,7 @@ export async function getAndReserveNextBomCode(commit = true) {
         await supabase
           .from('leaves')
           .insert({
-            employee: 'BOM_SEQUENCE',
+            employee: `BOM_SEQUENCE_${fy}`,
             reason: seqPayload,
             dates: new Date().toISOString(),
             status: 'active',
@@ -2070,7 +2042,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     return formattedCode;
   } catch (err) {
     console.error('Error reserving next BOM code from Supabase:', err);
-    return `BOM-${String(highestNum + 1).padStart(3, '0')}`;
+    return formatSequenceCode('BOM', maxFoundSeq + 1);
   }
 }
 

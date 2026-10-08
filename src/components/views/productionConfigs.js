@@ -32,9 +32,9 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             .filter(isInvoiceEligibleBom)
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
-              const cleanNum = bCode.replace(/[^0-9]/g, '') || '101';
+              const cleanNum = (bCode.match(/(\d+)$/)?.[1] || '01');
               const isConf = b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed || Boolean(b.invoiceNo && b.invoiceNo !== 'Pending Confirmation');
-              const invNo = (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') ? b.invoiceNo : (isConf ? (b.invoiceNo || `INV-2026-${cleanNum}`) : 'Pending Confirmation');
+              const invNo = (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') ? b.invoiceNo : (isConf ? (b.invoiceNo || `VRM-INV-2026-${cleanNum}`) : 'Pending Confirmation');
               const s = String(b.status || '').toLowerCase();
               const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
 
@@ -116,7 +116,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
           const findMatchingBom = (inv) => {
             if (!inv) return null;
             const directRef = (inv.poNo || inv.bomCode || inv.c3 || '').toLowerCase().trim();
-            const fromNotes = (inv.notes || '').match(/BOM-[0-9]+/i)?.[0]?.toLowerCase() || '';
+            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
             return (bomStore || []).find(b => {
               const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
               const soNo = (b.salesOrderNo || '').toLowerCase().trim();
@@ -134,7 +134,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             return true;
           }).map(inv => {
             const matchingBom = findMatchingBom(inv);
-            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/BOM-[0-9]+/i)?.[0] || '';
+            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
             const isConf = (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed)) ||
               inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.pay === 'Completed & Locked' ||
               Boolean(inv.invNo && inv.invNo !== 'Pending Confirmation') ||
@@ -299,6 +299,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
 
               const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort((a, b) => {
                 const parseBomSeq = (code) => {
+                  const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                  if (vrm) return parseInt(vrm[1], 10);
                   const m = String(code || '').match(/BOM-(\d+)/i);
                   return m ? parseInt(m[1], 10) : 0;
                 };
@@ -501,6 +503,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
                 rows: (bomStore || []).filter(Boolean).sort((a, b) => {
                   const parseBomSeq = (code) => {
+                    const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                    if (vrm) return parseInt(vrm[1], 10);
                     const m = String(code || '').match(/BOM-(\d+)/i);
                     return m ? parseInt(m[1], 10) : 0;
                   };

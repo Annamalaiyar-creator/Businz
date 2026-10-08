@@ -14,6 +14,7 @@ import { getFullProductsCatalogWithStock } from "../../utils/productCatalogServi
 import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
+import { getNextSequence } from "../../utils/sequenceGenerator";
 
 export default function CreateBomFormPage(props) {
   const {
@@ -1943,17 +1944,12 @@ export default function CreateBomFormPage(props) {
                     if (!isDraft) {
                       try {
                         const reserved = await getAndReserveNextBomCode(true);
-                        if (reserved && /^BOM-\d+$/i.test(reserved)) {
+                        if (reserved && (/^VRM-BOM-\d{4}-\d+$/i.test(reserved) || /^BOM-\d+$/i.test(reserved))) {
                           finalAssignedCode = reserved;
                         }
                       } catch (err) {
                         console.error('Error reserving atomic BOM code:', err);
-                        const existingNums = (props.bomStore || []).map(b => {
-                          const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
-                          return match ? parseInt(match[1], 10) : 0;
-                        }).filter(n => Number.isFinite(n) && n > 0);
-                        const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
-                        finalAssignedCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
+                        finalAssignedCode = getNextSequence('BOM', props.bomStore || []).code;
                       }
                     }
                     sanitizedNewBom.bomCode = finalAssignedCode;

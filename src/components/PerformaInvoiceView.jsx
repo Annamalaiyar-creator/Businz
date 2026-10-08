@@ -13,6 +13,7 @@ import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
+import { getNextSequence } from '../utils/sequenceGenerator';
 
 const defaultSalesPIs = [];
 
@@ -1486,19 +1487,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const fetchNextPiNumber = async () => {
-    const existingNums = (piList || []).map(p => {
-      const vrmMatch = String(p.piNo || p.id || '').match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || String(p.piNo || p.id || '').match(/\/(\d{3,6})$/);
-      if (vrmMatch) return parseInt(vrmMatch[1], 10);
-      const match = String(p.piNo || p.id || '').match(/PI-(\d+)/i);
-      return match ? parseInt(match[1], 10) : 0;
-    }).filter(n => Number.isFinite(n) && n > 0);
-    const localMax = existingNums.length > 0 ? Math.max(0, ...existingNums) : 0;
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth() + 1;
-    const fyStart = curMonth >= 4 ? curYear : curYear - 1;
-    const fyStr = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
-    const fallback = localMax >= 1000 ? `VRMS/PI/${fyStr}/${localMax + 1}` : `PI-${String(localMax + 1).padStart(5, '0')}`;
+    const fallback = getNextSequence('PI', piList || []).code;
 
     try {
       const controller = new AbortController();
@@ -1507,9 +1496,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.nextPiNo) {
-          setPiNumber(data.nextPiNo);
-          return data.nextPiNo;
+        if (data && (data.nextPiNo || data.nextEstimateNo)) {
+          const val = data.nextPiNo || data.nextEstimateNo;
+          setPiNumber(val);
+          return val;
         }
       }
     } catch (e) {

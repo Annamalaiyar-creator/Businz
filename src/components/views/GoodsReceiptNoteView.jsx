@@ -16,6 +16,7 @@ import ModernDateRangePicker from '../ModernDateRangePicker';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
+import { getNextSequence } from '../../utils/sequenceGenerator';
 
 
 
@@ -915,7 +916,7 @@ export default function GoodsReceiptNoteView(props) {
     const curRem = Math.max(0, curOrd - curRec);
     const isFull = (curOrd > 0 && curRec >= curOrd);
 
-    const grnGeneratedId = `GRN-2026-${String(Date.now()).slice(-5)}`;
+    const grnGeneratedId = getNextSequence('GRN', poReceivingHistory || []).code;
     const docsToAttach = grnDocs || [];
 
     const newGRNRecord = {
@@ -1106,7 +1107,7 @@ export default function GoodsReceiptNoteView(props) {
       forceClosePO: true
     };
 
-    const grnGeneratedId = `GRN-2026-${String(Date.now()).slice(-5)}`;
+    const grnGeneratedId = getNextSequence('GRN', poReceivingHistory || []).code;
     const newGRNRecord = {
       id: grnGeneratedId,
       grnNo: grnGeneratedId,

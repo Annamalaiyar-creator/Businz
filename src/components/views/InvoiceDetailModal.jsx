@@ -55,12 +55,12 @@ export default function InvoiceDetailModal({
       b.code === inv.poNo ||
       b.code === bomRefText ||
       (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
-      (b.bomCode && inv.invNo && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+      (b.bomCode && inv.invNo && (inv.invNo.endsWith(b.bomCode.replace('BOM-', '')) || inv.invNo.endsWith(b.bomCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
     )
   );
 
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
-  const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'INV-000012'));
+  const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'VRM-INV-2026-01'));
   const invNoText = isEditingInvoice
     ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'))
     : (inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'));
@@ -108,7 +108,7 @@ export default function InvoiceDetailModal({
         b.bomCode === targetCode ||
         b.salesOrderNo === targetCode ||
         b.code === targetCode ||
-        (inv.invNo && b.bomCode && inv.invNo.endsWith(b.bomCode.replace('BOM-', '')))
+        (inv.invNo && b.bomCode && (inv.invNo.endsWith(b.bomCode.replace('BOM-', '')) || inv.invNo.endsWith(b.bomCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
       ) ? {
         ...b,
         status: 'Invoice Cancelled',
@@ -748,7 +748,7 @@ export default function InvoiceDetailModal({
                     ? inv.invNo
                     : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation'
                       ? matchingBom.invoiceNo
-                      : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'INV-000012')));
+                      : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'VRM-INV-2026-01')));
 
                 const confirmedInvRecord = {
                   ...inv,

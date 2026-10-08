@@ -266,7 +266,7 @@ export default function AccountsVerificationModal({
         }
       } catch (_) {}
     }
-    if (!finalInvNo) finalInvNo = 'INV-000012';
+    if (!finalInvNo) finalInvNo = 'VRM-INV-2026-01';
 
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     const verifiedBOM = accountsVerificationModal;

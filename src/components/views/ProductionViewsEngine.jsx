@@ -264,6 +264,8 @@ export default function ProductionViewsEngine(props) {
               });
 
               const parseBomSeq = (code) => {
+                const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                if (vrm) return parseInt(vrm[1], 10);
                 const m = String(code || '').match(/BOM-(\d+)/i);
                 return m ? parseInt(m[1], 10) : 0;
               };
@@ -826,7 +828,7 @@ export default function ProductionViewsEngine(props) {
       if (!Array.isArray(list)) return [];
       const map = new Map();
       list.forEach(inv => {
-        const bRef = (inv.bomCode || inv.poNo || (inv.notes || '').match(/BOM-[0-9]+/i)?.[0] || '').toUpperCase().trim();
+        const bRef = (inv.bomCode || inv.poNo || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '').toUpperCase().trim();
         const invNum = (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo.toUpperCase().trim() : '';
         const key = invNum || (bRef ? `BOM_${bRef}` : (inv.id || JSON.stringify(inv)));
         if (!map.has(key)) {
@@ -861,13 +863,13 @@ export default function ProductionViewsEngine(props) {
           setInvoiceList(prev => {
             const map = new Map();
             data.forEach(i => {
-              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/BOM-[0-9]+/i)?.[0] || '').toUpperCase().trim();
+              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '').toUpperCase().trim();
               const invNum = (i.invNo && i.invNo !== 'Pending Confirmation') ? i.invNo.toUpperCase().trim() : '';
               const key = invNum || (bRef ? `BOM_${bRef}` : (i.id || JSON.stringify(i)));
               map.set(key, i);
             });
             (prev || []).forEach(i => {
-              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/BOM-[0-9]+/i)?.[0] || '').toUpperCase().trim();
+              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '').toUpperCase().trim();
               const invNum = (i.invNo && i.invNo !== 'Pending Confirmation') ? i.invNo.toUpperCase().trim() : '';
               const key = invNum || (bRef ? `BOM_${bRef}` : (i.id || JSON.stringify(i)));
               if (!map.has(key)) {

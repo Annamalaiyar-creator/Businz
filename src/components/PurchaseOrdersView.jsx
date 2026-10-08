@@ -5,6 +5,7 @@ import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../s
 import StatusBadge from './StatusBadge';
 import NotificationToast from './NotificationToast';
 import ModernDateRangePicker from './ModernDateRangePicker';
+import { getNextSequence } from '../utils/sequenceGenerator';
 
 const PRESET_MATERIALS = [
   { name: 'GI Steel Coil 2mm', account: 'Raw Material', unit: 'MT', rate: 45000, tax: 18 },
@@ -1525,12 +1526,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       const res = await fetch('/api/next-po-number');
       if (res.ok) {
         const data = await res.json();
-        if (data.nextPoNumber) {
-          setPoNumber(data.nextPoNumber);
+        if (data.nextPoNumber || data.nextPoNo) {
+          setPoNumber(data.nextPoNumber || data.nextPoNo);
         }
       }
     } catch (e) {
-      setPoNumber('PO-' + String(poList.length + 1).padStart(5, '0'));
+      setPoNumber(getNextPoNumber(poList));
     }
 
     setViewMode('create');
@@ -1560,8 +1561,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const nextRes = await fetch('/api/next-po-number');
           if (nextRes.ok) {
             const nextData = await nextRes.json();
-            if (nextData.nextPoNumber) {
-              setPoNumber(nextData.nextPoNumber);
+            if (nextData.nextPoNumber || nextData.nextPoNo) {
+              setPoNumber(nextData.nextPoNumber || nextData.nextPoNo);
             }
           }
         }
@@ -1573,20 +1574,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
   };
 
-  // Helper to calculate next PO number matching standard sequential format (PO-000XX)
+  // Helper to calculate next PO number matching standard sequential format (VRM-PO-[YYYY]-[SEQ])
   const getNextPoNumber = (list) => {
-    let maxNum = 43;
-    (list || []).forEach(p => {
-      const str = String(p.poNo || p.id || '');
-      const match = str.match(/^PO-(\d+)/i);
-      if (match) {
-        const val = parseInt(match[1], 10);
-        if (val > maxNum && val < 2000) {
-          maxNum = val;
-        }
-      }
-    });
-    return 'PO-' + String(maxNum + 1).padStart(5, '0');
+    return getNextSequence('PO', list || []).code;
   };
 
   // Triggers fresh form initialization
@@ -1596,8 +1586,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     fetch('/api/next-po-number')
       .then(res => res.json())
       .then(data => {
-        if (data && data.nextPoNo) {
-          setPoNumber(data.nextPoNo);
+        if (data && (data.nextPoNo || data.nextPoNumber)) {
+          setPoNumber(data.nextPoNo || data.nextPoNumber);
         }
       })
       .catch(() => { });

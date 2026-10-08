@@ -27,6 +27,12 @@ import {
   validateBusinzSession,
   validateBomCode
 } from './bomDocumentService.js';
+import {
+  getFinancialYear,
+  formatSequenceCode,
+  extractMaxSequence,
+  getNextSequence
+} from './sequenceService.js';
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -3364,76 +3370,93 @@ app.post('/api/purchaseorders', async (req, res) => {
     res.status(500).json({ error: 'Failed to create PO in BUSINZ: ' + err.message });
   }
 });
-// Returns next sequential PO number matching sequence (PO-000XX) from BUSINZ local stores
+// Returns next sequential PO number matching unified sequence VRM-PO-[YYYY]-[SEQ] (e.g. VRM-PO-2026-01)
 app.get('/api/next-po-number', async (req, res) => {
-  let maxNum = 43;
+  try {
+    const fy = getFinancialYear();
+    let records = [];
 
-  const localPOs = loadLocalPOs();
-  localPOs.forEach(p => {
-    const str = String(p.poNo || p.id || '');
-    const match = str.match(/^PO-(\d+)/i);
-    if (match) {
-      const val = parseInt(match[1], 10);
-      if (val > maxNum && val < 2000) {
-        maxNum = val;
-      }
+    // 1. Query PostgreSQL purchase_orders if connected
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query(`
+          SELECT po_no FROM public.purchase_orders
+          WHERE po_no ~ '^VRM-PO-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (dbRes?.rows) records.push(...dbRes.rows);
+      } catch (_) {}
     }
-  });
 
-  const nextPoNo = 'PO-' + String(maxNum + 1).padStart(5, '0');
-  res.json({ nextPoNo });
+    // 2. Scan local po_store.json
+    const localPOs = loadLocalPOs();
+    if (Array.isArray(localPOs)) records.push(...localPOs);
+
+    // 3. Scan memory store
+    if (supabaseMemoryStore.po_store && Array.isArray(supabaseMemoryStore.po_store)) {
+      records.push(...supabaseMemoryStore.po_store);
+    }
+
+    const { code, nextNum } = getNextSequence('PO', records);
+    res.json({
+      nextPoNo: code,
+      nextPoNumber: code,
+      nextNum,
+      financialYear: fy
+    });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextPoNo: `VRM-PO-${fy}-01`, nextPoNumber: `VRM-PO-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
 });
 
-// Returns next sequential Tax Invoice number matching sequence (INV-0000XX) from BUSINZ local stores
+// Returns next sequential Tax Invoice number matching unified sequence VRM-INV-[YYYY]-[SEQ] (e.g. VRM-INV-2026-01)
 app.get('/api/next-invoice-number', async (req, res) => {
-  let maxNum = 11;
-
-  // Also scan local invoice_store.json and in-memory store
   try {
+    const fy = getFinancialYear();
+    let records = [];
+
+    // 1. Query PostgreSQL invoices if available
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query(`
+          SELECT invoice_no FROM public.tax_invoices
+          WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (dbRes?.rows) records.push(...dbRes.rows);
+      } catch (_) {}
+    }
+
+    // 2. Scan local invoice_store.json
     const invStorePath = getStoreFilePath('invoice_store.json');
-    let localInvs = [];
     if (fs.existsSync(invStorePath)) {
-      localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+      try {
+        const localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+        if (Array.isArray(localInvs)) records.push(...localInvs);
+      } catch (_) {}
     }
     if (supabaseMemoryStore.invoice_store && Array.isArray(supabaseMemoryStore.invoice_store)) {
-      localInvs = [...localInvs, ...supabaseMemoryStore.invoice_store];
+      records.push(...supabaseMemoryStore.invoice_store);
     }
-    if (Array.isArray(localInvs)) {
-      localInvs.forEach(i => {
-        const str = String(i.invNo || i.invoiceNo || i.code || '');
-        const match = str.match(/^INV-(\d+)/i);
-        if (match) {
-          const val = parseInt(match[1], 10);
-          if (val > maxNum && val < 2000) {
-            maxNum = val;
-          }
-        }
-      });
-    }
-  } catch (_) {}
 
-  // Also scan bom_store.json for any BOM that already has an assigned invoiceNo
-  try {
+    // 3. Scan bom_store.json for any BOM that already has an assigned invoiceNo
     const bomStorePath = getStoreFilePath('bom_store.json');
     if (fs.existsSync(bomStorePath)) {
-      const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
-      if (Array.isArray(localBoms)) {
-        localBoms.forEach(b => {
-          const str = String(b.invoiceNo || '');
-          const match = str.match(/^INV-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 2000) {
-              maxNum = val;
-            }
-          }
-        });
-      }
+      try {
+        const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
+        if (Array.isArray(localBoms)) {
+          localBoms.forEach(b => {
+            if (b && b.invoiceNo) records.push({ invNo: b.invoiceNo });
+          });
+        }
+      } catch (_) {}
     }
-  } catch (_) {}
 
-  const nextInvNo = 'INV-' + String(maxNum + 1).padStart(6, '0');
-  res.json({ nextInvNo, nextNum: maxNum + 1 });
+    const { code, nextNum } = getNextSequence('INV', records);
+    res.json({ nextInvNo: code, nextInvoiceNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextInvNo: `VRM-INV-${fy}-01`, nextInvoiceNumber: `VRM-INV-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
 });
 
 let serverBomSequenceCounter = null;
@@ -3443,91 +3466,73 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
   return new Promise((resolve, reject) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let maxNum = 663;
+        const fy = getFinancialYear();
+        let records = [];
 
-        // 1. Authoritative: Query PostgreSQL directly for the absolute highest existing BOM sequence
+        // 1. Authoritative: Query PostgreSQL directly for VRM-BOM sequence in current FY
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_bom
-              FROM public.bom_orders
-              WHERE bom_code ~ '^BOM-[0-9]+$'
+              SELECT bom_code FROM public.bom_orders
+              WHERE bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
             `).catch(() => null);
-            const dbVal = parseInt(dbRes?.rows?.[0]?.max_bom, 10);
-            if (Number.isFinite(dbVal) && dbVal > maxNum) maxNum = dbVal;
+            if (dbRes?.rows) records.push(...dbRes.rows);
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_pi_bom
-              FROM public.proforma_invoices
-              WHERE converted_bom_code ~ '^BOM-[0-9]+$'
+              SELECT converted_bom_code FROM public.proforma_invoices
+              WHERE converted_bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
             `).catch(() => null);
-            const piVal = parseInt(piDbRes?.rows?.[0]?.max_pi_bom, 10);
-            if (Number.isFinite(piVal) && piVal > maxNum) maxNum = piVal;
+            if (piDbRes?.rows) records.push(...piDbRes.rows);
           } catch (dbErr) {
             console.warn('[getOrReserveNextBomAtomic PG check]:', dbErr.message);
           }
         }
 
         const filePath = getStoreFilePath('bom_store.json');
-        let allRecords = [];
         if (fs.existsSync(filePath)) {
           try {
-            allRecords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const fileBoms = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            if (Array.isArray(fileBoms)) records.push(...fileBoms);
           } catch (e) {}
         }
         if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store)) {
-          allRecords = [...allRecords, ...supabaseMemoryStore.bom_store];
+          records.push(...supabaseMemoryStore.bom_store);
         }
-
-        allRecords.forEach(b => {
-          const str = String(b?.bomCode || b?.code || b?.id || '');
-          const match = str.match(/^BOM-(\d+)$/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (Number.isFinite(val) && val > maxNum) maxNum = val;
-          }
-        });
 
         // Also check sales_pi_store on disk and in memory
         const piFilePath = getStoreFilePath('sales_pi_store.json');
-        let piRecords = [];
         if (fs.existsSync(piFilePath)) {
           try {
-            piRecords = JSON.parse(fs.readFileSync(piFilePath, 'utf8'));
+            const piRecords = JSON.parse(fs.readFileSync(piFilePath, 'utf8'));
+            if (Array.isArray(piRecords)) records.push(...piRecords);
           } catch (_) {}
         }
         if (Array.isArray(supabaseMemoryStore.sales_pi_store)) {
-          piRecords = [...piRecords, ...supabaseMemoryStore.sales_pi_store];
-        }
-        piRecords.forEach(pi => {
-          const codeStr = String(pi?.convertedBomCode || pi?.convertedBomNo || '');
-          const match = codeStr.match(/^BOM-(\d+)$/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (Number.isFinite(val) && val > maxNum) maxNum = val;
-          }
-        });
-
-        if (serverBomSequenceCounter !== null && serverBomSequenceCounter > maxNum) {
-          maxNum = serverBomSequenceCounter;
+          records.push(...supabaseMemoryStore.sales_pi_store);
         }
 
-        const nextNum = maxNum + 1;
-        const nextBomCode = `BOM-${String(nextNum).padStart(3, '0')}`;
+        let maxSeq = extractMaxSequence('BOM', fy, records);
+
+        if (serverBomSequenceCounter !== null && serverBomSequenceCounter.fy === fy && serverBomSequenceCounter.maxNum > maxSeq) {
+          maxSeq = serverBomSequenceCounter.maxNum;
+        }
+
+        const nextNum = maxSeq + 1;
+        const nextBomCode = formatSequenceCode('BOM', nextNum);
 
         if (commit) {
-          serverBomSequenceCounter = nextNum;
+          serverBomSequenceCounter = { fy, maxNum: nextNum };
           try {
             await supabase.from('leaves').update({
-              reason: JSON.stringify({ lastNumber: nextNum, updatedAt: new Date().toISOString() }),
+              reason: JSON.stringify({ fy, lastNumber: nextNum, updatedAt: new Date().toISOString() }),
               duration: String(nextNum),
               dates: new Date().toISOString()
-            }).eq('employee', 'BOM_SEQUENCE');
+            }).eq('employee', `BOM_SEQUENCE_${fy}`);
           } catch (_) {}
         }
 
-        resolve({ success: true, nextBomCode, nextCode: nextBomCode, maxNum: nextNum, counter: nextNum });
+        resolve({ success: true, nextBomCode, nextCode: nextBomCode, maxNum: nextNum, counter: nextNum, financialYear: fy });
       } catch (err) {
         reject(err);
       }
@@ -5017,70 +5022,153 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 // Proforma Invoices / Estimates endpoints
-// Returns next sequential PI number matching sequence (PI-000XX) from BUSINZ local stores
+// Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01)
 app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) => {
-  let maxNum = 0;
+  try {
+    const fy = getFinancialYear();
+    let records = [];
 
-  // 1. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
-  const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
-  for (const sf of storeFiles) {
-    try {
-      const p = getStoreFilePath(sf);
-      if (fs.existsSync(p)) {
-        const localPIs = JSON.parse(fs.readFileSync(p, 'utf8'));
-        if (Array.isArray(localPIs)) {
-          localPIs.forEach(item => {
-            const numStr = String(item.piNo || item.id || '');
-            const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
-            if (vrmMatch) {
-              const val = parseInt(vrmMatch[1], 10);
-              if (val > maxNum) maxNum = val;
-            } else {
-              const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-              if (match) {
-                const val = parseInt(match[1], 10);
-                if (val > maxNum && val < 1000000) maxNum = val;
-              }
-            }
-          });
-        }
-      }
-    } catch (_) {}
-  }
-
-  // 2. Check memory stores
-  ['proforma_invoice_store', 'sales_pi_store'].forEach(key => {
-    const list = supabaseMemoryStore[key];
-    if (Array.isArray(list)) {
-      list.forEach(item => {
-        const numStr = String(item.piNo || item.id || '');
-        const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
-        if (vrmMatch) {
-          const val = parseInt(vrmMatch[1], 10);
-          if (val > maxNum) maxNum = val;
-        } else {
-          const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 1000000) maxNum = val;
-          }
-        }
-      });
+    // 1. Query PostgreSQL proforma_invoices if connected
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query(`
+          SELECT pi_no FROM public.proforma_invoices
+          WHERE pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (dbRes?.rows) records.push(...dbRes.rows);
+      } catch (_) {}
     }
-  });
 
-  const nextNum = maxNum > 0 ? maxNum + 1 : 56;
-  // Compute fiscal year string: e.g., 2026-2027 => 26-27
-  const now = new Date();
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth() + 1; // 1-12
-  const fyStart = curMonth >= 4 ? curYear : curYear - 1;
-  const fyEnd = fyStart + 1;
-  const fyStr = `${String(fyStart).slice(-2)}-${String(fyEnd).slice(-2)}`;
+    // 2. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
+    const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
+    for (const sf of storeFiles) {
+      try {
+        const p = getStoreFilePath(sf);
+        if (fs.existsSync(p)) {
+          const localPIs = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (Array.isArray(localPIs)) records.push(...localPIs);
+        }
+      } catch (_) {}
+    }
 
-  const nextPiNo = maxNum >= 1000 ? `VRMS/PI/${fyStr}/${nextNum}` : `PI-${String(nextNum).padStart(5, '0')}`;
-  res.json({ nextPiNo, nextNum, fiscalYear: fyStr });
+    ['proforma_invoice_store', 'sales_pi_store'].forEach(key => {
+      const list = supabaseMemoryStore[key];
+      if (Array.isArray(list)) records.push(...list);
+    });
+
+    const { code, nextNum } = getNextSequence('PI', records);
+    res.json({
+      nextPiNo: code,
+      nextEstimateNo: code,
+      nextNum,
+      fiscalYear: String(fy),
+      financialYear: fy
+    });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextPiNo: `VRM-PI-${fy}-01`, nextEstimateNo: `VRM-PI-${fy}-01`, nextNum: 1, fiscalYear: String(fy), financialYear: fy });
+  }
 });
+
+// Quotations endpoint: Returns next sequential quotation number matching VRM-QT-[YYYY]-[SEQ] (e.g. VRM-QT-2026-01)
+app.get(['/api/next-quotation-number', '/api/next-quote-number'], async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const files = ['crm_quotations.json', 'quotation_store.json', 'sales_pi_store.json'];
+    for (const f of files) {
+      try {
+        const p = getStoreFilePath(f);
+        if (fs.existsSync(p)) {
+          const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (Array.isArray(d)) records.push(...d);
+        }
+      } catch (_) {}
+    }
+    ['crm_quotations', 'quotation_store'].forEach(key => {
+      if (Array.isArray(supabaseMemoryStore[key])) records.push(...supabaseMemoryStore[key]);
+    });
+    const { code, nextNum } = getNextSequence('QT', records);
+    res.json({ nextQuoteNo: code, nextQuotationNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextQuoteNo: `VRM-QT-${fy}-01`, nextQuotationNumber: `VRM-QT-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// CRM Leads endpoint: Returns next sequential lead number matching VRM-LEAD-[YYYY]-[SEQ] (e.g. VRM-LEAD-2026-01)
+app.get('/api/next-lead-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    const leads = await loadDatabaseLeads();
+    const { code, nextNum } = getNextSequence('LEAD', leads);
+    res.json({ nextLeadNo: code, nextLeadNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextLeadNo: `VRM-LEAD-${fy}-01`, nextLeadNumber: `VRM-LEAD-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// Delivery Challan endpoint: Returns next sequential DC number matching VRM-DC-[YYYY]-[SEQ] (e.g. VRM-DC-2026-01)
+app.get('/api/next-dc-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const p = getStoreFilePath('dc_store.json');
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(d)) records.push(...d);
+      } catch (_) {}
+    }
+    const { code, nextNum } = getNextSequence('DC', records);
+    res.json({ nextDcNo: code, nextChallanNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextDcNo: `VRM-DC-${fy}-01`, nextChallanNumber: `VRM-DC-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// GRN endpoint: Returns next sequential GRN number matching VRM-GRN-[YYYY]-[SEQ] (e.g. VRM-GRN-2026-01)
+app.get('/api/next-grn-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const p = getStoreFilePath('grn_store.json');
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(d)) records.push(...d);
+      } catch (_) {}
+    }
+    const { code, nextNum } = getNextSequence('GRN', records);
+    res.json({ nextGrnNo: code, nextGrnNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextGrnNo: `VRM-GRN-${fy}-01`, nextGrnNumber: `VRM-GRN-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// Work Order endpoint: Returns next sequential Work Order number matching VRM-WO-[YYYY]-[SEQ] (e.g. VRM-WO-2026-01)
+app.get('/api/next-wo-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const p = getStoreFilePath('workorder_store.json');
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(d)) records.push(...d);
+      } catch (_) {}
+    }
+    const { code, nextNum } = getNextSequence('WO', records);
+    res.json({ nextWoNo: code, nextWorkOrderNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextWoNo: `VRM-WO-${fy}-01`, nextWorkOrderNumber: `VRM-WO-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
 
 app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
   const p1 = getStoreFilePath('proforma_invoice_store.json');
@@ -7266,8 +7354,9 @@ app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
     if (!newLead || Object.keys(newLead).length === 0) return res.status(400).json({ success: false, error: 'No lead data provided' });
 
     let current = await loadDatabaseLeads();
-    const leadId = newLead.id || `LEAD-2026-${Date.now().toString().slice(-4)}`;
-    const nextNum = newLead.leadNumber || `LEAD-${String(current.length + 1).padStart(3, '0')}`;
+    const { code: autoLeadCode } = getNextSequence('LEAD', current);
+    const leadId = newLead.id || autoLeadCode;
+    const nextNum = newLead.leadNumber || autoLeadCode;
 
     const leadRecord = {
       ...newLead,
