@@ -609,8 +609,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   if (!totalAmt && matchedPi) {
                     totalAmt = Number(matchedPi.grandTotal || matchedPi.total || matchedPi.amount || 0);
                   }
-                  if (!totalAmt && effectiveItems.length > 0) {
-                    totalAmt = effectiveItems.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
+                  if (!totalAmt && itemsArray.length > 0) {
+                    totalAmt = itemsArray.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
                   }
                   if (!totalAmt) {
                     const code = b.bomCode || b.code || b.id || '';
