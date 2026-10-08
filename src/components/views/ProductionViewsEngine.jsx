@@ -1073,6 +1073,7 @@ export default function ProductionViewsEngine(props) {
                 canCancelBom={canCancelBom}
                 handleCancelBomOrder={handleCancelBomOrder}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                setVehicleLoadingModal={setVehicleLoadingModal}
               />
             );
           }
@@ -1521,6 +1522,9 @@ export default function ProductionViewsEngine(props) {
                     targetRow.status === 'Dispatched - Awaiting LR Copy' ||
                     targetRow.status === 'AWAITING LR COPY' ||
                     targetRow.status === 'Awaiting LR Copy' ||
+                    targetRow.packingStatus === 'PACKING_VERIFIED' ||
+                    targetRow.tabGroup === 'Packed' ||
+                    (targetRow.c4 && (targetRow.c4.includes('100%') || targetRow.c4 === '100% Paid') && (targetRow.tabGroup === 'Packed' || targetRow.status?.includes('Packed'))) ||
                     (targetRow.invoiceNo && targetRow.status !== 'Closed')
                   );
                   if (isCancelledRow) {
@@ -1605,6 +1609,10 @@ export default function ProductionViewsEngine(props) {
                 rec.invoiceConfirmed ||
                 rec.status === 'Accounts Verified & Passed to Invoice' ||
                 rec.isAccountsDone ||
+                rec.packingStatus === 'PACKING_VERIFIED' ||
+                fullRec.packingStatus === 'PACKING_VERIFIED' ||
+                rec.tabGroup === 'Packed' ||
+                (rec.c4 && (rec.c4.includes('100%') || rec.c4 === '100% Paid') && (rec.tabGroup === 'Packed' || rec.status?.includes('Packed'))) ||
                 (rec.invoiceNo && rec.status !== 'Closed')
               );
               if (isRecCancelled) {

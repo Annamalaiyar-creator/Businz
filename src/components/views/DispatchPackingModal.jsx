@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck
 } from "lucide-react";
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -21,7 +21,8 @@ export default function DispatchPackingModal({
   setInvoiceList,
   canCancelBom = false,
   handleCancelBomOrder = () => {},
-  setActiveMediaPreviewModal
+  setActiveMediaPreviewModal,
+  setVehicleLoadingModal
 }) {
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
@@ -169,7 +170,7 @@ export default function DispatchPackingModal({
   const progressPercent = totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0;
   const isPartial = packedItemsCount > 0 && !allItemsPacked;
 
-  const savePackingData = (isPartialSave = false) => {
+  const savePackingData = (isPartialSave = false, proceedToLoading = false) => {
     if (uploadingCount > 0) {
       alert('Media files (photos/videos) are currently uploading to the server. Please wait a few seconds so that Sales and Accounts can view them.');
       return;
@@ -179,18 +180,39 @@ export default function DispatchPackingModal({
     let nextStatus;
     let isFullyConfirmed = false;
 
+    const is100Paid = Boolean(
+      dispatchPackingModal.paymentType === '100% Paid' ||
+      dispatchPackingModal.paymentType === '100% Advance' ||
+      (dispatchPackingModal.paymentType && dispatchPackingModal.paymentType.includes('100%')) ||
+      (dispatchPackingModal.c4 && dispatchPackingModal.c4.includes('100%'))
+    );
+
     if (isPartialSave) {
       // User explicitly saving partial packing progress without sending to Accounts yet
       confirmedItems = itemsToPack;
       nextStatus = 'Partially Packed';
       isFullyConfirmed = false;
     } else {
-      // User confirmed packing: preserves user check/uncheck state and moves to Accounts Verification
+      // User confirmed packing: if user checked some items, keep their choices;
+      // if NO items were individually checked, default all to packed: true since user clicked "Packing Confirmed"
+      const anyChecked = (itemsToPack || []).some(it => it.packed);
       confirmedItems = (itemsToPack && itemsToPack.length > 0)
-        ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: Boolean(it.packed) }))
+        ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: anyChecked ? Boolean(it.packed) : true }))
         : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
-      nextStatus = isPartial ? 'Partially Packed - Sent to Accounts' : 'Packed & Awaiting Accounts Verification';
-      isFullyConfirmed = true;
+
+      const allConfirmedPacked = confirmedItems.every(it => it.packed);
+
+      if (allConfirmedPacked) {
+        if (proceedToLoading || is100Paid) {
+          nextStatus = 'Awaiting Vehicle Loading & Dispatch';
+        } else {
+          nextStatus = 'Packed & Awaiting Accounts Verification';
+        }
+        isFullyConfirmed = true;
+      } else {
+        nextStatus = 'Partially Packed - Sent to Accounts';
+        isFullyConfirmed = false;
+      }
     }
 
     const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
@@ -200,10 +222,10 @@ export default function DispatchPackingModal({
       ? ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
           ? dispatchPackingModal.accountsVerification
           : {
-              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
-              hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
-              softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
-              verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
+              paymentStatus: is100Paid ? 'Payment Received — 100%' : ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null)),
+              hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived || is100Paid),
+              softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived || is100Paid),
+              verified: Boolean(dispatchPackingModal.accountsVerification?.verified || is100Paid),
               readyForAccounts: true,
               packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
             })
@@ -362,6 +384,9 @@ export default function DispatchPackingModal({
       }));
     }
     setDispatchPackingModal(null);
+    if (proceedToLoading && typeof setVehicleLoadingModal === 'function') {
+      setVehicleLoadingModal(updatedPackedBom);
+    }
 
     // Safely resolve the salesperson who created the BOM and customer name
     const resolvedSalesPerson = resolvedSpName.replace(/\s*\([^)]*\)/g, '').trim();
@@ -529,23 +554,45 @@ export default function DispatchPackingModal({
             Close
           </button>
           {!isPackedAndReady && !isCancelled && (
-            <button
-              onClick={savePackingData}
-              disabled={uploadingCount > 0}
-              style={{
-                border: 'none',
-                backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
-                color: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF'),
-                height: '42px', padding: '0 22px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '900',
-                cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                display: 'flex', alignItems: 'center', gap: '8px'
-              }}
-            >
-              <CheckCircle style={{ width: '16px', height: '16px' }} />
-              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : 'Save Verification'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => savePackingData(false, false)}
+                disabled={uploadingCount > 0}
+                style={{
+                  border: 'none',
+                  backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
+                  color: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF'),
+                  height: '42px', padding: '0 20px',
+                  borderRadius: '10px', fontSize: '13px', fontWeight: '900',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}
+              >
+                <CheckCircle style={{ width: '16px', height: '16px' }} />
+                {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : 'Save Verification'}
+              </button>
+              <button
+                type="button"
+                onClick={() => savePackingData(false, true)}
+                disabled={uploadingCount > 0}
+                style={{
+                  border: 'none',
+                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #0284C7, #0EA5E9)',
+                  color: '#FFFFFF',
+                  height: '42px', padding: '0 20px',
+                  borderRadius: '10px', fontSize: '13px', fontWeight: '900',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 12px rgba(2,132,199,0.3)',
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}
+                title="Confirm packing and directly proceed to vehicle loading"
+              >
+                <Truck style={{ width: '16px', height: '16px' }} />
+                Confirm & Load Vehicle 🚚
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1081,23 +1128,43 @@ export default function DispatchPackingModal({
               </button>
             )}
             {!isPackedAndReady && !isCancelled && (
-              <button
-                type="button"
-                onClick={() => savePackingData(false)}
-                disabled={uploadingCount > 0}
-                style={{
-                  border: 'none',
-                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
-                  color: '#FFFFFF', height: '40px', padding: '0 24px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
-                  display: 'flex', alignItems: 'center', gap: '8px'
-                }}
-              >
-                <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : 'Packing Confirmed'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => savePackingData(false, false)}
+                  disabled={uploadingCount > 0}
+                  style={{
+                    border: 'none',
+                    background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
+                    color: '#FFFFFF', height: '40px', padding: '0 20px',
+                    borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                    cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
+                    display: 'flex', alignItems: 'center', gap: '8px'
+                  }}
+                >
+                  <CheckCircle style={{ width: '16px', height: '16px' }} />
+                  {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : 'Packing Confirmed'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => savePackingData(false, true)}
+                  disabled={uploadingCount > 0}
+                  style={{
+                    border: 'none',
+                    background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #0284C7, #0EA5E9)',
+                    color: '#FFFFFF', height: '40px', padding: '0 22px',
+                    borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                    cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(2,132,199,0.35)',
+                    display: 'flex', alignItems: 'center', gap: '8px'
+                  }}
+                  title="Confirm goods packing and immediately proceed to vehicle loading"
+                >
+                  <Truck style={{ width: '16px', height: '16px' }} />
+                  Confirm & Load Vehicle 🚚
+                </button>
+              </>
             )}
           </div>
         </div>

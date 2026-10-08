@@ -138,21 +138,153 @@ export default function SalesCrmEngine({
         } catch (_) {}
 
         if (isMounted) {
-          // Atomic single update: merge cloud and live Central without double-setting state
+          // Unified Customer Directory: merge cloud, live Central, local stores, PIs, and BOMs
           const map = new Map();
-          (cloudCust || []).forEach(c => {
-            const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
-            if (k) map.set(k, c);
-          });
-          liveList.forEach(c => {
-            const k = (c.customerCode || c.id || c.zohoContactId || '').toLowerCase().trim();
-            if (k) {
-              map.set(k, { ...(map.get(k) || {}), ...c });
+          const registerCust = (c) => {
+            if (!c || typeof c !== 'object') return;
+            const name = (c.companyName || c.c2 || c.name || c.customerName || c.code || '').trim();
+            if (!name || name === 'Customer Order' || name === 'Customer' || name === 'New Customer') return;
+            const k = name.toLowerCase();
+            const idKey = (c.customerCode || c.id || '').toLowerCase().trim();
+            const existing = map.get(k) || (idKey ? map.get(idKey) : null) || {};
+            const merged = {
+              ...existing,
+              ...c,
+              id: c.customerCode || c.id || existing.id || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+              customerCode: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+              companyName: name,
+              customerName: c.customerName || existing.customerName || name,
+              customerType: c.customerType || existing.customerType || 'EPC Contractor',
+              industry: c.industry || existing.industry || 'Solar Energy / Infrastructure',
+              status: c.status || existing.status || 'ACTIVE'
+            };
+            map.set(k, merged);
+            if (idKey) map.set(idKey, merged);
+          };
+
+          // 1. Local browser storage caches
+          try {
+            const storages = [
+              localStorage.getItem('controlroom_customer_store'),
+              localStorage.getItem('businz_crm_customers'),
+              localStorage.getItem('controlroom_crm_customers'),
+              localStorage.getItem('controlroom_customer_list')
+            ];
+            storages.forEach(s => {
+              if (s) {
+                const parsed = JSON.parse(s);
+                if (Array.isArray(parsed)) parsed.forEach(registerCust);
+              }
+            });
+          } catch (_) {}
+
+          // 2. Cloud and live backend customers
+          (cloudCust || []).forEach(registerCust);
+          (liveList || []).forEach(registerCust);
+
+          // 3. Proforma Invoices (Cloud + Local)
+          const allPIs = [...(cloudPIs || []), ...(proformaInvoices || [])];
+          try {
+            const rawPi = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('proforma_invoice_store');
+            if (rawPi) {
+              const parsed = JSON.parse(rawPi);
+              if (Array.isArray(parsed)) allPIs.push(...parsed);
+            }
+          } catch (_) {}
+
+          allPIs.forEach(pi => {
+            const comp = (pi.vendor || pi.customerName || pi.companyName || '').trim();
+            if (comp) {
+              registerCust({
+                id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+                customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+                companyName: comp,
+                customerName: pi.contactPerson || comp,
+                customerType: pi.customerType || 'EPC Contractor',
+                industry: 'Solar Energy / Infrastructure',
+                gstNumber: pi.gstNo || pi.gstNumber || '—',
+                panNumber: pi.panNumber || '—',
+                address: (typeof pi.billingAddress === 'string' ? pi.billingAddress : pi.billingAddress?.street) || '',
+                city: (typeof pi.billingAddress === 'object' ? pi.billingAddress.city : '') || '',
+                state: (typeof pi.billingAddress === 'object' ? pi.billingAddress.state : '') || '',
+                pincode: (typeof pi.billingAddress === 'object' ? pi.billingAddress.pincode : '') || '',
+                dispatchAddress: (typeof pi.deliveryAddress === 'string' ? pi.deliveryAddress : pi.deliveryAddress?.street) || '',
+                dispatchCity: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.city : '') || '',
+                dispatchState: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.state : '') || '',
+                dispatchPincode: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.pincode : '') || '',
+                sameAsBilling: pi.sameAsBilling !== undefined ? pi.sameAsBilling : true,
+                creditLimit: 2500000,
+                creditDays: Number(pi.creditDays || 30),
+                paymentTerms: pi.paymentTerms || 'Due on Receipt',
+                assignedSalesperson: pi.salesPerson || pi.salesperson || 'Sales Executive',
+                primaryContact: {
+                  name: pi.contactPerson || comp,
+                  phone: pi.phone || '',
+                  whatsapp: pi.phone || '',
+                  email: pi.email || ''
+                },
+                phone: pi.phone || '—',
+                email: pi.email || '—',
+                status: 'ACTIVE',
+                createdAt: pi.createdAt || new Date().toISOString()
+              });
             }
           });
-          const unified = Array.from(map.values());
+
+          // 4. BOM Orders (Cloud + Local)
+          const allBoms = [...(cloudBoms || []), ...(boms || [])];
+          try {
+            const rawBom = localStorage.getItem('controlroom_bom_store');
+            if (rawBom) {
+              const parsed = JSON.parse(rawBom);
+              if (Array.isArray(parsed)) allBoms.push(...parsed);
+            }
+          } catch (_) {}
+
+          allBoms.forEach(b => {
+            const comp = (b.customerName || b.companyName || '').trim();
+            if (comp) {
+              registerCust({
+                id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+                customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+                companyName: comp,
+                customerName: b.contactPerson || comp,
+                customerType: b.customerType || 'EPC Contractor',
+                industry: 'Solar Energy / Infrastructure',
+                gstNumber: b.gstNo || '—',
+                address: b.billingAddress || '',
+                dispatchAddress: b.deliveryAddress || '',
+                paymentTerms: b.paymentType || 'Due on Receipt',
+                assignedSalesperson: b.salesPerson || 'Sales Executive',
+                primaryContact: {
+                  name: b.contactPerson || comp,
+                  phone: b.mobile || '',
+                  whatsapp: b.mobile || '',
+                  email: b.email || ''
+                },
+                phone: b.mobile || '—',
+                email: b.email || '—',
+                status: 'ACTIVE',
+                createdAt: b.createdAt || new Date().toISOString()
+              });
+            }
+          });
+
+          // Final deduplication strictly by company name
+          const finalMap = new Map();
+          for (const val of map.values()) {
+            const k = (val.companyName || val.name || '').toLowerCase().trim();
+            if (k && !finalMap.has(k)) {
+              finalMap.set(k, val);
+            }
+          }
+          const unified = Array.from(finalMap.values());
           if (unified.length > 0) {
             setCustomers(prev => areListsEqual(prev, unified, 'customerCode') ? prev : unified);
+            try {
+              localStorage.setItem('controlroom_customer_store', JSON.stringify(unified));
+              localStorage.setItem('businz_crm_customers', JSON.stringify(unified));
+            } catch (_) {}
           }
         }
       } catch (err) {
