@@ -580,7 +580,10 @@ export default function ProductionTableView({
                       Boolean(targetRow.invoiceConfirmed) ||
                       Boolean(targetRow.isAccountsDone) ||
                       targetRow.status === 'Accounts Verified & Passed to Invoice' ||
-                      Boolean(targetRow.invoiceNo && targetRow.status !== 'Closed')
+                      Boolean(targetRow.invoiceNo && targetRow.status !== 'Closed') ||
+                      targetRow.packingStatus === 'PACKING_VERIFIED' ||
+                      targetRow.tabGroup === 'Packed' ||
+                      (targetRow.c4 && (targetRow.c4.includes('100%') || targetRow.c4 === '100% Paid') && (targetRow.tabGroup === 'Packed' || targetRow.status?.includes('Packed')))
                     );
                     if (isClosed) {
                       return (

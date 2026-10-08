@@ -186,17 +186,22 @@ export const INITIAL_CRM_ACTIVITIES = [];
  */
 export function getCrmStore(key, initialData = []) {
   try {
-    const raw = localStorage.getItem(`businz_crm_${key}`) || 
-                localStorage.getItem(`controlroom_crm_${key}`) || 
-                localStorage.getItem(key);
+    const raw = (key === 'customers' || key === 'customer_store')
+      ? (localStorage.getItem('controlroom_customer_store') || 
+         localStorage.getItem('businz_crm_customers') || 
+         localStorage.getItem('controlroom_crm_customers') || 
+         localStorage.getItem('controlroom_customer_list') || 
+         localStorage.getItem('customers'))
+      : (localStorage.getItem(`businz_crm_${key}`) || 
+         localStorage.getItem(`controlroom_crm_${key}`) || 
+         localStorage.getItem(key));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         // Filter out legacy mock seeds so old sample data never flashes
         const clean = parsed.filter(item => {
           const idStr = String(item.id || item.customerCode || item.oppNumber || item.leadNumber || item.quoteNumber || '');
-          return !idStr.startsWith('CUST-VRM-10') && 
-                 !idStr.startsWith('OPP-2026-10') && 
+          return !idStr.startsWith('OPP-2026-10') && 
                  !idStr.startsWith('LEAD-2026-00') && 
                  !idStr.startsWith('QT-2026-01') && 
                  !idStr.startsWith('FOL-00') && 

@@ -39,6 +39,7 @@ let supabaseMemoryStore = {};
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
   setTimeout(() => {
+    syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
     repairBomSequences().catch(err => console.warn('[Auto Repair Notice]:', err.message));
   }, 2000);
 }).catch(err => {
@@ -150,16 +151,12 @@ const loadDatabaseCustomers = async () => {
     console.warn('[loadDatabaseCustomers] Supabase fetch notice:', err?.message || err);
   }
 
-  // Fallback to disk JSON
-  try {
-    const diskPath = path.resolve(__dirname, 'customer_store.json');
-    if (fs.existsSync(diskPath)) {
-      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
-      supabaseMemoryStore.customer_store = diskData;
-      supabaseMemoryStore.crm_customers = diskData;
-      return diskData;
-    }
-  } catch (_) {}
+  // Fallback to local and auto-extracted customers
+  const localList = loadLocalCustomers();
+  if (localList && localList.length > 0) {
+    saveLocalCustomers(localList).catch(() => {});
+    return localList;
+  }
 
   return supabaseMemoryStore.customer_store || [];
 };
@@ -168,28 +165,183 @@ const loadLocalCustomers = () => {
   if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
     return supabaseMemoryStore.customer_store;
   }
+  const custMap = new Map();
+  const register = (c) => {
+    if (!c || typeof c !== 'object') return;
+    const name = (c.companyName || c.c2 || c.name || c.customerName || c.code || '').trim();
+    if (!name || name === 'Customer Order' || name === 'Customer' || name === 'New Customer') return;
+    const k = name.toLowerCase();
+    const idKey = (c.customerCode || c.id || '').toLowerCase().trim();
+    const existing = custMap.get(k) || (idKey ? custMap.get(idKey) : null) || {};
+    const merged = {
+      ...existing,
+      ...c,
+      id: c.customerCode || c.id || existing.id || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      customerCode: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      code: c.customerCode || c.id || existing.customerCode || `CUST-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      companyName: name,
+      c2: name,
+      customerName: c.customerName || existing.customerName || name,
+      c3: c.customerName || existing.customerName || name,
+      customerType: c.customerType || existing.customerType || 'EPC Contractor',
+      industry: c.industry || existing.industry || 'Solar Energy / Infrastructure',
+      gstNumber: c.gstNumber || c.gstNo || existing.gstNumber || '—',
+      gstNo: c.gstNumber || c.gstNo || existing.gstNo || '—',
+      panNumber: c.panNumber || existing.panNumber || '—',
+      address: c.billingAddress || c.address || existing.address || '',
+      c6: c.billingAddress || c.address || existing.address || '',
+      city: c.city || existing.city || '',
+      state: c.state || existing.state || '',
+      pincode: c.pincode || existing.pincode || '',
+      billingAddressObj: c.billingAddressObj || existing.billingAddressObj || {},
+      dispatchAddress: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || '',
+      deliveryAddress: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || '',
+      c7: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || '',
+      dispatchCity: c.dispatchCity || existing.dispatchCity || '',
+      dispatchState: c.dispatchState || existing.dispatchState || '',
+      dispatchPincode: c.dispatchPincode || existing.dispatchPincode || '',
+      deliveryAddressObj: c.deliveryAddressObj || existing.deliveryAddressObj || {},
+      sameAsBilling: c.sameAsBilling !== undefined ? c.sameAsBilling : true,
+      creditLimit: Number(c.creditLimit || existing.creditLimit || 2500000),
+      creditDays: Number(c.creditDays || existing.creditDays || 30),
+      paymentTerms: c.paymentTerms || existing.paymentTerms || 'Due on Receipt',
+      assignedSalesperson: c.assignedSalesperson || c.salesPerson || existing.assignedSalesperson || 'Sales Executive',
+      salesPerson: c.assignedSalesperson || c.salesPerson || existing.assignedSalesperson || 'Sales Executive',
+      c8: c.assignedSalesperson || c.salesPerson || existing.assignedSalesperson || 'Sales Executive',
+      source: c.source || existing.source || 'Direct Client',
+      primaryContact: c.primaryContact || existing.primaryContact || {
+        name: c.customerName || name,
+        phone: c.phone || '',
+        whatsapp: c.phone || '',
+        email: c.email || ''
+      },
+      phone: c.phone || existing.phone || '—',
+      c4: c.phone || existing.phone || '—',
+      email: c.email || existing.email || '—',
+      c5: c.email || existing.email || '—',
+      status: c.status || existing.status || 'ACTIVE',
+      createdAt: c.createdAt || existing.createdAt || new Date().toISOString()
+    };
+    custMap.set(k, merged);
+    if (idKey) custMap.set(idKey, merged);
+  };
+
   try {
     const p1 = getStoreFilePath('crm_customers.json');
     if (fs.existsSync(p1)) {
       const data = JSON.parse(fs.readFileSync(p1, 'utf8'));
-      if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore.customer_store = data;
-        supabaseMemoryStore.crm_customers = data;
-        return data;
-      }
+      if (Array.isArray(data)) data.forEach(register);
     }
   } catch (_) {}
+
   try {
     const p2 = getStoreFilePath('customer_store.json');
     if (fs.existsSync(p2)) {
       const data = JSON.parse(fs.readFileSync(p2, 'utf8'));
-      if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore.customer_store = data;
-        return data;
-      }
+      if (Array.isArray(data)) data.forEach(register);
     }
   } catch (_) {}
-  return [];
+
+  // Auto-enrich with any customer referenced in PIs
+  const piSources = [];
+  try {
+    const p = getStoreFilePath('sales_pi_store.json');
+    if (fs.existsSync(p)) piSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
+  } catch (_) {}
+  try {
+    const p = getStoreFilePath('proforma_invoice_store.json');
+    if (fs.existsSync(p)) piSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
+  } catch (_) {}
+
+  piSources.forEach(pi => {
+    const comp = (pi.vendor || pi.customerName || pi.companyName || '').trim();
+    if (comp) {
+      register({
+        id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        companyName: comp,
+        customerName: pi.contactPerson || comp,
+        customerType: pi.customerType || 'EPC Contractor',
+        industry: 'Solar Energy / Infrastructure',
+        gstNumber: pi.gstNo || pi.gstNumber || '—',
+        panNumber: pi.panNumber || '—',
+        address: (typeof pi.billingAddress === 'string' ? pi.billingAddress : pi.billingAddress?.street) || '',
+        city: (typeof pi.billingAddress === 'object' ? pi.billingAddress.city : '') || '',
+        state: (typeof pi.billingAddress === 'object' ? pi.billingAddress.state : '') || '',
+        pincode: (typeof pi.billingAddress === 'object' ? pi.billingAddress.pincode : '') || '',
+        dispatchAddress: (typeof pi.deliveryAddress === 'string' ? pi.deliveryAddress : pi.deliveryAddress?.street) || '',
+        dispatchCity: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.city : '') || '',
+        dispatchState: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.state : '') || '',
+        dispatchPincode: (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress.pincode : '') || '',
+        sameAsBilling: pi.sameAsBilling !== undefined ? pi.sameAsBilling : true,
+        creditLimit: 2500000,
+        creditDays: Number(pi.creditDays || 30),
+        paymentTerms: pi.paymentTerms || 'Due on Receipt',
+        assignedSalesperson: pi.salesPerson || pi.salesperson || 'Sales Executive',
+        primaryContact: {
+          name: pi.contactPerson || comp,
+          phone: pi.phone || '',
+          whatsapp: pi.phone || '',
+          email: pi.email || ''
+        },
+        phone: pi.phone || '—',
+        email: pi.email || '—',
+        status: 'ACTIVE',
+        createdAt: pi.createdAt || new Date().toISOString()
+      });
+    }
+  });
+
+  // Auto-enrich with any customer referenced in BOMs
+  const bomSources = [];
+  try {
+    const p = getStoreFilePath('bom_store.json');
+    if (fs.existsSync(p)) bomSources.push(...JSON.parse(fs.readFileSync(p, 'utf8') || '[]'));
+  } catch (_) {}
+
+  bomSources.forEach(b => {
+    const comp = (b.customerName || b.companyName || '').trim();
+    if (comp) {
+      register({
+        id: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        customerCode: `CUST-${comp.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+        companyName: comp,
+        customerName: b.contactPerson || comp,
+        customerType: b.customerType || 'EPC Contractor',
+        industry: 'Solar Energy / Infrastructure',
+        gstNumber: b.gstNo || '—',
+        address: b.billingAddress || '',
+        dispatchAddress: b.deliveryAddress || '',
+        paymentTerms: b.paymentType || 'Due on Receipt',
+        assignedSalesperson: b.salesPerson || 'Sales Executive',
+        primaryContact: {
+          name: b.contactPerson || comp,
+          phone: b.mobile || '',
+          whatsapp: b.mobile || '',
+          email: b.email || ''
+        },
+        phone: b.mobile || '—',
+        email: b.email || '—',
+        status: 'ACTIVE',
+        createdAt: b.createdAt || new Date().toISOString()
+      });
+    }
+  });
+
+  // Deduplicate strictly by company name
+  const finalMap = new Map();
+  for (const val of custMap.values()) {
+    const k = (val.companyName || val.name || '').toLowerCase().trim();
+    if (k && !finalMap.has(k)) {
+      finalMap.set(k, val);
+    }
+  }
+  const result = Array.from(finalMap.values());
+  if (result.length > 0) {
+    supabaseMemoryStore.customer_store = result;
+    supabaseMemoryStore.crm_customers = result;
+  }
+  return result;
 };
 
 // Canonical Supabase Opportunities Data Layer (Zero leaves table egress)
@@ -458,6 +610,7 @@ const toConsumerBomServer = (row) => {
     dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
     packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      (String(row.status || '').toLowerCase().includes('packed') || String(row.status || '').toLowerCase().includes('awaiting vehicle loading') || String(row.status || '').toLowerCase().includes('invoice confirmed')) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
     ),
@@ -737,13 +890,16 @@ function getWorkflowRankServer(b) {
   if (b.cancelled || s.includes('cancel')) return -1;
   if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
   if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
-  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
+  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('vehicle assigned') || s.includes('ready for dispatch')) return 50;
   if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
   if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
   if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
   if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
   return 1;
 }
+
+let cachedBomsResult = null;
+let lastBomFetchTimestamp = 0;
 
 const loadDatabaseBoms = async (forceRefresh = false) => {
   // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
@@ -882,44 +1038,140 @@ const loadLocalBoms = () => {
   return [];
 };
 
+let saveLocalBomsLock = Promise.resolve();
+
 const saveLocalBoms = async (boms) => {
   if (!boms) return;
-  const list = Array.isArray(boms) ? boms : [boms];
-  supabaseMemoryStore.bom_store = list;
-  cachedBomsResult = list;
-  lastBomFetchTimestamp = Date.now();
 
-  // 1. Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
-  try {
-    const diskPath = getStoreFilePath('bom_store.json');
-    fs.writeFileSync(diskPath, JSON.stringify(list, null, 2), 'utf8');
-  } catch (diskErr) {
-    console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
-  }
+  return new Promise((resolveOuter, rejectOuter) => {
+    saveLocalBomsLock = saveLocalBomsLock.then(async () => {
+      try {
+        // 1. Load existing authoritative BOM store
+        let existingList = [];
+        if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+          existingList = [...supabaseMemoryStore.bom_store];
+        } else {
+          existingList = loadLocalBoms();
+        }
+        if (!Array.isArray(existingList)) existingList = [];
 
-  // 2. Broadcast via SSE to all connected clients
-  try {
-    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: list });
-    broadcastRealtimeEvent('bom_updated', { bomList: list });
-  } catch (_) {}
+        const bomMap = new Map();
+        existingList.forEach(b => {
+          const k = String(b?.bomCode || b?.code || b?.id || '').trim();
+          if (k && k !== 'null' && k !== 'undefined' && k !== '[object Object]') {
+            bomMap.set(k, b);
+          }
+        });
 
-  // 3. Upsert to controlroom_store and canonical public.bom_orders table
-  try {
-    if (isDbConnected()) {
-      query(`
-        INSERT INTO controlroom_store (key, data, updated_at)
-        VALUES ('bom_store', $1, NOW())
-        ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
-      `, [JSON.stringify(list)]).catch(() => null);
-    }
-    const rows = list.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
-    for (let i = 0; i < rows.length; i += 20) {
-      const batch = rows.slice(i, i + 20);
-      await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
-    }
-  } catch (sbErr) {
-    console.warn('[saveLocalBoms Supabase upsert notice]:', sbErr?.message || sbErr);
-  }
+        const incomingItems = Array.isArray(boms) ? boms : [boms];
+        const changedRecords = [];
+
+        for (const item of incomingItems) {
+          if (!item || typeof item !== 'object') continue;
+          const cleanId = String(item.bomCode || item.code || item.id || '').trim();
+          if (!cleanId || cleanId === 'null' || cleanId === 'undefined' || cleanId === '[object Object]') {
+            console.warn('[saveLocalBoms Warning] Skipped item with invalid identifier:', item);
+            continue;
+          }
+
+          const existing = bomMap.get(cleanId);
+          if (existing) {
+            const eRank = getWorkflowRankServer(existing);
+            const iRank = getWorkflowRankServer(item);
+
+            const merged = {
+              ...existing,
+              ...item,
+              // Preserve rich items if incoming is empty/missing
+              items: (Array.isArray(item.items) && item.items.length > 0) ? item.items : (existing.items || []),
+              // Preserve customer details if incoming is empty or default
+              customerName: item.customerName || item.companyName || existing.customerName || existing.companyName || 'Customer',
+              companyName: item.companyName || item.customerName || existing.companyName || existing.customerName || '',
+              contactPerson: item.contactPerson || item.contact || existing.contactPerson || '',
+              gstNo: item.gstNo || item.gst || item.gstin || existing.gstNo || '',
+              // Preserve salesperson and attribution if missing in partial update
+              salesPerson: item.salesPerson || item.sales_person || existing.salesPerson || '',
+              salesPersonCode: item.salesPersonCode || item.sales_person_code || existing.salesPersonCode || '',
+              createdBy: item.createdBy || item.created_by || existing.createdBy || '',
+              createdById: item.createdById || item.created_by_id || existing.createdById || '',
+              sourcePiNo: item.sourcePiNo || item.source_pi_no || existing.sourcePiNo || null,
+              // Preserve financial totals if incoming is 0 and existing is non-zero
+              grandTotal: (Number(item.grandTotal) > 0) ? Number(item.grandTotal) : (existing.grandTotal || 0),
+              subTotal: (Number(item.subTotal) > 0) ? Number(item.subTotal) : (existing.subTotal || 0),
+              // Workflow progression safety: do not allow a stale lower-rank status to regress progress
+              status: (iRank >= eRank) ? item.status : existing.status,
+              packingStatus: (iRank >= eRank) ? (item.packingStatus || existing.packingStatus) : existing.packingStatus,
+              fullyCompleted: (iRank >= eRank) ? (item.fullyCompleted ?? existing.fullyCompleted) : existing.fullyCompleted,
+              // Deep merge dispatch packing and accounts verification
+              dispatchPacking: (Array.isArray(item.dispatchPacking) && item.dispatchPacking.length > 0) ? item.dispatchPacking : (existing.dispatchPacking || []),
+              accountsVerification: {
+                ...(existing.accountsVerification || {}),
+                ...(item.accountsVerification || {})
+              },
+              vehicleLoading: item.vehicleLoading || existing.vehicleLoading || null,
+              lrCopyDoc: item.lrCopyDoc || existing.lrCopyDoc || null,
+              dispatchPackingMedia: (item.dispatchPackingMedia?.photos?.length > 0 || item.dispatchPackingMedia?.videos?.length > 0)
+                ? item.dispatchPackingMedia
+                : (existing.dispatchPackingMedia || { photos: [], videos: [] })
+            };
+            bomMap.set(cleanId, merged);
+            changedRecords.push(merged);
+          } else {
+            bomMap.set(cleanId, item);
+            changedRecords.push(item);
+          }
+        }
+
+        const finalList = Array.from(bomMap.values());
+        supabaseMemoryStore.bom_store = finalList;
+        cachedBomsResult = finalList;
+        lastBomFetchTimestamp = Date.now();
+
+        // 2. Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
+        try {
+          const diskPath = getStoreFilePath('bom_store.json');
+          fs.writeFileSync(diskPath, JSON.stringify(finalList, null, 2), 'utf8');
+        } catch (diskErr) {
+          console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
+        }
+
+        // 3. Broadcast via SSE to all connected clients
+        try {
+          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: finalList });
+          broadcastRealtimeEvent('bom_updated', { bomList: finalList });
+        } catch (_) {}
+
+        // 4. Upsert to controlroom_store and canonical public.bom_orders table
+        if (isDbConnected()) {
+          try {
+            await query(`
+              INSERT INTO controlroom_store (key, data, updated_at)
+              VALUES ('bom_store', $1, NOW())
+              ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
+            `, [JSON.stringify(finalList)]);
+
+            const rowsToUpsert = changedRecords.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
+            for (let i = 0; i < rowsToUpsert.length; i += 20) {
+              const batch = rowsToUpsert.slice(i, i + 20);
+              const { error } = await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
+              if (error) {
+                console.error('[saveLocalBoms public.bom_orders upsert error]:', error.message || error);
+                throw error;
+              }
+            }
+          } catch (dbErr) {
+            console.error('[saveLocalBoms Database error]:', dbErr?.message || dbErr);
+            throw dbErr;
+          }
+        }
+        resolveOuter();
+      } catch (err) {
+        rejectOuter(err);
+      }
+    }).catch(err => {
+      rejectOuter(err);
+    });
+  });
 };
 
 // Authoritative Database Store functions directly with Supabase
@@ -2177,6 +2429,31 @@ const saveLocalGRNs = (grns) => {
   saveDatabaseStore('grn_store', grns);
 };
 
+// Health & PostgreSQL Database Status Check
+app.get('/api/db-status', async (req, res) => {
+  try {
+    const isConn = isDbConnected();
+    const result = await query('SELECT current_database(), current_user, version(), NOW() as server_time;');
+    const storeCount = await query('SELECT count(*) as total_tables FROM public.controlroom_store;');
+    res.json({
+      status: 'online',
+      connected: true,
+      database: result.rows[0]?.current_database || 'unknown',
+      user: result.rows[0]?.current_user || 'unknown',
+      serverTime: result.rows[0]?.server_time,
+      storeTablesCount: Number(storeCount.rows[0]?.total_tables || 0),
+      isPoolActive: isConn
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      connected: false,
+      message: err.message,
+      isPoolActive: isDbConnected()
+    });
+  }
+});
+
 // ⚡ Real-Time Push Gateway (Server-Sent Events)
 // Enables sub-second instant updates across all 10+ users without page refresh
 app.get('/api/realtime-events', (req, res) => {
@@ -2721,8 +2998,8 @@ app.post('/api/customers', async (req, res) => {
 
 // BUSINZ Native Customers endpoint (Native BUSINZ Store)
 app.get('/api/customers', async (req, res) => {
-  const localCustomers = loadLocalCustomers();
-  res.json(localCustomers);
+  const customers = await loadDatabaseCustomers();
+  res.json(customers && customers.length > 0 ? customers : loadLocalCustomers());
 });
 
 // BUSINZ Native Vendors endpoint (Native BUSINZ Store)
@@ -3167,13 +3444,13 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
   return new Promise((resolve, reject) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let maxNum = 662;
+        let maxNum = 663;
 
         // 1. Authoritative: Query PostgreSQL directly for the absolute highest existing BOM sequence
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_bom
               FROM public.bom_orders
               WHERE bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3182,7 +3459,7 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_pi_bom
+              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_pi_bom
               FROM public.proforma_invoices
               WHERE converted_bom_code ~ '^BOM-[0-9]+$'
             `).catch(() => null);
@@ -3352,6 +3629,22 @@ async function repairBomSequences() {
             convertedBomNo: assigned
           };
         }
+      } else if (
+        (pi.convertedBomCode === 'BOM-659' || pi.convertedBomNo === 'BOM-659' || pi.converted_bom_code === 'BOM-659' || pi.converted_bom_no === 'BOM-659') &&
+        pNo !== 'PI-00061'
+      ) {
+        piUpdatedCount++;
+        piListChanged = true;
+        return {
+          ...pi,
+          status: 'Issued',
+          statusType: 'issued',
+          convertedToBom: false,
+          convertedBomCode: null,
+          convertedBomNo: null,
+          converted_bom_code: null,
+          converted_bom_no: null
+        };
       }
       return pi;
     });
@@ -3359,11 +3652,13 @@ async function repairBomSequences() {
     if (piListChanged) {
       if (isDbConnected()) {
         await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
+        await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'proforma_invoice_store'`, [JSON.stringify(piList)]).catch(() => null);
       }
       try {
         fs.writeFileSync(getStoreFilePath('sales_pi_store.json'), JSON.stringify(piList, null, 2), 'utf8');
       } catch (_) {}
       supabaseMemoryStore['sales_pi_store'] = piList;
+      supabaseMemoryStore['proforma_invoice_store'] = piList;
     }
   }
 
@@ -3410,6 +3705,19 @@ async function repairBomSequences() {
 
   // 3. Ensure public.proforma_invoices and public.bom_orders tables in PostgreSQL are updated
   if (isDbConnected()) {
+    try {
+      await query(`
+        UPDATE public.proforma_invoices
+        SET converted_bom_code = NULL,
+            converted_to_bom = false,
+            status = 'Issued',
+            updated_at = NOW()
+        WHERE (converted_bom_code = 'BOM-659' OR converted_bom_no = 'BOM-659')
+          AND pi_no != 'PI-00061'
+          AND id != 'PI-00061'
+      `);
+    } catch (_) {}
+
     for (const [piNo, info] of Object.entries(targetMap)) {
       try {
         await query(`
@@ -3482,7 +3790,7 @@ async function repairBomSequences() {
   }
 
   // 4. Update sequence counter
-  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, 662);
+  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, 663);
 
   // 5. Reload memory cache & broadcast updates
   await loadDatabaseBoms(true);
@@ -3496,6 +3804,85 @@ async function repairBomSequences() {
   return { piUpdatedCount, bomUpdatedCount, maxSequence: serverBomSequenceCounter };
 }
 
+/**
+ * Idempotent reconciliation:
+ * Ensures all BOMs present in controlroom_store or bom_store.json (e.g. BOM-663, 664, 665)
+ * are cleanly represented in public.bom_orders without overwriting existing data.
+ */
+async function syncMissingRelationalBoms() {
+  if (!isDbConnected()) return;
+  try {
+    const existingDbRes = await query(`SELECT bom_code, id FROM public.bom_orders`).catch(() => null);
+    const existingCodes = new Set((existingDbRes?.rows || []).map(r => r.bom_code || r.id));
+
+    // Read authoritative JSON store
+    let bomsToSync = [];
+    const crRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'bom_store'`).catch(() => null);
+    if (crRes?.rows?.[0]?.data && Array.isArray(crRes.rows[0].data)) {
+      bomsToSync = crRes.rows[0].data;
+    }
+    if (bomsToSync.length === 0) {
+      const diskPath = getStoreFilePath('bom_store.json');
+      if (fs.existsSync(diskPath)) {
+        try { bomsToSync = JSON.parse(fs.readFileSync(diskPath, 'utf8')); } catch (_) {}
+      }
+    }
+    if (!Array.isArray(bomsToSync) || bomsToSync.length === 0) return;
+
+    let syncedCount = 0;
+    for (const bom of bomsToSync) {
+      const code = bom?.bomCode || bom?.code || bom?.id;
+      if (!code || existingCodes.has(code)) continue;
+
+      const dbRow = toDatabaseBomRowServer(bom);
+      if (!dbRow) continue;
+
+      const keys = Object.keys(dbRow).filter(k => dbRow[k] !== undefined);
+      const cols = keys.map(k => `"${k}"`).join(', ');
+      const jsonbCols = new Set([
+        'items', 'payments', 'dispatch_packing', 'accounts_verification', 
+        'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
+        'dispatch_packing_media', 'vehicle_loading', 'data'
+      ]);
+      const placeholders = keys.map((k, i) => jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`).join(', ');
+      const values = keys.map(k => {
+        const v = dbRow[k];
+        return typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
+      });
+
+      const sql = `
+        INSERT INTO public.bom_orders (${cols})
+        VALUES (${placeholders})
+        ON CONFLICT (id) DO NOTHING
+      `;
+
+      try {
+        await query(sql, values);
+        existingCodes.add(code);
+        if (bom?.id) existingCodes.add(bom.id);
+        if (bom?.bomCode) existingCodes.add(bom.bomCode);
+        syncedCount++;
+      } catch (insertErr) {
+        if (insertErr?.code === '23505') {
+          // Unique violation on id or bom_code: safely skip duplicate
+          console.warn(`[BOM Reconciliation Notice] Record ${code} already exists in database (skipped).`);
+        } else {
+          console.error(`[BOM Reconciliation Error] Failed to persist ${code} to public.bom_orders:`, insertErr.message);
+          throw insertErr;
+        }
+      }
+    }
+
+    if (syncedCount > 0) {
+      console.log(`✅ [BOM Reconciliation] Reconciled ${syncedCount} missing BOM(s) into public.bom_orders.`);
+    }
+    return { success: true, syncedCount };
+  } catch (err) {
+    console.error('❌ [BOM Reconciliation Fatal Error]:', err?.message || err);
+    throw err;
+  }
+}
+
 // Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs
 app.post('/api/repair-bom-sequences', async (req, res) => {
   try {
@@ -3507,9 +3894,6 @@ app.post('/api/repair-bom-sequences', async (req, res) => {
 });
 
 // Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching
-let cachedBomsResult = null;
-let lastBomFetchTimestamp = 0;
-
 app.get('/api/boms', async (req, res) => {
   try {
     const now = Date.now();
@@ -3810,7 +4194,11 @@ app.post('/api/boms', async (req, res) => {
   return new Promise((resolveOuter) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let { bom, isNew, isUpdate } = req.body;
+        let { bom, isNew, isUpdate } = req.body || {};
+        if (!bom && (req.body?.bomCode || req.body?.code || req.body?.id)) {
+          bom = req.body;
+          isUpdate = true;
+        }
         if (!bom) {
           res.status(400).json({ success: false, message: 'Valid bom record required' });
           return resolveOuter();
@@ -3904,6 +4292,12 @@ app.post('/api/boms', async (req, res) => {
         const isPlaceholderCode = !incomingCode || incomingCode.toLowerCase().includes('auto') || incomingCode.toLowerCase().includes('pending');
         const incomingPi = String(bom.sourcePiNo || bom.source_pi_no || bom.piNo || '').trim().toLowerCase();
 
+        // Reject invalid or ambiguous BOM identifiers on update
+        if (isUpdate && (!incomingCode || incomingCode === 'null' || incomingCode === 'undefined' || incomingCode === '[object Object]')) {
+          res.status(400).json({ success: false, message: 'Invalid or ambiguous BOM identifier for update' });
+          return resolveOuter();
+        }
+
         // 1. Check if an existing BOM belongs to this specific source PI
         let existingPiBom = null;
         if (incomingPi && incomingPi !== 'null' && incomingPi !== 'undefined') {
@@ -3954,9 +4348,49 @@ app.post('/api/boms', async (req, res) => {
 
         serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, maxNum);
 
-        // Merge or insert new BOM record
-        if (map.has(finalCode)) {
-          map.set(finalCode, { ...map.get(finalCode), ...bom });
+        // Safe Merge: preserve existing complete records when partial updates are performed
+        const existingRec = map.get(finalCode);
+        let mergedBom = bom;
+        if (existingRec) {
+          const eRank = getWorkflowRankServer(existingRec);
+          const iRank = getWorkflowRankServer(bom);
+
+          mergedBom = {
+            ...existingRec,
+            ...bom,
+            // Preserve rich line items if incoming is empty/missing
+            items: (Array.isArray(bom.items) && bom.items.length > 0) ? bom.items : (existingRec.items || []),
+            // Preserve customer details if incoming is empty or default
+            customerName: bom.customerName || bom.companyName || existingRec.customerName || existingRec.companyName || 'Customer',
+            companyName: bom.companyName || bom.customerName || existingRec.companyName || existingRec.customerName || '',
+            contactPerson: bom.contactPerson || bom.contact || existingRec.contactPerson || '',
+            gstNo: bom.gstNo || bom.gst || bom.gstin || existingRec.gstNo || '',
+            // Preserve salesperson and attribution if missing in partial update
+            salesPerson: bom.salesPerson || bom.sales_person || existingRec.salesPerson || '',
+            salesPersonCode: bom.salesPersonCode || bom.sales_person_code || existingRec.salesPersonCode || '',
+            createdBy: bom.createdBy || bom.created_by || existingRec.createdBy || '',
+            createdById: bom.createdById || bom.created_by_id || existingRec.createdById || '',
+            sourcePiNo: bom.sourcePiNo || bom.source_pi_no || existingRec.sourcePiNo || null,
+            // Preserve financial totals if incoming is 0 and existing is non-zero
+            grandTotal: (Number(bom.grandTotal) > 0) ? Number(bom.grandTotal) : (existingRec.grandTotal || 0),
+            subTotal: (Number(bom.subTotal) > 0) ? Number(bom.subTotal) : (existingRec.subTotal || 0),
+            // Workflow progression safety: do not allow a stale lower-rank status to regress progress
+            status: (iRank >= eRank) ? bom.status : existingRec.status,
+            packingStatus: (iRank >= eRank) ? (bom.packingStatus || existingRec.packingStatus) : existingRec.packingStatus,
+            fullyCompleted: (iRank >= eRank) ? (bom.fullyCompleted ?? existingRec.fullyCompleted) : existingRec.fullyCompleted,
+            // Deep merge dispatch packing and accounts verification
+            dispatchPacking: (Array.isArray(bom.dispatchPacking) && bom.dispatchPacking.length > 0) ? bom.dispatchPacking : (existingRec.dispatchPacking || []),
+            accountsVerification: {
+              ...(existingRec.accountsVerification || {}),
+              ...(bom.accountsVerification || {})
+            },
+            vehicleLoading: bom.vehicleLoading || existingRec.vehicleLoading || null,
+            lrCopyDoc: bom.lrCopyDoc || existingRec.lrCopyDoc || null,
+            dispatchPackingMedia: (bom.dispatchPackingMedia?.photos?.length > 0 || bom.dispatchPackingMedia?.videos?.length > 0)
+              ? bom.dispatchPackingMedia
+              : (existingRec.dispatchPackingMedia || { photos: [], videos: [] })
+          };
+          map.set(finalCode, mergedBom);
         } else {
           map.set(finalCode, bom);
         }
@@ -4000,24 +4434,24 @@ app.post('/api/boms', async (req, res) => {
         cachedBomsResult = mergedList;
         lastBomFetchTimestamp = Date.now();
 
-        // RESPOND TO CLIENT WITH CONFIRMED BOM IMMEDIATELY (Sub-second response)
-        res.json({ success: true, bom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
-        resolveOuter();
-
-        // Asynchronous single-row upsert to public.bom_orders with safety timeout
-        (async () => {
+        // Synchronous Relational Database Persistence Check: NEVER report false success if SQL fails
+        if (isDbConnected()) {
           try {
-            const mergedBom = map.get(finalCode) || bom;
             const dbRow = toDatabaseBomRowServer(mergedBom);
             if (dbRow) {
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase single BOM upsert timeout')), 5000));
-              const upsertPromise = supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
-              const { error: upsertErr } = await Promise.race([upsertPromise, timeoutPromise]);
-              if (upsertErr) console.warn('[POST /api/boms] Single row upsert notice:', upsertErr.message);
+              const { error: upsertErr } = await supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
+              if (upsertErr) {
+                console.error('[POST /api/boms Error] Failed to persist BOM to public.bom_orders:', upsertErr.message);
+                res.status(500).json({ success: false, message: 'Database persistence failed: ' + upsertErr.message });
+                return resolveOuter();
+              }
             }
           } catch (e) {
-            console.warn('[POST /api/boms] Background Supabase upsert notice:', e?.message || e);
+            console.error('[POST /api/boms Error] Supabase upsert error:', e?.message || e);
+            res.status(500).json({ success: false, message: 'Database persistence error: ' + (e?.message || e) });
+            return resolveOuter();
           }
+        }
 
           try {
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 5000));
@@ -4062,8 +4496,10 @@ app.post('/api/boms', async (req, res) => {
               }
             } catch (_) {}
           }
-        })();
-        return;
+
+        // RESPOND TO CLIENT WITH CONFIRMED BOM (Persisted to database & disk)
+        res.json({ success: true, bom: mergedBom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
+        return resolveOuter();
       } catch (err) {
         console.error('Error saving BOM:', err);
         res.status(500).json({ success: false, message: err.message });
@@ -7008,6 +7444,9 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       return res.sendFile(path.join(distPath, 'index.html'));
     }
     next();
@@ -7021,5 +7460,5 @@ app.listen(PORT, () => {
 });
 
 export default app;
-export { supabaseMemoryStore };
+export { supabaseMemoryStore, saveLocalBoms, syncMissingRelationalBoms, toDatabaseBomRowServer, loadDatabaseBoms };
 

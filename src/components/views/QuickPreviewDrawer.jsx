@@ -161,6 +161,54 @@ export default function QuickPreviewDrawer({
         </div>
       </div>
 
+      {/* Primary Dispatch Action Button */}
+      {activeTab === 'Dispatch Orders' && !quickPreviewRecord.cancelled && (
+        <div style={{ padding: '2px 0' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof onViewFullDetails === 'function') {
+                onViewFullDetails(quickPreviewRecord);
+              }
+              onClose();
+            }}
+            style={{
+              width: '100%',
+              padding: '13px 20px',
+              borderRadius: '12px',
+              border: 'none',
+              background: (quickPreviewRecord.tabGroup === 'Closed' || quickPreviewRecord.status === 'Completed' || quickPreviewRecord.status === 'COMPLETED & DISPATCHED')
+                ? 'linear-gradient(135deg, #15803D, #16A34A)'
+                : (quickPreviewRecord.tabGroup === 'AwaitingLrCopy' || quickPreviewRecord.status?.includes('Awaiting LR'))
+                  ? 'linear-gradient(135deg, #D97706, #F59E0B)'
+                  : (quickPreviewRecord.tabGroup === 'AwaitingLoading' || quickPreviewRecord.status?.includes('Loading') || quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' || quickPreviewRecord.tabGroup === 'Packed')
+                    ? 'linear-gradient(135deg, #0284C7, #0EA5E9)'
+                    : 'linear-gradient(135deg, #0E7490, #06B6D4)',
+              color: '#FFFFFF',
+              fontWeight: '800',
+              fontSize: '14px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              boxShadow: '0 4px 14px rgba(14,116,144,0.25)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {(quickPreviewRecord.tabGroup === 'Closed' || quickPreviewRecord.status === 'Completed' || quickPreviewRecord.status === 'COMPLETED & DISPATCHED') ? (
+              <>👁️ View Dispatched Shipment Details</>
+            ) : (quickPreviewRecord.tabGroup === 'AwaitingLrCopy' || quickPreviewRecord.status?.includes('Awaiting LR')) ? (
+              <>📄 Upload Transporter LR Copy & Close Order</>
+            ) : (quickPreviewRecord.tabGroup === 'AwaitingLoading' || quickPreviewRecord.status?.includes('Loading') || quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' || quickPreviewRecord.tabGroup === 'Packed') ? (
+              <>🚚 Proceed to Vehicle Loading & Complete Dispatch</>
+            ) : (
+              <>📦 Pack Goods & Verify Items for Dispatch</>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* 4 Stat Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
         <div>

@@ -814,6 +814,7 @@ export function toConsumerBom(row) {
     dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
     packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
+      (String(row.status || '').toLowerCase().includes('packed') || String(row.status || '').toLowerCase().includes('awaiting vehicle loading') || String(row.status || '').toLowerCase().includes('invoice confirmed')) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
       cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
     ),
@@ -1750,9 +1751,9 @@ export function getWorkflowRank(b) {
  * Deduplicates BOM list by unique bomCode and unique sourcePiNo (Strict 1-to-1 PI Rule).
  * Merges duplicate entries in place without fabricating clone BOM codes.
  */
-export function resolveBomCollisions(bomList, sequenceMax = 662) {
+export function resolveBomCollisions(bomList, sequenceMax = 663) {
   if (!Array.isArray(bomList)) return { list: [], maxSeq: sequenceMax };
-  let maxSeq = Math.max(sequenceMax, 662);
+  let maxSeq = Math.max(sequenceMax, 663);
 
   const seenCodes = new Map();
   const seenPiNos = new Map();
@@ -1929,7 +1930,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     const endpoint = commit ? '/api/boms/reserve-code' : '/api/boms/next-code';
     const method = commit ? 'POST' : 'GET';
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const apiRes = await fetch(endpoint, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -1945,7 +1946,7 @@ export async function getAndReserveNextBomCode(commit = true) {
     }
   } catch (_) {}
 
-  let highestNum = 662;
+  let highestNum = 663;
 
   try {
     // High-speed single-row query for sequence counter (50ms)
@@ -2031,7 +2032,7 @@ export async function getAndReserveNextBomCode(commit = true) {
 
     const safeSeq = Number.isFinite(seqCounter) && seqCounter > 0 ? seqCounter : 0;
     const safeStore = Number.isFinite(storeMax) && storeMax > 0 ? storeMax : 0;
-    highestNum = Math.max(safeSeq, safeStore, 662);
+    highestNum = Math.max(safeSeq, safeStore, 663);
     const nextNum = highestNum + 1;
     const formattedCode = `BOM-${String(nextNum).padStart(3, '0')}`;
 

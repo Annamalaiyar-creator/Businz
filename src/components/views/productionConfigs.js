@@ -392,6 +392,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 if (isAwaitingLrOrder(b)) return false;
 
                 const isFullyPacked = isPackedOrder(b);
+                const is100Paid = Boolean(
+                  b.paymentType === '100% Paid' ||
+                  b.paymentType === '100% Advance' ||
+                  (b.paymentType && b.paymentType.includes('100%')) ||
+                  (b.c4 && b.c4.includes('100%'))
+                );
 
                 return Boolean(
                   b.status === 'Awaiting Vehicle Loading & Dispatch' ||
@@ -402,7 +408,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   b.isAccountsDone ||
                   b.accountsVerification?.verified ||
                   (b.invoiceNo && !isClosedOrder(b)) ||
-                  (isFullyPacked && (b.isAccountsDone || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified || b.invoiceConfirmed || b.invoiceNo))
+                  (isFullyPacked && (b.isAccountsDone || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified || b.invoiceConfirmed || b.invoiceNo || is100Paid))
                 );
               };
 
@@ -464,9 +470,15 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   }
                   const totalItemsCount = itemsArray.length;
                   const isOrderPacked = isPackedOrder(b);
-                  const packedCount = (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
-                    ? b.dispatchPacking.filter(p => p.packed).length
-                    : (isOrderPacked ? totalItemsCount : 0);
+                  const packedCount = (() => {
+                    if (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0) {
+                      const count = b.dispatchPacking.filter(p => p && (p.packed || p.scanned || p.checked)).length;
+                      if (count > 0) return count;
+                      if (isOrderPacked) return b.dispatchPacking.length;
+                      return 0;
+                    }
+                    return isOrderPacked ? totalItemsCount : 0;
+                  })();
                   const isFullyPacked = isOrderPacked || (totalItemsCount > 0 && packedCount === totalItemsCount);
                   const isPartiallyPacked = !isFullyPacked && (isPartiallyPackedOrder(b) || (packedCount > 0 && packedCount < totalItemsCount));
                   const isAwaitingLr = isAwaitingLrOrder(b);
@@ -573,7 +585,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     else if (code === 'BOM-661') resolvedCustomer = 'VRM Energy Consultancy Services Private Limited';
                     else if (code === 'BOM-662') resolvedCustomer = 'Teorainn Solar Pvt Ltd';
                   }
-                  const customerDisplayName = resolvedCustomer || 'Teorainn Solar Pvt Ltd';
+                  const customerDisplayName = resolvedCustomer || 'Customer Order';
 
                   const isDispatchUser = (name) => {
                     if (!name) return false;
@@ -597,8 +609,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   if (!totalAmt && matchedPi) {
                     totalAmt = Number(matchedPi.grandTotal || matchedPi.total || matchedPi.amount || 0);
                   }
-                  if (!totalAmt && effectiveItems.length > 0) {
-                    totalAmt = effectiveItems.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
+                  if (!totalAmt && itemsArray.length > 0) {
+                    totalAmt = itemsArray.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
                   }
                   if (!totalAmt) {
                     const code = b.bomCode || b.code || b.id || '';
