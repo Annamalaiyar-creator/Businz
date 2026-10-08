@@ -58,15 +58,46 @@ done
 echo "✅ Successfully backed up ${JSON_COUNT} active server JSON store files."
 
 # ------------------------------------------------------------------------------
+# STEP 2.5: DISK SPACE VERIFICATION (MANDATORY HEADROOM CHECK)
+# ------------------------------------------------------------------------------
+echo ""
+echo "💾 [Step 2.5] Verifying available disk space..."
+AVAILABLE_KB=$(df -k /var/www | awk 'NR==2 {print $4}')
+REQUIRED_KB=2097152 # 2 GB minimum headroom in KB
+
+if [ "$AVAILABLE_KB" -lt "$REQUIRED_KB" ]; then
+  echo "❌ [FATAL ERROR] Insufficient disk space! Available: ${AVAILABLE_KB} KB, Required: ${REQUIRED_KB} KB."
+  exit 1
+fi
+echo "✅ Sufficient disk space verified: $(( AVAILABLE_KB / 1024 )) MB available."
+
+# ------------------------------------------------------------------------------
 # STEP 3: PERFORM CONSISTENT POSTGRESQL PRODUCTION DUMP
 # ------------------------------------------------------------------------------
 echo ""
 echo "🐘 [Step 3/5] Creating consistent dump of PostgreSQL database 'businz'..."
 DUMP_CUSTOM="${BACKUP_DIR}/businz_pg_${TIMESTAMP}.dump"
 DUMP_SQL="${BACKUP_DIR}/businz_pg_${TIMESTAMP}.sql"
+DUMP_LOG="${BACKUP_DIR}/pg_dump_${TIMESTAMP}.log"
 
-sudo -u postgres pg_dump -F c -b -v -f "${DUMP_CUSTOM}" businz
-sudo -u postgres pg_dump --clean --if-exists businz > "${DUMP_SQL}"
+if ! sudo -u postgres pg_dump -F c -b -v -f "${DUMP_CUSTOM}" businz 2> "${DUMP_LOG}"; then
+  echo "❌ [FATAL ERROR] pg_dump failed! Check log: ${DUMP_LOG}"
+  cat "${DUMP_LOG}"
+  exit 1
+fi
+
+if ! sudo -u postgres pg_dump --clean --if-exists businz > "${DUMP_SQL}" 2>> "${DUMP_LOG}"; then
+  echo "❌ [FATAL ERROR] Plain SQL pg_dump failed! Check log: ${DUMP_LOG}"
+  cat "${DUMP_LOG}"
+  exit 1
+fi
+
+# Verify dump file sizes (> 100 KB)
+CUSTOM_BYTES=$(wc -c < "${DUMP_CUSTOM}" 2>/dev/null || echo 0)
+if [ "$CUSTOM_BYTES" -lt 102400 ]; then
+  echo "❌ [FATAL ERROR] pg_dump file is abnormally small (${CUSTOM_BYTES} bytes)! Aborting."
+  exit 1
+fi
 
 CUSTOM_SIZE=$(du -h "${DUMP_CUSTOM}" | awk '{print $1}')
 SQL_SIZE=$(du -h "${DUMP_SQL}" | awk '{print $1}')
@@ -78,11 +109,24 @@ echo "✅ Plain SQL dump:     ${DUMP_SQL} (${SQL_SIZE})"
 # ------------------------------------------------------------------------------
 echo ""
 echo "🧪 [Step 4/5] Testing backup restoration in isolated environment (${ISOLATED_TEST_DB})..."
+RESTORE_LOG="${BACKUP_DIR}/pg_restore_${TIMESTAMP}.log"
+
 sudo -u postgres psql -c "DROP DATABASE IF EXISTS ${ISOLATED_TEST_DB};" >/dev/null 2>&1
-sudo -u postgres psql -c "CREATE DATABASE ${ISOLATED_TEST_DB};" >/dev/null 2>&1
+if ! sudo -u postgres psql -c "CREATE DATABASE ${ISOLATED_TEST_DB};" >/dev/null 2>&1; then
+  echo "❌ [FATAL ERROR] Failed to create isolated test database ${ISOLATED_TEST_DB}!"
+  exit 1
+fi
 
 echo "   - Restoring custom dump into ${ISOLATED_TEST_DB}..."
-sudo -u postgres pg_restore -d "${ISOLATED_TEST_DB}" --no-owner --no-privileges "${DUMP_CUSTOM}" >/dev/null 2>&1 || true
+if ! sudo -u postgres pg_restore -d "${ISOLATED_TEST_DB}" --no-owner --no-privileges "${DUMP_CUSTOM}" > "${RESTORE_LOG}" 2>&1; then
+  # Check if non-zero exit code represents real error or benign warnings
+  if grep -qi "error:" "${RESTORE_LOG}"; then
+    echo "❌ [FATAL ERROR] pg_restore failed with errors! Check log: ${RESTORE_LOG}"
+    cat "${RESTORE_LOG}"
+    sudo -u postgres psql -c "DROP DATABASE IF EXISTS ${ISOLATED_TEST_DB};" >/dev/null 2>&1
+    exit 1
+  fi
+fi
 
 echo "   - Verifying table integrity in isolated test database:"
 sudo -u postgres psql -d "${ISOLATED_TEST_DB}" -c "

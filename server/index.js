@@ -3812,8 +3812,13 @@ async function repairBomSequences() {
 async function syncMissingRelationalBoms() {
   if (!isDbConnected()) return;
   try {
-    const existingDbRes = await query(`SELECT bom_code, id FROM public.bom_orders`).catch(() => null);
-    const existingCodes = new Set((existingDbRes?.rows || []).map(r => r.bom_code || r.id));
+    const existingDbRes = await query(`SELECT bom_code, id, status, grand_total FROM public.bom_orders`).catch(() => null);
+    const existingCodes = new Set();
+    const existingDbMap = new Map();
+    (existingDbRes?.rows || []).forEach(r => {
+      if (r.bom_code) { existingCodes.add(r.bom_code); existingDbMap.set(r.bom_code, r); }
+      if (r.id) { existingCodes.add(r.id); existingDbMap.set(r.id, r); }
+    });
 
     // Read authoritative JSON store
     let bomsToSync = [];
@@ -3832,7 +3837,21 @@ async function syncMissingRelationalBoms() {
     let syncedCount = 0;
     for (const bom of bomsToSync) {
       const code = bom?.bomCode || bom?.code || bom?.id;
-      if (!code || existingCodes.has(code)) continue;
+      if (!code) continue;
+
+      const existingRecord = existingDbMap.get(code) || (bom?.id && existingDbMap.get(bom.id));
+      if (existingRecord) {
+        // Transparent conflict audit: detect and report differences rather than silently ignoring
+        const dbStatus = String(existingRecord.status || '').trim();
+        const storeStatus = String(bom.status || '').trim();
+        const dbTotal = Number(existingRecord.grand_total || 0);
+        const storeTotal = Number(bom.grandTotal || bom.grand_total || 0);
+
+        if (dbStatus !== storeStatus || (dbTotal !== storeTotal && Math.abs(dbTotal - storeTotal) > 1)) {
+          console.warn(`[BOM Reconciliation Conflict Notice] Divergence on ${code}: Database [Status: "${dbStatus}", Total: ${dbTotal}] vs Store [Status: "${storeStatus}", Total: ${storeTotal}]. Authoritative database preserved.`);
+        }
+        continue;
+      }
 
       const dbRow = toDatabaseBomRowServer(bom);
       if (!dbRow) continue;
