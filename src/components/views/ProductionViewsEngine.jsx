@@ -822,7 +822,21 @@ export default function ProductionViewsEngine(props) {
   const [invoiceList, setInvoiceList] = useState(() => {
     try {
       const saved = localStorage.getItem('controlroom_invoice_store');
-      return saved ? JSON.parse(saved) : [];
+      const list = saved ? JSON.parse(saved) : [];
+      if (!Array.isArray(list)) return [];
+      const map = new Map();
+      list.forEach(inv => {
+        const bRef = (inv.bomCode || inv.poNo || (inv.notes || '').match(/BOM-[0-9]+/i)?.[0] || '').toUpperCase().trim();
+        const invNum = (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo.toUpperCase().trim() : '';
+        const key = invNum || (bRef ? `BOM_${bRef}` : (inv.id || JSON.stringify(inv)));
+        if (!map.has(key)) {
+          map.set(key, inv);
+        } else {
+          const isCurrConf = inv.status === 'Invoice Confirmed' || inv.pay === 'Completed & Locked';
+          if (isCurrConf) map.set(key, inv);
+        }
+      });
+      return Array.from(map.values());
     } catch (_) {
       return [];
     }
@@ -846,11 +860,19 @@ export default function ProductionViewsEngine(props) {
         if (data && Array.isArray(data) && data.length > 0) {
           setInvoiceList(prev => {
             const map = new Map();
-            data.forEach(i => map.set(i.invNo || i.id, i));
+            data.forEach(i => {
+              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/BOM-[0-9]+/i)?.[0] || '').toUpperCase().trim();
+              const invNum = (i.invNo && i.invNo !== 'Pending Confirmation') ? i.invNo.toUpperCase().trim() : '';
+              const key = invNum || (bRef ? `BOM_${bRef}` : (i.id || JSON.stringify(i)));
+              map.set(key, i);
+            });
             (prev || []).forEach(i => {
-              const k = i.invNo || i.id;
-              if (!map.has(k)) map.set(k, i);
-              else map.set(k, { ...map.get(k), ...i });
+              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/BOM-[0-9]+/i)?.[0] || '').toUpperCase().trim();
+              const invNum = (i.invNo && i.invNo !== 'Pending Confirmation') ? i.invNo.toUpperCase().trim() : '';
+              const key = invNum || (bRef ? `BOM_${bRef}` : (i.id || JSON.stringify(i)));
+              if (!map.has(key)) {
+                map.set(key, i);
+              }
             });
             return Array.from(map.values());
           });

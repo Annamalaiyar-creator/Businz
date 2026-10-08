@@ -96,58 +96,129 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               };
             });
 
+          const cleanDateStr = (rawDate) => {
+            if (!rawDate) return '-';
+            const s = String(rawDate).trim();
+            if (s.includes('T')) {
+              const parts = s.split('T')[0].split('-');
+              if (parts.length === 3) {
+                const [y, m, d] = parts;
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const mIdx = parseInt(m, 10) - 1;
+                if (mIdx >= 0 && mIdx < 12) {
+                  return `${d} ${months[mIdx]} ${y}`;
+                }
+              }
+            }
+            return s;
+          };
+
+          const findMatchingBom = (inv) => {
+            if (!inv) return null;
+            const directRef = (inv.poNo || inv.bomCode || inv.c3 || '').toLowerCase().trim();
+            const fromNotes = (inv.notes || '').match(/BOM-[0-9]+/i)?.[0]?.toLowerCase() || '';
+            return (bomStore || []).find(b => {
+              const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
+              const soNo = (b.salesOrderNo || '').toLowerCase().trim();
+              return (bCode && (bCode === directRef || bCode === fromNotes)) ||
+                     (soNo && (soNo === directRef || soNo === fromNotes));
+            });
+          };
+
           const mergedInvoices = (invoiceList || []).filter(inv => {
-            const matchingBom = (bomStore || []).find(b =>
-              b.bomCode === inv.poNo ||
-              b.code === inv.poNo ||
-              b.bomCode === inv.code ||
-              b.bomCode === inv.invNo ||
-              (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3))
-            );
+            const matchingBom = findMatchingBom(inv);
             if (matchingBom) {
               if (matchingBom.cancelled || matchingBom.status === 'Cancelled' || matchingBom.status === 'Cancelled & Stock Restored') return false;
               return isInvoiceEligibleBom(matchingBom);
             }
             return true;
           }).map(inv => {
-            const matchingBom = (bomStore || []).find(b =>
-              b.bomCode === inv.poNo ||
-              b.code === inv.poNo ||
-              b.bomCode === inv.code ||
-              b.bomCode === inv.invNo ||
-              (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3))
-            );
-            if (matchingBom) {
-              const isConf = matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed || inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.pay === 'Completed & Locked' || Boolean(matchingBom.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation');
-              return {
-                ...inv,
-                invNo: (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo : (matchingBom.invoiceNo || inv.invNo),
-                vendor: inv.vendor || matchingBom.customerName || 'Customer',
-                customerName: matchingBom.customerName || inv.vendor || 'Customer',
-                billingAddress: inv.billingAddress || matchingBom.billingAddress,
-                deliveryAddress: inv.deliveryAddress || matchingBom.deliveryAddress,
-                deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom.deliveryAddressProofDoc,
-                accountsVerification: matchingBom.accountsVerification || inv.accountsVerification,
-                status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
-                pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
-                items: (inv.items && inv.items.length > 0) ? inv.items : (matchingBom.dispatchPacking || matchingBom.items || [])
-              };
+            const matchingBom = findMatchingBom(inv);
+            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/BOM-[0-9]+/i)?.[0] || '';
+            const isConf = (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed)) ||
+              inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.pay === 'Completed & Locked' ||
+              Boolean(inv.invNo && inv.invNo !== 'Pending Confirmation') ||
+              Boolean(matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation');
+            
+            const resolvedCustomer = (matchingBom?.customerName && matchingBom.customerName !== 'Customer Order' && matchingBom.customerName !== 'Customer')
+              ? matchingBom.customerName
+              : (inv.vendor && inv.vendor !== 'Customer Order' ? inv.vendor : (inv.customerName || matchingBom?.customerName || 'Customer'));
+
+            return {
+              ...inv,
+              poNo: resolvedBomCode,
+              bomCode: resolvedBomCode,
+              invNo: (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo : (matchingBom?.invoiceNo || inv.invNo || 'Pending Confirmation'),
+              vendor: resolvedCustomer,
+              customerName: resolvedCustomer,
+              billingAddress: inv.billingAddress || matchingBom?.billingAddress,
+              deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
+              deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc,
+              accountsVerification: matchingBom?.accountsVerification || inv.accountsVerification,
+              status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
+              pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
+              items: (inv.items && inv.items.length > 0) ? inv.items : (matchingBom?.dispatchPacking || matchingBom?.items || [])
+            };
+          });
+
+          // Build a strictly deduplicated canonical map
+          const invoiceMap = new Map();
+
+          // 1. Process mergedInvoices (prefer officially confirmed invoices over pending)
+          mergedInvoices.forEach(inv => {
+            const bRef = (inv.bomCode || inv.poNo || '').toUpperCase().trim();
+            const invNum = (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo.toUpperCase().trim() : '';
+            const key = invNum || (bRef ? `BOM_${bRef}` : (inv.id || JSON.stringify(inv)));
+
+            if (!invoiceMap.has(key)) {
+              invoiceMap.set(key, inv);
+            } else {
+              const existing = invoiceMap.get(key);
+              const isCurrConf = inv.status === 'Invoice Confirmed' || inv.pay === 'Completed & Locked';
+              const isExistConf = existing.status === 'Invoice Confirmed' || existing.pay === 'Completed & Locked';
+              if (isCurrConf && !isExistConf) {
+                invoiceMap.set(key, inv);
+              }
             }
-            return inv;
           });
 
-          const missingVerified = verifiedBomInvoices.filter(v => {
-            const vPo = (v.poNo || '').toLowerCase();
-            const vInv = (v.invNo || '').toLowerCase();
-            return !mergedInvoices.some(m =>
-              (m.poNo && m.poNo.toLowerCase() === vPo) ||
-              (m.bomCode && m.bomCode.toLowerCase() === vPo) ||
-              (m.invNo && m.invNo.toLowerCase() === vInv) ||
-              (m.code && m.code.toLowerCase() === vInv)
-            );
+          // 2. Add verified BOM invoices if not already present
+          verifiedBomInvoices.forEach(v => {
+            const bRef = (v.bomCode || v.poNo || '').toUpperCase().trim();
+            const invNum = (v.invNo && v.invNo !== 'Pending Confirmation') ? v.invNo.toUpperCase().trim() : '';
+            
+            const alreadyExists = Array.from(invoiceMap.values()).some(existing => {
+              const exBRef = (existing.bomCode || existing.poNo || '').toUpperCase().trim();
+              const exInv = (existing.invNo && existing.invNo !== 'Pending Confirmation') ? existing.invNo.toUpperCase().trim() : '';
+              return (bRef && exBRef === bRef) || (invNum && exInv === invNum);
+            });
+
+            if (!alreadyExists) {
+              const key = invNum || (bRef ? `BOM_${bRef}` : (v.id || `VERIFIED_${Math.random()}`));
+              invoiceMap.set(key, v);
+            }
           });
 
-          const allInvoicesUnified = [...missingVerified, ...mergedInvoices].sort((a, b) => {
+          // 3. Suppress any Pending Confirmation row if that same BOM already has a Confirmed & Locked invoice
+          const confirmedBomCodes = new Set();
+          Array.from(invoiceMap.values()).forEach(item => {
+            const isConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
+            const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
+            if (isConf && bRef) {
+              confirmedBomCodes.add(bRef);
+            }
+          });
+
+          const dedupedInvoices = Array.from(invoiceMap.values()).filter(item => {
+            const isPending = !item.invNo || item.invNo === 'Pending Confirmation' || item.pay !== 'Completed & Locked';
+            const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
+            if (isPending && bRef && confirmedBomCodes.has(bRef)) {
+              return false;
+            }
+            return true;
+          });
+
+          const allInvoicesUnified = dedupedInvoices.sort((a, b) => {
             const numA = parseInt((a.poNo || a.bomCode || a.invNo || '').replace(/[^0-9]/g, ''), 10) || 0;
             const numB = parseInt((b.poNo || b.bomCode || b.invNo || '').replace(/[^0-9]/g, ''), 10) || 0;
             return numB - numA;
@@ -176,7 +247,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   code: i.invNo,
                   c2: i.vendor || i.customerName || 'Customer',
                   c3: i.poNo || i.bomCode || 'BOM-001',
-                  c4: i.date,
+                  c4: cleanDateStr(i.date),
                   c5: typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : i.invAmt,
                   c6: isConfirmed ? 'Completed & Locked' : (i.pay || 'Ready for Payment'),
                   status: isConfirmed ? 'Invoice Confirmed' : (i.status || 'Ready for Payment'),
