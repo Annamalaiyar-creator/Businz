@@ -40,7 +40,6 @@ let supabaseMemoryStore = {};
 initPostgresDatabase().then(() => {
   setTimeout(() => {
     syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
-    repairBomSequences().catch(err => console.warn('[Auto Repair Notice]:', err.message));
   }, 2000);
 }).catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
