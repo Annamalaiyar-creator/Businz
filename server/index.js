@@ -39,6 +39,7 @@ let supabaseMemoryStore = {};
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
   setTimeout(() => {
+    syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
     repairBomSequences().catch(err => console.warn('[Auto Repair Notice]:', err.message));
   }, 2000);
 }).catch(err => {
@@ -889,13 +890,16 @@ function getWorkflowRankServer(b) {
   if (b.cancelled || s.includes('cancel')) return -1;
   if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
   if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
-  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
+  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('vehicle assigned') || s.includes('ready for dispatch')) return 50;
   if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
   if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
   if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
   if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
   return 1;
 }
+
+let cachedBomsResult = null;
+let lastBomFetchTimestamp = 0;
 
 const loadDatabaseBoms = async (forceRefresh = false) => {
   // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
@@ -1034,44 +1038,140 @@ const loadLocalBoms = () => {
   return [];
 };
 
+let saveLocalBomsLock = Promise.resolve();
+
 const saveLocalBoms = async (boms) => {
   if (!boms) return;
-  const list = Array.isArray(boms) ? boms : [boms];
-  supabaseMemoryStore.bom_store = list;
-  cachedBomsResult = list;
-  lastBomFetchTimestamp = Date.now();
 
-  // 1. Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
-  try {
-    const diskPath = getStoreFilePath('bom_store.json');
-    fs.writeFileSync(diskPath, JSON.stringify(list, null, 2), 'utf8');
-  } catch (diskErr) {
-    console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
-  }
+  return new Promise((resolveOuter, rejectOuter) => {
+    saveLocalBomsLock = saveLocalBomsLock.then(async () => {
+      try {
+        // 1. Load existing authoritative BOM store
+        let existingList = [];
+        if (Array.isArray(supabaseMemoryStore.bom_store) && supabaseMemoryStore.bom_store.length > 0) {
+          existingList = [...supabaseMemoryStore.bom_store];
+        } else {
+          existingList = loadLocalBoms();
+        }
+        if (!Array.isArray(existingList)) existingList = [];
 
-  // 2. Broadcast via SSE to all connected clients
-  try {
-    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: list });
-    broadcastRealtimeEvent('bom_updated', { bomList: list });
-  } catch (_) {}
+        const bomMap = new Map();
+        existingList.forEach(b => {
+          const k = String(b?.bomCode || b?.code || b?.id || '').trim();
+          if (k && k !== 'null' && k !== 'undefined' && k !== '[object Object]') {
+            bomMap.set(k, b);
+          }
+        });
 
-  // 3. Upsert to controlroom_store and canonical public.bom_orders table
-  try {
-    if (isDbConnected()) {
-      query(`
-        INSERT INTO controlroom_store (key, data, updated_at)
-        VALUES ('bom_store', $1, NOW())
-        ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
-      `, [JSON.stringify(list)]).catch(() => null);
-    }
-    const rows = list.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
-    for (let i = 0; i < rows.length; i += 20) {
-      const batch = rows.slice(i, i + 20);
-      await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
-    }
-  } catch (sbErr) {
-    console.warn('[saveLocalBoms Supabase upsert notice]:', sbErr?.message || sbErr);
-  }
+        const incomingItems = Array.isArray(boms) ? boms : [boms];
+        const changedRecords = [];
+
+        for (const item of incomingItems) {
+          if (!item || typeof item !== 'object') continue;
+          const cleanId = String(item.bomCode || item.code || item.id || '').trim();
+          if (!cleanId || cleanId === 'null' || cleanId === 'undefined' || cleanId === '[object Object]') {
+            console.warn('[saveLocalBoms Warning] Skipped item with invalid identifier:', item);
+            continue;
+          }
+
+          const existing = bomMap.get(cleanId);
+          if (existing) {
+            const eRank = getWorkflowRankServer(existing);
+            const iRank = getWorkflowRankServer(item);
+
+            const merged = {
+              ...existing,
+              ...item,
+              // Preserve rich items if incoming is empty/missing
+              items: (Array.isArray(item.items) && item.items.length > 0) ? item.items : (existing.items || []),
+              // Preserve customer details if incoming is empty or default
+              customerName: item.customerName || item.companyName || existing.customerName || existing.companyName || 'Customer',
+              companyName: item.companyName || item.customerName || existing.companyName || existing.customerName || '',
+              contactPerson: item.contactPerson || item.contact || existing.contactPerson || '',
+              gstNo: item.gstNo || item.gst || item.gstin || existing.gstNo || '',
+              // Preserve salesperson and attribution if missing in partial update
+              salesPerson: item.salesPerson || item.sales_person || existing.salesPerson || '',
+              salesPersonCode: item.salesPersonCode || item.sales_person_code || existing.salesPersonCode || '',
+              createdBy: item.createdBy || item.created_by || existing.createdBy || '',
+              createdById: item.createdById || item.created_by_id || existing.createdById || '',
+              sourcePiNo: item.sourcePiNo || item.source_pi_no || existing.sourcePiNo || null,
+              // Preserve financial totals if incoming is 0 and existing is non-zero
+              grandTotal: (Number(item.grandTotal) > 0) ? Number(item.grandTotal) : (existing.grandTotal || 0),
+              subTotal: (Number(item.subTotal) > 0) ? Number(item.subTotal) : (existing.subTotal || 0),
+              // Workflow progression safety: do not allow a stale lower-rank status to regress progress
+              status: (iRank >= eRank) ? item.status : existing.status,
+              packingStatus: (iRank >= eRank) ? (item.packingStatus || existing.packingStatus) : existing.packingStatus,
+              fullyCompleted: (iRank >= eRank) ? (item.fullyCompleted ?? existing.fullyCompleted) : existing.fullyCompleted,
+              // Deep merge dispatch packing and accounts verification
+              dispatchPacking: (Array.isArray(item.dispatchPacking) && item.dispatchPacking.length > 0) ? item.dispatchPacking : (existing.dispatchPacking || []),
+              accountsVerification: {
+                ...(existing.accountsVerification || {}),
+                ...(item.accountsVerification || {})
+              },
+              vehicleLoading: item.vehicleLoading || existing.vehicleLoading || null,
+              lrCopyDoc: item.lrCopyDoc || existing.lrCopyDoc || null,
+              dispatchPackingMedia: (item.dispatchPackingMedia?.photos?.length > 0 || item.dispatchPackingMedia?.videos?.length > 0)
+                ? item.dispatchPackingMedia
+                : (existing.dispatchPackingMedia || { photos: [], videos: [] })
+            };
+            bomMap.set(cleanId, merged);
+            changedRecords.push(merged);
+          } else {
+            bomMap.set(cleanId, item);
+            changedRecords.push(item);
+          }
+        }
+
+        const finalList = Array.from(bomMap.values());
+        supabaseMemoryStore.bom_store = finalList;
+        cachedBomsResult = finalList;
+        lastBomFetchTimestamp = Date.now();
+
+        // 2. Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
+        try {
+          const diskPath = getStoreFilePath('bom_store.json');
+          fs.writeFileSync(diskPath, JSON.stringify(finalList, null, 2), 'utf8');
+        } catch (diskErr) {
+          console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
+        }
+
+        // 3. Broadcast via SSE to all connected clients
+        try {
+          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: finalList });
+          broadcastRealtimeEvent('bom_updated', { bomList: finalList });
+        } catch (_) {}
+
+        // 4. Upsert to controlroom_store and canonical public.bom_orders table
+        if (isDbConnected()) {
+          try {
+            await query(`
+              INSERT INTO controlroom_store (key, data, updated_at)
+              VALUES ('bom_store', $1, NOW())
+              ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
+            `, [JSON.stringify(finalList)]);
+
+            const rowsToUpsert = changedRecords.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
+            for (let i = 0; i < rowsToUpsert.length; i += 20) {
+              const batch = rowsToUpsert.slice(i, i + 20);
+              const { error } = await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
+              if (error) {
+                console.error('[saveLocalBoms public.bom_orders upsert error]:', error.message || error);
+                throw error;
+              }
+            }
+          } catch (dbErr) {
+            console.error('[saveLocalBoms Database error]:', dbErr?.message || dbErr);
+            throw dbErr;
+          }
+        }
+        resolveOuter();
+      } catch (err) {
+        rejectOuter(err);
+      }
+    }).catch(err => {
+      rejectOuter(err);
+    });
+  });
 };
 
 // Authoritative Database Store functions directly with Supabase
@@ -3530,11 +3630,8 @@ async function repairBomSequences() {
           };
         }
       } else if (
-        pi.convertedBomCode === 'BOM-659' || 
-        pi.convertedBomNo === 'BOM-659' || 
-        pi.converted_bom_code === 'BOM-659' || 
-        pi.converted_bom_no === 'BOM-659' ||
-        (['PI-00063', 'PI-00064', 'PI-00065', 'PI-00066'].includes(pNo) && (pi.convertedBomCode === 'BOM-659' || pi.converted_bom_code === 'BOM-659' || !pi.convertedBomCode))
+        (pi.convertedBomCode === 'BOM-659' || pi.convertedBomNo === 'BOM-659' || pi.converted_bom_code === 'BOM-659' || pi.converted_bom_no === 'BOM-659') &&
+        pNo !== 'PI-00061'
       ) {
         piUpdatedCount++;
         piListChanged = true;
@@ -3707,6 +3804,85 @@ async function repairBomSequences() {
   return { piUpdatedCount, bomUpdatedCount, maxSequence: serverBomSequenceCounter };
 }
 
+/**
+ * Idempotent reconciliation:
+ * Ensures all BOMs present in controlroom_store or bom_store.json (e.g. BOM-663, 664, 665)
+ * are cleanly represented in public.bom_orders without overwriting existing data.
+ */
+async function syncMissingRelationalBoms() {
+  if (!isDbConnected()) return;
+  try {
+    const existingDbRes = await query(`SELECT bom_code, id FROM public.bom_orders`).catch(() => null);
+    const existingCodes = new Set((existingDbRes?.rows || []).map(r => r.bom_code || r.id));
+
+    // Read authoritative JSON store
+    let bomsToSync = [];
+    const crRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'bom_store'`).catch(() => null);
+    if (crRes?.rows?.[0]?.data && Array.isArray(crRes.rows[0].data)) {
+      bomsToSync = crRes.rows[0].data;
+    }
+    if (bomsToSync.length === 0) {
+      const diskPath = getStoreFilePath('bom_store.json');
+      if (fs.existsSync(diskPath)) {
+        try { bomsToSync = JSON.parse(fs.readFileSync(diskPath, 'utf8')); } catch (_) {}
+      }
+    }
+    if (!Array.isArray(bomsToSync) || bomsToSync.length === 0) return;
+
+    let syncedCount = 0;
+    for (const bom of bomsToSync) {
+      const code = bom?.bomCode || bom?.code || bom?.id;
+      if (!code || existingCodes.has(code)) continue;
+
+      const dbRow = toDatabaseBomRowServer(bom);
+      if (!dbRow) continue;
+
+      const keys = Object.keys(dbRow).filter(k => dbRow[k] !== undefined);
+      const cols = keys.map(k => `"${k}"`).join(', ');
+      const jsonbCols = new Set([
+        'items', 'payments', 'dispatch_packing', 'accounts_verification', 
+        'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
+        'dispatch_packing_media', 'vehicle_loading', 'data'
+      ]);
+      const placeholders = keys.map((k, i) => jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`).join(', ');
+      const values = keys.map(k => {
+        const v = dbRow[k];
+        return typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
+      });
+
+      const sql = `
+        INSERT INTO public.bom_orders (${cols})
+        VALUES (${placeholders})
+        ON CONFLICT (id) DO NOTHING
+      `;
+
+      try {
+        await query(sql, values);
+        existingCodes.add(code);
+        if (bom?.id) existingCodes.add(bom.id);
+        if (bom?.bomCode) existingCodes.add(bom.bomCode);
+        syncedCount++;
+      } catch (insertErr) {
+        if (insertErr?.code === '23505') {
+          // Unique violation on id or bom_code: safely skip duplicate
+          console.warn(`[BOM Reconciliation Notice] Record ${code} already exists in database (skipped).`);
+        } else {
+          console.error(`[BOM Reconciliation Error] Failed to persist ${code} to public.bom_orders:`, insertErr.message);
+          throw insertErr;
+        }
+      }
+    }
+
+    if (syncedCount > 0) {
+      console.log(`✅ [BOM Reconciliation] Reconciled ${syncedCount} missing BOM(s) into public.bom_orders.`);
+    }
+    return { success: true, syncedCount };
+  } catch (err) {
+    console.error('❌ [BOM Reconciliation Fatal Error]:', err?.message || err);
+    throw err;
+  }
+}
+
 // Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs
 app.post('/api/repair-bom-sequences', async (req, res) => {
   try {
@@ -3718,9 +3894,6 @@ app.post('/api/repair-bom-sequences', async (req, res) => {
 });
 
 // Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching
-let cachedBomsResult = null;
-let lastBomFetchTimestamp = 0;
-
 app.get('/api/boms', async (req, res) => {
   try {
     const now = Date.now();
@@ -4119,6 +4292,12 @@ app.post('/api/boms', async (req, res) => {
         const isPlaceholderCode = !incomingCode || incomingCode.toLowerCase().includes('auto') || incomingCode.toLowerCase().includes('pending');
         const incomingPi = String(bom.sourcePiNo || bom.source_pi_no || bom.piNo || '').trim().toLowerCase();
 
+        // Reject invalid or ambiguous BOM identifiers on update
+        if (isUpdate && (!incomingCode || incomingCode === 'null' || incomingCode === 'undefined' || incomingCode === '[object Object]')) {
+          res.status(400).json({ success: false, message: 'Invalid or ambiguous BOM identifier for update' });
+          return resolveOuter();
+        }
+
         // 1. Check if an existing BOM belongs to this specific source PI
         let existingPiBom = null;
         if (incomingPi && incomingPi !== 'null' && incomingPi !== 'undefined') {
@@ -4169,9 +4348,49 @@ app.post('/api/boms', async (req, res) => {
 
         serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, maxNum);
 
-        // Merge or insert new BOM record
-        if (map.has(finalCode)) {
-          map.set(finalCode, { ...map.get(finalCode), ...bom });
+        // Safe Merge: preserve existing complete records when partial updates are performed
+        const existingRec = map.get(finalCode);
+        let mergedBom = bom;
+        if (existingRec) {
+          const eRank = getWorkflowRankServer(existingRec);
+          const iRank = getWorkflowRankServer(bom);
+
+          mergedBom = {
+            ...existingRec,
+            ...bom,
+            // Preserve rich line items if incoming is empty/missing
+            items: (Array.isArray(bom.items) && bom.items.length > 0) ? bom.items : (existingRec.items || []),
+            // Preserve customer details if incoming is empty or default
+            customerName: bom.customerName || bom.companyName || existingRec.customerName || existingRec.companyName || 'Customer',
+            companyName: bom.companyName || bom.customerName || existingRec.companyName || existingRec.customerName || '',
+            contactPerson: bom.contactPerson || bom.contact || existingRec.contactPerson || '',
+            gstNo: bom.gstNo || bom.gst || bom.gstin || existingRec.gstNo || '',
+            // Preserve salesperson and attribution if missing in partial update
+            salesPerson: bom.salesPerson || bom.sales_person || existingRec.salesPerson || '',
+            salesPersonCode: bom.salesPersonCode || bom.sales_person_code || existingRec.salesPersonCode || '',
+            createdBy: bom.createdBy || bom.created_by || existingRec.createdBy || '',
+            createdById: bom.createdById || bom.created_by_id || existingRec.createdById || '',
+            sourcePiNo: bom.sourcePiNo || bom.source_pi_no || existingRec.sourcePiNo || null,
+            // Preserve financial totals if incoming is 0 and existing is non-zero
+            grandTotal: (Number(bom.grandTotal) > 0) ? Number(bom.grandTotal) : (existingRec.grandTotal || 0),
+            subTotal: (Number(bom.subTotal) > 0) ? Number(bom.subTotal) : (existingRec.subTotal || 0),
+            // Workflow progression safety: do not allow a stale lower-rank status to regress progress
+            status: (iRank >= eRank) ? bom.status : existingRec.status,
+            packingStatus: (iRank >= eRank) ? (bom.packingStatus || existingRec.packingStatus) : existingRec.packingStatus,
+            fullyCompleted: (iRank >= eRank) ? (bom.fullyCompleted ?? existingRec.fullyCompleted) : existingRec.fullyCompleted,
+            // Deep merge dispatch packing and accounts verification
+            dispatchPacking: (Array.isArray(bom.dispatchPacking) && bom.dispatchPacking.length > 0) ? bom.dispatchPacking : (existingRec.dispatchPacking || []),
+            accountsVerification: {
+              ...(existingRec.accountsVerification || {}),
+              ...(bom.accountsVerification || {})
+            },
+            vehicleLoading: bom.vehicleLoading || existingRec.vehicleLoading || null,
+            lrCopyDoc: bom.lrCopyDoc || existingRec.lrCopyDoc || null,
+            dispatchPackingMedia: (bom.dispatchPackingMedia?.photos?.length > 0 || bom.dispatchPackingMedia?.videos?.length > 0)
+              ? bom.dispatchPackingMedia
+              : (existingRec.dispatchPackingMedia || { photos: [], videos: [] })
+          };
+          map.set(finalCode, mergedBom);
         } else {
           map.set(finalCode, bom);
         }
@@ -4215,24 +4434,24 @@ app.post('/api/boms', async (req, res) => {
         cachedBomsResult = mergedList;
         lastBomFetchTimestamp = Date.now();
 
-        // RESPOND TO CLIENT WITH CONFIRMED BOM IMMEDIATELY (Sub-second response)
-        res.json({ success: true, bom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
-        resolveOuter();
-
-        // Asynchronous single-row upsert to public.bom_orders with safety timeout
-        (async () => {
+        // Synchronous Relational Database Persistence Check: NEVER report false success if SQL fails
+        if (isDbConnected()) {
           try {
-            const mergedBom = map.get(finalCode) || bom;
             const dbRow = toDatabaseBomRowServer(mergedBom);
             if (dbRow) {
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase single BOM upsert timeout')), 5000));
-              const upsertPromise = supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
-              const { error: upsertErr } = await Promise.race([upsertPromise, timeoutPromise]);
-              if (upsertErr) console.warn('[POST /api/boms] Single row upsert notice:', upsertErr.message);
+              const { error: upsertErr } = await supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
+              if (upsertErr) {
+                console.error('[POST /api/boms Error] Failed to persist BOM to public.bom_orders:', upsertErr.message);
+                res.status(500).json({ success: false, message: 'Database persistence failed: ' + upsertErr.message });
+                return resolveOuter();
+              }
             }
           } catch (e) {
-            console.warn('[POST /api/boms] Background Supabase upsert notice:', e?.message || e);
+            console.error('[POST /api/boms Error] Supabase upsert error:', e?.message || e);
+            res.status(500).json({ success: false, message: 'Database persistence error: ' + (e?.message || e) });
+            return resolveOuter();
           }
+        }
 
           try {
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 5000));
@@ -4277,8 +4496,10 @@ app.post('/api/boms', async (req, res) => {
               }
             } catch (_) {}
           }
-        })();
-        return;
+
+        // RESPOND TO CLIENT WITH CONFIRMED BOM (Persisted to database & disk)
+        res.json({ success: true, bom: mergedBom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
+        return resolveOuter();
       } catch (err) {
         console.error('Error saving BOM:', err);
         res.status(500).json({ success: false, message: err.message });
@@ -7239,5 +7460,5 @@ app.listen(PORT, () => {
 });
 
 export default app;
-export { supabaseMemoryStore };
+export { supabaseMemoryStore, saveLocalBoms, syncMissingRelationalBoms, toDatabaseBomRowServer, loadDatabaseBoms };
 

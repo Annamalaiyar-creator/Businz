@@ -357,6 +357,9 @@ export default function BomOrdersView(props) {
   const isSubmittingBomRef = useRef(false);
   const lastConvertedPiRef = useRef(null);
   const [newBomSourcePiNo, setNewBomSourcePiNo] = useState('');
+  const [newBomSalesPersonCode, setNewBomSalesPersonCode] = useState('');
+  const [newBomCreatedBy, setNewBomCreatedBy] = useState('');
+  const [newBomCreatedById, setNewBomCreatedById] = useState('');
 
   // Comprehensive BOM Form Validation Helper
   const validateBomForm = (isDraft = false) => {
@@ -1011,6 +1014,9 @@ export default function BomOrdersView(props) {
       } else {
         setNewBomSalesPerson(getEffectiveSalesPerson());
       }
+      setNewBomSalesPersonCode(pendingPi.salesPersonCode || pendingPi.sales_person_code || pendingPi.createdById || pendingPi.created_by_id || '');
+      setNewBomCreatedBy(pendingPi.createdBy || pendingPi.created_by || pendingPi.salesPerson || '');
+      setNewBomCreatedById(pendingPi.createdById || pendingPi.created_by_id || pendingPi.salesPersonCode || '');
 
       // 3. Customer, Company, and Contact Person details from PI
       const compName = (pendingPi.companyName || pendingPi.vendor || pendingPi.customerName || '').trim();
@@ -4487,9 +4493,14 @@ export default function BomOrdersView(props) {
                         // BOM code is strictly assigned atomically upon submission
                         const finalCode = 'BOM-PENDING';
 
-                        const effectiveSalesPersonName = (newBomSalesPerson && newBomSalesPerson.trim()) ? newBomSalesPerson.trim() : defaultSalesPersonName;
-                        const effectiveSalesPersonCode = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
-                        const effectiveCreatorName = (localStorage.getItem('controlroom_logged_user_name') || effectiveSalesPersonName).trim();
+                        const loggedInOperatorName = (localStorage.getItem('controlroom_logged_user_name') || '').trim() || defaultSalesPersonName;
+                        const loggedInOperatorId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+
+                        // PRESERVE ORIGINAL PI SALESPERSON: Prioritize PI salesperson over converting operator
+                        const effectiveSalesPersonName = (newBomSalesPerson && newBomSalesPerson.trim()) ? newBomSalesPerson.trim() : (newBomCreatedBy || loggedInOperatorName);
+                        const effectiveSalesPersonCode = (newBomSalesPersonCode && newBomSalesPersonCode.trim()) ? newBomSalesPersonCode.trim() : (newBomCreatedById || loggedInOperatorId);
+                        const effectiveCreatorName = loggedInOperatorName;
+                        const effectiveCreatedById = loggedInOperatorId || effectiveSalesPersonCode;
 
                         const hasPaymentProof = Boolean(newBomPaymentProofDoc);
                         const newBomRecord = {
@@ -4529,7 +4540,9 @@ export default function BomOrdersView(props) {
                           salesPerson: effectiveSalesPersonName,
                           salesPersonCode: effectiveSalesPersonCode,
                           createdBy: effectiveCreatorName,
-                          createdById: effectiveSalesPersonCode,
+                          createdById: effectiveCreatedById,
+                          convertedBy: loggedInOperatorName,
+                          convertedById: loggedInOperatorId,
                           items: (bomMaterialsList || []).map(item => ({
                             code: item.code || '',
                             name: item.name || 'Custom Item',
