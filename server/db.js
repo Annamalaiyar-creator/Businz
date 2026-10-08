@@ -64,6 +64,7 @@ export async function initPostgresDatabase() {
         DO $$
         BEGIN
           IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'bom_orders') THEN
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS invoice_no TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
             
@@ -140,11 +141,13 @@ export async function initPostgresDatabase() {
         const schemaPath = path.resolve(__dirname, '../supabase_main_schema.sql');
         if (fs.existsSync(schemaPath)) {
           let schemaSql = fs.readFileSync(schemaPath, 'utf8');
-          // Clean out Supabase-specific extensions/policies that are not needed on self-hosted PG
+          // Clean out Supabase-specific extensions/policies and storage bucket statements that are not needed on self-hosted PG
           schemaSql = schemaSql.replace(/CREATE EXTENSION IF NOT EXISTS [^;]+;/gi, '');
           schemaSql = schemaSql.replace(/ALTER TABLE [^;]+ ENABLE ROW LEVEL SECURITY;/gi, '');
           schemaSql = schemaSql.replace(/DROP POLICY [^;]+;/gi, '');
           schemaSql = schemaSql.replace(/CREATE POLICY [\s\S]*?;/gi, '');
+          schemaSql = schemaSql.replace(/INSERT INTO storage\.buckets[\s\S]*?;/gi, '');
+          schemaSql = schemaSql.replace(/DROP POLICY [^;]+ ON storage\.[^;]+;/gi, '');
 
           await client.query(schemaSql);
           console.log('✅ [PostgreSQL] Clean relational tables created successfully.');
@@ -262,16 +265,21 @@ export function createLocalDbClient(memoryStore = {}) {
             if (isConnected) {
               const res = await executeSql(state);
               if (res) {
+                if (res.error) {
+                  return resolve({ data: null, error: res.error });
+                }
                 return resolve(res);
               }
             }
 
-            // 2. Safe Fallback to server memoryStore / disk
+            // 2. Safe Fallback to server memoryStore / disk if DB not connected
             const fallbackRes = executeFallback(state, memoryStore);
             return resolve(fallbackRes);
           } catch (err) {
-            console.warn(`[LocalDb Error on ${state.table}]:`, err.message);
-            // Graceful fallback on error
+            console.error(`[LocalDb Error on ${state.table}]:`, err.message);
+            if (isConnected) {
+              return resolve({ data: null, error: err });
+            }
             const fallbackRes = executeFallback(state, memoryStore);
             return resolve(fallbackRes);
           }
@@ -344,38 +352,45 @@ async function executeSql(state) {
       }
 
       if (state.action === 'upsert' && state.upsertData && state.upsertData.length > 0) {
-        for (const row of state.upsertData) {
-          const keys = Object.keys(row).filter(k => row[k] !== undefined);
-          if (keys.length === 0) continue;
-          const cols = keys.map(k => `"${k}"`).join(', ');
-          const jsonbCols = new Set([
-            'items', 'payments', 'dispatch_packing', 'accounts_verification', 
-            'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
-            'dispatch_packing_media', 'vehicle_loading', 'data'
-          ]);
-          const placeholders = keys.map((k, i) => {
-            return jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`;
-          }).join(', ');
-          const updateSet = keys
-            .filter(k => k !== state.conflictTarget)
-            .map(k => `"${k}" = EXCLUDED."${k}"`)
-            .join(', ');
+        await client.query('BEGIN');
+        try {
+          for (const row of state.upsertData) {
+            const keys = Object.keys(row).filter(k => row[k] !== undefined);
+            if (keys.length === 0) continue;
+            const cols = keys.map(k => `"${k}"`).join(', ');
+            const jsonbCols = new Set([
+              'items', 'payments', 'dispatch_packing', 'accounts_verification', 
+              'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
+              'dispatch_packing_media', 'vehicle_loading', 'data'
+            ]);
+            const placeholders = keys.map((k, i) => {
+              return jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`;
+            }).join(', ');
+            const updateSet = keys
+              .filter(k => k !== state.conflictTarget)
+              .map(k => `"${k}" = EXCLUDED."${k}"`)
+              .join(', ');
 
-          const values = keys.map(k => {
-            const v = row[k];
-            return typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
-          });
+            const values = keys.map(k => {
+              const v = row[k];
+              return typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
+            });
 
-          const sql = `
-            INSERT INTO public."${table}" (${cols})
-            VALUES (${placeholders})
-            ON CONFLICT ("${state.conflictTarget}") 
-            DO UPDATE SET ${updateSet || 'updated_at = NOW()'}
-          `;
+            const sql = `
+              INSERT INTO public."${table}" (${cols})
+              VALUES (${placeholders})
+              ON CONFLICT ("${state.conflictTarget}") 
+              DO UPDATE SET ${updateSet || 'updated_at = NOW()'}
+            `;
 
-          await client.query(sql, values);
+            await client.query(sql, values);
+          }
+          await client.query('COMMIT');
+          return { data: state.upsertData, error: null };
+        } catch (txErr) {
+          await client.query('ROLLBACK').catch(() => null);
+          throw txErr;
         }
-        return { data: state.upsertData, error: null };
       }
 
       if (state.action === 'update' && state.updateData) {
@@ -404,13 +419,13 @@ async function executeSql(state) {
         return { data: result.rows, error: null };
       }
 
-      return null;
+      return { data: [], error: null };
     } finally {
       client.release();
     }
   } catch (err) {
-    console.warn(`[executeSql Warning on ${state.table}]:`, err.message);
-    return null;
+    console.error(`[executeSql Error on ${state.table}]:`, err.message);
+    return { data: null, error: err };
   }
 }
 
