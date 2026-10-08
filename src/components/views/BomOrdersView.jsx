@@ -21,6 +21,7 @@ import ModernDateRangePicker from '../ModernDateRangePicker';
 import { is5PctSolarProduct } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch } from '../../services/notificationService';
+import { getNextSequence } from '../../utils/sequenceGenerator';
 
 export default function BomOrdersView(props) {
   const {
@@ -1000,12 +1001,7 @@ export default function BomOrdersView(props) {
       }
 
       // 1. Calculate synchronous fallback BOM code immediately from local store
-      const existingNums = (bomStore || []).map(b => {
-        const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
-        return match ? parseInt(match[1], 10) : 0;
-      }).filter(n => Number.isFinite(n) && n > 0);
-      const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
-      const initialCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
+      const initialCode = getNextSequence(bomStore, 'BOM');
       setNewBomCode(initialCode);
 
       // 2. Sales Person
@@ -1210,7 +1206,7 @@ export default function BomOrdersView(props) {
 
       // 9. Non-blocking asynchronous refinement of atomic BOM code from server sequence
       getAndReserveNextBomCode(false).then(reservedCode => {
-        if (reservedCode && /^BOM-\d+$/i.test(reservedCode)) {
+        if (reservedCode && (reservedCode.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(reservedCode))) {
           setNewBomCode(reservedCode);
         }
       }).catch(err => {
@@ -4634,20 +4630,15 @@ export default function BomOrdersView(props) {
                         }
 
                         // 2. Offline / Direct fallback to atomic Supabase Sequence
-                        if (!finalAssignedCode || !/^BOM-\d+$/i.test(finalAssignedCode)) {
+                        if (!finalAssignedCode || (!finalAssignedCode.startsWith('VRM-BOM-') && !/^BOM-\d+$/i.test(finalAssignedCode))) {
                           try {
                             const reservedCode = await getAndReserveNextBomCode(true);
-                            if (reservedCode && /^BOM-\d+$/i.test(reservedCode)) {
+                            if (reservedCode && (reservedCode.startsWith('VRM-BOM-') || /^BOM-\d+$/i.test(reservedCode))) {
                               finalAssignedCode = reservedCode;
                             }
                           } catch (err) {
                             console.error('Error reserving atomic BOM code from Supabase:', err);
-                            const existingNums = (bomStore || []).map(b => {
-                              const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
-                              return match ? parseInt(match[1], 10) : 0;
-                            }).filter(n => Number.isFinite(n) && n > 0);
-                            const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
-                            finalAssignedCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
+                            finalAssignedCode = getNextSequence(bomStore, 'BOM');
                           }
                         }
 

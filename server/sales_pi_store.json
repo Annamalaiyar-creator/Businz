@@ -54,8 +54,8 @@
     "signedPiDoc": null,
     "piDate": "2026-10-07",
     "expDate": "2026-10-08",
-    "status": "Issued",
-    "statusType": "issued",
+    "status": "Converted to BOM",
+    "statusType": "converted",
     "salesPerson": "sales",
     "salesperson": "sales",
     "salesPersonCode": "SE-1000",
@@ -65,7 +65,11 @@
     "zohoSynced": false,
     "zohoEstimateId": null,
     "zohoModule": "Quotes",
-    "createdAt": "2026-10-07T18:18:43.006Z"
+    "createdAt": "2026-10-07T18:18:43.006Z",
+    "convertedToBom": true,
+    "convertedBomCode": "BOM-665",
+    "convertedBomNo": "BOM-665",
+    "convertedAt": "2026-10-07T18:40:00.000Z"
   },
   {
     "id": "PI-00061",
