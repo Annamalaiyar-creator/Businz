@@ -13,6 +13,7 @@
  * 9. UI and calculation integrity check
  */
 
+process.env.ALLOW_TEST_DB = process.env.ALLOW_TEST_DB || 'businz_staging_test';
 import { pool, query, initPostgresDatabase, createLocalDbClient } from '../server/db.js';
 import { supabaseMemoryStore, saveLocalBoms, syncMissingRelationalBoms, toDatabaseBomRowServer, loadDatabaseBoms } from '../server/index.js';
 import fs from 'fs';

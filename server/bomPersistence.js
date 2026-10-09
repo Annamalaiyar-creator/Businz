@@ -677,16 +677,46 @@ export async function persistBomsTransactionSafe({
       changedRecords.push(merged);
 
       // Synchronize source PI record status in database within the transaction
+      // Both relational public.proforma_invoices and legacy public.controlroom_store ('sales_pi_store')
       if (merged.sourcePiNo) {
         const cleanPi = String(merged.sourcePiNo).trim();
         // Strict guard: Do not alter or forcibly associate PI-00063 with BOM-665
         if (cleanPi !== 'PI-00063' || finalCode === 'BOM-665') {
+          // 1. Relational proforma_invoices table
           await client.query(`
             UPDATE public.proforma_invoices
             SET status = 'Converted to BOM',
                 updated_at = NOW()
             WHERE (pi_no = $1 OR id = $1)
           `, [cleanPi]);
+
+          // 2. Authoritative legacy store in controlroom_store ('sales_pi_store')
+          const piStoreRes = await client.query(`
+            SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store' FOR UPDATE
+          `);
+          if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
+            let piList = piStoreRes.rows[0].data;
+            let piChanged = false;
+            piList = piList.map(p => {
+              if (p && String(p.piNo || p.id || '').trim().toLowerCase() === cleanPi.toLowerCase()) {
+                piChanged = true;
+                return {
+                  ...p,
+                  status: 'Converted to BOM',
+                  convertedToBom: true,
+                  convertedBomCode: finalCode
+                };
+              }
+              return p;
+            });
+            if (piChanged) {
+              await client.query(`
+                UPDATE public.controlroom_store
+                SET data = $1, updated_at = NOW()
+                WHERE key = 'sales_pi_store'
+              `, [JSON.stringify(piList)]);
+            }
+          }
         }
       }
     }

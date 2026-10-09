@@ -362,6 +362,17 @@ async function runPhase51TestSuite() {
       ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
     `);
 
+    // Ensure test PI exists in controlroom_store key sales_pi_store
+    const piStorePre = await testPool.query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`);
+    let currentPiStore = Array.isArray(piStorePre.rows[0]?.data) ? piStorePre.rows[0].data : [];
+    currentPiStore = currentPiStore.filter(p => (p.piNo || p.id) !== 'PI-P51-01');
+    currentPiStore.push({ id: 'PI-P51-01', piNo: 'PI-P51-01', customerName: 'PI Test Corp', status: 'Sent to Customer' });
+    await testPool.query(`
+      INSERT INTO public.controlroom_store (key, data, updated_at)
+      VALUES ('sales_pi_store', $1::jsonb, NOW())
+      ON CONFLICT (key) DO UPDATE SET data = $1::jsonb, updated_at = NOW()
+    `, [JSON.stringify(currentPiStore)]);
+
     // Persist BOM referencing this PI
     await persistBomsTransactionSafe({
       singleBom: {
@@ -378,10 +389,19 @@ async function runPhase51TestSuite() {
       SELECT status FROM public.proforma_invoices WHERE pi_no = 'PI-P51-01'
     `);
 
-    const passed = checkPi.rows[0]?.status === 'Converted to BOM';
+    const checkPiStore = await testPool.query(`
+      SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'
+    `);
+    const storePiList = Array.isArray(checkPiStore.rows[0]?.data) ? checkPiStore.rows[0].data : [];
+    const matchedPiStore = storePiList.find(p => (p.piNo || p.id) === 'PI-P51-01');
 
-    recordResult(7, 'PI Conversion Status Synchronization within Transaction', passed,
-      passed ? 'Source PI-P51-01 status automatically synchronized to "Converted to BOM".' : 'PI synchronization failed.');
+    const passed = checkPi.rows[0]?.status === 'Converted to BOM' &&
+      matchedPiStore &&
+      matchedPiStore.status === 'Converted to BOM' &&
+      matchedPiStore.convertedToBom === true;
+
+    recordResult(7, 'PI Conversion Status Synchronization (Relational & Legacy Store)', passed,
+      passed ? 'Source PI-P51-01 status synchronized in both relational proforma_invoices and controlroom_store sales_pi_store.' : 'PI synchronization failed.');
   } catch (err) {
     recordResult(7, 'PI Conversion Status Synchronization', false, err.message);
   }

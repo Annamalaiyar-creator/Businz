@@ -719,17 +719,15 @@ const getDatabaseStore = async (key) => {
     return await loadDatabaseBoms();
   }
   // 0. Primary: Check PostgreSQL controlroom_store on Hostinger VPS
+  // Protection 1: PostgreSQL is authoritative whenever the store row exists
   if (isDbConnected()) {
     try {
       const dbRes = await query('SELECT data FROM controlroom_store WHERE key = $1', [cleanKey]);
-      if (dbRes.rows[0]?.data) {
+      if (dbRes.rows.length > 0 && dbRes.rows[0]?.data !== undefined && dbRes.rows[0]?.data !== null) {
         const d = dbRes.rows[0].data;
-        const hasContent = Array.isArray(d) ? d.length > 0 : (d && typeof d === 'object' && Object.keys(d).length > 0);
-        if (hasContent) {
-          supabaseMemoryStore[cleanKey] = d;
-          supabaseMemoryStore[key] = d;
-          return d;
-        }
+        supabaseMemoryStore[cleanKey] = d;
+        supabaseMemoryStore[key] = d;
+        return d;
       }
     } catch (_) {}
   }
@@ -2016,7 +2014,7 @@ app.get('/api/store/:key', async (req, res) => {
     const data = await getDatabaseStore(key);
     res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
-    res.json({ success: true, data: [] });
+    res.status(500).json({ success: false, error: err.message, message: err.message });
   }
 });
 
@@ -2194,7 +2192,7 @@ app.post('/api/store/:key', async (req, res) => {
     await saveDatabaseStore(key, finalDataToSave);
     res.json({ success: true, count: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1, data: finalDataToSave });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: err.message, message: err.message });
   }
 });
 
@@ -3085,24 +3083,13 @@ app.post('/api/boms/reserve-code', async (req, res) => {
   }
 });
 
-// Dedicated endpoint to reset BOM, PI, Dispatch, Accounts Verification, and Invoice Ledger data for a fresh start
+// Dedicated endpoint to reset BOM, PI, Dispatch, Accounts Verification, and Invoice Ledger data - DISABLED
+// Protection 4: /api/reset-bom-workflow-data disabled with HTTP 403
 app.post('/api/reset-bom-workflow-data', async (req, res) => {
-  try {
-    const storesToReset = ['bom_store', 'proforma_invoice_store', 'sales_pi_store', 'invoice_store'];
-    for (const key of storesToReset) {
-      const filePath = getStoreFilePath(`${key}.json`);
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
-      supabaseMemoryStore[key] = [];
-      try {
-        await pushStoreToSupabase(key, []);
-      } catch (e) {
-        console.warn(`[Reset Supabase Warning for ${key}]:`, e.message);
-      }
-    }
-    res.json({ success: true, message: 'All BOM, PI, Dispatch, Accounts Verification, and Invoice records have been reset cleanly.' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Forbidden: /api/reset-bom-workflow-data is disabled to protect historical BOM, PI, and financial ledger data.'
+  });
 });
 
 // Dedicated function to audit, deduplicate, and repair historical BOM sequence mappings for converted PIs
@@ -3430,14 +3417,13 @@ async function syncMissingRelationalBoms() {
   }
 }
 
-// Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs
+// Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs - DISABLED
+// Protection 5: /api/repair-bom-sequences disabled with HTTP 403
 app.post('/api/repair-bom-sequences', async (req, res) => {
-  try {
-    const repaired = await repairBomSequences();
-    res.json({ success: true, ...repaired });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Forbidden: /api/repair-bom-sequences is disabled to protect historical BOM sequences.'
+  });
 });
 
 // Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching
