@@ -3,9 +3,16 @@ const { Pool } = pkg;
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load environment files in priority order without overriding explicitly provided environment variables
+dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
 
 // PostgreSQL connection config for Hostinger VPS (Self-hosted)
 const connectionString = process.env.DATABASE_URL || 
