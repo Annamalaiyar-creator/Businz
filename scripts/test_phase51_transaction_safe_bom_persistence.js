@@ -19,6 +19,9 @@
  * 13. Historical records preservation audit (BOM-659 through BOM-665, PI-00063)
  */
 
+process.env.PORT = process.env.PORT || '5095';
+process.env.ALLOW_TEST_DB = process.env.ALLOW_TEST_DB || 'businz_staging_test';
+
 import pkg from 'pg';
 const { Pool } = pkg;
 import {
@@ -29,6 +32,8 @@ import {
   mergeBomRecords
 } from '../server/bomPersistence.js';
 import { getFinancialYear } from '../server/sequenceService.js';
+import app from '../server/index.js';
+import { pool as serverPool } from '../server/db.js';
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL || 'postgres://localhost:5432/businz_staging_test';
 const testPool = new Pool({ connectionString: TEST_DB_URL });
@@ -66,6 +71,7 @@ async function runPhase51TestSuite() {
 
   const cleanupTestRecords = async () => {
     await testPool.query(`DELETE FROM public.bom_orders WHERE bom_code LIKE 'BOM-P51-%' OR bom_code LIKE 'VRM-BOM-2026-%'`);
+    await testPool.query(`DELETE FROM public.proforma_invoices WHERE id LIKE 'PI-P51-%' OR pi_no LIKE 'PI-P51-%'`);
     const cr = await testPool.query(`SELECT data FROM public.controlroom_store WHERE key = 'bom_store'`);
     if (Array.isArray(cr.rows[0]?.data)) {
       const filtered = cr.rows[0].data.filter(b => {
@@ -73,6 +79,14 @@ async function runPhase51TestSuite() {
         return !c.startsWith('BOM-P51-') && !c.startsWith('VRM-BOM-2026-');
       });
       await testPool.query(`UPDATE public.controlroom_store SET data = $1 WHERE key = 'bom_store'`, [JSON.stringify(filtered)]);
+    }
+    const crPi = await testPool.query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`);
+    if (Array.isArray(crPi.rows[0]?.data)) {
+      const filteredPi = crPi.rows[0].data.filter(p => {
+        const c = String(p?.piNo || p?.id || '');
+        return !c.startsWith('PI-P51-');
+      });
+      await testPool.query(`UPDATE public.controlroom_store SET data = $1 WHERE key = 'sales_pi_store'`, [JSON.stringify(filteredPi)]);
     }
   };
 
@@ -119,6 +133,13 @@ async function runPhase51TestSuite() {
   // Test 2: Successful Single BOM Save (Atomic dual persistence)
   // -------------------------------------------------------------------------
   try {
+    // Ensure source PI exists in database for validation
+    await testPool.query(`
+      INSERT INTO public.proforma_invoices (id, pi_no, customer_name, status, grand_total)
+      VALUES ('PI-P51-01', 'PI-P51-01', 'Phase 51 Industrial Corp', 'Sent to Customer', 75000)
+      ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
+    `);
+
     const testBom = {
       id: 'BOM-P51-001',
       bomCode: 'BOM-P51-001',
@@ -668,7 +689,227 @@ async function runPhase51TestSuite() {
   }
 
   // -------------------------------------------------------------------------
-  // Test 13: Historical Data Protection Audit (BOM-659 through BOM-665, PI-00063)
+  // Test 13: Missing Source PI Validation Rejection (Zero Partial Commits)
+  // -------------------------------------------------------------------------
+  try {
+    let errorCaught = false;
+    let errorMessage = '';
+    try {
+      await persistBomsTransactionSafe({
+        singleBom: {
+          id: 'BOM-P51-MISSING-PI',
+          bomCode: 'BOM-P51-MISSING-PI',
+          customerName: 'Missing PI Test Client',
+          sourcePiNo: 'PI-NONEXISTENT-99999'
+        },
+        isNew: true,
+        customPool: testPool,
+        customAllowedDb: 'businz_staging_test'
+      });
+    } catch (err) {
+      errorCaught = true;
+      errorMessage = err.message;
+    }
+
+    const checkBom = await testPool.query(`
+      SELECT bom_code FROM public.bom_orders WHERE bom_code = 'BOM-P51-MISSING-PI'
+    `);
+
+    const passed = errorCaught &&
+      errorMessage.includes('[PI Validation Error]') &&
+      checkBom.rows.length === 0;
+
+    recordResult(13, 'Missing Source PI Validation Rejection', passed,
+      passed 
+        ? 'Safely rejected non-existent source PI; zero partial records written.' 
+        : `Expected [PI Validation Error], got: ${errorMessage}`);
+  } catch (err) {
+    recordResult(13, 'Missing Source PI Validation Rejection', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 14: Conflicting Source PI Re-association Rejection
+  // -------------------------------------------------------------------------
+  try {
+    await testPool.query(`
+      INSERT INTO public.proforma_invoices (id, pi_no, customer_name, status, grand_total)
+      VALUES 
+        ('PI-P51-ASSOC-A', 'PI-P51-ASSOC-A', 'Assoc Client A', 'Sent to Customer', 40000),
+        ('PI-P51-ASSOC-B', 'PI-P51-ASSOC-B', 'Assoc Client B', 'Sent to Customer', 50000)
+      ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
+    `);
+
+    await persistBomsTransactionSafe({
+      singleBom: {
+        id: 'BOM-P51-ASSOC-01',
+        bomCode: 'BOM-P51-ASSOC-01',
+        customerName: 'Assoc Client A',
+        sourcePiNo: 'PI-P51-ASSOC-A',
+        status: 'Sales Confirmed - Sent to Dispatch'
+      },
+      isNew: true,
+      customPool: testPool,
+      customAllowedDb: 'businz_staging_test'
+    });
+
+    let conflictCaught = false;
+    let conflictMessage = '';
+    try {
+      await persistBomsTransactionSafe({
+        singleBom: {
+          id: 'BOM-P51-ASSOC-01',
+          bomCode: 'BOM-P51-ASSOC-01',
+          sourcePiNo: 'PI-P51-ASSOC-B'
+        },
+        isUpdate: true,
+        customPool: testPool,
+        customAllowedDb: 'businz_staging_test'
+      });
+    } catch (err) {
+      conflictCaught = true;
+      conflictMessage = err.message;
+    }
+
+    const verifyBom = await testPool.query(`
+      SELECT source_pi_no FROM public.bom_orders WHERE bom_code = 'BOM-P51-ASSOC-01'
+    `);
+
+    const passed = conflictCaught &&
+      conflictMessage.includes('[PI Association Conflict]') &&
+      verifyBom.rows[0]?.source_pi_no === 'PI-P51-ASSOC-A';
+
+    await testPool.query(`DELETE FROM public.bom_orders WHERE bom_code = 'BOM-P51-ASSOC-01'`);
+    await testPool.query(`DELETE FROM public.proforma_invoices WHERE id IN ('PI-P51-ASSOC-A', 'PI-P51-ASSOC-B')`);
+
+    recordResult(14, 'Conflicting Source PI Re-association Rejection', passed,
+      passed 
+        ? 'Rejected re-associating BOM to different source PI; original link preserved.' 
+        : `Expected [PI Association Conflict], got: ${conflictMessage}`);
+  } catch (err) {
+    recordResult(14, 'Conflicting Source PI Re-association Rejection', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 15: Duplicate PI Conversion Rejection
+  // -------------------------------------------------------------------------
+  try {
+    await testPool.query(`
+      INSERT INTO public.proforma_invoices (id, pi_no, customer_name, status, grand_total)
+      VALUES ('PI-P51-DUP-01', 'PI-P51-DUP-01', 'Dup Client', 'Sent to Customer', 60000)
+      ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
+    `);
+
+    await persistBomsTransactionSafe({
+      singleBom: {
+        id: 'BOM-P51-DUP-01',
+        bomCode: 'BOM-P51-DUP-01',
+        customerName: 'Dup Client',
+        sourcePiNo: 'PI-P51-DUP-01',
+        status: 'Sales Confirmed - Sent to Dispatch'
+      },
+      isNew: true,
+      customPool: testPool,
+      customAllowedDb: 'businz_staging_test'
+    });
+
+    let dupCaught = false;
+    let dupMessage = '';
+    try {
+      await persistBomsTransactionSafe({
+        singleBom: {
+          id: 'BOM-P51-DUP-02',
+          bomCode: 'BOM-P51-DUP-02',
+          customerName: 'Second Client',
+          sourcePiNo: 'PI-P51-DUP-01',
+          status: 'Draft'
+        },
+        isNew: true,
+        customPool: testPool,
+        customAllowedDb: 'businz_staging_test'
+      });
+    } catch (err) {
+      dupCaught = true;
+      dupMessage = err.message;
+    }
+
+    const checkBom2 = await testPool.query(`
+      SELECT bom_code FROM public.bom_orders WHERE bom_code = 'BOM-P51-DUP-02'
+    `);
+
+    const passed = dupCaught &&
+      dupMessage.includes('[PI Association Conflict]') &&
+      checkBom2.rows.length === 0;
+
+    await testPool.query(`DELETE FROM public.bom_orders WHERE bom_code IN ('BOM-P51-DUP-01', 'BOM-P51-DUP-02')`);
+    await testPool.query(`DELETE FROM public.proforma_invoices WHERE id = 'PI-P51-DUP-01'`);
+
+    recordResult(15, 'Duplicate PI Conversion Rejection', passed,
+      passed 
+        ? 'Rejected second BOM attempting to convert already-active PI.' 
+        : `Expected [PI Association Conflict], got: ${dupMessage}`);
+  } catch (err) {
+    recordResult(15, 'Duplicate PI Conversion Rejection', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 16: PostgreSQL Failure Handling: HTTP 500 on GET & POST /api/store/:key
+  // -------------------------------------------------------------------------
+  try {
+    const serverPort = process.env.PORT || '5095';
+    const baseUrl = `http://127.0.0.1:${serverPort}`;
+
+    // Temporarily mock pool.query on serverPool to simulate unexpected database outage
+    const origQuery = serverPool.query;
+    serverPool.query = async () => { throw new Error('Simulated Database Fatal Error'); };
+
+    let getStatus = 0;
+    let postStatus = 0;
+    try {
+      const getRes = await fetch(`${baseUrl}/api/store/test_p51_fail_store`);
+      getStatus = getRes.status;
+
+      const postRes = await fetch(`${baseUrl}/api/store/test_p51_fail_store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([{ id: 'test' }])
+      });
+      postStatus = postRes.status;
+    } finally {
+      serverPool.query = origQuery; // Always restore original query function
+    }
+
+    const passed = getStatus === 500 && postStatus === 500;
+
+    recordResult(16, 'PostgreSQL Failure Handling: HTTP 500 on GET & POST /api/store/:key', passed,
+      passed 
+        ? `Both GET and POST returned HTTP 500 on database failure; zero silent fallback to stale JSON/memory.` 
+        : `Expected status 500/500, got GET=${getStatus}, POST=${postStatus}`);
+  } catch (err) {
+    recordResult(16, 'PostgreSQL Failure Handling', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 17: Security Protections: Disabled Admin Endpoints Return HTTP 403
+  // -------------------------------------------------------------------------
+  try {
+    const serverPort = process.env.PORT || '5095';
+    const baseUrl = `http://127.0.0.1:${serverPort}`;
+
+    const resReset = await fetch(`${baseUrl}/api/reset-bom-workflow-data`, { method: 'POST' });
+    const resRepair = await fetch(`${baseUrl}/api/repair-bom-sequences`, { method: 'POST' });
+
+    const passed = resReset.status === 403 && resRepair.status === 403;
+
+    recordResult(17, 'Security Protections: Disabled Admin Endpoints Return HTTP 403', passed,
+      passed 
+        ? 'Both /api/reset-bom-workflow-data and /api/repair-bom-sequences strictly returned HTTP 403 Forbidden.' 
+        : `Expected 403/403, got reset=${resReset.status}, repair=${resRepair.status}`);
+  } catch (err) {
+    recordResult(17, 'Security Protections: Disabled Admin Endpoints', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 18: Historical Data Protection Audit (BOM-659 through BOM-665, PI-00063)
   // -------------------------------------------------------------------------
   try {
     const postAuditRes = await testPool.query(`
@@ -704,12 +945,12 @@ async function runPhase51TestSuite() {
       auditDifferences.push(`Row count mismatch: pre=${preTestSnapshot.size}, post=${postAuditRes.rows.length}`);
     }
 
-    recordResult(13, 'Historical Data Preservation Audit (BOM-659 to BOM-665)', historicalUntouched,
+    recordResult(18, 'Historical Data Preservation Audit (BOM-659 to BOM-665)', historicalUntouched,
       historicalUntouched 
         ? `100% of historical records (BOM-659 through BOM-665) are byte-for-byte identical to pre-test baseline. Zero historical records modified.` 
         : `Historical modification detected: ${auditDifferences.join('; ')}`);
   } catch (err) {
-    recordResult(13, 'Historical Data Preservation Audit', false, err.message);
+    recordResult(18, 'Historical Data Preservation Audit', false, err.message);
   }
 
   // Cleanup all P51 test records
@@ -724,6 +965,7 @@ async function runPhase51TestSuite() {
   console.log('======================================================================\n');
 
   await testPool.end();
+  try { await serverPool.end(); } catch (_) {}
   process.exit(allPassed ? 0 : 1);
 }
 

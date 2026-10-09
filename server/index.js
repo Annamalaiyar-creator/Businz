@@ -729,7 +729,10 @@ const getDatabaseStore = async (key) => {
         supabaseMemoryStore[key] = d;
         return d;
       }
-    } catch (_) {}
+    } catch (dbErr) {
+      console.error(`[getDatabaseStore PostgreSQL error for ${cleanKey}]:`, dbErr?.message || dbErr);
+      throw dbErr; // Protection 2: Never silently swallow database errors; propagate to trigger HTTP 500
+    }
   }
 
   if (cleanKey === 'employees_store') {
@@ -1223,9 +1226,7 @@ const saveDatabaseStore = async (key, storeData) => {
     await saveLocalBoms(storeData);
     return storeData;
   }
-  supabaseMemoryStore[key] = storeData;
-
-  // Persist to disk files for raw_materials_store and item_store
+  // 1. Persist to disk files for legacy offline backup
   try {
     if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
@@ -1252,22 +1253,25 @@ const saveDatabaseStore = async (key, storeData) => {
         fs.writeFileSync(getStoreFilePath('employees_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
       } catch (_) {}
     }
-
-    // Persist directly to PostgreSQL database on VPS
-    if (isDbConnected()) {
-      try {
-        await query(`
-          INSERT INTO controlroom_store (key, data, updated_at)
-          VALUES ($1, $2, NOW())
-          ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
-        `, [cleanKey, JSON.stringify(storeData)]);
-      } catch (pgErr) {
-        console.warn(`[saveDatabaseStore PostgreSQL write notice for ${cleanKey}]:`, pgErr?.message);
-      }
-    }
   } catch (diskErr) {
     console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
   }
+
+  // 2. Persist directly to authoritative PostgreSQL database on VPS
+  if (isDbConnected()) {
+    try {
+      await query(`
+        INSERT INTO controlroom_store (key, data, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
+      `, [cleanKey, JSON.stringify(storeData)]);
+    } catch (pgErr) {
+      console.error(`[saveDatabaseStore PostgreSQL write error for ${cleanKey}]:`, pgErr?.message || pgErr);
+      throw pgErr; // Protection 3: Never silently swallow database write errors; propagate to trigger HTTP 500
+    }
+  }
+
+  supabaseMemoryStore[key] = storeData;
 
   // Real-time broadcast to all connected users immediately
   try {
@@ -3846,25 +3850,10 @@ app.post('/api/boms', async (req, res) => {
         // 7. Synchronize source PI in-memory cache and broadcast if applicable
         if (bom.sourcePiNo) {
           try {
-            const cleanPi = String(bom.sourcePiNo).trim();
             const piStoreRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`).catch(() => null);
             if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
-              let piList = piStoreRes.rows[0].data;
-              let changed = false;
-              piList = piList.map(p => {
-                if (p && (p.piNo === cleanPi || p.id === cleanPi)) {
-                  // Do not alter or forcibly associate PI-00063 with BOM-665
-                  if (cleanPi === 'PI-00063' && finalCode !== 'BOM-665') return p;
-                  changed = true;
-                  return { ...p, status: 'Converted to BOM', convertedToBom: true, convertedBomCode: finalCode };
-                }
-                return p;
-              });
-              if (changed) {
-                await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
-                supabaseMemoryStore['sales_pi_store'] = piList;
-                broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piList });
-              }
+              supabaseMemoryStore['sales_pi_store'] = piStoreRes.rows[0].data;
+              broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piStoreRes.rows[0].data });
             }
           } catch (_) {}
         }

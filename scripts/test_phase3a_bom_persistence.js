@@ -85,6 +85,16 @@ async function runStagingTestSuite() {
     const cleanList = crCheckPre.rows[0].data.filter(b => !String(b?.bomCode || b?.code || b?.id || '').startsWith('BOM-TEST-'));
     await query(`UPDATE public.controlroom_store SET data = $1 WHERE key = 'bom_store'`, [JSON.stringify(cleanList)]);
   }
+
+  // Ensure test PIs exist in database for validation
+  await query(`
+    INSERT INTO public.proforma_invoices (id, pi_no, customer_name, status, grand_total)
+    VALUES 
+      ('PI-00091', 'PI-00091', 'Staging Test Industries A', 'Sent to Customer', 50000),
+      ('PI-00092', 'PI-00092', 'Staging Test Industries B', 'Sent to Customer', 120000),
+      ('PI-00093', 'PI-00093', 'Staging Test Industries C', 'Sent to Customer', 35400)
+    ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
+  `);
   const testBoms = [
     {
       id: 'BOM-TEST-901',
@@ -378,6 +388,7 @@ async function runStagingTestSuite() {
   // Clean up staging test records (BOM-TEST-*) so staging remains clean
   // -------------------------------------------------------------------------
   await query(`DELETE FROM public.bom_orders WHERE bom_code LIKE 'BOM-TEST-%'`);
+  await query(`DELETE FROM public.proforma_invoices WHERE pi_no IN ('PI-00091', 'PI-00092', 'PI-00093')`);
   if (Array.isArray(supabaseMemoryStore.bom_store)) {
     supabaseMemoryStore.bom_store = supabaseMemoryStore.bom_store.filter(b => !String(b?.bomCode || b?.code || b?.id || '').startsWith('BOM-TEST-'));
   }

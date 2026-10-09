@@ -531,6 +531,125 @@ async function validateTargetDatabase(client, customAllowedDb = null) {
 }
 
 /**
+ * Validates and synchronizes source PI association within the PostgreSQL transaction.
+ * 
+ * General Database-Backed Rules:
+ * 1. Source PI must exist in authoritative sales_pi_store or public.proforma_invoices.
+ * 2. If the BOM already has an associated source PI, confirm it does not point to a different PI.
+ * 3. If the PI is already converted, confirm it does not point to a different active BOM.
+ * 4. Reject ambiguous or conflicting associations with an explicit error.
+ * 5. Update PI status and conversion fields in both relational table and controlroom_store.
+ * 6. Strictly preserve existing customer, salesperson, and financial data on the PI.
+ */
+async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
+  if (!cleanPi) return;
+
+  const targetPi = String(cleanPi).trim();
+  const lowerPi = targetPi.toLowerCase();
+
+  // 1. Confirm BOM does not point to a different source PI
+  const existingBomPi = String(baseRecord?.sourcePiNo || baseRecord?.source_pi_no || '').trim();
+  if (existingBomPi && existingBomPi.toLowerCase() !== lowerPi) {
+    throw new Error(
+      `[PI Association Conflict] BOM "${finalCode}" is already linked to source PI "${existingBomPi}", cannot re-associate to "${targetPi}".`
+    );
+  }
+
+  // 2. Fetch authoritative sales_pi_store with row-level lock
+  const piStoreRes = await client.query(`
+    SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store' FOR UPDATE
+  `);
+  let piList = [];
+  if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
+    piList = piStoreRes.rows[0].data;
+  }
+
+  // Also query public.proforma_invoices
+  const piDbRes = await client.query(`
+    SELECT * FROM public.proforma_invoices
+    WHERE LOWER(pi_no) = $1 OR LOWER(id) = $1
+    FOR UPDATE
+  `, [lowerPi]);
+
+  const matchedStorePi = piList.find(p => String(p?.piNo || p?.id || '').trim().toLowerCase() === lowerPi);
+  const matchedDbPi = piDbRes?.rows?.[0] || null;
+
+  // Validation: Source PI must exist in at least one authoritative store
+  if (!matchedStorePi && !matchedDbPi) {
+    throw new Error(
+      `[PI Validation Error] Source PI "${targetPi}" does not exist in authoritative PI stores.`
+    );
+  }
+
+  // 3. Confirm that an existing PI conversion does not point to a different active BOM
+  const conflictBomRes = await client.query(`
+    SELECT bom_code, id FROM public.bom_orders
+    WHERE LOWER(source_pi_no) = $1
+      AND bom_code <> $2
+      AND id <> $2
+      AND status NOT ILIKE '%cancel%'
+  `, [lowerPi, finalCode]);
+
+  if (conflictBomRes?.rows?.length > 0) {
+    const conflictingCode = conflictBomRes.rows[0].bom_code || conflictBomRes.rows[0].id;
+    throw new Error(
+      `[PI Association Conflict] Source PI "${targetPi}" is already converted to active BOM "${conflictingCode}", cannot associate with BOM "${finalCode}".`
+    );
+  }
+
+  // Check if the store PI object already has a conflicting convertedBomCode
+  const existingConvertedBomCode = String(matchedStorePi?.convertedBomCode || matchedStorePi?.converted_bom_code || '').trim();
+  if (existingConvertedBomCode && existingConvertedBomCode !== finalCode) {
+    const otherActiveRes = await client.query(`
+      SELECT bom_code, status FROM public.bom_orders
+      WHERE (bom_code = $1 OR id = $1)
+        AND status NOT ILIKE '%cancel%'
+    `, [existingConvertedBomCode]);
+
+    if (otherActiveRes?.rows?.length > 0) {
+      throw new Error(
+        `[PI Association Conflict] Source PI "${targetPi}" is already converted to BOM "${existingConvertedBomCode}".`
+      );
+    }
+  }
+
+  // 4. Update relational public.proforma_invoices within transaction
+  await client.query(`
+    UPDATE public.proforma_invoices
+    SET status = 'Converted to BOM',
+        updated_at = NOW()
+    WHERE LOWER(pi_no) = $1 OR LOWER(id) = $1
+  `, [lowerPi]);
+
+  // 5. Update authoritative public.controlroom_store ('sales_pi_store') within transaction
+  if (piList.length > 0) {
+    let changed = false;
+    const updatedPiList = piList.map(p => {
+      if (p && String(p.piNo || p.id || '').trim().toLowerCase() === lowerPi) {
+        changed = true;
+        // Strictly preserve all existing customer, salesperson, financial, line items, and terms
+        return {
+          ...p,
+          status: 'Converted to BOM',
+          convertedToBom: true,
+          convertedBomCode: finalCode,
+          convertedAt: p.convertedAt || new Date().toISOString()
+        };
+      }
+      return p;
+    });
+
+    if (changed) {
+      await client.query(`
+        UPDATE public.controlroom_store
+        SET data = $1, updated_at = NOW()
+        WHERE key = 'sales_pi_store'
+      `, [JSON.stringify(updatedPiList)]);
+    }
+  }
+}
+
+/**
  * Main Shared Transaction-Safe BOM Persistence Function
  * 
  * Supports both single BOM persistence (POST /api/boms) and batch persistence (saveLocalBoms).
@@ -624,7 +743,15 @@ export async function persistBomsTransactionSafe({
 
       finalCode = incomingCode;
 
-      if (existingPiBom) {
+      // General DB Validation: If PI is already converted to an active BOM, reject new conversion
+      if (incomingPi && existingPiBom && (isNew || (incomingCode && !isPlaceholderCode && incomingCode !== existingPiBom.bomCode && incomingCode !== existingPiBom.id))) {
+        const activeCode = existingPiBom.bomCode || existingPiBom.id;
+        throw new Error(
+          `[PI Association Conflict] Source PI "${bom.sourcePiNo || bom.source_pi_no || incomingPi}" is already converted to active BOM "${activeCode}", cannot associate with BOM "${incomingCode || 'NEW'}".`
+        );
+      }
+
+      if (existingPiBom && !isNew) {
         // Strictly update existing BOM for this specific PI
         finalCode = existingPiBom.bomCode || existingPiBom.code || existingPiBom.id;
         shouldAssignNewCode = false;
@@ -667,6 +794,12 @@ export async function persistBomsTransactionSafe({
       const baseRecord = existingRecordWithCode || (existingPiBom ? existingPiBom : storeMap.get(finalCode));
       const merged = baseRecord ? mergeBomRecords(baseRecord, bom) : bom;
 
+      // Synchronize source PI record status in database within the transaction first
+      // General database-backed validation: zero hardcoded exceptions
+      if (merged.sourcePiNo) {
+        await validateAndSyncSourcePi(client, merged.sourcePiNo, finalCode, baseRecord);
+      }
+
       // Parameterized write to public.bom_orders
       const dbRow = toDatabaseBomRowServer(merged);
       const rowExistsInDb = Boolean(existingDbRow || (existingPiDbRow && (existingPiDbRow.bom_code === finalCode || existingPiDbRow.id === finalCode)));
@@ -675,50 +808,6 @@ export async function persistBomsTransactionSafe({
       storeMap.set(finalCode, merged);
       persistedBom = merged;
       changedRecords.push(merged);
-
-      // Synchronize source PI record status in database within the transaction
-      // Both relational public.proforma_invoices and legacy public.controlroom_store ('sales_pi_store')
-      if (merged.sourcePiNo) {
-        const cleanPi = String(merged.sourcePiNo).trim();
-        // Strict guard: Do not alter or forcibly associate PI-00063 with BOM-665
-        if (cleanPi !== 'PI-00063' || finalCode === 'BOM-665') {
-          // 1. Relational proforma_invoices table
-          await client.query(`
-            UPDATE public.proforma_invoices
-            SET status = 'Converted to BOM',
-                updated_at = NOW()
-            WHERE (pi_no = $1 OR id = $1)
-          `, [cleanPi]);
-
-          // 2. Authoritative legacy store in controlroom_store ('sales_pi_store')
-          const piStoreRes = await client.query(`
-            SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store' FOR UPDATE
-          `);
-          if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
-            let piList = piStoreRes.rows[0].data;
-            let piChanged = false;
-            piList = piList.map(p => {
-              if (p && String(p.piNo || p.id || '').trim().toLowerCase() === cleanPi.toLowerCase()) {
-                piChanged = true;
-                return {
-                  ...p,
-                  status: 'Converted to BOM',
-                  convertedToBom: true,
-                  convertedBomCode: finalCode
-                };
-              }
-              return p;
-            });
-            if (piChanged) {
-              await client.query(`
-                UPDATE public.controlroom_store
-                SET data = $1, updated_at = NOW()
-                WHERE key = 'sales_pi_store'
-              `, [JSON.stringify(piList)]);
-            }
-          }
-        }
-      }
     }
 
     // =========================================================================
@@ -744,6 +833,11 @@ export async function persistBomsTransactionSafe({
 
         const dbRow = toDatabaseBomRowServer(merged);
         await executeBomOrderWrite(client, dbRow, Boolean(dbRowFromDb));
+
+        // Synchronize source PI if present
+        if (merged.sourcePiNo) {
+          await validateAndSyncSourcePi(client, merged.sourcePiNo, cleanId, existing);
+        }
 
         storeMap.set(cleanId, merged);
         changedRecords.push(merged);
