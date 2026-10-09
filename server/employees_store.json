@@ -1,60 +1,60 @@
 [
   {
+    "role": "Technical Administrator",
+    "email": "arannamalaiyar@gmail.com",
+    "prefix": "TA",
+    "status": "Active",
+    "password": "Efx@1234",
     "employee_code": "TA-VRM001",
     "employee_name": "Ar.Annamalaiyar",
-    "email": "arannamalaiyar@gmail.com",
-    "password": "Efx@1234",
-    "prefix": "TA",
-    "role": "Technical Administrator",
-    "dashboard_type": "Technical Administrator",
-    "status": "Active"
+    "dashboard_type": "Technical Administrator"
   },
   {
+    "role": "Sales Executive",
+    "email": "sales@gmail.com",
+    "prefix": "SE",
+    "status": "Pending Approval",
+    "password": "12345",
+    "created_at": "2026-10-07T18:18:04.346Z",
+    "last_login": "2026-10-07T18:18:04.346Z",
     "employee_code": "SE-1000",
     "employee_name": "sales",
-    "email": "sales@gmail.com",
-    "password": "12345",
-    "prefix": "SE",
-    "role": "Sales Executive",
-    "dashboard_type": "Sales Executive",
-    "status": "Pending Approval",
-    "created_at": "2026-10-07T18:18:04.346Z",
-    "last_login": "2026-10-07T18:18:04.346Z"
+    "dashboard_type": "Sales Executive"
   },
   {
+    "role": "Dispatch Head",
+    "email": "dispatchhead@gmail.com",
+    "prefix": "DH",
+    "status": "Pending Approval",
+    "password": "12345",
+    "created_at": "2026-10-07T18:19:43.450Z",
+    "last_login": "2026-10-07T18:19:43.450Z",
     "employee_code": "DH-1000",
     "employee_name": "Dispatch",
-    "email": "dispatchhead@gmail.com",
-    "password": "12345",
-    "prefix": "DH",
-    "role": "Dispatch Head",
-    "dashboard_type": "Dispatch Head",
-    "status": "Pending Approval",
-    "created_at": "2026-10-07T18:19:43.450Z",
-    "last_login": "2026-10-07T18:19:43.450Z"
+    "dashboard_type": "Dispatch Head"
   },
   {
+    "role": "Accounts Head",
+    "email": "ah@gmail.com",
+    "prefix": "AH",
+    "status": "Pending Approval",
+    "password": "12345",
+    "created_at": "2026-10-09T10:38:17.677Z",
+    "last_login": "2026-10-09T10:38:17.677Z",
     "employee_code": "AH-1000",
     "employee_name": "Accounts",
-    "email": "accountshead@gmail.com",
-    "password": "123456",
-    "prefix": "AH",
-    "role": "Accounts Head",
-    "dashboard_type": "Accounts Head",
-    "status": "Pending Approval",
-    "created_at": "2026-10-07T18:20:27.255Z",
-    "last_login": "2026-10-07T18:20:27.255Z"
+    "dashboard_type": "Accounts Head"
   },
   {
+    "role": "Billing",
+    "email": "bi@gmail.com",
+    "prefix": "BI",
+    "status": "Pending Approval",
+    "password": "12345",
+    "created_at": "2026-10-09T10:42:27.105Z",
+    "last_login": "2026-10-09T10:42:27.105Z",
     "employee_code": "BI-1000",
     "employee_name": "Billing",
-    "email": "billing@vrmstructures.com",
-    "password": "12345",
-    "prefix": "BI",
-    "role": "Billing",
-    "dashboard_type": "Billing",
-    "status": "Pending Approval",
-    "created_at": "2026-10-07T18:21:17.003Z",
-    "last_login": "2026-10-07T18:21:17.004Z"
+    "dashboard_type": "Billing"
   }
 ]

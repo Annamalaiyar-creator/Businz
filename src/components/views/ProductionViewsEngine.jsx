@@ -398,12 +398,13 @@ export default function ProductionViewsEngine(props) {
   const [newBomStatus, setNewBomStatus] = useState('ACTIVE');
   const [bomFormErrors, setBomFormErrors] = useState({});
 
-  // Permission Check for Cancel BOM (Strictly Dispatch, Production, Billing, and Admin - Exclude Accounts)
+  // Permission Check for Cancel BOM (Strictly Dispatch, Accounts, Production, Billing, and Admin)
   const canCancelBom = [
     'Dispatch Head', 'Dispatch Executive',
+    'Accounts Head', 'Accounts Executive', 'Accounts Lead', 'Finance & Accounts', 'Accounts',
     'Production Head', 'Technical Administrator', 'CEO', 'MD', 'Managing Director',
-    'Floor Supervisor', 'Billing', 'Invoice Executive'
-  ].includes(userRole) && !String(userRole || '').toLowerCase().includes('accounts');
+    'Floor Supervisor', 'Billing', 'Invoice Executive', 'Billing & Invoice Executive'
+  ].includes(userRole);
 
   // Helper to Restore / Unblock Inventory when a BOM is Cancelled
   const restoreInventoryForBom = (bomItems = [], bomCode = '') => {
@@ -481,6 +482,38 @@ export default function ProductionViewsEngine(props) {
       alert('⛔ Access Restricted!\nOnly Dispatch, Accounts, Production, or Billing logins are authorized to cancel a BOM and release reserved inventory.');
       return;
     }
+
+    const isAlreadySentToAccounts = Boolean(
+      bomToCancel.status === 'Packed & Awaiting Accounts Verification' ||
+      bomToCancel.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
+      bomToCancel.status === 'Packing Verified - Sent to Accounts' ||
+      bomToCancel.status === 'Accounts Verified & Passed to Invoice' ||
+      bomToCancel.status === 'ACCOUNTS VERIFIED' ||
+      bomToCancel.status === 'Invoice Confirmed' ||
+      bomToCancel.status === 'Awaiting Vehicle Loading & Dispatch' ||
+      bomToCancel.status === 'AWAITING VEHICLE LOADING' ||
+      bomToCancel.status === 'Closed' ||
+      bomToCancel.status === 'CLOSED' ||
+      bomToCancel.status === 'COMPLETED & DISPATCHED' ||
+      bomToCancel.status === 'Completed' ||
+      bomToCancel.tabGroup === 'Packed' ||
+      bomToCancel.tabGroup === 'AwaitingLoading' ||
+      bomToCancel.tabGroup === 'Closed' ||
+      bomToCancel.accountsVerification?.readyForAccounts ||
+      bomToCancel.accountsVerification?.verified
+    );
+
+    const isDispatchContext = Boolean(
+      activeTab === 'Dispatch Orders' ||
+      activeTab === 'Dispatch Dashboard' ||
+      ['Dispatch Head', 'Dispatch Executive', 'Dispatch Team', 'Dispatch'].some(r => r.toLowerCase() === (userRole || '').toLowerCase().trim())
+    );
+
+    if (isDispatchContext && isAlreadySentToAccounts) {
+      alert('⛔ Cancellation Restricted!\nThis BOM order has already been verified and forwarded to Accounts. Dispatch can only cancel orders before sending to Accounts.');
+      return;
+    }
+
     setBomCancelPromptModal(bomToCancel);
     setCancellationReasonInput('');
   };
@@ -504,19 +537,86 @@ export default function ProductionViewsEngine(props) {
         : [];
     restoreInventoryForBom(itemsToRestore, bCode);
 
-    // 2. Prepare updated cancelled BOM record
-    const loggedInUser = localStorage.getItem('controlroom_logged_user_name') || userRole || 'Dispatch Head';
+    // 2. Resolve Canceller's exact Name, Position/Role, and Department/Team for the Sales Person
+    const resolveCancellerIdentity = () => {
+      const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').replace(/\s*\([^)]*\)/g, '').trim();
+      const storedRole = (localStorage.getItem('controlroom_user_role') || userRole || '').trim();
+      
+      let team = 'Dispatch Team';
+      let position = storedRole || 'Dispatch Head';
+
+      if (activeTab === 'Accounts Verification' || storedRole.toLowerCase().includes('account')) {
+        team = 'Accounts Team';
+        if (!storedRole || storedRole === 'Sales Executive' || storedRole === 'Dispatch Head') {
+          position = 'Accounts Executive';
+        }
+      } else if (activeTab === 'Invoice Management' || storedRole.toLowerCase().includes('invoice') || storedRole.toLowerCase().includes('bill')) {
+        team = 'Invoice Team';
+        if (!storedRole || storedRole === 'Sales Executive' || storedRole === 'Dispatch Head') {
+          position = 'Billing & Invoice Executive';
+        }
+      } else if (activeTab === 'Dispatch Orders' || activeTab === 'Dispatch Dashboard' || storedRole.toLowerCase().includes('dispatch')) {
+        team = 'Dispatch Team';
+        if (!storedRole || storedRole === 'Sales Executive') {
+          position = 'Dispatch Head';
+        }
+      } else if (storedRole.toLowerCase().includes('production')) {
+        team = 'Production Team';
+        if (!storedRole) position = 'Production Head';
+      }
+
+      let personName = storedName;
+      try {
+        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || localStorage.getItem('controlroom_employees_store') || '[]');
+        if (Array.isArray(emps) && (storedName || localStorage.getItem('controlroom_logged_emp_id'))) {
+          const empId = localStorage.getItem('controlroom_logged_emp_id');
+          const match = emps.find(e => (empId && e.empId === empId) || (e.name && e.name.toLowerCase() === storedName.toLowerCase()));
+          if (match) {
+            personName = match.name || personName;
+            if (match.designation || match.role) position = match.designation || match.role;
+            if (match.department) {
+              if (match.department.toLowerCase().includes('dispatch')) team = 'Dispatch Team';
+              else if (match.department.toLowerCase().includes('account')) team = 'Accounts Team';
+              else if (match.department.toLowerCase().includes('invoice') || match.department.toLowerCase().includes('bill')) team = 'Invoice Team';
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (!personName) {
+        if (team === 'Dispatch Team') personName = 'Murugan';
+        else if (team === 'Accounts Team') personName = 'Venkatesh';
+        else if (team === 'Invoice Team') personName = 'Priya';
+        else personName = 'Authorized Personnel';
+      }
+
+      const fullAttribution = `${personName} (${position}, ${team})`;
+
+      return {
+        personName,
+        position,
+        team,
+        fullAttribution
+      };
+    };
+
+    const { personName, position, team, fullAttribution } = resolveCancellerIdentity();
+
+    // 3. Prepare updated cancelled BOM record with full attribution
     const updatedBomRecord = {
       ...bomToCancel,
       status: 'Cancelled & Stock Restored',
       cancelled: true,
       cancellationReason: cleanReason,
       stockBlocked: false,
-      cancelledBy: loggedInUser,
+      cancelledBy: personName,
+      cancelledByRole: position,
+      cancelledByTeam: team,
+      cancelledByNameAndRole: fullAttribution,
       cancelledAt: new Date().toISOString()
     };
 
-    // 3. Update local bomStore and storage
+    // 4. Update local bomStore and storage
     setBomStore(prev => {
       const updated = prev.map(b => (b.bomCode === bCode || b.code === bCode || b.id === bCode) ? updatedBomRecord : b);
       const sanitized = updated.map(stripDataUrlsFromRecord);
@@ -538,17 +638,19 @@ export default function ProductionViewsEngine(props) {
 
     window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomRecord } }));
 
-    // 4. Notify Sales Person who raised this BOM
+    // 5. Notify Sales Person who raised this BOM with canceller's name, role & team
     const salesPerson = bomToCancel.salesPerson || bomToCancel.salesExecutive || bomToCancel.createdBy || 'Sales Executive';
     notifyBomCancelledByDispatch({
       bomCode: bCode,
       customerName: bomToCancel.customerName,
       salesPerson: salesPerson,
       reason: cleanReason,
-      cancelledBy: loggedInUser
+      cancelledBy: fullAttribution,
+      cancelledByRole: position,
+      cancelledByTeam: team
     });
 
-    // 5. Close open modals if target BOM matches
+    // 6. Close open modals if target BOM matches
     if (dispatchPackingModal && (dispatchPackingModal.bomCode === bCode || dispatchPackingModal.code === bCode || dispatchPackingModal.id === bCode)) {
       setDispatchPackingModal(null);
     }
@@ -1037,8 +1139,9 @@ export default function ProductionViewsEngine(props) {
             );
           }
 
-          // Restrict Delivery Challans for Accounts roles
-          if (activeTab === 'Delivery Challans' && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts')) {
+          // Restrict Delivery Challans for Accounts and Dispatch roles
+          const isDispatchRole = userRole === 'Dispatch Head' || userRole === 'Dispatch' || userRole === 'Dispatch Executive' || String(userRole || '').toLowerCase().includes('dispatch');
+          if (activeTab === 'Delivery Challans' && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || isDispatchRole)) {
             return (
               <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '20px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A', marginBottom: '8px' }}>Access Restricted</h3>
@@ -1098,6 +1201,20 @@ export default function ProductionViewsEngine(props) {
                 handleCancelBomOrder={handleCancelBomOrder}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setVehicleLoadingModal={setVehicleLoadingModal}
+              />
+            );
+          }
+
+          // Render Vehicle Loading Verification Screen (Full Size Page like DispatchPackingModal)
+          if (vehicleLoadingModal) {
+            return (
+              <VehicleLoadingModal
+                vehicleLoadingModal={vehicleLoadingModal}
+                onClose={() => setVehicleLoadingModal(null)}
+                setBomStore={setBomStore}
+                setCompletedBomSummaryModal={setCompletedBomSummaryModal}
+                setActiveMediaPreviewModal={setActiveMediaPreviewModal}
+                setInvoiceList={setInvoiceList}
               />
             );
           }
@@ -1531,30 +1648,24 @@ export default function ProductionViewsEngine(props) {
                     salesPersonCode: (originalBom.salesPersonCode || targetRow.salesPersonCode)
                   } : targetRow;
 
-                  const isAwaitingLoad = Boolean(
-                    targetRow.tabGroup === 'AwaitingLoading' ||
-                    targetRow.tabGroup === 'AwaitingLrCopy' ||
-                    targetRow.tabGroup === 'Closed' ||
-                    targetRow.status === 'Completed' ||
-                    targetRow.status === 'COMPLETED & DISPATCHED' ||
-                    targetRow.status === 'Awaiting Vehicle Loading & Dispatch' ||
-                    targetRow.status === 'AWAITING VEHICLE LOADING' ||
-                    targetRow.status === 'Invoice Confirmed' ||
-                    targetRow.invoiceConfirmed ||
-                    targetRow.status === 'Accounts Verified & Passed to Invoice' ||
-                    targetRow.isAccountsDone ||
-                    targetRow.status === 'Dispatched - Awaiting LR Copy' ||
-                    targetRow.status === 'AWAITING LR COPY' ||
-                    targetRow.status === 'Awaiting LR Copy' ||
+                  const isAccountsDone = Boolean(targetRow.isAccountsDone || targetRow.accountsVerification?.verified);
+                  const isInvoiceDone = Boolean(targetRow.invoiceConfirmed || targetRow.status === 'Invoice Confirmed');
+                  const isFullyPacked = Boolean(
                     targetRow.packingStatus === 'PACKING_VERIFIED' ||
                     targetRow.tabGroup === 'Packed' ||
-                    (targetRow.c4 && (targetRow.c4.includes('100%') || targetRow.c4 === '100% Paid') && (targetRow.tabGroup === 'Packed' || targetRow.status?.includes('Packed'))) ||
-                    (targetRow.invoiceNo && targetRow.status !== 'Closed')
+                    (targetRow.status && targetRow.status.toLowerCase().includes('packed'))
+                  );
+                  const isAwaitingLoad = Boolean(
+                    targetRow.tabGroup === 'AwaitingLoading' ||
+                    ((targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || targetRow.status === 'AWAITING VEHICLE LOADING') && isAccountsDone && isInvoiceDone) ||
+                    (isFullyPacked && isAccountsDone && isInvoiceDone)
                   );
                   if (isCancelledRow) {
                     setDispatchPackingModal({ ...fullBomToLoad, isViewOnly: true, isReadOnly: true });
                   } else if (targetRow.tabGroup === 'Closed' || targetRow.status === 'Completed' || targetRow.status === 'COMPLETED & DISPATCHED') {
                     setVehicleLoadingModal({ ...fullBomToLoad, isReadOnly: true });
+                  } else if (targetRow.tabGroup === 'AwaitingLrCopy' || targetRow.status === 'Dispatched - Awaiting LR Copy' || targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Awaiting LR Copy') {
+                    setVehicleLoadingModal(fullBomToLoad);
                   } else if (isAwaitingLoad) {
                     setVehicleLoadingModal(fullBomToLoad);
                   } else {
@@ -1618,31 +1729,25 @@ export default function ProductionViewsEngine(props) {
               } : rec;
 
               const isRecCancelled = Boolean(rec.cancelled || rec.status === 'CANCELLED' || rec.status === 'Cancelled' || rec.status === 'Cancelled & Stock Restored' || (typeof rec.status === 'string' && rec.status.toLowerCase().includes('cancel')));
-              const isRecAwaitingLoad = Boolean(
-                rec.tabGroup === 'AwaitingLoading' ||
-                rec.tabGroup === 'AwaitingLrCopy' ||
-                rec.tabGroup === 'Closed' ||
-                rec.status === 'Completed' ||
-                rec.status === 'COMPLETED & DISPATCHED' ||
-                rec.status === 'Dispatched - Awaiting LR Copy' ||
-                rec.status === 'AWAITING LR COPY' ||
-                rec.status === 'Awaiting LR Copy' ||
-                rec.status === 'Awaiting Vehicle Loading & Dispatch' ||
-                rec.status === 'AWAITING VEHICLE LOADING' ||
-                rec.status === 'Invoice Confirmed' ||
-                rec.invoiceConfirmed ||
-                rec.status === 'Accounts Verified & Passed to Invoice' ||
-                rec.isAccountsDone ||
+              const isRecAccountsDone = Boolean(rec.isAccountsDone || rec.accountsVerification?.verified || fullRec.isAccountsDone || fullRec.accountsVerification?.verified);
+              const isRecInvoiceDone = Boolean(rec.invoiceConfirmed || rec.status === 'Invoice Confirmed' || fullRec.invoiceConfirmed || fullRec.status === 'Invoice Confirmed');
+              const isRecFullyPacked = Boolean(
                 rec.packingStatus === 'PACKING_VERIFIED' ||
                 fullRec.packingStatus === 'PACKING_VERIFIED' ||
                 rec.tabGroup === 'Packed' ||
-                (rec.c4 && (rec.c4.includes('100%') || rec.c4 === '100% Paid') && (rec.tabGroup === 'Packed' || rec.status?.includes('Packed'))) ||
-                (rec.invoiceNo && rec.status !== 'Closed')
+                (rec.status && rec.status.toLowerCase().includes('packed'))
+              );
+              const isRecAwaitingLoad = Boolean(
+                rec.tabGroup === 'AwaitingLoading' ||
+                ((rec.status === 'Awaiting Vehicle Loading & Dispatch' || rec.status === 'AWAITING VEHICLE LOADING') && isRecAccountsDone && isRecInvoiceDone) ||
+                (isRecFullyPacked && isRecAccountsDone && isRecInvoiceDone)
               );
               if (isRecCancelled) {
                 setDispatchPackingModal({ ...fullRec, isViewOnly: true, isReadOnly: true });
               } else if (rec.tabGroup === 'Closed' || rec.status === 'Completed' || rec.status === 'COMPLETED & DISPATCHED') {
                 setVehicleLoadingModal({ ...fullRec, isReadOnly: true });
+              } else if (rec.tabGroup === 'AwaitingLrCopy' || rec.status === 'Awaiting LR Copy' || rec.status === 'Dispatched - Awaiting LR Copy' || rec.status === 'AWAITING LR COPY') {
+                setVehicleLoadingModal(fullRec);
               } else if (isRecAwaitingLoad) {
                 setVehicleLoadingModal(fullRec);
               } else {
@@ -1707,17 +1812,6 @@ export default function ProductionViewsEngine(props) {
         />
       )}
 
-      {/* ─── VEHICLE LOADING & FINAL DISPATCH VERIFICATION MODAL ─── */}
-      {vehicleLoadingModal && (
-        <VehicleLoadingModal
-          vehicleLoadingModal={vehicleLoadingModal}
-          onClose={() => setVehicleLoadingModal(null)}
-          setBomStore={setBomStore}
-          setCompletedBomSummaryModal={setCompletedBomSummaryModal}
-          setActiveMediaPreviewModal={setActiveMediaPreviewModal}
-          setInvoiceList={setInvoiceList}
-        />
-      )}
 
       {/* ─── FULL BOM LIFECYCLE COMPLETION SUMMARY MODAL ─── */}
       {/* ─── FULL BOM LIFECYCLE COMPLETION SUMMARY MODAL ─── */}

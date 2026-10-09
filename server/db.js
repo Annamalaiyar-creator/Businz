@@ -1,5 +1,9 @@
 import pkg from 'pg';
-const { Pool } = pkg;
+const { Pool, types } = pkg;
+if (types && typeof types.setTypeParser === 'function') {
+  // 1082 is PostgreSQL DATE OID. Return raw 'YYYY-MM-DD' string to avoid UTC timezone shifts to 18:30:00.000Z
+  types.setTypeParser(1082, str => str);
+}
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

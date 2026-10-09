@@ -787,8 +787,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   if (fp) dispatchedDeductions.set(fp, (dispatchedDeductions.get(fp) || 0) + q);
                 }
               });
-            } else if (isSentToDispatch) {
-              // Active BOM order in progress prior to vehicle loading -> held in RESERVED stock
+            } else {
+              // Active BOM order in progress prior to vehicle loading / invoice deduction -> held in RESERVED stock
               (b.items || []).forEach(it => {
                 const q = parseFloat(it.qty || it.bomQty || 0) || 0;
                 if (q > 0) {
@@ -1134,18 +1134,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             st.includes('delivered') ||
             st.includes('awaiting lr copy')
           );
-          const isSentToDispatch = Boolean(b?.salesConfirmed) || [
-            'sales confirmed - sent to dispatch',
-            'sent to production',
-            'confirmed',
-            'packed & ready for dispatch',
-            'partially packed',
-            'closed',
-            'dispatch packing verified - sent to accounts',
-            'awaiting vehicle loading & dispatch'
-          ].some(s => st.includes(s));
-
-          if (!isVehicleLoaded && !isSentToDispatch) return;
+          if (!isVehicleLoaded && (st.includes('cancel') || st.includes('restored') || b?.cancelled)) return;
 
           const rawSales = b.salesPerson || b.salesperson || b.salesRep || b.createdBy || b.createdByName || b.salesPersonName || (b.sourcePiNo ? piMap[String(b.sourcePiNo).toUpperCase().trim()] : '') || '';
           const cleanSalesPerson = rawSales ? rawSales.replace(/\s*\([^)]*\)/g, '').trim() : '';

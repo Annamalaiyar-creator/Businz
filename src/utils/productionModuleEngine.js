@@ -10,10 +10,10 @@
  * - Full Partial / Rejection Output & Additional Material Request handling
  */
 
-import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from './supabaseDataSync';
-import { stripDataUrlsFromRecord } from './mediaUtils';
-import { CANONICAL_PRODUCT_ALIASES } from './vrmProductsData';
-import { getNextSequence } from './sequenceGenerator';
+import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from './supabaseDataSync.js';
+import { stripDataUrlsFromRecord } from './mediaUtils.js';
+import { CANONICAL_PRODUCT_ALIASES } from './vrmProductsData.js';
+import { getNextSequence } from './sequenceGenerator.js';
 
 // Initial Manufacturing Recipes (BOMs)
 export const INITIAL_MANUFACTURING_RECIPES = [

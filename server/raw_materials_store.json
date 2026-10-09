@@ -1,17 +1,44 @@
 [
   {
+    "cat": "Aluminium Profiles",
     "code": "MR-300MM",
     "name": "Mini Rail - 300 mm",
-    "cat": "Aluminium Profiles",
     "unit": "NOS",
-    "stock": 1800,
-    "availableStock": 1800,
-    "physicalStock": 1800,
-    "openingStock": 2000,
-    "reserved": 0,
-    "blockedForBom": 0,
+    "stock": 2000,
     "status": "In Stock",
+    "reserved": 0,
     "issuedProd": 400,
-    "lastUpdated": "Deducted 200 for BOM BOM-663 by Sales Department"
+    "lastUpdated": "Deducted 400 for BOM VRM-BOM-2026-03 by Accounts Invoice Confirmation",
+    "openingStock": 2000,
+    "blockedForBom": 0,
+    "physicalStock": 2000,
+    "availableStock": 2000
+  },
+  {
+    "cat": "HDG",
+    "code": "L1200",
+    "name": "LEG 1200 mm (HDG)",
+    "unit": "NOS",
+    "stock": 0,
+    "status": "Out of Stock",
+    "reserved": 0,
+    "lastUpdated": "Deducted 200 for BOM VRM-BOM-2026-01 by Sales Executive",
+    "openingStock": 0,
+    "blockedForBom": 0,
+    "physicalStock": 0,
+    "availableStock": 0
+  },
+  {
+    "cat": "HDG",
+    "code": "L500",
+    "name": "LEG 500 mm (HDG)",
+    "unit": "NOS",
+    "stock": 0,
+    "status": "Out of Stock",
+    "reserved": 0,
+    "openingStock": 0,
+    "blockedForBom": 0,
+    "physicalStock": 0,
+    "availableStock": 0
   }
 ]

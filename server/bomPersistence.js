@@ -104,20 +104,67 @@ export const toConsumerBomServer = (row) => {
     return doc;
   };
 
+  const sanitizeDateStr = (d) => {
+    if (!d) return '';
+    if (typeof d === 'string') {
+      const match = d.match(/^\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : d;
+    }
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${yr}-${mo}-${day}`;
+    }
+    return String(d).slice(0, 10);
+  };
+
   const id = row.id || row.bom_code || '';
   const bomCode = row.bom_code || row.id || '';
-  const customerName = row.customer_name || row.company_name || '';
-  const companyName = row.company_name || row.customer_name || '';
-  const contactPerson = row.contact_person || extraData.contactPerson || '';
-  const gstNo = row.gst_no || extraData.gstNo || extraData.gstin || '';
-  const phone = row.mobile || '';
+  const rawCustomer = [
+    row.customer_name,
+    row.customerName,
+    row.company_name,
+    row.companyName,
+    row.vendor,
+    extraData.customerName,
+    extraData.companyName,
+    extraData.vendor,
+    extraData.clientName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || '';
+
+  const rawCompany = [
+    row.company_name,
+    row.companyName,
+    row.customer_name,
+    row.customerName,
+    extraData.companyName,
+    extraData.customerName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || rawCustomer;
+
+  const customerName = rawCustomer || rawCompany || row.customer_name || row.customerName || 'Customer Order';
+  const companyName = rawCompany || rawCustomer || row.company_name || row.companyName || customerName;
+
+  const contactPerson = row.contact_person || row.contactPerson || extraData.contactPerson || '';
+  const gstNo = row.gst_no || row.gstNo || row.gstin || extraData.gstNo || extraData.gstin || '';
+  const phone = row.mobile || row.phone || '';
   const email = row.email || '';
-  const billingAddr = row.billing_address || (row.billing_address_obj?.address ? `${row.billing_address_obj.address}, ${row.billing_address_obj.city || ''} ${row.billing_address_obj.state || ''} - ${row.billing_address_obj.pincode || ''}` : '');
-  const deliveryAddr = row.delivery_address || (row.delivery_address_obj?.address ? `${row.delivery_address_obj.address}, ${row.delivery_address_obj.city || ''} ${row.delivery_address_obj.state || ''} - ${row.delivery_address_obj.pincode || ''}` : billingAddr);
-  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || '';
-  const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
-  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || '';
-  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || '';
+  const billingAddr = row.billing_address || row.billingAddress || (row.billing_address_obj?.address ? `${row.billing_address_obj.address}, ${row.billing_address_obj.city || ''} ${row.billing_address_obj.state || ''} - ${row.billing_address_obj.pincode || ''}` : '');
+  const deliveryAddr = row.delivery_address || row.deliveryAddress || (row.delivery_address_obj?.address ? `${row.delivery_address_obj.address}, ${row.delivery_address_obj.city || ''} ${row.delivery_address_obj.state || ''} - ${row.delivery_address_obj.pincode || ''}` : billingAddr);
+  
+  const rawSales = [
+    row.sales_person,
+    row.salesPerson,
+    row.created_by,
+    row.createdBy,
+    extraData.salesPerson,
+    extraData.createdBy
+  ].find(s => s && typeof s === 'string' && s.trim() && s.trim() !== 'Sales Department');
+
+  const salesRep = rawSales || row.sales_person || row.salesPerson || row.created_by || row.createdBy || 'Sales Department';
+  const salesPersonCode = row.sales_person_code || row.salesPersonCode || row.created_by_id || row.createdById || extraData.salesPersonCode || extraData.createdById || '';
+  const createdBy = row.created_by || row.createdBy || rawSales || salesRep;
+  const createdById = row.created_by_id || row.createdById || row.sales_person_code || row.salesPersonCode || extraData.createdById || salesPersonCode;
 
   return {
     ...extraData,
@@ -131,8 +178,8 @@ export const toConsumerBomServer = (row) => {
     gstin: gstNo,
     c2: companyName,
     c3: customerName,
-    date: row.date || '',
-    deliveryDate: row.delivery_date || '',
+    date: sanitizeDateStr(row.date) || '',
+    deliveryDate: sanitizeDateStr(row.delivery_date || row.deliveryDate) || '',
     mobile: phone,
     phone,
     c4: phone,
@@ -198,6 +245,9 @@ export const toConsumerBomServer = (row) => {
     cancelled: Boolean(row.cancelled || extraData.cancelled),
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
+    cancelledByRole: extraData.cancelledByRole || null,
+    cancelledByTeam: extraData.cancelledByTeam || null,
+    cancelledByNameAndRole: extraData.cancelledByNameAndRole || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
     proofDoc: row.proof_doc || extraData.proofDoc || null,
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
@@ -224,8 +274,17 @@ export const toDatabaseBomRowServer = (item) => {
 
   const sanitizeDate = (d) => {
     if (!d) return null;
-    const str = String(d).trim().slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : null;
+    if (typeof d === 'string') {
+      const match = d.match(/^\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : null;
+    }
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${yr}-${mo}-${day}`;
+    }
+    return null;
   };
 
   const sanitizeTimestamp = (ts) => {
@@ -336,6 +395,30 @@ export const toDatabaseBomRowServer = (item) => {
     cleanPayments.proofDocObj = sanitizeBomDocForStorage(cleanPayments.proofDocObj);
   }
 
+  const cleanCust = [
+    item.customerName,
+    item.companyName,
+    item.vendor,
+    extraData.customerName,
+    extraData.companyName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || 'Customer';
+
+  const cleanComp = [
+    item.companyName,
+    item.customerName,
+    extraData.companyName,
+    extraData.customerName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || (cleanCust !== 'Customer' ? cleanCust : '');
+
+  const cleanSalesPerson = [
+    item.salesPerson,
+    item.sales_person,
+    item.createdBy,
+    item.created_by,
+    extraData.salesPerson,
+    extraData.createdBy
+  ].find(s => s && typeof s === 'string' && s.trim() && s.trim() !== 'Sales Department') || '';
+
   return {
     id,
     bom_code: bomCode,
@@ -343,8 +426,8 @@ export const toDatabaseBomRowServer = (item) => {
     source_pi_no: sourcePiNo,
     date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
     delivery_date: sanitizeDate(item.deliveryDate),
-    customer_name: item.companyName || item.customerName || item.vendor || 'Customer',
-    company_name: item.companyName || item.customerName || item.vendor || '',
+    customer_name: cleanCust,
+    company_name: cleanComp,
     contact_person: item.contactPerson || item.contact || extraData.contactPerson || '',
     gst_no: item.gstNo || item.gst || item.gstin || extraData.gstNo || '',
     mobile: item.mobile || item.phone || '',
@@ -368,9 +451,9 @@ export const toDatabaseBomRowServer = (item) => {
     remarks: item.remarks || '',
     status: item.status || 'Draft',
     sales_confirmed: Boolean(item.salesConfirmed),
-    sales_person: item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
+    sales_person: cleanSalesPerson || item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
     sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
-    created_by: item.createdBy || item.created_by || item.salesPerson || item.sales_person || '',
+    created_by: item.createdBy || item.created_by || cleanSalesPerson || item.salesPerson || item.sales_person || '',
     created_by_id: item.createdById || item.created_by_id || item.salesPersonCode || item.sales_person_code || extraData.createdById || '',
     items: Array.isArray(item.items) ? item.items : [],
     payments: cleanPayments,
@@ -414,15 +497,23 @@ export function mergeBomRecords(existing, incoming) {
     // Preserve rich items if incoming is empty/missing
     items: (Array.isArray(incoming.items) && incoming.items.length > 0) ? incoming.items : (existing.items || []),
     // Preserve customer details if incoming is empty or default
-    customerName: incoming.customerName || incoming.companyName || existing.customerName || existing.companyName || 'Customer',
-    companyName: incoming.companyName || incoming.customerName || existing.companyName || existing.customerName || '',
+    customerName: (incoming.customerName && !['Customer', 'Customer Order', '-', '—'].includes(incoming.customerName.trim()))
+      ? incoming.customerName
+      : (existing.customerName || incoming.companyName || existing.companyName || 'Customer'),
+    companyName: (incoming.companyName && !['Customer', 'Customer Order', '-', '—'].includes(incoming.companyName.trim()))
+      ? incoming.companyName
+      : (existing.companyName || incoming.customerName || existing.customerName || ''),
     contactPerson: incoming.contactPerson || incoming.contact || existing.contactPerson || '',
     gstNo: incoming.gstNo || incoming.gst || incoming.gstin || existing.gstNo || '',
     // Preserve salesperson and attribution if missing in partial update
-    salesPerson: incoming.salesPerson || incoming.sales_person || existing.salesPerson || '',
-    salesPersonCode: incoming.salesPersonCode || incoming.sales_person_code || existing.salesPersonCode || '',
-    createdBy: incoming.createdBy || incoming.created_by || existing.createdBy || '',
-    createdById: incoming.createdById || incoming.created_by_id || existing.createdById || '',
+    salesPerson: (incoming.salesPerson && incoming.salesPerson.trim() !== 'Sales Department')
+      ? incoming.salesPerson
+      : (existing.salesPerson || incoming.sales_person || existing.sales_person || incoming.createdBy || existing.createdBy || ''),
+    salesPersonCode: incoming.salesPersonCode || incoming.sales_person_code || existing.salesPersonCode || existing.sales_person_code || '',
+    createdBy: (incoming.createdBy && incoming.createdBy.trim() !== 'Sales Department')
+      ? incoming.createdBy
+      : (existing.createdBy || incoming.salesPerson || existing.salesPerson || ''),
+    createdById: incoming.createdById || incoming.created_by_id || existing.createdById || existing.created_by_id || '',
     sourcePiNo: incoming.sourcePiNo || incoming.source_pi_no || existing.sourcePiNo || null,
     // Preserve financial totals if incoming is 0 and existing is non-zero
     grandTotal: (Number(incoming.grandTotal) > 0) ? Number(incoming.grandTotal) : (existing.grandTotal || 0),

@@ -127,7 +127,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
 
     if (role === 'Production Head' || role === 'Production Admin') {
       sections = [...productionSections];
-    } else if (role === 'Dispatch Head') {
+    } else if (role === 'Dispatch Head' || role === 'Dispatch' || role === 'Dispatch Executive' || String(role || '').toLowerCase().includes('dispatch')) {
       sections = [
         {
           category: 'MAIN MENU',
@@ -135,7 +135,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
             { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
-            { label: 'Delivery Challans', icon: FileCheck },
             { label: 'Stock Status', icon: Layers }
           ]
         },

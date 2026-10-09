@@ -17,6 +17,16 @@ The following core workflows and modules have been thoroughly tested, verified, 
 4. **Inventory Flow**:
    - File references: `RawMaterialInventoryView.jsx`, `GoodsReceiptNoteView.jsx`, `centralInventoryStore.js`, GRN inwarding, stock deduction reconciliation, and live item audit log tracking.
    - Status: **LOCKED & FROZEN**.
+5. **End-to-End Order-to-Dispatch Lifecycle (PI → BOM → Dispatch Packing → Accounts Verification → Invoice Management → Vehicle Loading & Final Dispatch)**:
+   - File references: `SalesProformaInvoicesView.jsx`, `BomOrdersView.jsx`, `DispatchPackingModal.jsx`, `AccountsVerificationModal.jsx`, `InvoiceDetailModal.jsx`, `VehicleLoadingModal.jsx`, `productionConfigs.js`, `ProductionViewsEngine.jsx`.
+   - Verified Sequence:
+     1. **PI (Sales)**: Create/confirm Proforma Invoice with pricing and customer details.
+     2. **BOM (Sales/Engineering)**: Convert to BOM order with payment & address proofs, sales confirmation.
+     3. **Dispatch Packing (Dispatch)**: Checklist verification, mandatory photo/video upload, mark packing verified.
+     4. **Accounts Verification (Accounts)**: Verify payment receipt & hard copy, generate official invoice sequence number, pass directly to billing.
+     5. **Invoice Management (Billing)**: Complete invoice, verify 3-way match, deduct inventory stock, lock confirmed invoice with exact order amount.
+     6. **Vehicle Loading & Final Dispatch (Dispatch)**: Verify vehicle loading, choose transport mode (3rd-Party VRL/ARC, Self-Pickup / Direct Delivery, Local Transporter), upload LR copy / vehicle photo, and mark completed & dispatched. (Delivery Challans strictly excluded from Dispatch login).
+   - Status: **STRICTLY LOCKED & FROZEN BY USER**. Do NOT alter, refactor, redesign, or change transitions across this entire workflow without explicit written user instruction.
 
 ## Purchase Order (PO) & Zoho Books Integration Rules
 

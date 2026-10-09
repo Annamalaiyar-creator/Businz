@@ -393,7 +393,10 @@ export function toConsumerInvoice(row) {
   }
 
   const invNo = row.inv_no || row.id;
-  const invAmt = Number(row.inv_amt || 0);
+  const rawAmt = Number(row.inv_amt || 0);
+  const metaAmt = Number(meta.total || meta.rawTotal || (meta.amount ? String(meta.amount).replace(/[^0-9.]/g, '') : 0)) || 0;
+  const effectiveAmt = rawAmt > 0 ? rawAmt : (metaAmt > 0 ? metaAmt : 0);
+  const formattedAmt = effectiveAmt > 0 ? `₹${effectiveAmt.toLocaleString('en-IN')}` : (meta.amount || `₹0`);
 
   return {
     id: row.id,
@@ -408,11 +411,11 @@ export function toConsumerInvoice(row) {
     customerId: meta.customerId || '',
     date: meta.date || row.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
     dueDate: meta.dueDate || '',
-    invAmt: meta.amount || `₹${invAmt.toLocaleString('en-IN')}`,
-    amount: meta.amount || `₹${invAmt.toLocaleString('en-IN')}`,
-    total: meta.total || invAmt,
-    rawTotal: meta.rawTotal || invAmt,
-    balance: meta.balance !== undefined ? meta.balance : invAmt,
+    invAmt: effectiveAmt > 0 ? effectiveAmt : (meta.amount || 0),
+    amount: formattedAmt,
+    total: effectiveAmt,
+    rawTotal: effectiveAmt,
+    balance: meta.balance !== undefined ? meta.balance : effectiveAmt,
     status: row.status || 'Draft',
     pay: row.pay || row.status || 'Pending',
     items: meta.items || [],
@@ -741,25 +744,68 @@ export function toConsumerBom(row) {
     return doc;
   };
 
+  const sanitizeDateStr = (d) => {
+    if (!d) return '';
+    if (typeof d === 'string') {
+      const match = d.match(/^\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : d;
+    }
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${yr}-${mo}-${day}`;
+    }
+    return String(d).slice(0, 10);
+  };
+
   const id = row.id || row.bom_code || '';
   const bomCode = row.bom_code || row.id || '';
-  const rawCustomer = (row.customer_name || row.company_name || extraData.customerName || extraData.companyName || extraData.vendor || extraData.clientName || '').trim();
-  const customerName = (rawCustomer && rawCustomer !== 'Customer' && rawCustomer !== '-')
-    ? rawCustomer
-    : (row.company_name && row.company_name !== '-' && row.company_name !== 'Customer')
-      ? row.company_name
-      : (extraData.companyName || extraData.customerName || (rawCustomer || 'Customer Order'));
-  const companyName = (row.company_name && row.company_name !== '-') ? row.company_name : customerName;
-  const phone = row.mobile || '';
+  const rawCustomer = [
+    row.customer_name,
+    row.customerName,
+    row.company_name,
+    row.companyName,
+    extraData.customerName,
+    extraData.companyName,
+    extraData.vendor,
+    extraData.clientName,
+    row.vendor,
+    row.clientName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || '';
+
+  const rawCompany = [
+    row.company_name,
+    row.companyName,
+    row.customer_name,
+    row.customerName,
+    extraData.companyName,
+    extraData.customerName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || rawCustomer;
+
+  const customerName = rawCustomer || rawCompany || row.customer_name || row.customerName || 'Customer Order';
+  const companyName = rawCompany || rawCustomer || row.company_name || row.companyName || customerName;
+
+  const phone = row.mobile || row.phone || '';
   const email = row.email || '';
-  const billingAddr = row.billing_address || '';
-  const deliveryAddr = row.delivery_address || '';
-  const contactPerson = row.contact_person || extraData.contactPerson || '';
-  const gstNo = row.gst_no || extraData.gstNo || extraData.gstin || '';
-  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || 'Sales Department';
-  const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
-  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || salesRep;
-  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || salesPersonCode;
+  const billingAddr = row.billing_address || row.billingAddress || '';
+  const deliveryAddr = row.delivery_address || row.deliveryAddress || '';
+  const contactPerson = row.contact_person || row.contactPerson || extraData.contactPerson || '';
+  const gstNo = row.gst_no || row.gstNo || row.gstNumber || row.gstin || extraData.gstNo || extraData.gstin || '';
+  
+  const rawSales = [
+    row.sales_person,
+    row.salesPerson,
+    row.created_by,
+    row.createdBy,
+    extraData.salesPerson,
+    extraData.createdBy
+  ].find(s => s && typeof s === 'string' && s.trim() && s.trim() !== 'Sales Department');
+
+  const salesRep = rawSales || row.sales_person || row.salesPerson || row.created_by || row.createdBy || 'Sales Department';
+  const salesPersonCode = row.sales_person_code || row.salesPersonCode || row.created_by_id || row.createdById || extraData.salesPersonCode || extraData.createdById || '';
+  const createdBy = row.created_by || row.createdBy || rawSales || salesRep;
+  const createdById = row.created_by_id || row.createdById || row.sales_person_code || row.salesPersonCode || extraData.createdById || salesPersonCode;
 
   return {
     ...extraData,
@@ -773,10 +819,10 @@ export function toConsumerBom(row) {
     gstNo,
     gstNumber: gstNo,
     gstin: gstNo,
-    c2: customerName,
+    c2: companyName,
     c3: customerName,
-    date: row.date || '',
-    deliveryDate: row.delivery_date || '',
+    date: sanitizeDateStr(row.date) || '',
+    deliveryDate: sanitizeDateStr(row.delivery_date || row.deliveryDate) || '',
     mobile: phone,
     phone,
     c4: phone,
@@ -842,6 +888,9 @@ export function toConsumerBom(row) {
     cancelled: Boolean(row.cancelled || extraData.cancelled),
     cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
     cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
+    cancelledByRole: extraData.cancelledByRole || null,
+    cancelledByTeam: extraData.cancelledByTeam || null,
+    cancelledByNameAndRole: extraData.cancelledByNameAndRole || null,
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
     dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || { photos: [], videos: [] }),
     proofDoc: row.proof_doc || extraData.proofDoc || null,
@@ -941,6 +990,31 @@ export function toDatabaseBomRow(item) {
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
     : { _extra_data: mergedExtra };
 
+  const cleanCust = [
+    item.customerName,
+    item.companyName,
+    item.vendor,
+    item.clientName,
+    extraData.customerName,
+    extraData.companyName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || 'Customer';
+
+  const cleanComp = [
+    item.companyName,
+    item.customerName,
+    extraData.companyName,
+    extraData.customerName
+  ].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '-', '—'].includes(s.trim())) || (cleanCust !== 'Customer' ? cleanCust : '');
+
+  const cleanSalesPerson = [
+    item.salesPerson,
+    item.sales_person,
+    item.createdBy,
+    item.created_by,
+    extraData.salesPerson,
+    extraData.createdBy
+  ].find(s => s && typeof s === 'string' && s.trim() && s.trim() !== 'Sales Department') || '';
+
   return {
     id,
     bom_code: bomCode,
@@ -948,8 +1022,8 @@ export function toDatabaseBomRow(item) {
     source_pi_no: sourcePiNo,
     date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
     delivery_date: sanitizeDate(item.deliveryDate),
-    customer_name: item.customerName || item.companyName || item.vendor || item.clientName || 'Customer',
-    company_name: item.companyName || item.customerName || item.vendor || item.clientName || '',
+    customer_name: cleanCust,
+    company_name: cleanComp,
     contact_person: item.contactPerson || item.contact_person || extraData.contactPerson || '',
     gst_no: item.gstNo || item.gst_no || item.gstNumber || extraData.gstNo || '',
     mobile: item.mobile || item.phone || '',
@@ -974,9 +1048,9 @@ export function toDatabaseBomRow(item) {
     status: item.status || 'Draft',
     sales_confirmed: Boolean(item.salesConfirmed),
     sales_confirmed_at: sanitizeTimestamp(item.salesConfirmedAt),
-    sales_person: item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
+    sales_person: cleanSalesPerson || item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
     sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
-    created_by: item.createdBy || item.created_by || item.salesPerson || item.sales_person || '',
+    created_by: item.createdBy || item.created_by || cleanSalesPerson || item.salesPerson || item.sales_person || '',
     created_by_id: item.createdById || item.created_by_id || item.salesPersonCode || item.sales_person_code || extraData.createdById || '',
     items: Array.isArray(item.items) ? item.items : [],
     payments: typeof item.payments === 'object' && item.payments !== null ? item.payments : {},

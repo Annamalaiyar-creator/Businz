@@ -42,22 +42,40 @@ export default function InvoiceDetailModal({
   const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
   const [selectedProofVersionIdx, setSelectedProofVersionIdx] = useState(null);
 
-  const bomRefText = inv.poNo || inv.bomCode || inv.c3 || 'BOM-00007';
+  const rawBomRefText = inv.poNo || inv.bomCode || (inv.c3 !== 'BOM-001' ? inv.c3 : '') || '';
 
   // Look up matching BOM from bomStore to sync items & dispatch checkboxes
-  const matchingBom = (bomStore || []).find(b =>
-    b && (
-      b.bomCode === inv.poNo ||
-      b.bomCode === inv.code ||
-      b.bomCode === inv.c3 ||
-      b.bomCode === inv.invNo ||
-      b.bomCode === bomRefText ||
-      b.code === inv.poNo ||
-      b.code === bomRefText ||
+  const matchingBom = (bomStore || []).find(b => {
+    if (!b) return false;
+    const bCode = (b.bomCode || b.code || '').trim();
+    const invNum = (inv.invNo || inv.code || inv.id || '').trim();
+    const bInv = (b.invoiceNo || '').trim();
+    const custName = (inv.vendor || inv.customerName || inv.c2 || '').trim().toLowerCase();
+    const bCust = (b.customerName || b.companyName || '').trim().toLowerCase();
+
+    if (bCode && (
+      bCode === inv.poNo ||
+      bCode === inv.code ||
+      bCode === inv.c3 ||
+      bCode === inv.invNo ||
+      bCode === rawBomRefText ||
       (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3)) ||
-      (b.bomCode && inv.invNo && (inv.invNo.endsWith(b.bomCode.replace('BOM-', '')) || inv.invNo.endsWith(b.bomCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
-    )
-  );
+      (invNum && (invNum.endsWith(bCode.replace('BOM-', '')) || invNum.endsWith(bCode.replace(/^VRM-BOM-\d{4}-/i, ''))))
+    )) return true;
+
+    if (bInv && invNum && bInv === invNum) return true;
+
+    const invDigits = invNum.match(/(?:VRM-INV-\d{4}-|INV-)(\d+)/i)?.[1];
+    const bomDigits = bCode.match(/(?:VRM-BOM-\d{4}-|BOM-)(\d+)/i)?.[1];
+    if (invDigits && bomDigits && parseInt(invDigits, 10) === parseInt(bomDigits, 10)) return true;
+
+    if (custName && bCust && custName === bCust && !['customer', 'customer order', 'pending'].includes(custName)) return true;
+
+    return false;
+  });
+
+  const targetBomRef = matchingBom?.bomCode || matchingBom?.code || rawBomRefText || 'VRM-BOM-2026-01';
+  const bomRefText = targetBomRef;
 
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
   const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'VRM-INV-2026-01'));
@@ -238,11 +256,19 @@ export default function InvoiceDetailModal({
   const computedTaxGst = computedSubtotal * 0.18;
   const computedGrandTotal = computedSubtotal + computedTaxGst;
 
+  const cleanAmtNum = (amt) => {
+    if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
+    if (!amt) return 0;
+    const n = parseFloat(String(amt).replace(/[^0-9.]/g, ''));
+    return (isNaN(n) || n <= 0) ? 0 : n;
+  };
+
+  const bomTotalAmt = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || 0;
+  const invAmtNum = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.c5) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal) || 0;
+
   const totalAmtRaw = isEditingInvoice
     ? computedGrandTotal
-    : (typeof inv.invAmt === 'number'
-      ? inv.invAmt
-      : parseFloat((inv.invAmt || inv.c5 || '76523').toString().replace(/[^0-9.]/g, '')) || computedGrandTotal || 17400);
+    : (invAmtNum > 0 ? invAmtNum : (bomTotalAmt > 0 ? bomTotalAmt : (computedGrandTotal > 0 ? computedGrandTotal : 17400)));
 
   const subtotal = isEditingInvoice ? computedSubtotal : (totalAmtRaw / 1.18);
   const taxGst = isEditingInvoice ? computedTaxGst : (totalAmtRaw - subtotal);
@@ -750,6 +776,9 @@ export default function InvoiceDetailModal({
                       ? matchingBom.invoiceNo
                       : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'VRM-INV-2026-01')));
 
+                const finalInvAmt = cleanAmtNum(totalAmtRaw) || invAmtNum || bomTotalAmt || computedGrandTotal || 0;
+                const formattedInvAmt = `₹ ${finalInvAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+
                 const confirmedInvRecord = {
                   ...inv,
                   id: inv.id || targetInvNumber,
@@ -762,7 +791,12 @@ export default function InvoiceDetailModal({
                   vendor: customerText,
                   customerName: customerText,
                   date: invDateText || new Date().toISOString().split('T')[0],
-                  invAmt: totalAmtRaw || inv.invAmt || (matchingBom ? (matchingBom.grandTotal || matchingBom.subTotal) : 0),
+                  invAmt: finalInvAmt,
+                  total: finalInvAmt,
+                  rawTotal: finalInvAmt,
+                  amount: formattedInvAmt,
+                  poVal: formattedInvAmt,
+                  grnVal: formattedInvAmt,
                   status: 'Invoice Confirmed',
                   match: 'Matched',
                   pay: 'Completed & Locked',
@@ -879,7 +913,7 @@ export default function InvoiceDetailModal({
                 if (isPresetOrder) {
                   const presetName = (presetGroupsList.length > 0 && presetGroupsList[0]?.presetName) ||
                     matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Preset Kit';
-                  const totalPresetPrice = Number(totalAmtRaw || (inv.invAmt ? String(inv.invAmt).replace(/[^0-9.]/g, '') : 0));
+                  const totalPresetPrice = Number(cleanAmtNum(totalAmtRaw) || invAmtNum || bomTotalAmt || computedGrandTotal || 0);
                   totalAmt = totalPresetPrice;
 
                   if (presetGroupsList.length > 0) {
@@ -936,7 +970,7 @@ export default function InvoiceDetailModal({
                     };
                   });
 
-                  totalAmt = Number(totalAmtRaw || (inv.invAmt ? String(inv.invAmt).replace(/[^0-9.]/g, '') : 0));
+                  totalAmt = Number(cleanAmtNum(totalAmtRaw) || invAmtNum || bomTotalAmt || computedGrandTotal || 0);
                   invoiceNotes = `Sales Invoice confirmed for BOM ${bomRefText}.`;
                 }
 

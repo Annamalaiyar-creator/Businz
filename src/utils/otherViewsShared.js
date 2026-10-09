@@ -1,4 +1,4 @@
-import { saveCloudStore } from './supabaseDataSync';
+import { saveCloudStore } from './supabaseDataSync.js';
 export {
   saveMediaToCache,
   getMediaFromCache,
@@ -7,7 +7,7 @@ export {
   readCompressedImage,
   compressAndSaveFile,
   uploadMediaFile
-} from './mediaUtils';
+} from './mediaUtils.js';
 
 /**
  * Universal safe number parser: strips currency symbols, commas, spaces and handles NaN/null/undefined.

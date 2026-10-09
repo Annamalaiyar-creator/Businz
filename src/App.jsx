@@ -309,6 +309,11 @@ function App() {
         (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports' || activeTab === 'Delivery Challans')) {
       handleTabChange('Finance Dashboard');
     }
+
+    const isDispatchRole = userRole === 'Dispatch Head' || userRole === 'Dispatch' || userRole === 'Dispatch Executive' || String(userRole || '').toLowerCase().includes('dispatch');
+    if (isDispatchRole && activeTab === 'Delivery Challans') {
+      handleTabChange('Dispatch Dashboard');
+    }
   }, [userRole, activeTab]);
 
   const toggleSidebar = () => {

@@ -893,8 +893,71 @@ export default function BomOrdersView(props) {
   const executeCancelBom = (bomToCancel, reason) => {
     if (!bomToCancel) return;
     const bCode = bomToCancel.bomCode || bomToCancel.code;
-    const currentUser = getEffectiveSalesPerson() || 'Dispatch Executive';
     const reasonText = reason || 'Order cancelled by Dispatch';
+
+    const resolveCancellerIdentity = () => {
+      const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').replace(/\s*\([^)]*\)/g, '').trim();
+      const storedRole = (localStorage.getItem('controlroom_user_role') || userRole || '').trim();
+      
+      let team = 'Dispatch Team';
+      let position = storedRole || 'Dispatch Head';
+
+      if (storedRole.toLowerCase().includes('account')) {
+        team = 'Accounts Team';
+        if (!storedRole || storedRole === 'Sales Executive' || storedRole === 'Dispatch Head') {
+          position = 'Accounts Executive';
+        }
+      } else if (storedRole.toLowerCase().includes('invoice') || storedRole.toLowerCase().includes('bill')) {
+        team = 'Invoice Team';
+        if (!storedRole || storedRole === 'Sales Executive' || storedRole === 'Dispatch Head') {
+          position = 'Billing & Invoice Executive';
+        }
+      } else if (storedRole.toLowerCase().includes('dispatch')) {
+        team = 'Dispatch Team';
+        if (!storedRole || storedRole === 'Sales Executive') {
+          position = 'Dispatch Head';
+        }
+      } else if (storedRole.toLowerCase().includes('production')) {
+        team = 'Production Team';
+        if (!storedRole) position = 'Production Head';
+      }
+
+      let personName = storedName;
+      try {
+        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || localStorage.getItem('controlroom_employees_store') || '[]');
+        if (Array.isArray(emps) && (storedName || localStorage.getItem('controlroom_logged_emp_id'))) {
+          const empId = localStorage.getItem('controlroom_logged_emp_id');
+          const match = emps.find(e => (empId && e.empId === empId) || (e.name && e.name.toLowerCase() === storedName.toLowerCase()));
+          if (match) {
+            personName = match.name || personName;
+            if (match.designation || match.role) position = match.designation || match.role;
+            if (match.department) {
+              if (match.department.toLowerCase().includes('dispatch')) team = 'Dispatch Team';
+              else if (match.department.toLowerCase().includes('account')) team = 'Accounts Team';
+              else if (match.department.toLowerCase().includes('invoice') || match.department.toLowerCase().includes('bill')) team = 'Invoice Team';
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (!personName) {
+        if (team === 'Dispatch Team') personName = 'Murugan';
+        else if (team === 'Accounts Team') personName = 'Venkatesh';
+        else if (team === 'Invoice Team') personName = 'Priya';
+        else personName = 'Authorized Personnel';
+      }
+
+      const fullAttribution = `${personName} (${position}, ${team})`;
+
+      return {
+        personName,
+        position,
+        team,
+        fullAttribution
+      };
+    };
+
+    const { personName, position, team, fullAttribution } = resolveCancellerIdentity();
 
     // 1. Restore Inventory
     restoreInventoryForBom(bomToCancel.items || bomToCancel.dispatchPacking, bCode);
@@ -907,7 +970,10 @@ export default function BomOrdersView(props) {
         cancelled: true,
         stockBlocked: false,
         cancellationReason: reasonText,
-        cancelledBy: currentUser,
+        cancelledBy: personName,
+        cancelledByRole: position,
+        cancelledByTeam: team,
+        cancelledByNameAndRole: fullAttribution,
         cancelledAt: new Date().toISOString()
       } : b);
       const sanitized = updated.map(stripDataUrlsFromRecord);
@@ -921,7 +987,10 @@ export default function BomOrdersView(props) {
         cancelled: true,
         stockBlocked: false,
         cancellationReason: reasonText,
-        cancelledBy: currentUser,
+        cancelledBy: personName,
+        cancelledByRole: position,
+        cancelledByTeam: team,
+        cancelledByNameAndRole: fullAttribution,
         cancelledAt: new Date().toISOString(),
         isEditMode: false
       } : null);
@@ -933,7 +1002,9 @@ export default function BomOrdersView(props) {
       customerName: bomToCancel.customerName || bomToCancel.clientName || 'Customer',
       salesPerson: bomToCancel.salesPerson || bomToCancel.createdBy || 'Sales Executive',
       reason: reasonText,
-      cancelledBy: currentUser
+      cancelledBy: fullAttribution,
+      cancelledByRole: position,
+      cancelledByTeam: team
     });
 
     setBomCancelPromptModal(null);
@@ -1360,6 +1431,13 @@ export default function BomOrdersView(props) {
         tabGroup = 'Sent';
       }
 
+      const rawDateStr = b.date || b.createdAt || '';
+      const formattedDate = (() => {
+        if (!rawDateStr) return new Date().toISOString().split('T')[0];
+        const m = String(rawDateStr).match(/^\d{4}-\d{2}-\d{2}/);
+        return m ? m[0] : String(rawDateStr).slice(0, 10);
+      })();
+
       const displayName = [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim()) && !/^\d+$/.test(s.trim())) || b.companyName || b.customerName || 'Customer Order';
       const numVal = (v) => {
         const n = parseFloat(String(v || '').replace(/[^0-9.]/g, ''));
@@ -1370,11 +1448,11 @@ export default function BomOrdersView(props) {
       return {
         ...b,
         code: b.bomCode || b.code || 'BOM-101',
-        c2: b.date || new Date().toISOString().split('T')[0],
+        c2: formattedDate,
         c3: displayName,
         salesPerson: (() => {
           const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
-          if (!sp) return 'Sales Department';
+          if (!sp || sp === 'Sales Department') return (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : (sp || 'Sales Department'));
           return sp;
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
@@ -4947,24 +5025,75 @@ export default function BomOrdersView(props) {
     const orderGstAmount = parseFloat(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
     const grandTotalCalc = orderGrandTotal;
 
-    const bObj = confirmingBomModal.billingAddressObj || {
-      address: confirmingBomModal.billingAddress || '',
-      city: '',
-      state: '',
-      pincode: ''
+    let sourcePi = null;
+    const piNum = confirmingBomModal.sourcePiNo || confirmingBomModal.piNo;
+    if (piNum) {
+      try {
+        const rawPis = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_proforma_invoice_store');
+        if (rawPis) {
+          const parsedPis = JSON.parse(rawPis);
+          if (Array.isArray(parsedPis)) {
+            sourcePi = parsedPis.find(p => {
+              const pNo = String(p.piNo || p.estimate_number || p.id || '').trim().toLowerCase();
+              return pNo === String(piNum).trim().toLowerCase();
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    const rawBObj = (confirmingBomModal.billingAddressObj && typeof confirmingBomModal.billingAddressObj === 'object' && Object.keys(confirmingBomModal.billingAddressObj).length > 0)
+      ? confirmingBomModal.billingAddressObj
+      : (confirmingBomModal.billingAddress && typeof confirmingBomModal.billingAddress === 'object'
+          ? confirmingBomModal.billingAddress
+          : (sourcePi?.billingAddressObj && typeof sourcePi.billingAddressObj === 'object' && Object.keys(sourcePi.billingAddressObj).length > 0
+              ? sourcePi.billingAddressObj
+              : (sourcePi?.billingAddress && typeof sourcePi.billingAddress === 'object' ? sourcePi.billingAddress : {})));
+
+    const rawDObj = (confirmingBomModal.deliveryAddressObj && typeof confirmingBomModal.deliveryAddressObj === 'object' && Object.keys(confirmingBomModal.deliveryAddressObj).length > 0)
+      ? confirmingBomModal.deliveryAddressObj
+      : (confirmingBomModal.deliveryAddress && typeof confirmingBomModal.deliveryAddress === 'object'
+          ? confirmingBomModal.deliveryAddress
+          : (sourcePi?.deliveryAddressObj && typeof sourcePi.deliveryAddressObj === 'object' && Object.keys(sourcePi.deliveryAddressObj).length > 0
+              ? sourcePi.deliveryAddressObj
+              : (sourcePi?.deliveryAddress && typeof sourcePi.deliveryAddress === 'object' ? sourcePi.deliveryAddress : {})));
+
+    const resolvedBStreet = confirmingBomModal.billingStreet || rawBObj.street || rawBObj.address || sourcePi?.billingStreet || (typeof confirmingBomModal.billingAddress === 'string' && !confirmingBomModal.billingAddress.includes('on file') ? confirmingBomModal.billingAddress : '') || (typeof sourcePi?.billingAddress === 'string' ? sourcePi.billingAddress : '') || '';
+    const resolvedBCity = confirmingBomModal.billingCity || rawBObj.city || sourcePi?.billingCity || '';
+    const resolvedBState = confirmingBomModal.billingState || rawBObj.state || sourcePi?.billingState || '';
+    const resolvedBPincode = confirmingBomModal.billingPincode || rawBObj.pincode || rawBObj.pin || sourcePi?.billingPincode || '';
+
+    const bObj = {
+      address: resolvedBStreet,
+      street: resolvedBStreet,
+      city: resolvedBCity,
+      state: resolvedBState,
+      pincode: resolvedBPincode
     };
-    const dObj = confirmingBomModal.deliveryAddressObj || {
-      address: confirmingBomModal.deliveryAddress || '',
-      city: '',
-      state: '',
-      pincode: ''
+
+    const isSameAddr = confirmingBomModal.sameAsBilling !== false && (!rawDObj.address && !rawDObj.street || (rawDObj.address || rawDObj.street) === (rawBObj.address || rawBObj.street));
+
+    const resolvedDStreet = isSameAddr && resolvedBStreet
+      ? resolvedBStreet
+      : (confirmingBomModal.deliveryStreet || rawDObj.street || rawDObj.address || sourcePi?.deliveryStreet || (typeof confirmingBomModal.deliveryAddress === 'string' && !confirmingBomModal.deliveryAddress.includes('on file') ? confirmingBomModal.deliveryAddress : '') || resolvedBStreet);
+    const resolvedDCity = isSameAddr && resolvedBCity ? resolvedBCity : (confirmingBomModal.deliveryCity || rawDObj.city || sourcePi?.deliveryCity || resolvedBCity);
+    const resolvedDState = isSameAddr && resolvedBState ? resolvedBState : (confirmingBomModal.deliveryState || rawDObj.state || sourcePi?.deliveryState || resolvedBState);
+    const resolvedDPincode = isSameAddr && resolvedBPincode ? resolvedBPincode : (confirmingBomModal.deliveryPincode || rawDObj.pincode || rawDObj.pin || sourcePi?.deliveryPincode || resolvedBPincode);
+
+    const dObj = {
+      address: resolvedDStreet,
+      street: resolvedDStreet,
+      city: resolvedDCity,
+      state: resolvedDState,
+      pincode: resolvedDPincode
     };
 
     const formatAddr = (obj, fallbackStr) => {
       if (!obj) return fallbackStr || '—';
-      const { address, city, state, pincode } = obj;
+      const { address, street, city, state, pincode } = obj;
+      const addrLine = address || street || '';
       const parts = [];
-      if (address && address.trim() && address.trim() !== '—') parts.push(address.trim());
+      if (addrLine && addrLine.trim() && addrLine.trim() !== '—') parts.push(addrLine.trim());
       if (city && city.trim() && city.trim() !== '—') parts.push(city.trim());
       if (state && state.trim() && state.trim() !== '—' && pincode && pincode.trim() && pincode.trim() !== '—') {
         parts.push(`${state.trim()} - ${pincode.trim()}`);
@@ -5311,8 +5440,27 @@ export default function BomOrdersView(props) {
               <div style={{ marginTop: '6px', fontSize: '13px', color: '#7F1D1D', lineHeight: 1.5 }}>
                 <strong>Reason:</strong> {confirmingBomModal.cancellationReason || 'Order cancelled by Dispatch'}
               </div>
-              <div style={{ marginTop: '8px', display: 'flex', gap: '16px', fontSize: '11px', color: '#991B1B', flexWrap: 'wrap' }}>
-                <span><strong>Cancelled By:</strong> {confirmingBomModal.cancelledBy || 'Dispatch Head'}</span>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '16px', fontSize: '11px', color: '#991B1B', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span>
+                  <strong>Cancelled By:</strong>{' '}
+                  <strong style={{ color: '#7F1D1D' }}>
+                    {confirmingBomModal.cancelledBy || 'Authorized Personnel'}
+                  </strong>
+                  {(confirmingBomModal.cancelledByRole || confirmingBomModal.cancelledByTeam) && (
+                    <span style={{
+                      marginLeft: '6px',
+                      backgroundColor: '#FFFFFF',
+                      color: '#991B1B',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #FECACA',
+                      fontWeight: '800'
+                    }}>
+                      {confirmingBomModal.cancelledByRole || ''}
+                      {confirmingBomModal.cancelledByRole && confirmingBomModal.cancelledByTeam ? ` • ${confirmingBomModal.cancelledByTeam}` : (confirmingBomModal.cancelledByTeam || '')}
+                    </span>
+                  )}
+                </span>
                 <span>•</span>
                 <span><strong>Cancelled At:</strong> {confirmingBomModal.cancelledAt ? new Date(confirmingBomModal.cancelledAt).toLocaleString('en-IN') : 'Recently'}</span>
                 <span>•</span>
@@ -5458,15 +5606,15 @@ export default function BomOrdersView(props) {
 
           {/* Structured Address Cards */}
           {(() => {
-            const bStreet = bObj.address || '—';
+            const bStreet = bObj.address || bObj.street || (typeof confirmingBomModal.billingAddress === 'string' ? confirmingBomModal.billingAddress : '') || '—';
             const bCity = bObj.city || '—';
             const bState = bObj.state || '—';
             const bPin = bObj.pincode || '—';
 
-            const dStreet = dObj.address || '—';
-            const dCity = dObj.city || '—';
-            const dState = dObj.state || '—';
-            const dPin = dObj.pincode || '—';
+            const dStreet = dObj.address || dObj.street || (typeof confirmingBomModal.deliveryAddress === 'string' ? confirmingBomModal.deliveryAddress : '') || bStreet;
+            const dCity = dObj.city || bCity;
+            const dState = dObj.state || bState;
+            const dPin = dObj.pincode || bPin;
 
             const isDeliveryMatching = Boolean(confirmingBomModal.sameAsBilling) || (
               ((dObj.address || '').trim() === (bObj.address || '').trim()) &&
@@ -6950,11 +7098,11 @@ export default function BomOrdersView(props) {
           </span>
 
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
-            const isSentToDispatch = (selectedRows || []).some(codeVal => {
+            const isOnlyDraft = (selectedRows || []).every(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return r && (r.salesConfirmed || r.fullyCompleted || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Completed', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(r.status));
+              return r && r.status === 'Draft';
             });
-            if (isSentToDispatch) return null;
+            if (!isOnlyDraft) return null;
 
             return (
               <button
@@ -6986,50 +7134,6 @@ export default function BomOrdersView(props) {
                 }}
               >
                 <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
-              </button>
-            );
-          })()}
-
-          {/* Delete button removed for BOM Orders & Client Specifications per user request */}
-
-          {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
-            const isTargetAlreadyConfirmed = (selectedRows || []).every(codeVal => {
-              const row = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-              return row && (row.salesConfirmed || row.fullyCompleted || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Completed', 'Dispatch Packing Verified - Sent to Accounts'].includes(row.status));
-            });
-            if (isTargetAlreadyConfirmed) return null;
-
-            return (
-              <button
-                onClick={() => {
-                  if (selectedRows.length > 1) {
-                    alert('Please select a single BOM to confirm and review.');
-                  } else if (selectedRows.length === 1) {
-                    const codeVal = selectedRows[0];
-                    const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal };
-                    const isDraftOrPending = ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'ACTIVE', 'Active', 'Pending Verification', 'Pending'].includes(targetRow.status);
-                    setSelectedRows([]);
-                    setConfirmingBomModal({ ...targetRow, isEditMode: isDraftOrPending });
-                  }
-                }}
-                style={{
-                  backgroundColor: '#0E7490',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  borderRadius: '10px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
-                }}
-              >
-                <CheckCircle size={14} style={{ color: '#FFFFFF' }} /> Confirm BOM
               </button>
             );
           })()}
@@ -7171,7 +7275,6 @@ export default function BomOrdersView(props) {
           <button
             onClick={() => {
               setSelectedRows([]);
-              setShowFloatingMoreMenu(false);
             }}
             title="Deselect all"
             style={{ backgroundColor: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', flexShrink: 0 }}

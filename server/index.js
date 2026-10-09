@@ -2150,6 +2150,9 @@ app.post('/api/store/:key', async (req, res) => {
         } else {
           const getId = (item) => {
             if (!item || typeof item !== 'object') return null;
+            if (key === 'invoice_store') {
+              return item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.code || item.bomCode || item.poNo;
+            }
             return item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.id || item.poNo || item.invNo || item.grnNo || item.vendorCode || item.email || item.name;
           };
 
@@ -4326,7 +4329,7 @@ app.post('/api/invoices', async (req, res) => {
     fs.writeFileSync(invStorePath, JSON.stringify(localInvList, null, 2), 'utf8');
     if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
     supabaseMemoryStore['invoice_store'] = localInvList;
-    pushStoreToSupabase('invoice_store', localInvList);
+    pushStoreToSupabase('invoice_store', localInvList).catch(() => {});
 
     // Synchronize matching BOM record with assigned invoice
     const targetBomCode = invRecord.bomCode || invRecord.poNo;
@@ -4662,8 +4665,8 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
     fs.writeFileSync(pSales, JSON.stringify(updatedSales, null, 2), 'utf8');
   } catch (_) {}
 
-  pushStoreToSupabase('proforma_invoice_store', updatedProforma);
-  pushStoreToSupabase('sales_pi_store', updatedProforma);
+  pushStoreToSupabase('proforma_invoice_store', updatedProforma).catch(() => {});
+  pushStoreToSupabase('sales_pi_store', updatedProforma).catch(() => {});
 
   return res.json({
     success: true,
@@ -4696,7 +4699,7 @@ app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req,
           return p;
         });
         fs.writeFileSync(pProforma, JSON.stringify(localProforma, null, 2), 'utf8');
-        pushStoreToSupabase('proforma_invoice_store', localProforma);
+        pushStoreToSupabase('proforma_invoice_store', localProforma).catch(() => {});
       }
     }
 
@@ -4711,7 +4714,7 @@ app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req,
           return p;
         });
         fs.writeFileSync(pSales, JSON.stringify(localSales, null, 2), 'utf8');
-        pushStoreToSupabase('sales_pi_store', localSales);
+        pushStoreToSupabase('sales_pi_store', localSales).catch(() => {});
       }
     }
   } catch (e) {
@@ -4757,7 +4760,7 @@ app.post(['/api/deliverychallans', '/api/delivery-challans'], async (req, res) =
   try { 
     fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8'); 
     supabaseMemoryStore['dc_store'] = updated;
-    pushStoreToSupabase('dc_store', updated);
+    pushStoreToSupabase('dc_store', updated).catch(() => {});
   } catch (_) {}
 
   res.json({ 
