@@ -78,6 +78,12 @@ async function runStagingTestSuite() {
   // -------------------------------------------------------------------------
   // Test 1: Create multiple test BOMs via save pipeline
   // -------------------------------------------------------------------------
+  await query(`DELETE FROM public.bom_orders WHERE bom_code LIKE 'BOM-TEST-%'`);
+  const crCheckPre = await query(`SELECT data FROM public.controlroom_store WHERE key = 'bom_store'`);
+  if (Array.isArray(crCheckPre.rows[0]?.data)) {
+    const cleanList = crCheckPre.rows[0].data.filter(b => !String(b?.bomCode || b?.code || b?.id || '').startsWith('BOM-TEST-'));
+    await query(`UPDATE public.controlroom_store SET data = $1 WHERE key = 'bom_store'`, [JSON.stringify(cleanList)]);
+  }
   const testBoms = [
     {
       id: 'BOM-TEST-901',
