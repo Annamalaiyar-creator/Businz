@@ -32,8 +32,8 @@ import {
   mergeBomRecords
 } from '../server/bomPersistence.js';
 import { getFinancialYear } from '../server/sequenceService.js';
-import app from '../server/index.js';
-import { pool as serverPool } from '../server/db.js';
+import app, { supabaseMemoryStore, saveDatabaseStore, getDatabaseStore } from '../server/index.js';
+import { pool as serverPool, isDbConnected } from '../server/db.js';
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL || 'postgres://localhost:5432/businz_staging_test';
 const testPool = new Pool({ connectionString: TEST_DB_URL });
@@ -852,13 +852,138 @@ async function runPhase51TestSuite() {
   }
 
   // -------------------------------------------------------------------------
-  // Test 16: PostgreSQL Failure Handling: HTTP 500 on GET & POST /api/store/:key
+  // Test 16: Cancelled PI Protection (Explicit Business Approval Required)
+  // -------------------------------------------------------------------------
+  try {
+    await testPool.query(`
+      INSERT INTO public.proforma_invoices (id, pi_no, customer_name, status, grand_total)
+      VALUES ('PI-P51-CANCEL-01', 'PI-P51-CANCEL-01', 'Cancelled PI Client', 'Sent to Customer', 45000)
+      ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
+    `);
+
+    await persistBomsTransactionSafe({
+      singleBom: {
+        id: 'BOM-P51-CAN-01',
+        bomCode: 'BOM-P51-CAN-01',
+        customerName: 'Cancelled PI Client',
+        sourcePiNo: 'PI-P51-CANCEL-01',
+        status: 'Cancelled'
+      },
+      isNew: true,
+      customPool: testPool,
+      customAllowedDb: 'businz_staging_test'
+    });
+
+    let cancelReuseCaught = false;
+    let cancelReuseMessage = '';
+    try {
+      await persistBomsTransactionSafe({
+        singleBom: {
+          id: 'BOM-P51-CAN-02',
+          bomCode: 'BOM-P51-CAN-02',
+          customerName: 'New Client Attempting Reuse',
+          sourcePiNo: 'PI-P51-CANCEL-01',
+          status: 'Draft'
+        },
+        isNew: true,
+        customPool: testPool,
+        customAllowedDb: 'businz_staging_test'
+      });
+    } catch (err) {
+      cancelReuseCaught = true;
+      cancelReuseMessage = err.message;
+    }
+
+    const checkRejectedBom = await testPool.query(`
+      SELECT bom_code FROM public.bom_orders WHERE bom_code = 'BOM-P51-CAN-02'
+    `);
+
+    // Explicitly update PI status to authorized release state: 'Approved for Reconversion'
+    await testPool.query(`
+      UPDATE public.proforma_invoices
+      SET status = 'Approved for Reconversion'
+      WHERE id = 'PI-P51-CANCEL-01'
+    `);
+
+    let authorizedSuccess = false;
+    try {
+      const authRes = await persistBomsTransactionSafe({
+        singleBom: {
+          id: 'BOM-P51-CAN-03',
+          bomCode: 'BOM-P51-CAN-03',
+          customerName: 'Authorized Client Reuse',
+          sourcePiNo: 'PI-P51-CANCEL-01',
+          status: 'Draft',
+          reuseApproved: true,
+          releaseState: 'AUTHORIZED_FOR_REUSE'
+        },
+        isNew: true,
+        customPool: testPool,
+        customAllowedDb: 'businz_staging_test'
+      });
+      authorizedSuccess = Boolean(authRes.success);
+    } catch (authErr) {
+      console.warn('Authorized reuse error:', authErr.message);
+    }
+
+    const passed = cancelReuseCaught &&
+      cancelReuseMessage.includes('[PI Association Conflict]') &&
+      cancelReuseMessage.includes('cancelled') &&
+      checkRejectedBom.rows.length === 0 &&
+      authorizedSuccess;
+
+    await testPool.query(`DELETE FROM public.bom_orders WHERE bom_code IN ('BOM-P51-CAN-01', 'BOM-P51-CAN-02', 'BOM-P51-CAN-03')`);
+    await testPool.query(`DELETE FROM public.proforma_invoices WHERE id = 'PI-P51-CANCEL-01'`);
+
+    recordResult(16, 'Cancelled PI Protection (Explicit Business Approval Required)', passed,
+      passed 
+        ? 'Cancelled BOM source PI strictly blocked from automatic reuse; explicit authorized release state permitted conversion.' 
+        : `Cancelled PI validation failed: ${cancelReuseMessage}`);
+  } catch (err) {
+    recordResult(16, 'Cancelled PI Protection', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 17: Generic Store Persistence Ordering & Database Failure Protection
+  // -------------------------------------------------------------------------
+  try {
+    const testKey = 'test_p51_ordering_store';
+    supabaseMemoryStore[testKey] = [{ id: 'INITIAL_UNTOUCHED_STATE' }];
+
+    const origQuery = serverPool.query;
+    serverPool.query = async () => { throw new Error('Simulated Database Write Failure'); };
+
+    let errorThrown = false;
+    try {
+      await saveDatabaseStore(testKey, [{ id: 'MALICIOUS_UNCOMMITTED_STATE' }]);
+    } catch (err) {
+      errorThrown = true;
+    } finally {
+      serverPool.query = origQuery;
+    }
+
+    const memoryRemainedIntact = Array.isArray(supabaseMemoryStore[testKey]) &&
+      supabaseMemoryStore[testKey].length === 1 &&
+      supabaseMemoryStore[testKey][0].id === 'INITIAL_UNTOUCHED_STATE';
+
+    const passed = errorThrown && memoryRemainedIntact;
+    delete supabaseMemoryStore[testKey];
+
+    recordResult(17, 'Generic Store Persistence Ordering & Cache Protection', passed,
+      passed 
+        ? 'PostgreSQL write attempted before memory/disk updates; on DB error, memory cache remained completely uncorrupted.' 
+        : 'Memory was modified before or despite PostgreSQL failure!');
+  } catch (err) {
+    recordResult(17, 'Generic Store Persistence Ordering', false, err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 18: PostgreSQL Failure Handling: HTTP 500 on GET & POST /api/store/:key
   // -------------------------------------------------------------------------
   try {
     const serverPort = process.env.PORT || '5095';
     const baseUrl = `http://127.0.0.1:${serverPort}`;
 
-    // Temporarily mock pool.query on serverPool to simulate unexpected database outage
     const origQuery = serverPool.query;
     serverPool.query = async () => { throw new Error('Simulated Database Fatal Error'); };
 
@@ -875,21 +1000,21 @@ async function runPhase51TestSuite() {
       });
       postStatus = postRes.status;
     } finally {
-      serverPool.query = origQuery; // Always restore original query function
+      serverPool.query = origQuery;
     }
 
     const passed = getStatus === 500 && postStatus === 500;
 
-    recordResult(16, 'PostgreSQL Failure Handling: HTTP 500 on GET & POST /api/store/:key', passed,
+    recordResult(18, 'PostgreSQL Failure Handling: HTTP 500 on GET & POST /api/store/:key', passed,
       passed 
         ? `Both GET and POST returned HTTP 500 on database failure; zero silent fallback to stale JSON/memory.` 
         : `Expected status 500/500, got GET=${getStatus}, POST=${postStatus}`);
   } catch (err) {
-    recordResult(16, 'PostgreSQL Failure Handling', false, err.message);
+    recordResult(18, 'PostgreSQL Failure Handling', false, err.message);
   }
 
   // -------------------------------------------------------------------------
-  // Test 17: Security Protections: Disabled Admin Endpoints Return HTTP 403
+  // Test 19: Security Protections: Disabled Admin Endpoints Return HTTP 403
   // -------------------------------------------------------------------------
   try {
     const serverPort = process.env.PORT || '5095';
@@ -900,16 +1025,16 @@ async function runPhase51TestSuite() {
 
     const passed = resReset.status === 403 && resRepair.status === 403;
 
-    recordResult(17, 'Security Protections: Disabled Admin Endpoints Return HTTP 403', passed,
+    recordResult(19, 'Security Protections: Disabled Admin Endpoints Return HTTP 403', passed,
       passed 
         ? 'Both /api/reset-bom-workflow-data and /api/repair-bom-sequences strictly returned HTTP 403 Forbidden.' 
         : `Expected 403/403, got reset=${resReset.status}, repair=${resRepair.status}`);
   } catch (err) {
-    recordResult(17, 'Security Protections: Disabled Admin Endpoints', false, err.message);
+    recordResult(19, 'Security Protections: Disabled Admin Endpoints', false, err.message);
   }
 
   // -------------------------------------------------------------------------
-  // Test 18: Historical Data Protection Audit (BOM-659 through BOM-665, PI-00063)
+  // Test 20: Historical Data Protection Audit (BOM-659 through BOM-665, PI-00063)
   // -------------------------------------------------------------------------
   try {
     const postAuditRes = await testPool.query(`
@@ -945,12 +1070,12 @@ async function runPhase51TestSuite() {
       auditDifferences.push(`Row count mismatch: pre=${preTestSnapshot.size}, post=${postAuditRes.rows.length}`);
     }
 
-    recordResult(18, 'Historical Data Preservation Audit (BOM-659 to BOM-665)', historicalUntouched,
+    recordResult(20, 'Historical Data Preservation Audit (BOM-659 to BOM-665)', historicalUntouched,
       historicalUntouched 
         ? `100% of historical records (BOM-659 through BOM-665) are byte-for-byte identical to pre-test baseline. Zero historical records modified.` 
         : `Historical modification detected: ${auditDifferences.join('; ')}`);
   } catch (err) {
-    recordResult(18, 'Historical Data Preservation Audit', false, err.message);
+    recordResult(20, 'Historical Data Preservation Audit', false, err.message);
   }
 
   // Cleanup all P51 test records

@@ -1226,7 +1226,33 @@ const saveDatabaseStore = async (key, storeData) => {
     await saveLocalBoms(storeData);
     return storeData;
   }
-  // 1. Persist to disk files for legacy offline backup
+  // 1. Validate input
+  if (!key || typeof key !== 'string') {
+    throw new Error('[Validation Error] Invalid store key provided to saveDatabaseStore');
+  }
+
+  // 2. Validate database connection: database-disconnected conditions return genuine errors
+  if (!isDbConnected()) {
+    throw new Error(`[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${cleanKey}".`);
+  }
+
+  // 3. Persist directly to authoritative PostgreSQL database on VPS first
+  try {
+    await query(`
+      INSERT INTO controlroom_store (key, data, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
+    `, [cleanKey, JSON.stringify(storeData)]);
+  } catch (pgErr) {
+    console.error(`[saveDatabaseStore PostgreSQL write error for ${cleanKey}]:`, pgErr?.message || pgErr);
+    throw pgErr; // Never silently swallow database write errors; propagate to trigger HTTP 500
+  }
+
+  // 4. Update memory and application cache ONLY after successful PostgreSQL write
+  supabaseMemoryStore[key] = storeData;
+  supabaseMemoryStore[cleanKey] = storeData;
+
+  // 5. Write optional JSON backup for local recovery (post-commit)
   try {
     if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
@@ -1254,26 +1280,10 @@ const saveDatabaseStore = async (key, storeData) => {
       } catch (_) {}
     }
   } catch (diskErr) {
-    console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
+    console.warn(`[saveDatabaseStore disk backup notice for ${key}]:`, diskErr?.message);
   }
 
-  // 2. Persist directly to authoritative PostgreSQL database on VPS
-  if (isDbConnected()) {
-    try {
-      await query(`
-        INSERT INTO controlroom_store (key, data, updated_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
-      `, [cleanKey, JSON.stringify(storeData)]);
-    } catch (pgErr) {
-      console.error(`[saveDatabaseStore PostgreSQL write error for ${cleanKey}]:`, pgErr?.message || pgErr);
-      throw pgErr; // Protection 3: Never silently swallow database write errors; propagate to trigger HTTP 500
-    }
-  }
-
-  supabaseMemoryStore[key] = storeData;
-
-  // Real-time broadcast to all connected users immediately
+  // 6. Broadcast realtime events ONLY after successful database persistence
   try {
     broadcastRealtimeEvent('store_updated', { key, storeData });
     if (cleanKey === 'raw_materials_store') {
@@ -2014,6 +2024,9 @@ app.get('/api/realtime-events', (req, res) => {
 
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
+  if (!isDbConnected()) {
+    return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot read store "${key}".` });
+  }
   try {
     const data = await getDatabaseStore(key);
     res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
@@ -2025,6 +2038,9 @@ app.get('/api/store/:key', async (req, res) => {
 app.post('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   const storeData = req.body;
+  if (!isDbConnected()) {
+    return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${key}".` });
+  }
   try {
     let finalDataToSave = storeData;
 
@@ -6919,8 +6935,9 @@ export {
   toDatabaseBomRowServer,
   toConsumerBomServer,
   getWorkflowRankServer,
-  mergeBomRecords,
   loadDatabaseBoms,
-  persistBomsTransactionSafe
+  persistBomsTransactionSafe,
+  saveDatabaseStore,
+  getDatabaseStore
 };
 

@@ -581,35 +581,60 @@ async function validateAndSyncSourcePi(client, cleanPi, finalCode, baseRecord) {
     );
   }
 
-  // 3. Confirm that an existing PI conversion does not point to a different active BOM
+  // 3. Confirm that an existing PI conversion does not point to a different BOM
+  // Strict Mandate: Do not automatically release a converted PI merely because earlier BOM is cancelled.
+  // Requires explicit business approval (e.g. releaseState = 'AUTHORIZED_FOR_REUSE' or reuseApproved = true).
   const conflictBomRes = await client.query(`
-    SELECT bom_code, id FROM public.bom_orders
+    SELECT bom_code, id, status FROM public.bom_orders
     WHERE LOWER(source_pi_no) = $1
       AND bom_code <> $2
       AND id <> $2
-      AND status NOT ILIKE '%cancel%'
   `, [lowerPi, finalCode]);
 
-  if (conflictBomRes?.rows?.length > 0) {
-    const conflictingCode = conflictBomRes.rows[0].bom_code || conflictBomRes.rows[0].id;
-    throw new Error(
-      `[PI Association Conflict] Source PI "${targetPi}" is already converted to active BOM "${conflictingCode}", cannot associate with BOM "${finalCode}".`
-    );
+  const isApprovedForReuse = Boolean(
+    matchedStorePi?.reuseApproved ||
+    matchedStorePi?.releaseState === 'AUTHORIZED_FOR_REUSE' ||
+    matchedStorePi?.status === 'Approved for Reconversion' ||
+    matchedStorePi?.status === 'AUTHORIZED_FOR_REUSE' ||
+    matchedDbPi?.status === 'Approved for Reconversion' ||
+    matchedDbPi?.status === 'AUTHORIZED_FOR_REUSE'
+  );
+
+  if (conflictBomRes?.rows?.length > 0 && !isApprovedForReuse) {
+    const conflictingBom = conflictBomRes.rows[0];
+    const conflictingCode = conflictingBom.bom_code || conflictingBom.id;
+    const isCancelled = String(conflictingBom.status || '').toLowerCase().includes('cancel');
+
+    if (isCancelled) {
+      throw new Error(
+        `[PI Association Conflict] Source PI "${targetPi}" was previously converted to cancelled BOM "${conflictingCode}". Cannot automatically reuse converted PI without explicit business approval or authorized release state.`
+      );
+    } else {
+      throw new Error(
+        `[PI Association Conflict] Source PI "${targetPi}" is already converted to active BOM "${conflictingCode}", cannot associate with BOM "${finalCode}".`
+      );
+    }
   }
 
   // Check if the store PI object already has a conflicting convertedBomCode
   const existingConvertedBomCode = String(matchedStorePi?.convertedBomCode || matchedStorePi?.converted_bom_code || '').trim();
-  if (existingConvertedBomCode && existingConvertedBomCode !== finalCode) {
-    const otherActiveRes = await client.query(`
+  if (existingConvertedBomCode && existingConvertedBomCode !== finalCode && !isApprovedForReuse) {
+    const otherBomRes = await client.query(`
       SELECT bom_code, status FROM public.bom_orders
       WHERE (bom_code = $1 OR id = $1)
-        AND status NOT ILIKE '%cancel%'
     `, [existingConvertedBomCode]);
 
-    if (otherActiveRes?.rows?.length > 0) {
-      throw new Error(
-        `[PI Association Conflict] Source PI "${targetPi}" is already converted to BOM "${existingConvertedBomCode}".`
-      );
+    if (otherBomRes?.rows?.length > 0) {
+      const isCancelled = String(otherBomRes.rows[0]?.status || '').toLowerCase().includes('cancel');
+      if (isCancelled) {
+        throw new Error(
+          `[PI Association Conflict] Source PI "${targetPi}" is linked to cancelled BOM "${existingConvertedBomCode}". Cannot automatically reuse converted PI without explicit business approval or authorized release state.`
+        );
+      } else {
+        throw new Error(
+          `[PI Association Conflict] Source PI "${targetPi}" is already converted to BOM "${existingConvertedBomCode}".`
+        );
+      }
     }
   }
 
@@ -743,12 +768,25 @@ export async function persistBomsTransactionSafe({
 
       finalCode = incomingCode;
 
-      // General DB Validation: If PI is already converted to an active BOM, reject new conversion
+      // General DB Validation: If PI is already converted to another BOM, reject new conversion (even if cancelled, unless explicitly authorized)
       if (incomingPi && existingPiBom && (isNew || (incomingCode && !isPlaceholderCode && incomingCode !== existingPiBom.bomCode && incomingCode !== existingPiBom.id))) {
         const activeCode = existingPiBom.bomCode || existingPiBom.id;
-        throw new Error(
-          `[PI Association Conflict] Source PI "${bom.sourcePiNo || bom.source_pi_no || incomingPi}" is already converted to active BOM "${activeCode}", cannot associate with BOM "${incomingCode || 'NEW'}".`
+        const isCancelled = String(existingPiBom.status || '').toLowerCase().includes('cancel');
+        const isApprovedForReuse = Boolean(
+          bom.reuseApproved ||
+          bom.releaseState === 'AUTHORIZED_FOR_REUSE'
         );
+        if (!isApprovedForReuse) {
+          if (isCancelled) {
+            throw new Error(
+              `[PI Association Conflict] Source PI "${bom.sourcePiNo || bom.source_pi_no || incomingPi}" was previously converted to cancelled BOM "${activeCode}". Cannot automatically reuse converted PI without explicit business approval or authorized release state.`
+            );
+          } else {
+            throw new Error(
+              `[PI Association Conflict] Source PI "${bom.sourcePiNo || bom.source_pi_no || incomingPi}" is already converted to active BOM "${activeCode}", cannot associate with BOM "${incomingCode || 'NEW'}".`
+            );
+          }
+        }
       }
 
       if (existingPiBom && !isNew) {
@@ -831,13 +869,13 @@ export async function persistBomsTransactionSafe({
         const existing = dbRowFromDb || storeMap.get(cleanId);
         const merged = existing ? mergeBomRecords(existing, item) : item;
 
-        const dbRow = toDatabaseBomRowServer(merged);
-        await executeBomOrderWrite(client, dbRow, Boolean(dbRowFromDb));
-
-        // Synchronize source PI if present
+        // Synchronize and validate source PI within transaction before BOM write
         if (merged.sourcePiNo) {
           await validateAndSyncSourcePi(client, merged.sourcePiNo, cleanId, existing);
         }
+
+        const dbRow = toDatabaseBomRowServer(merged);
+        await executeBomOrderWrite(client, dbRow, Boolean(dbRowFromDb));
 
         storeMap.set(cleanId, merged);
         changedRecords.push(merged);
