@@ -852,7 +852,7 @@ async function runPhase51TestSuite() {
   }
 
   // -------------------------------------------------------------------------
-  // Test 16: Cancelled PI Protection (Explicit Business Approval Required)
+  // Test 16: Block Unauthorized PI Reconversion (Client Bypass Prevention)
   // -------------------------------------------------------------------------
   try {
     await testPool.query(`
@@ -861,6 +861,7 @@ async function runPhase51TestSuite() {
       ON CONFLICT (id) DO UPDATE SET status = 'Sent to Customer'
     `);
 
+    // 1. Create original BOM linked to this PI, then mark it Cancelled
     await persistBomsTransactionSafe({
       singleBom: {
         id: 'BOM-P51-CAN-01',
@@ -874,44 +875,15 @@ async function runPhase51TestSuite() {
       customAllowedDb: 'businz_staging_test'
     });
 
-    let cancelReuseCaught = false;
-    let cancelReuseMessage = '';
+    // 2. Attempt to create a NEW BOM attempting bypass with client-supplied reuseApproved & releaseState
+    let bypassCaught = false;
+    let bypassErrorMessage = '';
     try {
       await persistBomsTransactionSafe({
         singleBom: {
           id: 'BOM-P51-CAN-02',
           bomCode: 'BOM-P51-CAN-02',
-          customerName: 'New Client Attempting Reuse',
-          sourcePiNo: 'PI-P51-CANCEL-01',
-          status: 'Draft'
-        },
-        isNew: true,
-        customPool: testPool,
-        customAllowedDb: 'businz_staging_test'
-      });
-    } catch (err) {
-      cancelReuseCaught = true;
-      cancelReuseMessage = err.message;
-    }
-
-    const checkRejectedBom = await testPool.query(`
-      SELECT bom_code FROM public.bom_orders WHERE bom_code = 'BOM-P51-CAN-02'
-    `);
-
-    // Explicitly update PI status to authorized release state: 'Approved for Reconversion'
-    await testPool.query(`
-      UPDATE public.proforma_invoices
-      SET status = 'Approved for Reconversion'
-      WHERE id = 'PI-P51-CANCEL-01'
-    `);
-
-    let authorizedSuccess = false;
-    try {
-      const authRes = await persistBomsTransactionSafe({
-        singleBom: {
-          id: 'BOM-P51-CAN-03',
-          bomCode: 'BOM-P51-CAN-03',
-          customerName: 'Authorized Client Reuse',
+          customerName: 'Client Attempting Unauthorized Bypass',
           sourcePiNo: 'PI-P51-CANCEL-01',
           status: 'Draft',
           reuseApproved: true,
@@ -921,26 +893,54 @@ async function runPhase51TestSuite() {
         customPool: testPool,
         customAllowedDb: 'businz_staging_test'
       });
-      authorizedSuccess = Boolean(authRes.success);
-    } catch (authErr) {
-      console.warn('Authorized reuse error:', authErr.message);
+    } catch (err) {
+      bypassCaught = true;
+      bypassErrorMessage = err.message;
     }
 
-    const passed = cancelReuseCaught &&
-      cancelReuseMessage.includes('[PI Association Conflict]') &&
-      cancelReuseMessage.includes('cancelled') &&
-      checkRejectedBom.rows.length === 0 &&
-      authorizedSuccess;
+    const checkRejectedBom = await testPool.query(`
+      SELECT bom_code FROM public.bom_orders WHERE bom_code = 'BOM-P51-CAN-02'
+    `);
 
-    await testPool.query(`DELETE FROM public.bom_orders WHERE bom_code IN ('BOM-P51-CAN-01', 'BOM-P51-CAN-02', 'BOM-P51-CAN-03')`);
+    // 3. Confirm valid updates to the original BOM and its existing source PI succeed
+    let originalUpdateSuccess = false;
+    try {
+      const origRes = await persistBomsTransactionSafe({
+        singleBom: {
+          id: 'BOM-P51-CAN-01',
+          bomCode: 'BOM-P51-CAN-01',
+          sourcePiNo: 'PI-P51-CANCEL-01',
+          remarks: 'Valid post-cancellation audit update on original BOM'
+        },
+        isUpdate: true,
+        customPool: testPool,
+        customAllowedDb: 'businz_staging_test'
+      });
+      originalUpdateSuccess = Boolean(origRes.success);
+    } catch (err) {
+      console.warn('Original update error:', err.message);
+    }
+
+    const verifyOrig = await testPool.query(`
+      SELECT remarks, source_pi_no FROM public.bom_orders WHERE bom_code = 'BOM-P51-CAN-01'
+    `);
+
+    const passed = bypassCaught &&
+      bypassErrorMessage.includes('[PI Association Conflict]') &&
+      checkRejectedBom.rows.length === 0 &&
+      originalUpdateSuccess &&
+      verifyOrig.rows[0]?.remarks === 'Valid post-cancellation audit update on original BOM' &&
+      verifyOrig.rows[0]?.source_pi_no === 'PI-P51-CANCEL-01';
+
+    await testPool.query(`DELETE FROM public.bom_orders WHERE bom_code IN ('BOM-P51-CAN-01', 'BOM-P51-CAN-02')`);
     await testPool.query(`DELETE FROM public.proforma_invoices WHERE id = 'PI-P51-CANCEL-01'`);
 
-    recordResult(16, 'Cancelled PI Protection (Explicit Business Approval Required)', passed,
+    recordResult(16, 'Block Unauthorized PI Reconversion (Client Bypass Prevention)', passed,
       passed 
-        ? 'Cancelled BOM source PI strictly blocked from automatic reuse; explicit authorized release state permitted conversion.' 
-        : `Cancelled PI validation failed: ${cancelReuseMessage}`);
+        ? 'Client-supplied reuseApproved & releaseState strictly failed to bypass protection; updates to original BOM preserved.' 
+        : `Unauthorized reconversion check failed: ${bypassErrorMessage}`);
   } catch (err) {
-    recordResult(16, 'Cancelled PI Protection', false, err.message);
+    recordResult(16, 'Block Unauthorized PI Reconversion', false, err.message);
   }
 
   // -------------------------------------------------------------------------
