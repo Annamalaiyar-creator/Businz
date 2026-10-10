@@ -12,6 +12,7 @@ import CrmWhatsAppInbox from './CrmWhatsAppInbox';
 import CrmQuotationsView from './CrmQuotationsView';
 import CrmProductCatalog from './CrmProductCatalog';
 import CrmReportsView from './CrmReportsView';
+import { getNextSequence } from '../../utils/sequenceGenerator';
 
 import {
   getCrmStore,
@@ -614,9 +615,9 @@ export default function SalesCrmEngine({
 
   // Auto Create Lead from WhatsApp Conversation
   const handleAutoCreateLeadFromWhatsApp = (conv) => {
-    const nextNumber = `LEAD-${String(leads.length + 1).padStart(3, '0')}`;
+    const nextNumber = getNextSequence('LEAD', leads || []).code;
     const newLead = {
-      id: `LEAD-2026-${String(Date.now()).slice(-4)}`,
+      id: nextNumber,
       leadNumber: nextNumber,
       companyName: conv.companyName || `${conv.customerName} Project`,
       contactPerson: conv.customerName,
@@ -704,6 +705,7 @@ export default function SalesCrmEngine({
             customers={customers}
             opportunities={opportunities}
             quotations={quotations}
+            boms={boms}
             isLoading={isCloudSyncing}
             onSaveCustomer={handleSaveCustomer}
             onBatchUpdateCustomers={handleBatchUpdateCustomers}

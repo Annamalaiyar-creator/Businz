@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle
+  Loader2, ExternalLink, AlertTriangle, User
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -153,9 +153,16 @@ export default function AccountsVerificationModal({
     accountsVerificationModal.status === 'ACCOUNTS VERIFIED' ||
     accountsVerificationModal.isAccountsDone === true
   );
+  const isCancelled = Boolean(
+    accountsVerificationModal?.cancelled ||
+    accountsVerificationModal?.status === 'Cancelled' ||
+    accountsVerificationModal?.status === 'CANCELLED' ||
+    accountsVerificationModal?.status === 'Cancelled & Stock Restored' ||
+    (accountsVerificationModal?.status && typeof accountsVerificationModal.status === 'string' && accountsVerificationModal.status.toLowerCase().includes('cancel'))
+  );
   const currentPayStatus = isAlreadyCompleted 
     ? (accVerif.paymentStatus || (accountsVerificationModal.paymentType === 'Net 30 Days' ? 'Credit Payment' : 'Payment Received — 100%'))
-    : (accVerif.paymentStatus || null);
+    : (accVerif.paymentStatus || '');
   const hardCopy = isAlreadyCompleted ? true : Boolean(accVerif.hardCopyReceived);
   const bomCodeText = (accountsVerificationModal && (accountsVerificationModal.bomCode || accountsVerificationModal.code)) || 'BOM-2026';
   const custNameText = (() => {
@@ -171,38 +178,49 @@ export default function AccountsVerificationModal({
   const payTypeText = (accountsVerificationModal && (accountsVerificationModal.paymentType || accountsVerificationModal.c3)) || 'Net 30 Days';
   const orderValue = cleanNum(accountsVerificationModal?.grandTotal, 0) || cleanNum(accountsVerificationModal?.subTotal, 0) || cleanNum(accountsVerificationModal?.totalAmount, 0) || (Array.isArray(accountsVerificationModal?.items) ? accountsVerificationModal.items.reduce((s, it) => s + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0) : 0);
 
-  // Accounts Verification State & Derived Variables (NOT prefilled by default)
-  const [assignedInvoiceNo, setAssignedInvoiceNo] = useState(() => {
+  const getExpectedInvNo = () => {
     const raw = accountsVerificationModal?.invoiceNo;
-    return (raw && raw !== 'Pending Confirmation') ? raw : '';
-  });
+    if (raw && raw !== 'Pending Confirmation') {
+      const isTaken = (invoiceList || []).some(inv => 
+        (inv.invNo === raw || inv.code === raw || inv.invoiceNo === raw) &&
+        inv.poNo !== accountsVerificationModal?.bomCode && inv.bomCode !== accountsVerificationModal?.bomCode
+      );
+      if (!isTaken) return raw;
+    }
+    return '';
+  };
+
+  const [assignedInvoiceNo, setAssignedInvoiceNo] = useState(getExpectedInvNo);
   const [isFetchingInvNo, setIsFetchingInvNo] = useState(false);
 
   useEffect(() => {
-    if (!assignedInvoiceNo || assignedInvoiceNo === 'Pending Confirmation') {
-      setIsFetchingInvNo(true);
-      fetch('/api/next-invoice-number')
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.nextInvNo) {
-            setAssignedInvoiceNo(data.nextInvNo);
-          }
-        })
-        .catch(err => {
-          console.warn('Could not fetch next invoice number:', err);
-        })
-        .finally(() => {
-          setIsFetchingInvNo(false);
-        });
+    const expected = getExpectedInvNo();
+    if (expected) {
+      setAssignedInvoiceNo(expected);
+      return;
     }
-  }, [accountsVerificationModal]);
+    setIsFetchingInvNo(true);
+    fetch('/api/next-invoice-number')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.nextInvNo) {
+          setAssignedInvoiceNo(data.nextInvNo);
+        }
+      })
+      .catch(err => {
+        console.warn('Could not fetch next invoice number:', err);
+      })
+      .finally(() => {
+        setIsFetchingInvNo(false);
+      });
+  }, [accountsVerificationModal?.bomCode, accountsVerificationModal?.code, accountsVerificationModal?.id, accountsVerificationModal?.invoiceNo]);
 
-  const currentPayDate = accVerif.paymentDate !== undefined 
+  const currentPayDate = (accVerif.paymentDate !== undefined && accVerif.paymentDate !== null)
     ? accVerif.paymentDate 
-    : (isAlreadyCompleted ? (accountsVerificationModal.paymentDate || '') : '');
-  const currentTotalAmount = accVerif.totalAmount !== undefined 
+    : (isAlreadyCompleted ? (accountsVerificationModal?.paymentDate || '') : (accountsVerificationModal?.paymentDate || ''));
+  const currentTotalAmount = (accVerif.totalAmount !== undefined && accVerif.totalAmount !== null)
     ? accVerif.totalAmount 
-    : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : '') : '');
+    : (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || ''));
 
   const payType = accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3 || '';
   const isWhileDispatch = payType === 'Payment While Dispatch' || String(payType).includes('While Dispatch');
@@ -238,11 +256,15 @@ export default function AccountsVerificationModal({
     'Payment Received — 50%': { bg: '#FEF3C7', color: '#B45309', label: '50% Advance', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
     'Credit Payment': { bg: '#DBEAFE', color: '#1E40AF', label: 'Credit / Net 30', icon: <Receipt style={{ width: '18px', height: '18px' }} /> },
   };
-  const currentPayConfig = payStatusConfig[currentPayStatus] || payStatusConfig['Payment Received — 100%'];
+  const currentPayConfig = (currentPayStatus && payStatusConfig[currentPayStatus]) || { bg: '#F1F5F9', color: '#475569', label: 'Pending Verification', icon: <Clock style={{ width: '18px', height: '18px' }} /> };
 
   const completeVerification = async () => {
     if (isWhileDispatch && !hasUploadedPaymentProof) {
       alert('⛔ CANNOT APPROVE — PAYMENT ATTACHMENT REQUIRED\n\nThis order has payment terms "Payment While Dispatch". The payment proof image/slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order must remain on HOLD in the Accounts team until the Sales person attaches the payment proof receipt.');
+      return;
+    }
+    if (!currentPayStatus) {
+      alert('⚠️ Please select the Customer Payment Status before completing accounts verification.');
       return;
     }
     if (!currentPayDate) {
@@ -254,21 +276,34 @@ export default function AccountsVerificationModal({
       return;
     }
 
+    const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     let finalInvNo = assignedInvoiceNo;
-    if (!finalInvNo || finalInvNo === 'Pending Confirmation') {
+    const isTaken = (no) => {
+      if (!no || no === 'Pending Confirmation') return true;
+      return (invoiceList || []).some(inv => 
+        (inv.invNo === no || inv.code === no || inv.invoiceNo === no) &&
+        inv.poNo !== targetCode && inv.bomCode !== targetCode
+      );
+    };
+
+    if (!finalInvNo || finalInvNo === 'Pending Confirmation' || isTaken(finalInvNo)) {
       try {
         const res = await fetch('/api/next-invoice-number');
         if (res.ok) {
           const data = await res.json();
-          if (data && data.nextInvNo) {
+          if (data && data.nextInvNo && !isTaken(data.nextInvNo)) {
             finalInvNo = data.nextInvNo;
           }
         }
       } catch (_) {}
     }
-    if (!finalInvNo) finalInvNo = 'INV-000012';
+    if (!finalInvNo || isTaken(finalInvNo)) {
+      const bCode = accountsVerificationModal.bomCode || accountsVerificationModal.code || '';
+      const matchSeq = bCode.match(/VRM-BOM-(\d{4})-(\d+)/i);
+      const candidate = matchSeq ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : '';
+      finalInvNo = (!candidate || isTaken(candidate)) ? `VRM-INV-2026-${Date.now().toString().slice(-4)}` : candidate;
+    }
 
-    const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     const verifiedBOM = accountsVerificationModal;
     const updatedBomData = {
       ...verifiedBOM,
@@ -276,6 +311,7 @@ export default function AccountsVerificationModal({
       grandTotal: cleanNum(currentTotalAmount, 0),
       paymentDate: currentPayDate,
       isAccountsDone: true,
+      invoiceConfirmed: false,
       accountsVerification: {
         ...(verifiedBOM.accountsVerification || {}),
         paymentStatus: currentPayStatus,
@@ -336,6 +372,7 @@ export default function AccountsVerificationModal({
       invNo: finalInvNo,
       code: finalInvNo,
       invoiceNo: finalInvNo,
+      invoiceConfirmed: false,
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       vendor: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
       customerName: verifiedBOM.customerName || verifiedBOM.companyName || custNameText,
@@ -410,17 +447,15 @@ export default function AccountsVerificationModal({
 
       {/* ─── GRADIENT HEADER BANNER ─── */}
       <div style={{
-        background: isVerified
+        background: isAlreadyCompleted
           ? 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)'
-          : isPartialVerified
-            ? 'linear-gradient(135deg, #78350F 0%, #92400E 100%)'
-            : 'linear-gradient(135deg, #1E3A5F 0%, #1E40AF 100%)',
+          : 'linear-gradient(135deg, #0E7490 0%, #0369A1 100%)',
         borderRadius: '16px',
         padding: '24px 28px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: isVerified ? '0 8px 24px rgba(6,78,59,0.35)' : isPartialVerified ? '0 8px 24px rgba(120,53,15,0.35)' : '0 8px 24px rgba(30,58,138,0.35)'
+        boxShadow: isAlreadyCompleted ? '0 8px 24px rgba(6,78,59,0.35)' : '0 8px 24px rgba(14,116,144,0.35)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div>
@@ -443,14 +478,14 @@ export default function AccountsVerificationModal({
                 Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
               </span>
               <StatusBadge
-                status={(isAlreadyCompleted || isVerified) ? 'ACCOUNTS VERIFIED' : isPartialVerified ? 'PARTIALLY VERIFIED' : 'PENDING VERIFICATION'}
+                status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
                 size="sm"
               />
             </div>
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
               <span>•</span>
-              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
+              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
               <span>•</span>
               <span>Payment Terms: <strong style={{ color: '#FFFFFF' }}>{payTypeText}</strong></span>
             </div>
@@ -458,7 +493,7 @@ export default function AccountsVerificationModal({
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && !String(userRole || '').toLowerCase().includes('accounts') && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && (
+          {canCancelBom && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && !isCancelled && (
             <button
               onClick={() => handleCancelBomOrder(accountsVerificationModal)}
               style={{
@@ -718,7 +753,7 @@ export default function AccountsVerificationModal({
               </label>
               <select
                 disabled={isAlreadyCompleted}
-                value={currentPayStatus || 'Payment Received — 100%'}
+                value={currentPayStatus || ''}
                 onChange={(e) => {
                   if (isAlreadyCompleted) return;
                   const val = e.target.value;
@@ -730,12 +765,13 @@ export default function AccountsVerificationModal({
                 style={{
                   width: '100%', height: '44px', borderRadius: '10px',
                   border: '1px solid #CBD5E1', padding: '0 14px',
-                  fontSize: '13px', fontWeight: '600', color: '#0F172A',
+                  fontSize: '13px', fontWeight: '600', color: currentPayStatus ? '#0F172A' : '#94A3B8',
                   outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
                   cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
                   opacity: isAlreadyCompleted ? 0.9 : 1
                 }}
               >
+                <option value="" disabled>-- Select Verified Payment Status --</option>
                 <option value="Payment Received — 100%">Payment Received — 100%</option>
                 <option value="Payment Received — 50%">Payment Received — 50% Advance</option>
                 <option value="Credit Payment">Credit Payment (Net 30 Days)</option>
@@ -1223,7 +1259,7 @@ export default function AccountsVerificationModal({
             Confirm payment date, total amount, and customer payment status to complete accounts clearance.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {canCancelBom && !String(userRole || '').toLowerCase().includes('accounts') && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && (
+            {canCancelBom && accountsVerificationModal.status !== 'Cancelled & Stock Restored' && !isCancelled && (
               <button
                 onClick={() => handleCancelBomOrder(accountsVerificationModal)}
                 style={{

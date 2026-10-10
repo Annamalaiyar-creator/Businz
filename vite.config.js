@@ -19,7 +19,8 @@ function autoStartBackendPlugin() {
             console.log('\n🚀 [Auto-Backend] Starting BUSINZ Node.js backend server on port 5001...');
             backendProc = spawn('node', ['server/index.js'], {
               stdio: 'inherit',
-              shell: true
+              shell: true,
+              env: { ...process.env, PORT: '5001' }
             });
             backendProc.on('exit', (code) => {
               console.log(`[Auto-Backend] Server process exited with code ${code}`);

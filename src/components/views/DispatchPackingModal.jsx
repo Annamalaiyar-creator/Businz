@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
-  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck
+  UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User
 } from "lucide-react";
 import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
@@ -129,19 +129,6 @@ export default function DispatchPackingModal({
     setLocalActiveMediaPreview(finalMedia);
   };
 
-  const rawItems = (dispatchPackingModal.items || []).map(it => {
-    const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
-    const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
-    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: false };
-  });
-  const itemsToPack = (dispatchPackingModal.dispatchPacking && Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0)
-    ? dispatchPackingModal.dispatchPacking.map(p => {
-        const nameStr = (p.name || '').toLowerCase().trim();
-        const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || null));
-        return { ...p, code };
-      })
-    : rawItems;
-
   const isCancelled = Boolean(
     dispatchPackingModal.cancelled ||
     dispatchPackingModal.status === 'Cancelled' ||
@@ -150,25 +137,93 @@ export default function DispatchPackingModal({
     (dispatchPackingModal.status && typeof dispatchPackingModal.status === 'string' && dispatchPackingModal.status.toLowerCase().includes('cancel'))
   );
 
+  const isAlreadySentToAccounts = Boolean(
+    dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
+    dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
+    dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
+    dispatchPackingModal.status === 'Accounts Verified & Passed to Invoice' ||
+    dispatchPackingModal.status === 'ACCOUNTS VERIFIED' ||
+    dispatchPackingModal.status === 'Invoice Confirmed' ||
+    dispatchPackingModal.status === 'Awaiting Vehicle Loading & Dispatch' ||
+    dispatchPackingModal.status === 'AWAITING VEHICLE LOADING' ||
+    dispatchPackingModal.status === 'Closed' ||
+    dispatchPackingModal.status === 'CLOSED' ||
+    dispatchPackingModal.status === 'COMPLETED & DISPATCHED' ||
+    dispatchPackingModal.status === 'Completed' ||
+    dispatchPackingModal.tabGroup === 'Packed' ||
+    dispatchPackingModal.tabGroup === 'AwaitingLoading' ||
+    dispatchPackingModal.tabGroup === 'Closed' ||
+    dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
+    dispatchPackingModal.accountsVerification?.readyForAccounts ||
+    dispatchPackingModal.accountsVerification?.verified
+  );
+
+  const rawItems = (dispatchPackingModal.items || []).map(it => {
+    const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
+    const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
+    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: isAlreadySentToAccounts ? true : false };
+  });
+  const itemsToPack = (dispatchPackingModal.dispatchPacking && Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0)
+    ? dispatchPackingModal.dispatchPacking.map(p => {
+        const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
+        const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || null));
+        const isPacked = isAlreadySentToAccounts ? (p.packed !== false) : Boolean(p.packed || p.scanned || p.packedQty > 0);
+        return { ...p, code, packed: isPacked };
+      })
+    : rawItems;
+
   const isPackedAndReady = Boolean(
     isCancelled ||
     dispatchPackingModal.isReadOnly ||
     dispatchPackingModal.isViewOnly ||
-    dispatchPackingModal.status === 'Packed & Ready for Dispatch' ||
-    dispatchPackingModal.status === 'PACKED & READY FOR DISPATCH' ||
-    dispatchPackingModal.status === 'Packed & Awaiting Dispatch Payment' ||
-    dispatchPackingModal.status === 'Accounts Verified & Passed to Invoice' ||
-    dispatchPackingModal.status === 'ACCOUNTS VERIFIED' ||
-    dispatchPackingModal.status === 'Invoice Confirmed' ||
-    dispatchPackingModal.status === 'Closed' ||
-    dispatchPackingModal.status === 'CLOSED'
+    isAlreadySentToAccounts
   );
 
-  const packedItemsCount = itemsToPack.filter(p => p.packed).length;
+  const formatUploadTime = (item) => {
+    if (!item) return '';
+    if (item.uploadTime) return item.uploadTime;
+    const raw = item.uploadedAt || item.createdAt || item.date;
+    if (!raw) return 'Recently';
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        return `${dateStr}, ${timeStr}`;
+      }
+      return String(raw);
+    } catch (_) {
+      return String(raw);
+    }
+  };
+
+  const syncModalMediaToStore = (updatedMedia) => {
+    if (!targetCode) return;
+    if (typeof setBomStore === 'function') {
+      setBomStore(prev => (prev || []).map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? { ...b, dispatchPackingMedia: updatedMedia } : b));
+    }
+    try {
+      const cur = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
+      const next = cur.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode) ? { ...b, dispatchPackingMedia: updatedMedia } : b);
+      localStorage.setItem('controlroom_bom_store', JSON.stringify(next.map(stripDataUrlsFromRecord)));
+      const targetBom = next.find(b => b.bomCode === targetCode || b.code === targetCode || b.id === targetCode);
+      if (targetBom) {
+        saveCloudBomRow(targetBom);
+        window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
+        fetch('/api/boms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  };
+
+  const packedItemsCount = isAlreadySentToAccounts ? itemsToPack.length : itemsToPack.filter(p => p.packed).length;
   const totalItemsCount = itemsToPack.length;
-  const allItemsPacked = totalItemsCount > 0 && packedItemsCount === totalItemsCount;
-  const progressPercent = totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0;
-  const isPartial = packedItemsCount > 0 && !allItemsPacked;
+  const allItemsPacked = isAlreadySentToAccounts || (totalItemsCount > 0 && packedItemsCount === totalItemsCount);
+  const progressPercent = isAlreadySentToAccounts ? 100 : (totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0);
+  const isPartial = !isAlreadySentToAccounts && packedItemsCount > 0 && !allItemsPacked;
 
   const savePackingData = (isPartialSave = false, proceedToLoading = false) => {
     if (uploadingCount > 0) {
@@ -203,11 +258,7 @@ export default function DispatchPackingModal({
       const allConfirmedPacked = confirmedItems.every(it => it.packed);
 
       if (allConfirmedPacked) {
-        if (proceedToLoading || is100Paid) {
-          nextStatus = 'Awaiting Vehicle Loading & Dispatch';
-        } else {
-          nextStatus = 'Packed & Awaiting Accounts Verification';
-        }
+        nextStatus = 'Packed & Awaiting Accounts Verification';
         isFullyConfirmed = true;
       } else {
         nextStatus = 'Partially Packed - Sent to Accounts';
@@ -222,10 +273,10 @@ export default function DispatchPackingModal({
       ? ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
           ? dispatchPackingModal.accountsVerification
           : {
-              paymentStatus: is100Paid ? 'Payment Received — 100%' : ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null)),
-              hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived || is100Paid),
-              softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived || is100Paid),
-              verified: Boolean(dispatchPackingModal.accountsVerification?.verified || is100Paid),
+              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
+              hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
+              softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
+              verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
               readyForAccounts: true,
               packedAt: dispatchPackingModal.accountsVerification?.packedAt || new Date().toISOString()
             })
@@ -365,18 +416,15 @@ export default function DispatchPackingModal({
       }).catch(() => {});
     } catch (_) {}
 
-    const targetBomCode = dispatchPackingModal.bomCode;
-    const targetNum = targetBomCode ? targetBomCode.replace(/[^0-9]/g, '') : '';
-    if (typeof setInvoiceList === 'function') {
+    const targetBomCode = dispatchPackingModal.bomCode || dispatchPackingModal.code;
+    if (targetBomCode && typeof setInvoiceList === 'function') {
       setInvoiceList(prev => (prev || []).map(inv => {
-        const invPoNum = inv.poNo ? inv.poNo.replace(/[^0-9]/g, '') : '';
-        const invNoNum = inv.invNo ? inv.invNo.replace(/[^0-9]/g, '') : '';
-        const isMatch = inv.poNo === targetBomCode || inv.invNo === targetBomCode || inv.code === targetBomCode || (targetNum && (invPoNum === targetNum || invNoNum === targetNum));
+        const isMatch = inv.poNo === targetBomCode || inv.bomCode === targetBomCode;
         if (isMatch) {
           const currentItems = (inv.items && inv.items.length > 0) ? inv.items : (dispatchPackingModal.items || []);
           const updatedInvItems = currentItems.map((it, idx) => {
-            const matchingPacked = itemsToPack.find(p => p.name === it.name || p.code === it.code || (it.name && p.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim())) || itemsToPack[idx];
-            return { ...it, selected: matchingPacked ? Boolean(matchingPacked.packed) : false };
+            const matchingPacked = itemsToPack.find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
+            return matchingPacked ? { ...it, selected: Boolean(matchingPacked.packed), packed: Boolean(matchingPacked.packed) } : it;
           });
           return { ...inv, items: updatedInvItems };
         }
@@ -384,9 +432,6 @@ export default function DispatchPackingModal({
       }));
     }
     setDispatchPackingModal(null);
-    if (proceedToLoading && typeof setVehicleLoadingModal === 'function') {
-      setVehicleLoadingModal(updatedPackedBom);
-    }
 
     // Safely resolve the salesperson who created the BOM and customer name
     const resolvedSalesPerson = resolvedSpName.replace(/\s*\([^)]*\)/g, '').trim();
@@ -499,6 +544,17 @@ export default function DispatchPackingModal({
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }}></span>
                   CANCELLED (VIEW ONLY)
                 </span>
+              ) : isAlreadySentToAccounts ? (
+                <span style={{
+                  backgroundColor: '#DCFCE7',
+                  color: '#166534',
+                  padding: '3px 12px', borderRadius: '20px',
+                  fontSize: '11px', fontWeight: '800',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#166534' }}></span>
+                  PACKING VERIFIED • SENT TO ACCOUNTS
+                </span>
               ) : (
                 <span style={{
                   backgroundColor: allItemsPacked ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#DBEAFE',
@@ -515,7 +571,7 @@ export default function DispatchPackingModal({
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <span>Customer: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.customerName}</strong></span>
               <span>•</span>
-              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px' }}>👤 {(dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
+              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {(dispatchPackingModal.salesPerson || dispatchPackingModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
               <span>•</span>
               <span>Payment: <strong style={{ color: '#FFFFFF' }}>{dispatchPackingModal.paymentType}</strong></span>
             </div>
@@ -524,7 +580,7 @@ export default function DispatchPackingModal({
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && !isCancelled && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
+          {canCancelBom && !isCancelled && !isAlreadySentToAccounts && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
             <button
               onClick={() => handleCancelBomOrder(dispatchPackingModal)}
               style={{
@@ -541,58 +597,25 @@ export default function DispatchPackingModal({
               Cancel BOM
             </button>
           )}
-          <button
-            onClick={() => setDispatchPackingModal(null)}
-            style={{
-              border: '1px solid rgba(255,255,255,0.3)',
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              color: '#FFFFFF', height: '42px', padding: '0 20px',
-              borderRadius: '10px', fontSize: '13px', fontWeight: '700',
-              cursor: 'pointer', backdropFilter: 'blur(4px)'
-            }}
-          >
-            Close
-          </button>
-          {!isPackedAndReady && !isCancelled && (
-            <>
-              <button
-                type="button"
-                onClick={() => savePackingData(false, false)}
-                disabled={uploadingCount > 0}
-                style={{
-                  border: 'none',
-                  backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
-                  color: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF'),
-                  height: '42px', padding: '0 20px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '900',
-                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                  display: 'flex', alignItems: 'center', gap: '8px'
-                }}
-              >
-                <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : 'Save Verification'}
-              </button>
-              <button
-                type="button"
-                onClick={() => savePackingData(false, true)}
-                disabled={uploadingCount > 0}
-                style={{
-                  border: 'none',
-                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #0284C7, #0EA5E9)',
-                  color: '#FFFFFF',
-                  height: '42px', padding: '0 20px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '900',
-                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(2,132,199,0.3)',
-                  display: 'flex', alignItems: 'center', gap: '8px'
-                }}
-                title="Confirm packing and directly proceed to vehicle loading"
-              >
-                <Truck style={{ width: '16px', height: '16px' }} />
-                Confirm & Load Vehicle 🚚
-              </button>
-            </>
+          {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && (
+            <button
+              type="button"
+              onClick={() => savePackingData(false)}
+              disabled={uploadingCount > 0}
+              style={{
+                border: 'none',
+                backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
+                color: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF'),
+                height: '42px', padding: '0 20px',
+                borderRadius: '10px', fontSize: '13px', fontWeight: '900',
+                cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}
+            >
+              <CheckCircle style={{ width: '16px', height: '16px' }} />
+              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : (allItemsPacked ? 'Packing Confirmed (Send to Accounts)' : 'Save Packing Progress')}
+            </button>
           )}
         </div>
       </div>
@@ -900,8 +923,19 @@ export default function DispatchPackingModal({
             </span>
           </div>
 
+          {isAlreadySentToAccounts && (
+            <div style={{
+              backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '10px',
+              padding: '10px 14px', fontSize: '12px', color: '#0E7490', fontWeight: '700',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <CheckCircle size={16} style={{ color: '#0E7490', flexShrink: 0 }} />
+              <span>Order is already with Accounts. Uploaded packing photos are saved instantly and viewed directly by the Sales Person and Accounts team without re-sending.</span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {!isPackedAndReady && (
+            {!isCancelled && (
               <div style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   type="button"
@@ -953,6 +987,11 @@ export default function DispatchPackingModal({
                             if (files && files.length > 0) {
                               const bomCode = dispatchPackingModal.bomCode || dispatchPackingModal.id;
                               setUploadingCount(prev => prev + files.length);
+                              const now = new Date();
+                              const uploadTimestamp = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                              const uploadDateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                              const fullFormattedTime = `${uploadDateStr}, ${uploadTimestamp}`;
+
                               for (const f of Array.from(files)) {
                                 try {
                                   const metadata = await uploadBomDocumentFile({
@@ -963,14 +1002,18 @@ export default function DispatchPackingModal({
                                   const photoId = `pack_photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                                   const newPhoto = {
                                     id: photoId,
+                                    uploadedAt: now.toISOString(),
+                                    uploadTime: fullFormattedTime,
                                     ...metadata
                                   };
                                   setDispatchPackingModal(prev => {
                                     if (!prev) return prev;
                                     const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                                    const updatedMedia = { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] };
+                                    syncModalMediaToStore(updatedMedia);
                                     return {
                                       ...prev,
-                                      dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), newPhoto] }
+                                      dispatchPackingMedia: updatedMedia
                                     };
                                   });
                                 } catch (err) {
@@ -1014,36 +1057,42 @@ export default function DispatchPackingModal({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginTop: '6px' }}>
               {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => {
                 const photoSrc = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+                const timeText = formatUploadTime(ph);
                 return (
-                  <div key={ph.id || phIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div key={ph.id || phIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     <div
                       onClick={() => handleMediaPreview({ type: 'image', url: photoSrc, name: ph.name })}
-                      style={{ height: '90px', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ height: '95px', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
                     >
                       <img src={photoSrc} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(15,23,42,0.8)', color: '#FFFFFF', padding: '3px 8px', fontSize: '10px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={11} style={{ color: '#38BDF8', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timeText}</span>
+                      </div>
                     </div>
-                    <div style={{ padding: '6px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
-                        {ph.name}
+                    <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }} title={ph.name}>
+                        {ph.name || `Photo ${phIdx + 1}`}
                       </span>
-                      {!isPackedAndReady && (
+                      {!isCancelled && (
                         <button
                           type="button"
                           onClick={() => {
                             setDispatchPackingModal(prev => {
                               const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                              const updatedPhotos = existingMedia.photos.filter((_, i) => i !== phIdx);
+                              const updatedMedia = { ...existingMedia, photos: updatedPhotos };
+                              syncModalMediaToStore(updatedMedia);
                               return {
                                 ...prev,
-                                dispatchPackingMedia: {
-                                  ...existingMedia,
-                                  photos: existingMedia.photos.filter((_, i) => i !== phIdx)
-                                }
+                                dispatchPackingMedia: updatedMedia
                               };
                             });
                           }}
                           style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                          title="Remove photo"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </button>
                       )}
                     </div>
@@ -1075,7 +1124,7 @@ export default function DispatchPackingModal({
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {canCancelBom && !isCancelled && (
+            {canCancelBom && !isCancelled && !isAlreadySentToAccounts && (
               <button
                 type="button"
                 onClick={() => {
@@ -1101,13 +1150,13 @@ export default function DispatchPackingModal({
                 border: '1px solid #CBD5E1',
                 background: '#FFFFFF',
                 color: '#475569', height: '40px', padding: '0 20px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '700',
+                borderRadius: '10px', fontSize: '13px', fontWeight: '800',
                 cursor: 'pointer'
               }}
             >
-              Close
+              ← Back
             </button>
-            {!isPackedAndReady && !isCancelled && isPartial && (
+            {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && isPartial && (
               <button
                 type="button"
                 onClick={() => savePackingData(true)}
@@ -1127,44 +1176,25 @@ export default function DispatchPackingModal({
                 Save Partial Progress
               </button>
             )}
-            {!isPackedAndReady && !isCancelled && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => savePackingData(false, false)}
-                  disabled={uploadingCount > 0}
-                  style={{
-                    border: 'none',
-                    background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
-                    color: '#FFFFFF', height: '40px', padding: '0 20px',
-                    borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                    cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                >
-                  <CheckCircle style={{ width: '16px', height: '16px' }} />
-                  {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : 'Packing Confirmed'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => savePackingData(false, true)}
-                  disabled={uploadingCount > 0}
-                  style={{
-                    border: 'none',
-                    background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #0284C7, #0EA5E9)',
-                    color: '#FFFFFF', height: '40px', padding: '0 22px',
-                    borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                    cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 4px 12px rgba(2,132,199,0.35)',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  title="Confirm goods packing and immediately proceed to vehicle loading"
-                >
-                  <Truck style={{ width: '16px', height: '16px' }} />
-                  Confirm & Load Vehicle 🚚
-                </button>
-              </>
+            {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && (
+              <button
+                type="button"
+                onClick={() => savePackingData(false)}
+                disabled={uploadingCount > 0}
+                style={{
+                  border: 'none',
+                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
+                  color: '#FFFFFF', height: '40px', padding: '0 22px',
+                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}
+                title="Confirm goods packing and send to Accounts verification"
+              >
+                <CheckCircle style={{ width: '16px', height: '16px' }} />
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Packing Confirmed (Send to Accounts)' : 'Save Packing Progress')}
+              </button>
             )}
           </div>
         </div>
@@ -1265,19 +1295,27 @@ export default function DispatchPackingModal({
                     saveMediaToCache(capturedName, photoUrl);
                     saveMediaToCache(capturedId, photoUrl);
 
+                    const now = new Date();
+                    const uploadTimestamp = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                    const uploadDateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const fullFormattedTime = `${uploadDateStr}, ${uploadTimestamp}`;
+
                     const capturedPhoto = {
                       id: capturedId,
                       name: capturedName,
                       size: '1.1 MB',
                       dataUrl: photoUrl,
-                      uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                      uploadedAt: now.toISOString(),
+                      uploadTime: fullFormattedTime
                     };
 
                     setDispatchPackingModal(prev => {
                       const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
+                      const updatedMedia = { ...existingMedia, photos: [...(existingMedia.photos || []), capturedPhoto] };
+                      syncModalMediaToStore(updatedMedia);
                       return {
                         ...prev,
-                        dispatchPackingMedia: { ...existingMedia, photos: [...(existingMedia.photos || []), capturedPhoto] }
+                        dispatchPackingMedia: updatedMedia
                       };
                     });
 

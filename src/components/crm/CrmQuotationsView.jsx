@@ -5,7 +5,7 @@ import {
   Building2, Printer, X, DollarSign, Calendar, Tag, ChevronRight,
   RotateCcw, Edit3, Trash2, CheckCircle, Clock, AlertCircle, Layers,
   Truck, ArrowRight, Copy, RefreshCw, Send, Mail, Boxes, User, Landmark,
-  AlertTriangle, ShoppingCart, ShieldCheck
+  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode
 } from 'lucide-react';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import SearchablePresetSelector from '../SearchablePresetSelector';
@@ -14,6 +14,14 @@ import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
 import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
+import { getNextSequence } from '../../utils/sequenceGenerator';
+import WhatsAppQrModal from './WhatsAppQrModal';
+import {
+  getCleanCurrentUserId,
+  getCurrentSalesRepName,
+  getWhatsAppStatus,
+  sendDirectWhatsApp
+} from '../../utils/whatsappDispatchService';
 
 const QUOTATION_TERMS_PRESETS = [
   {
@@ -207,6 +215,9 @@ export default function CrmQuotationsView({
   const [editableEmailSubject, setEditableEmailSubject] = useState('');
   const [editableMessageBody, setEditableMessageBody] = useState('');
   const [recipientContact, setRecipientContact] = useState('');
+  const [waSession, setWaSession] = useState(null);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
 
   // Notification / Conversion toast state
   const [toastMessage, setToastMessage] = useState(null);
@@ -744,8 +755,16 @@ export default function CrmQuotationsView({
 
   // Open Create BOM-style Quote
   const handleOpenCreateForm = () => {
-    const nextCode = `QT-2026-${String(10 + quotations.length + 1)}`;
+    const nextCode = getNextSequence('QT', quotations || []).code;
     setQuoteCode(nextCode);
+    fetch('/api/next-quotation-number')
+      .then(r => r.json())
+      .then(d => {
+        if (d && (d.nextQuoteNo || d.nextQuotationNumber)) {
+          setQuoteCode(d.nextQuoteNo || d.nextQuotationNumber);
+        }
+      })
+      .catch(() => {});
     setQuoteDate(new Date().toISOString().split('T')[0]);
     setValidUntilDate(new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
     setDeliveryDate(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
@@ -991,10 +1010,22 @@ export default function CrmQuotationsView({
   const handleConvertToPI = async (quote) => {
     if (!quote) return;
 
-    // 1. Generate Next Sales PI Number
-    const existingPIs = await fetchCloudStore('sales_pi_store', []);
-    const nextPiIndex = (Array.isArray(existingPIs) ? existingPIs.length : 0) + 101;
-    const piNumber = `SPI-2026-${nextPiIndex}`;
+    // 1. Generate Next Sales PI Number (VRM-PI-[YYYY]-[SEQ])
+    let piNumber = '';
+    try {
+      const res = await fetch('/api/next-pi-number');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextPiNo || data.nextEstimateNo) {
+          piNumber = data.nextPiNo || data.nextEstimateNo;
+        }
+      }
+    } catch (_) {}
+
+    if (!piNumber) {
+      const existingPIs = await fetchCloudStore('sales_pi_store', []);
+      piNumber = getNextSequence('PI', existingPIs || []).code;
+    }
 
     // 2. Prepare items and amounts
     const cleanAmount = Number(quote.grandTotal || quote.totalAmount || quote.numericTotal || 0);
@@ -1127,6 +1158,11 @@ export default function CrmQuotationsView({
     setEditableEmailSubject(fillVars(tmpl.subject));
     setEditableMessageBody(fillVars(tmpl.body));
     setRecipientContact(channel === 'WhatsApp' ? (quote.phone || '+91 98765 43210') : (quote.email || 'procurement@client.com'));
+
+    // Check sales rep's WhatsApp status
+    if (channel === 'WhatsApp') {
+      getWhatsAppStatus(getCleanCurrentUserId()).then(setWaSession).catch(() => {});
+    }
   };
 
   // Switch template inside modal and re-fill placeholders
@@ -1167,20 +1203,44 @@ export default function CrmQuotationsView({
   };
 
   // Handle Send Quote execution
-  const handleExecuteSendQuote = () => {
+  const handleExecuteSendQuote = async () => {
     if (!sendQuoteModalData) return;
     const quote = sendQuoteModalData;
 
     if (sendChannel === 'WhatsApp') {
       const cleanPhone = (recipientContact || '').replace(/[^0-9]/g, '');
-      const encodedMsg = encodeURIComponent(editableMessageBody);
-      const whatsappUrl = cleanPhone 
-        ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodedMsg}`
-        : `https://wa.me/?text=${encodedMsg}`;
+      if (!cleanPhone) {
+        showToast('Please provide a valid recipient phone number.', 'error');
+        return;
+      }
 
-      // Open WhatsApp web / app
-      window.open(whatsappUrl, '_blank');
-      showToast(`Quotation ${quote.code || quote.quoteNumber} dispatched via WhatsApp!`);
+      // Check current session status
+      const currentStatus = await getWhatsAppStatus(getCleanCurrentUserId());
+      if (currentStatus?.status === 'CONNECTED') {
+        setIsSendingWhatsApp(true);
+        try {
+          await sendDirectWhatsApp({
+            userId: getCleanCurrentUserId(),
+            to: cleanPhone,
+            text: editableMessageBody
+          });
+          showToast(`Quotation ${quote.code || quote.quoteNumber} dispatched directly from your WhatsApp (+${currentStatus.phoneNumber})!`, 'success');
+        } catch (err) {
+          console.warn('Direct send failed, falling back to WhatsApp Web:', err);
+          const encodedMsg = encodeURIComponent(editableMessageBody);
+          const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+          window.open(`https://wa.me/${formattedPhone}?text=${encodedMsg}`, '_blank');
+          showToast(`Quotation opened in WhatsApp Web: ${err.message}`, 'info');
+        } finally {
+          setIsSendingWhatsApp(false);
+        }
+      } else {
+        // Not linked yet: fallback to WhatsApp Web
+        const encodedMsg = encodeURIComponent(editableMessageBody);
+        const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+        window.open(`https://wa.me/${formattedPhone}?text=${encodedMsg}`, '_blank');
+        showToast(`Quotation opened in WhatsApp Web. Link your WhatsApp in BUSINZ to send in 1 click!`, 'info');
+      }
     } else {
       // Email via mailto
       const mailtoUrl = `mailto:${recipientContact || ''}?subject=${encodeURIComponent(editableEmailSubject)}&body=${encodeURIComponent(editableMessageBody)}`;
@@ -3769,6 +3829,24 @@ export default function CrmQuotationsView({
                   <Mail size={14} /> Official Email
                 </button>
               </div>
+
+              {sendChannel === 'WhatsApp' && (
+                <div style={{ marginTop: '10px', backgroundColor: waSession?.status === 'CONNECTED' ? '#F0FDF4' : '#FFFBEB', border: waSession?.status === 'CONNECTED' ? '1px solid #BBF7D0' : '1px solid #FDE68A', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Smartphone size={16} color={waSession?.status === 'CONNECTED' ? '#16A34A' : '#D97706'} />
+                    <span style={{ fontSize: '12px', color: '#1E293B' }}>
+                      Sender Phone: <strong>{waSession?.status === 'CONNECTED' ? `+${waSession.phoneNumber} (${getCurrentSalesRepName()})` : 'Not Linked Yet'}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsQrModalOpen(true)}
+                    style={{ backgroundColor: 'transparent', border: 'none', color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    {waSession?.status === 'CONNECTED' ? 'Manage Connection' : 'Link Phone (Scan QR)'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Template Presets Picker */}
@@ -3912,6 +3990,7 @@ export default function CrmQuotationsView({
 
               <button
                 type="button"
+                disabled={isSendingWhatsApp}
                 onClick={handleExecuteSendQuote}
                 style={{
                   padding: '10px 24px',
@@ -3921,20 +4000,34 @@ export default function CrmQuotationsView({
                   color: '#FFFFFF',
                   fontSize: '13px',
                   fontWeight: '800',
-                  cursor: 'pointer',
+                  cursor: isSendingWhatsApp ? 'wait' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: sendChannel === 'WhatsApp' ? '0 4px 12px rgba(22,163,74,0.3)' : '0 4px 12px rgba(14,116,144,0.3)'
+                  boxShadow: sendChannel === 'WhatsApp' ? '0 4px 12px rgba(22,163,74,0.3)' : '0 4px 12px rgba(14,116,144,0.3)',
+                  opacity: isSendingWhatsApp ? 0.7 : 1
                 }}
               >
                 <Send size={15} />
-                <span>{sendChannel === 'WhatsApp' ? 'Send via WhatsApp →' : 'Send via Email →'}</span>
+                <span>
+                  {isSendingWhatsApp 
+                    ? 'Dispatching via WhatsApp...' 
+                    : sendChannel === 'WhatsApp' 
+                      ? (waSession?.status === 'CONNECTED' ? 'Send from Linked WhatsApp' : 'Open in WhatsApp Web') 
+                      : 'Send via Email'}
+                </span>
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* WhatsApp QR Linking Modal */}
+      <WhatsAppQrModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        onSessionChanged={(s) => setWaSession(s)}
+      />
     </div>
   );
 }

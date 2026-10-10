@@ -9,6 +9,13 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { pool, isDbConnected, initPostgresDatabase, createLocalDbClient, query } from './db.js';
+import {
+  persistBomsTransactionSafe,
+  toDatabaseBomRowServer,
+  toConsumerBomServer,
+  getWorkflowRankServer,
+  mergeBomRecords
+} from './bomPersistence.js';
 import * as vrmDataModule from '../src/utils/vrmProductsData.js';
 const VRM_PRODUCTS = vrmDataModule.VRM_PRODUCTS || vrmDataModule.default?.VRM_PRODUCTS || [];
 const wordFingerprint = vrmDataModule.wordFingerprint || vrmDataModule.default?.wordFingerprint || ((w) => String(w || '').toLowerCase().trim());
@@ -27,6 +34,22 @@ import {
   validateBusinzSession,
   validateBomCode
 } from './bomDocumentService.js';
+import {
+  getFinancialYear,
+  formatSequenceCode,
+  extractMaxSequence,
+  getNextSequence
+} from './sequenceService.js';
+import {
+  getUserSessionStatus,
+  getAllUserSessions,
+  initUserSession,
+  sendUserWhatsAppMessage,
+  logoutUserSession,
+  autoRestoreAllSavedSessions,
+  getUserChats,
+  addUserChat
+} from './whatsappMultiService.js';
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -39,7 +62,7 @@ let supabaseMemoryStore = {};
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
   setTimeout(() => {
-    repairBomSequences().catch(err => console.warn('[Auto Repair Notice]:', err.message));
+    syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
   }, 2000);
 }).catch(err => {
   console.warn('[PostgreSQL Init Notice]:', err.message);
@@ -490,412 +513,13 @@ const loadLocalLeads = () => {
 };
 
 // ==========================================
-// 📦 CANONICAL BOM_ORDERS ADAPTERS & STORE (PHASE C)
+// 📦 CANONICAL BOM_ORDERS ADAPTERS & STORE (PHASE C / 51)
+// Functions toConsumerBomServer, toDatabaseBomRowServer, and getWorkflowRankServer
+// are imported from ./bomPersistence.js
 // ==========================================
-const toConsumerBomServer = (row) => {
-  if (!row || typeof row !== 'object') return null;
-  const cName = (row.customer_name || row.customerName || row.company_name || row.vendor || 'Customer').trim();
 
-  let av = row.accounts_verification || row.accountsVerification;
-  if (typeof av === 'string' && (av.startsWith('{') || av.startsWith('['))) {
-    try { av = JSON.parse(av); } catch (_) {}
-  }
-  let extraData = {};
-  if (av && typeof av === 'object' && av._extra_data) {
-    extraData = { ...av._extra_data };
-  }
-
-  let cleanDispatchPacking = row.dispatch_packing || row.dispatchPacking || extraData.dispatchPacking || [];
-  if (typeof cleanDispatchPacking === 'string' && (cleanDispatchPacking.startsWith('[') || cleanDispatchPacking.startsWith('{'))) {
-    try { cleanDispatchPacking = JSON.parse(cleanDispatchPacking); } catch (_) {}
-  }
-  if (!Array.isArray(cleanDispatchPacking)) {
-    cleanDispatchPacking = [];
-  }
-
-  const isAccVerified = row.accounts_verified !== undefined
-    ? Boolean(row.accounts_verified)
-    : Boolean(
-        (row.status && String(row.status).toLowerCase().includes('accounts verified')) ||
-        row.invoice_confirmed ||
-        row.invoice_no
-      );
-  const cleanAccountsVerification = (av && typeof av === 'object')
-    ? { ...av }
-    : {
-        verified: isAccVerified,
-        verifiedBy: row.accounts_verified_by || '',
-        paymentStatus: row.accounts_payment_status || null,
-        paymentDate: row.accounts_payment_date || null,
-        totalAmount: row.accounts_total_amount !== undefined ? row.accounts_total_amount : null
-      };
-  delete cleanAccountsVerification._extra_data;
-
-  const parseDoc = (doc) => {
-    if (!doc) return null;
-    if (typeof doc === 'object') return doc;
-    if (typeof doc === 'string' && (doc.startsWith('{') || doc.startsWith('['))) {
-      try {
-        return JSON.parse(doc);
-      } catch (_) {}
-    }
-    return doc;
-  };
-
-  const id = row.id || row.bom_code || '';
-  const bomCode = row.bom_code || row.id || '';
-  const customerName = row.customer_name || row.company_name || '';
-  const companyName = row.company_name || row.customer_name || '';
-  const contactPerson = row.contact_person || extraData.contactPerson || '';
-  const gstNo = row.gst_no || extraData.gstNo || extraData.gstin || '';
-  const phone = row.mobile || '';
-  const email = row.email || '';
-  const billingAddr = row.billing_address || (row.billing_address_obj?.address ? `${row.billing_address_obj.address}, ${row.billing_address_obj.city || ''} ${row.billing_address_obj.state || ''} - ${row.billing_address_obj.pincode || ''}` : '');
-  const deliveryAddr = row.delivery_address || (row.delivery_address_obj?.address ? `${row.delivery_address_obj.address}, ${row.delivery_address_obj.city || ''} ${row.delivery_address_obj.state || ''} - ${row.delivery_address_obj.pincode || ''}` : billingAddr);
-  const salesRep = row.sales_person || row.created_by || extraData.salesPerson || extraData.createdBy || '';
-  const salesPersonCode = row.sales_person_code || row.created_by_id || extraData.salesPersonCode || extraData.createdById || '';
-  const createdBy = row.created_by || row.sales_person || extraData.createdBy || extraData.salesPerson || '';
-  const createdById = row.created_by_id || row.sales_person_code || extraData.createdById || extraData.salesPersonCode || '';
-
-  return {
-    ...extraData,
-    id,
-    bomCode,
-    code: bomCode,
-    customerName,
-    companyName,
-    contactPerson,
-    gstNo,
-    gstin: gstNo,
-    c2: companyName,
-    c3: customerName,
-    date: row.date || '',
-    deliveryDate: row.delivery_date || '',
-    mobile: phone,
-    phone,
-    c4: phone,
-    email,
-    c5: email,
-    billingAddress: billingAddr,
-    c6: billingAddr,
-    billingAddressObj: row.billing_address_obj || {},
-    deliveryAddress: deliveryAddr,
-    c7: deliveryAddr,
-    deliveryAddressObj: row.delivery_address_obj || {},
-    deliveryAddressProofDoc: parseDoc(row.delivery_address_proof_doc),
-    paymentProofDoc: parseDoc(row.payment_proof_doc),
-    transportMode: row.transport_mode || 'Transport',
-    transportScope: row.transport_scope || 'VRM Structures',
-    transporterName: row.transporter_name || '',
-    vehicleNo: row.vehicle_no || '',
-    lrNo: row.lr_no || '',
-    paymentType: row.payment_type || '100% Paid',
-    partialAmount: Number(row.partial_amount || 0),
-    balanceAmount: Number(row.balance_amount || 0),
-    creditDays: Number(row.credit_days || 0),
-    creditDueDate: row.credit_due_date || '',
-    remarks: row.remarks || '',
-    status: row.status || 'Draft',
-    salesConfirmed: Boolean(row.sales_confirmed),
-    salesConfirmedAt: row.sales_confirmed_at || null,
-    salesPerson: salesRep,
-    salesPersonCode: salesPersonCode,
-    c8: salesRep,
-    createdBy: createdBy,
-    createdById: createdById,
-    dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
-    items: Array.isArray(row.items) ? row.items : [],
-    payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
-    dispatchPacking: cleanDispatchPacking,
-    accountsVerification: cleanAccountsVerification,
-    packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
-      (String(row.status || '').toLowerCase().includes('packed') || String(row.status || '').toLowerCase().includes('awaiting vehicle loading') || String(row.status || '').toLowerCase().includes('invoice confirmed')) ? 'PACKING_VERIFIED' :
-      cleanDispatchPacking.length > 0 && cleanDispatchPacking.every(p => p.packed) ? 'PACKING_VERIFIED' :
-      cleanDispatchPacking.some(p => p.packed) ? 'PARTIALLY_PACKED' : null
-    ),
-    packedAt: row.packed_at || row.packedAt || extraData.packedAt || cleanAccountsVerification?.packedAt || null,
-    packedBy: row.packed_by || row.packedBy || extraData.packedBy || cleanAccountsVerification?.packedBy || null,
-    packedById: row.packed_by_id || row.packedById || extraData.packedById || cleanAccountsVerification?.packedById || null,
-    packingCompletedAt: row.packing_completed_at || row.packingCompletedAt || extraData.packingCompletedAt || null,
-    invoiceConfirmed: Boolean(row.invoice_confirmed || row.invoiceConfirmed || extraData.invoiceConfirmed),
-    invoiceDeducted: Boolean(row.invoice_deducted || row.invoiceDeducted || extraData.invoiceDeducted),
-    invoiceNo: row.invoice_no || row.invoiceNo || extraData.invoiceNo || '',
-    stockBlocked: Boolean(row.stock_blocked),
-    stockBlockedAt: row.stock_blocked_at || null,
-    stockDeducted: Boolean(row.stock_deducted),
-    stockDeductionDate: row.stock_deduction_date || extraData.stockDeductionDate || null,
-    presetName: row.preset_name || extraData.presetName || '',
-    presetKitPrice: Number(row.preset_kit_price || extraData.presetKitPrice || 0),
-    presetSetCount: Number(row.preset_set_count || extraData.presetSetCount || 0),
-    presetGroups: Array.isArray(row.preset_groups) ? row.preset_groups : (extraData.presetGroups || []),
-    subTotal: Number(row.sub_total || 0),
-    gstAmount: Number(row.gst_amount || 0),
-    cgstAmount: Number(row.cgst_amount || 0),
-    sgstAmount: Number(row.sgst_amount || 0),
-    grandTotal: Number(row.grand_total || 0),
-    cancelled: Boolean(row.cancelled || extraData.cancelled),
-    cancelledAt: row.cancelled_at || extraData.cancelledAt || null,
-    cancelledBy: row.cancelled_by || extraData.cancelledBy || null,
-    cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
-    proofDoc: row.proof_doc || extraData.proofDoc || null,
-    sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
-    vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
-    lrCopyDoc: row.lr_copy_doc || extraData.lrCopyDoc || null,
-    fullyCompleted: Boolean(extraData.fullyCompleted || row.status === 'Completed' || row.status === 'Closed' || row.status === 'Fully Dispatched & Delivered'),
-    dispatchedAt: row.dispatched_at || extraData.dispatchedAt || null,
-    completedAt: row.completed_at || extraData.completedAt || null,
-    createdAt: row.created_at || new Date().toISOString(),
-    updatedAt: row.updated_at || new Date().toISOString()
-  };
-};
-
-const toDatabaseBomRowServer = (item) => {
-  if (!item || typeof item !== 'object') return null;
-
-  const id = item.id || item.bomCode || item.code || `BOM-${Date.now()}`;
-  const bomCode = item.bomCode || item.code || id;
-  const code = item.code || bomCode;
-  const sourcePiNo = item.sourcePiNo || null;
-
-  const sanitizeDate = (d) => {
-    if (!d) return null;
-    const str = String(d).trim().slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : null;
-  };
-
-  const sanitizeTimestamp = (ts) => {
-    if (!ts) return null;
-    try {
-      const d = new Date(ts);
-      return !isNaN(d.getTime()) ? d.toISOString() : null;
-    } catch (_) {
-      return null;
-    }
-  };
-
-  const sanitizeNumber = (val, defaultVal = 0) => {
-    if (val === null || val === undefined || val === '') return defaultVal;
-    const n = Number(val);
-    return isNaN(n) ? defaultVal : n;
-  };
-
-  const sanitizeBomDocForStorage = (doc) => {
-    if (!doc) return null;
-    let target = doc;
-    if (typeof doc === 'string' && (doc.startsWith('{') || doc.startsWith('['))) {
-      try { target = JSON.parse(doc); } catch (_) { return doc; }
-    }
-    if (typeof target === 'object' && target !== null) {
-      const clean = { ...target };
-      // Strip embedded binary payloads from document metadata (D4 Zero-Base64 Guard)
-      delete clean.dataUrl;
-      delete clean.fileData;
-      delete clean.proofDocData;
-      if (Array.isArray(clean.history)) {
-        clean.history = clean.history.map(h => {
-          if (h && typeof h === 'object') {
-            const hClean = { ...h };
-            delete hClean.dataUrl;
-            delete hClean.fileData;
-            return hClean;
-          }
-          return h;
-        });
-      }
-      return clean;
-    }
-    // If raw string starts with data: or is long Base64 string, disallow persisting
-    if (typeof target === 'string') {
-      const trimmed = target.trim();
-      if (trimmed.startsWith('data:') || (trimmed.length > 200 && /^[A-Za-z0-9+/=\s]+$/.test(trimmed.slice(0, 100)) && !trimmed.startsWith('http'))) {
-        return null;
-      }
-    }
-    return target;
-  };
-
-  const serializeDoc = (doc) => {
-    const sanitized = sanitizeBomDocForStorage(doc);
-    if (!sanitized) return null;
-    if (typeof sanitized === 'string') return sanitized;
-    try {
-      return JSON.stringify(sanitized);
-    } catch (_) {
-      return null;
-    }
-  };
-
-  const standardFields = new Set([
-    'id', 'bomCode', 'code', 'sourcePiNo', 'date', 'deliveryDate',
-    'customerName', 'companyName', 'contactPerson', 'contact_person', 'gstNo', 'gst_no', 'gstin', 'mobile', 'phone', 'email', 'billingAddress',
-    'billingAddressObj', 'deliveryAddress', 'deliveryAddressObj',
-    'deliveryAddressProofDoc', 'transportMode', 'transportScope',
-    'transporterName', 'vehicleNo', 'lrNo', 'paymentType', 'partialAmount',
-    'balanceAmount', 'creditDays', 'creditDueDate', 'paymentProofDoc',
-    'remarks', 'status', 'salesConfirmed', 'salesConfirmedAt', 'salesPerson',
-    'salesPersonCode', 'createdBy', 'createdById', 'items', 'payments',
-    'dispatchPacking', 'accountsVerification', 'invoiceConfirmed',
-    'invoiceDeducted', 'stockBlocked', 'stockBlockedAt', 'presetName',
-    'presetKitPrice', 'presetSetCount', 'presetGroups', 'subTotal',
-    'gstAmount', 'cgstAmount', 'sgstAmount', 'grandTotal', 'stockDeducted',
-    'stockDeductionDate', 'createdAt', 'updatedAt', 'cancelled', 'cancelledAt',
-    'cancelledBy', 'cancellationReason', 'invoiceNo', 'proofDoc',
-    'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'
-  ]);
-
-  const extraData = {};
-  Object.keys(item).forEach(k => {
-    if (!standardFields.has(k)) {
-      extraData[k] = item[k];
-    }
-  });
-
-  // Strip Base64 from extraData
-  if (extraData.dispatchPackingMedia && typeof extraData.dispatchPackingMedia === 'object') {
-    if (Array.isArray(extraData.dispatchPackingMedia.photos)) {
-      extraData.dispatchPackingMedia.photos = extraData.dispatchPackingMedia.photos.map(p => {
-        if (p && typeof p === 'object') {
-          const cp = { ...p };
-          delete cp.dataUrl;
-          delete cp.fileData;
-          return cp;
-        }
-        return p;
-      });
-    }
-    if (Array.isArray(extraData.dispatchPackingMedia.videos)) {
-      extraData.dispatchPackingMedia.videos = extraData.dispatchPackingMedia.videos.map(v => {
-        if (v && typeof v === 'object') {
-          const cv = { ...v };
-          delete cv.dataUrl;
-          delete cv.fileData;
-          return cv;
-        }
-        return v;
-      });
-    }
-  }
-  if (extraData.vehicleLoading && typeof extraData.vehicleLoading === 'object') {
-    if (Array.isArray(extraData.vehicleLoading.photos)) {
-      extraData.vehicleLoading.photos = extraData.vehicleLoading.photos.map(p => {
-        if (p && typeof p === 'object') {
-          const cp = { ...p };
-          delete cp.dataUrl;
-          delete cp.fileData;
-          return cp;
-        }
-        return p;
-      });
-    }
-    if (Array.isArray(extraData.vehicleLoading.videos)) {
-      extraData.vehicleLoading.videos = extraData.vehicleLoading.videos.map(v => {
-        if (v && typeof v === 'object') {
-          const cv = { ...v };
-          delete cv.dataUrl;
-          delete cv.fileData;
-          return cv;
-        }
-        return v;
-      });
-    }
-  }
-
-  const existingExtra = (item.accountsVerification && typeof item.accountsVerification === 'object' && item.accountsVerification._extra_data) || {};
-  const mergedExtra = { ...existingExtra, ...extraData };
-  if (item.dispatchPackingMedia) mergedExtra.dispatchPackingMedia = item.dispatchPackingMedia;
-  if (item.vehicleLoading) mergedExtra.vehicleLoading = item.vehicleLoading;
-  if (item.lrCopyDoc) mergedExtra.lrCopyDoc = item.lrCopyDoc;
-  if (item.packingStatus) mergedExtra.packingStatus = item.packingStatus;
-  if (item.packedAt) mergedExtra.packedAt = item.packedAt;
-  if (item.packedBy) mergedExtra.packedBy = item.packedBy;
-  if (item.packedById) mergedExtra.packedById = item.packedById;
-  if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
-  if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
-  if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
-
-  const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
-    ? { ...item.accountsVerification, _extra_data: mergedExtra }
-    : { _extra_data: mergedExtra };
-
-  const cleanPayments = typeof item.payments === 'object' && item.payments !== null ? { ...item.payments } : {};
-  delete cleanPayments.proofDocData;
-  if (cleanPayments.proofDocObj) {
-    cleanPayments.proofDocObj = sanitizeBomDocForStorage(cleanPayments.proofDocObj);
-  }
-
-  return {
-    id,
-    bom_code: bomCode,
-    code,
-    source_pi_no: sourcePiNo,
-    date: sanitizeDate(item.date) || new Date().toISOString().slice(0, 10),
-    delivery_date: sanitizeDate(item.deliveryDate),
-    customer_name: item.companyName || item.customerName || item.vendor || 'Customer',
-    company_name: item.companyName || item.customerName || item.vendor || '',
-    contact_person: item.contactPerson || item.contact || extraData.contactPerson || '',
-    gst_no: item.gstNo || item.gst || item.gstin || extraData.gstNo || '',
-    mobile: item.mobile || item.phone || '',
-    email: item.email || '',
-    billing_address: item.billingAddress || item.c6 || '',
-    billing_address_obj: item.billingAddressObj || {},
-    delivery_address: item.deliveryAddress || item.c7 || '',
-    delivery_address_obj: item.deliveryAddressObj || {},
-    delivery_address_proof_doc: serializeDoc(item.deliveryAddressProofDoc),
-    transport_mode: item.transportMode || 'Transport',
-    transport_scope: item.transportScope || 'VRM Structures',
-    transporter_name: item.transporterName || item.transporter || '',
-    vehicle_no: item.vehicleNo || '',
-    lr_no: item.lrNo || '',
-    payment_type: item.paymentType || '100% Paid',
-    partial_amount: sanitizeNumber(item.partialAmount, 0),
-    balance_amount: sanitizeNumber(item.balanceAmount, 0),
-    credit_days: Math.round(sanitizeNumber(item.creditDays, 0)),
-    credit_due_date: sanitizeDate(item.creditDueDate),
-    payment_proof_doc: serializeDoc(item.paymentProofDoc),
-    remarks: item.remarks || '',
-    status: item.status || 'Draft',
-    sales_confirmed: Boolean(item.salesConfirmed),
-    sales_person: item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
-    sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
-    created_by: item.createdBy || item.created_by || item.salesPerson || item.sales_person || '',
-    created_by_id: item.createdById || item.created_by_id || item.salesPersonCode || item.sales_person_code || extraData.createdById || '',
-    items: Array.isArray(item.items) ? item.items : [],
-    payments: cleanPayments,
-    dispatch_packing: Array.isArray(item.dispatchPacking) || typeof item.dispatchPacking === 'object' ? item.dispatchPacking : [],
-    accounts_verification: accountsVerification,
-    invoice_no: item.invoiceNo || item.invoice_no || extraData.invoiceNo || '',
-    invoice_confirmed: Boolean(item.invoiceConfirmed || item.invoice_confirmed),
-    invoice_deducted: Boolean(item.invoiceDeducted || item.invoice_deducted),
-    stock_blocked: Boolean(item.stockBlocked),
-    stock_blocked_at: sanitizeTimestamp(item.stockBlockedAt),
-    preset_name: item.presetName || '',
-    preset_kit_price: sanitizeNumber(item.presetKitPrice, 0),
-    preset_set_count: Math.round(sanitizeNumber(item.presetSetCount, 0)),
-    preset_groups: Array.isArray(item.presetGroups) ? item.presetGroups : [],
-    sub_total: sanitizeNumber(item.subTotal, 0),
-    gst_amount: sanitizeNumber(item.gstAmount, 0),
-    cgst_amount: sanitizeNumber(item.cgstAmount, 0),
-    sgst_amount: sanitizeNumber(item.sgstAmount, 0),
-    grand_total: sanitizeNumber(item.grandTotal, 0),
-    stock_deducted: Boolean(item.stockDeducted),
-    created_at: sanitizeTimestamp(item.createdAt || item.date) || new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-};
-
-function getWorkflowRankServer(b) {
-  if (!b) return 0;
-  const s = String(b.status || '').toLowerCase();
-  if (b.cancelled || s.includes('cancel')) return -1;
-  if (b.fullyCompleted || s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return 70;
-  if (s.includes('awaiting lr copy') || s.includes('awaiting lr') || s.includes('dispatched')) return 60;
-  if (s.includes('invoice confirmed') || s.includes('awaiting vehicle loading') || s.includes('vehicle loading') || s.includes('ready for dispatch')) return 50;
-  if (s.includes('passed to invoice') || s.includes('accounts verified') || b.invoiceConfirmed || b.isAccountsDone) return 40;
-  if (s.includes('packed') || s.includes('packing verified') || s.includes('awaiting accounts') || b.packingStatus === 'PACKING_VERIFIED') return 30;
-  if (s.includes('partially packed') || b.packingStatus === 'PARTIALLY_PACKED') return 20;
-  if (s.includes('sales confirmed') || s.includes('sent to dispatch') || s.includes('sent to production') || b.salesConfirmed) return 10;
-  return 1;
-}
+let cachedBomsResult = null;
+let lastBomFetchTimestamp = 0;
 
 const loadDatabaseBoms = async (forceRefresh = false) => {
   // 1. Instant sub-millisecond return if authoritative memory cache is already loaded
@@ -1034,44 +658,59 @@ const loadLocalBoms = () => {
   return [];
 };
 
+let saveLocalBomsLock = Promise.resolve();
+
 const saveLocalBoms = async (boms) => {
   if (!boms) return;
-  const list = Array.isArray(boms) ? boms : [boms];
-  supabaseMemoryStore.bom_store = list;
-  cachedBomsResult = list;
-  lastBomFetchTimestamp = Date.now();
 
-  // 1. Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
-  try {
-    const diskPath = getStoreFilePath('bom_store.json');
-    fs.writeFileSync(diskPath, JSON.stringify(list, null, 2), 'utf8');
-  } catch (diskErr) {
-    console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
-  }
+  return new Promise((resolveOuter, rejectOuter) => {
+    saveLocalBomsLock = saveLocalBomsLock.then(async () => {
+      try {
+        const incomingItems = Array.isArray(boms) ? boms : [boms];
 
-  // 2. Broadcast via SSE to all connected clients
-  try {
-    broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: list });
-    broadcastRealtimeEvent('bom_updated', { bomList: list });
-  } catch (_) {}
+        // 1. Transaction-safe PostgreSQL persistence across public.bom_orders and public.controlroom_store
+        const persistResult = await persistBomsTransactionSafe({
+          items: incomingItems,
+          isUpdate: true
+        });
 
-  // 3. Upsert to controlroom_store and canonical public.bom_orders table
-  try {
-    if (isDbConnected()) {
-      query(`
-        INSERT INTO controlroom_store (key, data, updated_at)
-        VALUES ('bom_store', $1, NOW())
-        ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
-      `, [JSON.stringify(list)]).catch(() => null);
-    }
-    const rows = list.map(item => toDatabaseBomRowServer(item)).filter(Boolean);
-    for (let i = 0; i < rows.length; i += 20) {
-      const batch = rows.slice(i, i + 20);
-      await supabase.from('bom_orders').upsert(batch, { onConflict: 'id' });
-    }
-  } catch (sbErr) {
-    console.warn('[saveLocalBoms Supabase upsert notice]:', sbErr?.message || sbErr);
-  }
+        const { fullStoreList, changedRecords } = persistResult;
+
+        // 2. ONLY AFTER successful PostgreSQL COMMIT: Update in-memory active cache
+        supabaseMemoryStore.bom_store = fullStoreList;
+        cachedBomsResult = fullStoreList;
+        lastBomFetchTimestamp = Date.now();
+
+        // 3. Write disk backup
+        try {
+          const diskPath = getStoreFilePath('bom_store.json');
+          fs.writeFileSync(diskPath, JSON.stringify(fullStoreList, null, 2), 'utf8');
+        } catch (diskErr) {
+          console.warn('[saveLocalBoms disk write notice]:', diskErr?.message || diskErr);
+        }
+
+        // 4. Broadcast via SSE to all connected clients
+        try {
+          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullStoreList });
+          broadcastRealtimeEvent('bom_updated', { bomList: fullStoreList });
+        } catch (_) {}
+
+        // 5. Post-commit inventory reconciliation
+        try {
+          await reconcileServerInventoryWithBoms(fullStoreList);
+        } catch (rErr) {
+          console.warn('[saveLocalBoms Inventory reconcile notice]:', rErr?.message || rErr);
+        }
+
+        resolveOuter(persistResult);
+      } catch (err) {
+        console.error('[saveLocalBoms Transaction Error]:', err?.message || err);
+        rejectOuter(err);
+      }
+    }).catch(err => {
+      rejectOuter(err);
+    });
+  });
 };
 
 // Authoritative Database Store functions directly with Supabase
@@ -1090,19 +729,20 @@ const getDatabaseStore = async (key) => {
     return await loadDatabaseBoms();
   }
   // 0. Primary: Check PostgreSQL controlroom_store on Hostinger VPS
+  // Protection 1: PostgreSQL is authoritative whenever the store row exists
   if (isDbConnected()) {
     try {
       const dbRes = await query('SELECT data FROM controlroom_store WHERE key = $1', [cleanKey]);
-      if (dbRes.rows[0]?.data) {
+      if (dbRes.rows.length > 0 && dbRes.rows[0]?.data !== undefined && dbRes.rows[0]?.data !== null) {
         const d = dbRes.rows[0].data;
-        const hasContent = Array.isArray(d) ? d.length > 0 : (d && typeof d === 'object' && Object.keys(d).length > 0);
-        if (hasContent) {
-          supabaseMemoryStore[cleanKey] = d;
-          supabaseMemoryStore[key] = d;
-          return d;
-        }
+        supabaseMemoryStore[cleanKey] = d;
+        supabaseMemoryStore[key] = d;
+        return d;
       }
-    } catch (_) {}
+    } catch (dbErr) {
+      console.error(`[getDatabaseStore PostgreSQL error for ${cleanKey}]:`, dbErr?.message || dbErr);
+      throw dbErr; // Protection 2: Never silently swallow database errors; propagate to trigger HTTP 500
+    }
   }
 
   if (cleanKey === 'employees_store') {
@@ -1596,9 +1236,33 @@ const saveDatabaseStore = async (key, storeData) => {
     await saveLocalBoms(storeData);
     return storeData;
   }
-  supabaseMemoryStore[key] = storeData;
+  // 1. Validate input
+  if (!key || typeof key !== 'string') {
+    throw new Error('[Validation Error] Invalid store key provided to saveDatabaseStore');
+  }
 
-  // Persist to disk files for raw_materials_store and item_store
+  // 2. Validate database connection: database-disconnected conditions return genuine errors
+  if (!isDbConnected()) {
+    throw new Error(`[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${cleanKey}".`);
+  }
+
+  // 3. Persist directly to authoritative PostgreSQL database on VPS first
+  try {
+    await query(`
+      INSERT INTO controlroom_store (key, data, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
+    `, [cleanKey, JSON.stringify(storeData)]);
+  } catch (pgErr) {
+    console.error(`[saveDatabaseStore PostgreSQL write error for ${cleanKey}]:`, pgErr?.message || pgErr);
+    throw pgErr; // Never silently swallow database write errors; propagate to trigger HTTP 500
+  }
+
+  // 4. Update memory and application cache ONLY after successful PostgreSQL write
+  supabaseMemoryStore[key] = storeData;
+  supabaseMemoryStore[cleanKey] = storeData;
+
+  // 5. Write optional JSON backup for local recovery (post-commit)
   try {
     if (cleanKey === 'raw_materials_store' && Array.isArray(storeData)) {
       const rawMatsPath = getStoreFilePath('raw_materials_store.json');
@@ -1625,24 +1289,11 @@ const saveDatabaseStore = async (key, storeData) => {
         fs.writeFileSync(getStoreFilePath('employees_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
       } catch (_) {}
     }
-
-    // Persist directly to PostgreSQL database on VPS
-    if (isDbConnected()) {
-      try {
-        await query(`
-          INSERT INTO controlroom_store (key, data, updated_at)
-          VALUES ($1, $2, NOW())
-          ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()
-        `, [cleanKey, JSON.stringify(storeData)]);
-      } catch (pgErr) {
-        console.warn(`[saveDatabaseStore PostgreSQL write notice for ${cleanKey}]:`, pgErr?.message);
-      }
-    }
   } catch (diskErr) {
-    console.warn(`[saveDatabaseStore disk write error for ${key}]:`, diskErr?.message);
+    console.warn(`[saveDatabaseStore disk backup notice for ${key}]:`, diskErr?.message);
   }
 
-  // Real-time broadcast to all connected users immediately
+  // 6. Broadcast realtime events ONLY after successful database persistence
   try {
     broadcastRealtimeEvent('store_updated', { key, storeData });
     if (cleanKey === 'raw_materials_store') {
@@ -2383,17 +2034,23 @@ app.get('/api/realtime-events', (req, res) => {
 
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
+  if (!isDbConnected()) {
+    return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot read store "${key}".` });
+  }
   try {
     const data = await getDatabaseStore(key);
     res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
-    res.json({ success: true, data: [] });
+    res.status(500).json({ success: false, error: err.message, message: err.message });
   }
 });
 
 app.post('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   const storeData = req.body;
+  if (!isDbConnected()) {
+    return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${key}".` });
+  }
   try {
     let finalDataToSave = storeData;
 
@@ -2503,6 +2160,9 @@ app.post('/api/store/:key', async (req, res) => {
         } else {
           const getId = (item) => {
             if (!item || typeof item !== 'object') return null;
+            if (key === 'invoice_store') {
+              return item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.code || item.bomCode || item.poNo;
+            }
             return item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.id || item.poNo || item.invNo || item.grnNo || item.vendorCode || item.email || item.name;
           };
 
@@ -2565,7 +2225,7 @@ app.post('/api/store/:key', async (req, res) => {
     await saveDatabaseStore(key, finalDataToSave);
     res.json({ success: true, count: Array.isArray(finalDataToSave) ? finalDataToSave.length : 1, data: finalDataToSave });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: err.message, message: err.message });
   }
 });
 
@@ -3265,76 +2925,93 @@ app.post('/api/purchaseorders', async (req, res) => {
     res.status(500).json({ error: 'Failed to create PO in BUSINZ: ' + err.message });
   }
 });
-// Returns next sequential PO number matching sequence (PO-000XX) from BUSINZ local stores
+// Returns next sequential PO number matching unified sequence VRM-PO-[YYYY]-[SEQ] (e.g. VRM-PO-2026-01)
 app.get('/api/next-po-number', async (req, res) => {
-  let maxNum = 43;
+  try {
+    const fy = getFinancialYear();
+    let records = [];
 
-  const localPOs = loadLocalPOs();
-  localPOs.forEach(p => {
-    const str = String(p.poNo || p.id || '');
-    const match = str.match(/^PO-(\d+)/i);
-    if (match) {
-      const val = parseInt(match[1], 10);
-      if (val > maxNum && val < 2000) {
-        maxNum = val;
-      }
+    // 1. Query PostgreSQL purchase_orders if connected
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query(`
+          SELECT po_no FROM public.purchase_orders
+          WHERE po_no ~ '^VRM-PO-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (dbRes?.rows) records.push(...dbRes.rows);
+      } catch (_) {}
     }
-  });
 
-  const nextPoNo = 'PO-' + String(maxNum + 1).padStart(5, '0');
-  res.json({ nextPoNo });
+    // 2. Scan local po_store.json
+    const localPOs = loadLocalPOs();
+    if (Array.isArray(localPOs)) records.push(...localPOs);
+
+    // 3. Scan memory store
+    if (supabaseMemoryStore.po_store && Array.isArray(supabaseMemoryStore.po_store)) {
+      records.push(...supabaseMemoryStore.po_store);
+    }
+
+    const { code, nextNum } = getNextSequence('PO', records);
+    res.json({
+      nextPoNo: code,
+      nextPoNumber: code,
+      nextNum,
+      financialYear: fy
+    });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextPoNo: `VRM-PO-${fy}-01`, nextPoNumber: `VRM-PO-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
 });
 
-// Returns next sequential Tax Invoice number matching sequence (INV-0000XX) from BUSINZ local stores
+// Returns next sequential Tax Invoice number matching unified sequence VRM-INV-[YYYY]-[SEQ] (e.g. VRM-INV-2026-01)
 app.get('/api/next-invoice-number', async (req, res) => {
-  let maxNum = 11;
-
-  // Also scan local invoice_store.json and in-memory store
   try {
+    const fy = getFinancialYear();
+    let records = [];
+
+    // 1. Query PostgreSQL invoices if available
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query(`
+          SELECT invoice_no FROM public.tax_invoices
+          WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (dbRes?.rows) records.push(...dbRes.rows);
+      } catch (_) {}
+    }
+
+    // 2. Scan local invoice_store.json
     const invStorePath = getStoreFilePath('invoice_store.json');
-    let localInvs = [];
     if (fs.existsSync(invStorePath)) {
-      localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+      try {
+        const localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+        if (Array.isArray(localInvs)) records.push(...localInvs);
+      } catch (_) {}
     }
     if (supabaseMemoryStore.invoice_store && Array.isArray(supabaseMemoryStore.invoice_store)) {
-      localInvs = [...localInvs, ...supabaseMemoryStore.invoice_store];
+      records.push(...supabaseMemoryStore.invoice_store);
     }
-    if (Array.isArray(localInvs)) {
-      localInvs.forEach(i => {
-        const str = String(i.invNo || i.invoiceNo || i.code || '');
-        const match = str.match(/^INV-(\d+)/i);
-        if (match) {
-          const val = parseInt(match[1], 10);
-          if (val > maxNum && val < 2000) {
-            maxNum = val;
-          }
-        }
-      });
-    }
-  } catch (_) {}
 
-  // Also scan bom_store.json for any BOM that already has an assigned invoiceNo
-  try {
+    // 3. Scan bom_store.json for any BOM that already has an assigned invoiceNo
     const bomStorePath = getStoreFilePath('bom_store.json');
     if (fs.existsSync(bomStorePath)) {
-      const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
-      if (Array.isArray(localBoms)) {
-        localBoms.forEach(b => {
-          const str = String(b.invoiceNo || '');
-          const match = str.match(/^INV-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 2000) {
-              maxNum = val;
-            }
-          }
-        });
-      }
+      try {
+        const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
+        if (Array.isArray(localBoms)) {
+          localBoms.forEach(b => {
+            if (b && b.invoiceNo) records.push({ invNo: b.invoiceNo });
+          });
+        }
+      } catch (_) {}
     }
-  } catch (_) {}
 
-  const nextInvNo = 'INV-' + String(maxNum + 1).padStart(6, '0');
-  res.json({ nextInvNo, nextNum: maxNum + 1 });
+    const { code, nextNum } = getNextSequence('INV', records);
+    res.json({ nextInvNo: code, nextInvoiceNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextInvNo: `VRM-INV-${fy}-01`, nextInvoiceNumber: `VRM-INV-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
 });
 
 let serverBomSequenceCounter = null;
@@ -3344,91 +3021,73 @@ const getOrReserveNextBomAtomic = async (commit = false) => {
   return new Promise((resolve, reject) => {
     serverBomReservationLock = serverBomReservationLock.then(async () => {
       try {
-        let maxNum = 663;
+        const fy = getFinancialYear();
+        let records = [];
 
-        // 1. Authoritative: Query PostgreSQL directly for the absolute highest existing BOM sequence
+        // 1. Authoritative: Query PostgreSQL directly for VRM-BOM sequence in current FY
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_bom
-              FROM public.bom_orders
-              WHERE bom_code ~ '^BOM-[0-9]+$'
+              SELECT bom_code FROM public.bom_orders
+              WHERE bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
             `).catch(() => null);
-            const dbVal = parseInt(dbRes?.rows?.[0]?.max_bom, 10);
-            if (Number.isFinite(dbVal) && dbVal > maxNum) maxNum = dbVal;
+            if (dbRes?.rows) records.push(...dbRes.rows);
 
             // Also check proforma_invoices for any converted_bom_code
             const piDbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(converted_bom_code, '\\D', '', 'g'), '') AS INTEGER)), 663) AS max_pi_bom
-              FROM public.proforma_invoices
-              WHERE converted_bom_code ~ '^BOM-[0-9]+$'
+              SELECT converted_bom_code FROM public.proforma_invoices
+              WHERE converted_bom_code ~ '^VRM-BOM-[0-9]{4}-[0-9]+$'
             `).catch(() => null);
-            const piVal = parseInt(piDbRes?.rows?.[0]?.max_pi_bom, 10);
-            if (Number.isFinite(piVal) && piVal > maxNum) maxNum = piVal;
+            if (piDbRes?.rows) records.push(...piDbRes.rows);
           } catch (dbErr) {
             console.warn('[getOrReserveNextBomAtomic PG check]:', dbErr.message);
           }
         }
 
         const filePath = getStoreFilePath('bom_store.json');
-        let allRecords = [];
         if (fs.existsSync(filePath)) {
           try {
-            allRecords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const fileBoms = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            if (Array.isArray(fileBoms)) records.push(...fileBoms);
           } catch (e) {}
         }
         if (supabaseMemoryStore.bom_store && Array.isArray(supabaseMemoryStore.bom_store)) {
-          allRecords = [...allRecords, ...supabaseMemoryStore.bom_store];
+          records.push(...supabaseMemoryStore.bom_store);
         }
-
-        allRecords.forEach(b => {
-          const str = String(b?.bomCode || b?.code || b?.id || '');
-          const match = str.match(/^BOM-(\d+)$/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (Number.isFinite(val) && val > maxNum) maxNum = val;
-          }
-        });
 
         // Also check sales_pi_store on disk and in memory
         const piFilePath = getStoreFilePath('sales_pi_store.json');
-        let piRecords = [];
         if (fs.existsSync(piFilePath)) {
           try {
-            piRecords = JSON.parse(fs.readFileSync(piFilePath, 'utf8'));
+            const piRecords = JSON.parse(fs.readFileSync(piFilePath, 'utf8'));
+            if (Array.isArray(piRecords)) records.push(...piRecords);
           } catch (_) {}
         }
         if (Array.isArray(supabaseMemoryStore.sales_pi_store)) {
-          piRecords = [...piRecords, ...supabaseMemoryStore.sales_pi_store];
-        }
-        piRecords.forEach(pi => {
-          const codeStr = String(pi?.convertedBomCode || pi?.convertedBomNo || '');
-          const match = codeStr.match(/^BOM-(\d+)$/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (Number.isFinite(val) && val > maxNum) maxNum = val;
-          }
-        });
-
-        if (serverBomSequenceCounter !== null && serverBomSequenceCounter > maxNum) {
-          maxNum = serverBomSequenceCounter;
+          records.push(...supabaseMemoryStore.sales_pi_store);
         }
 
-        const nextNum = maxNum + 1;
-        const nextBomCode = `BOM-${String(nextNum).padStart(3, '0')}`;
+        let maxSeq = extractMaxSequence('BOM', fy, records);
+
+        if (serverBomSequenceCounter !== null && serverBomSequenceCounter.fy === fy && serverBomSequenceCounter.maxNum > maxSeq) {
+          maxSeq = serverBomSequenceCounter.maxNum;
+        }
+
+        const nextNum = maxSeq + 1;
+        const nextBomCode = formatSequenceCode('BOM', nextNum);
 
         if (commit) {
-          serverBomSequenceCounter = nextNum;
+          serverBomSequenceCounter = { fy, maxNum: nextNum };
           try {
             await supabase.from('leaves').update({
-              reason: JSON.stringify({ lastNumber: nextNum, updatedAt: new Date().toISOString() }),
+              reason: JSON.stringify({ fy, lastNumber: nextNum, updatedAt: new Date().toISOString() }),
               duration: String(nextNum),
               dates: new Date().toISOString()
-            }).eq('employee', 'BOM_SEQUENCE');
+            }).eq('employee', `BOM_SEQUENCE_${fy}`);
           } catch (_) {}
         }
 
-        resolve({ success: true, nextBomCode, nextCode: nextBomCode, maxNum: nextNum, counter: nextNum });
+        resolve({ success: true, nextBomCode, nextCode: nextBomCode, maxNum: nextNum, counter: nextNum, financialYear: fy });
       } catch (err) {
         reject(err);
       }
@@ -3457,24 +3116,13 @@ app.post('/api/boms/reserve-code', async (req, res) => {
   }
 });
 
-// Dedicated endpoint to reset BOM, PI, Dispatch, Accounts Verification, and Invoice Ledger data for a fresh start
+// Dedicated endpoint to reset BOM, PI, Dispatch, Accounts Verification, and Invoice Ledger data - DISABLED
+// Protection 4: /api/reset-bom-workflow-data disabled with HTTP 403
 app.post('/api/reset-bom-workflow-data', async (req, res) => {
-  try {
-    const storesToReset = ['bom_store', 'proforma_invoice_store', 'sales_pi_store', 'invoice_store'];
-    for (const key of storesToReset) {
-      const filePath = getStoreFilePath(`${key}.json`);
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
-      supabaseMemoryStore[key] = [];
-      try {
-        await pushStoreToSupabase(key, []);
-      } catch (e) {
-        console.warn(`[Reset Supabase Warning for ${key}]:`, e.message);
-      }
-    }
-    res.json({ success: true, message: 'All BOM, PI, Dispatch, Accounts Verification, and Invoice records have been reset cleanly.' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Forbidden: /api/reset-bom-workflow-data is disabled to protect historical BOM, PI, and financial ledger data.'
+  });
 });
 
 // Dedicated function to audit, deduplicate, and repair historical BOM sequence mappings for converted PIs
@@ -3530,11 +3178,8 @@ async function repairBomSequences() {
           };
         }
       } else if (
-        pi.convertedBomCode === 'BOM-659' || 
-        pi.convertedBomNo === 'BOM-659' || 
-        pi.converted_bom_code === 'BOM-659' || 
-        pi.converted_bom_no === 'BOM-659' ||
-        (['PI-00063', 'PI-00064', 'PI-00065', 'PI-00066'].includes(pNo) && (pi.convertedBomCode === 'BOM-659' || pi.converted_bom_code === 'BOM-659' || !pi.convertedBomCode))
+        (pi.convertedBomCode === 'BOM-659' || pi.convertedBomNo === 'BOM-659' || pi.converted_bom_code === 'BOM-659' || pi.converted_bom_no === 'BOM-659') &&
+        pNo !== 'PI-00061'
       ) {
         piUpdatedCount++;
         piListChanged = true;
@@ -3707,20 +3352,114 @@ async function repairBomSequences() {
   return { piUpdatedCount, bomUpdatedCount, maxSequence: serverBomSequenceCounter };
 }
 
-// Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs
-app.post('/api/repair-bom-sequences', async (req, res) => {
+/**
+ * Idempotent reconciliation:
+ * Ensures all BOMs present in controlroom_store or bom_store.json (e.g. BOM-663, 664, 665)
+ * are cleanly represented in public.bom_orders without overwriting existing data.
+ */
+async function syncMissingRelationalBoms() {
+  if (!isDbConnected()) return;
   try {
-    const repaired = await repairBomSequences();
-    res.json({ success: true, ...repaired });
+    const existingDbRes = await query(`SELECT bom_code, id, status, grand_total FROM public.bom_orders`).catch(() => null);
+    const existingCodes = new Set();
+    const existingDbMap = new Map();
+    (existingDbRes?.rows || []).forEach(r => {
+      if (r.bom_code) { existingCodes.add(r.bom_code); existingDbMap.set(r.bom_code, r); }
+      if (r.id) { existingCodes.add(r.id); existingDbMap.set(r.id, r); }
+    });
+
+    // Read authoritative JSON store
+    let bomsToSync = [];
+    const crRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'bom_store'`).catch(() => null);
+    if (crRes?.rows?.[0]?.data && Array.isArray(crRes.rows[0].data)) {
+      bomsToSync = crRes.rows[0].data;
+    }
+    if (bomsToSync.length === 0) {
+      const diskPath = getStoreFilePath('bom_store.json');
+      if (fs.existsSync(diskPath)) {
+        try { bomsToSync = JSON.parse(fs.readFileSync(diskPath, 'utf8')); } catch (_) {}
+      }
+    }
+    if (!Array.isArray(bomsToSync) || bomsToSync.length === 0) return;
+
+    let syncedCount = 0;
+    for (const bom of bomsToSync) {
+      const code = bom?.bomCode || bom?.code || bom?.id;
+      if (!code) continue;
+
+      const existingRecord = existingDbMap.get(code) || (bom?.id && existingDbMap.get(bom.id));
+      if (existingRecord) {
+        // Transparent conflict audit: detect and report differences rather than silently ignoring
+        const dbStatus = String(existingRecord.status || '').trim();
+        const storeStatus = String(bom.status || '').trim();
+        const dbTotal = Number(existingRecord.grand_total || 0);
+        const storeTotal = Number(bom.grandTotal || bom.grand_total || 0);
+
+        if (dbStatus !== storeStatus || (dbTotal !== storeTotal && Math.abs(dbTotal - storeTotal) > 1)) {
+          console.warn(`[BOM Reconciliation Conflict Notice] Divergence on ${code}: Database [Status: "${dbStatus}", Total: ${dbTotal}] vs Store [Status: "${storeStatus}", Total: ${storeTotal}]. Authoritative database preserved.`);
+        }
+        continue;
+      }
+
+      const dbRow = toDatabaseBomRowServer(bom);
+      if (!dbRow) continue;
+
+      const keys = Object.keys(dbRow).filter(k => dbRow[k] !== undefined);
+      const cols = keys.map(k => `"${k}"`).join(', ');
+      const jsonbCols = new Set([
+        'items', 'payments', 'dispatch_packing', 'accounts_verification', 
+        'preset_groups', 'billing_address_obj', 'delivery_address_obj', 
+        'dispatch_packing_media', 'vehicle_loading', 'data'
+      ]);
+      const placeholders = keys.map((k, i) => jsonbCols.has(k) ? `$${i + 1}::jsonb` : `$${i + 1}`).join(', ');
+      const values = keys.map(k => {
+        const v = dbRow[k];
+        return typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
+      });
+
+      const sql = `
+        INSERT INTO public.bom_orders (${cols})
+        VALUES (${placeholders})
+        ON CONFLICT (id) DO NOTHING
+      `;
+
+      try {
+        await query(sql, values);
+        existingCodes.add(code);
+        if (bom?.id) existingCodes.add(bom.id);
+        if (bom?.bomCode) existingCodes.add(bom.bomCode);
+        syncedCount++;
+      } catch (insertErr) {
+        if (insertErr?.code === '23505') {
+          // Unique violation on id or bom_code: safely skip duplicate
+          console.warn(`[BOM Reconciliation Notice] Record ${code} already exists in database (skipped).`);
+        } else {
+          console.error(`[BOM Reconciliation Error] Failed to persist ${code} to public.bom_orders:`, insertErr.message);
+          throw insertErr;
+        }
+      }
+    }
+
+    if (syncedCount > 0) {
+      console.log(`✅ [BOM Reconciliation] Reconciled ${syncedCount} missing BOM(s) into public.bom_orders.`);
+    }
+    return { success: true, syncedCount };
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('❌ [BOM Reconciliation Fatal Error]:', err?.message || err);
+    throw err;
   }
+}
+
+// Dedicated endpoint to fix and re-align historical BOM sequences for converted PIs - DISABLED
+// Protection 5: /api/repair-bom-sequences disabled with HTTP 403
+app.post('/api/repair-bom-sequences', async (req, res) => {
+  return res.status(403).json({
+    success: false,
+    message: 'Forbidden: /api/repair-bom-sequences is disabled to protect historical BOM sequences.'
+  });
 });
 
 // Centralized GET all BOMs endpoint - reads authoritative list from public.bom_orders with fast caching
-let cachedBomsResult = null;
-let lastBomFetchTimestamp = 0;
-
 app.get('/api/boms', async (req, res) => {
   try {
     const now = Date.now();
@@ -4057,228 +3796,107 @@ app.post('/api/boms', async (req, res) => {
           });
         }
 
-        const filePath = getStoreFilePath('bom_store.json');
-        let diskList = [];
-        if (fs.existsSync(filePath)) {
-          try {
-            diskList = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          } catch (e) {
-            diskList = [];
-          }
-        }
-        if (!Array.isArray(diskList)) diskList = [];
-
-        // In-memory / fast cached cloud list without blocking on network round-trip
-        let cachedCloud = supabaseMemoryStore.bom_store || [];
-        if (!Array.isArray(cachedCloud)) cachedCloud = [];
-
-        // Authoritative merge: diskList (passive fallback) first, then cachedCloud (authoritative public.bom_orders)
-        const map = new Map();
-        diskList.forEach(item => {
-          const c = item?.bomCode || item?.code || item?.id;
-          if (c) map.set(c, item);
-        });
-        cachedCloud.forEach(item => {
-          const c = item?.bomCode || item?.code || item?.id;
-          if (c) {
-            if (map.has(c)) {
-              map.set(c, { ...map.get(c), ...item });
-            } else {
-              map.set(c, item);
-            }
-          }
-        });
-
-        // Authoritative: Query PostgreSQL directly for the highest BOM sequence
-        let maxNum = 662;
-        if (isDbConnected()) {
-          try {
-            const dbRes = await query(`
-              SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(bom_code, '\\D', '', 'g'), '') AS INTEGER)), 662) AS max_bom
-              FROM public.bom_orders
-              WHERE bom_code ~ '^BOM-[0-9]+$'
-            `).catch(() => null);
-            const dbVal = parseInt(dbRes?.rows?.[0]?.max_bom, 10);
-            if (Number.isFinite(dbVal) && dbVal > maxNum) maxNum = dbVal;
-          } catch (_) {}
-        }
-
-        for (const key of map.keys()) {
-          const match = String(key).match(/^BOM-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (Number.isFinite(val) && val > maxNum) maxNum = val;
-          }
-        }
-
-        if (serverBomSequenceCounter !== null && serverBomSequenceCounter > maxNum) {
-          maxNum = serverBomSequenceCounter;
-        }
-
         const incomingCode = String(bom.bomCode || bom.code || bom.id || '').trim();
-        const isPlaceholderCode = !incomingCode || incomingCode.toLowerCase().includes('auto') || incomingCode.toLowerCase().includes('pending');
-        const incomingPi = String(bom.sourcePiNo || bom.source_pi_no || bom.piNo || '').trim().toLowerCase();
-
-        // 1. Check if an existing BOM belongs to this specific source PI
-        let existingPiBom = null;
-        if (incomingPi && incomingPi !== 'null' && incomingPi !== 'undefined') {
-          existingPiBom = Array.from(map.values()).find(item => {
-            const p = String(item.sourcePiNo || item.source_pi_no || item.piNo || '').trim().toLowerCase();
-            return p === incomingPi;
-          });
+        // Reject invalid or ambiguous BOM identifiers on update
+        if (isUpdate && (!incomingCode || incomingCode === 'null' || incomingCode === 'undefined' || incomingCode === '[object Object]')) {
+          res.status(400).json({ success: false, message: 'Invalid or ambiguous BOM identifier for update' });
+          return resolveOuter();
         }
 
-        // 2. Check if incomingCode already exists in map or database
-        const existingRecordWithCode = (incomingCode && !isPlaceholderCode && map.has(incomingCode)) ? map.get(incomingCode) : null;
-        const codeBelongsToSameRecord = existingRecordWithCode && (
-          (existingPiBom && (existingPiBom.bomCode === incomingCode || existingPiBom.id === incomingCode)) ||
-          (isUpdate && (existingRecordWithCode.id === bom.id || existingRecordWithCode.bomCode === incomingCode))
-        );
+        // 1. Transaction-safe PostgreSQL persistence via shared backend function
+        const persistResult = await persistBomsTransactionSafe({
+          singleBom: bom,
+          isNew: Boolean(isNew),
+          isUpdate: Boolean(isUpdate)
+        });
 
-        let finalCode = incomingCode;
-        let shouldAssignNewCode = false;
+        const { persistedBom, finalCode, fullStoreList, shouldAssignNewCode } = persistResult;
 
-        if (existingPiBom) {
-          // Strictly update existing BOM for this specific PI
-          finalCode = existingPiBom.bomCode || existingPiBom.code || existingPiBom.id;
-          shouldAssignNewCode = false;
-        } else if (isUpdate && existingRecordWithCode && codeBelongsToSameRecord) {
-          // Explicit update to the same existing BOM record
-          finalCode = incomingCode;
-          shouldAssignNewCode = false;
-        } else if (incomingCode && !isPlaceholderCode && !existingRecordWithCode) {
-          // Valid code that does NOT collide with any existing record
-          finalCode = incomingCode;
-          const numMatch = incomingCode.match(/^BOM-(\d+)$/i);
-          if (numMatch) {
-            const cNum = parseInt(numMatch[1], 10);
-            if (Number.isFinite(cNum) && cNum > maxNum) maxNum = cNum;
-          }
-        } else {
-          // Collision detected OR placeholder code: NEVER overwrite another record!
-          // Atomically assign the next available unique code
-          shouldAssignNewCode = true;
-          maxNum += 1;
-          finalCode = `BOM-${String(maxNum).padStart(3, '0')}`;
-          console.log(`[POST /api/boms Non-Collision Guard] Assigned new unique code ${finalCode} (avoiding overwrite of existing record)`);
-        }
+        // 2. ONLY AFTER successful PostgreSQL COMMIT: Update memory cache
+        supabaseMemoryStore.bom_store = fullStoreList;
+        cachedBomsResult = fullStoreList;
+        lastBomFetchTimestamp = Date.now();
 
-        bom.bomCode = finalCode;
-        bom.code = finalCode;
-        bom.id = finalCode;
-
-        serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, maxNum);
-
-        // Merge or insert new BOM record
-        if (map.has(finalCode)) {
-          map.set(finalCode, { ...map.get(finalCode), ...bom });
-        } else {
-          map.set(finalCode, bom);
-        }
-
-        const mergedList = Array.from(map.values());
-        supabaseMemoryStore.bom_store = mergedList;
-
-        // Dual-Layer Disk Persistence: write immediately so PM2 restarts NEVER wipe BOM data
+        // 3. Write disk backup
         try {
           const diskPath = getStoreFilePath('bom_store.json');
-          fs.writeFileSync(diskPath, JSON.stringify(mergedList, null, 2), 'utf8');
+          fs.writeFileSync(diskPath, JSON.stringify(fullStoreList, null, 2), 'utf8');
         } catch (diskErr) {
           console.warn('[POST /api/boms disk write error]:', diskErr?.message || diskErr);
         }
-        if (isDbConnected()) {
-          query(`
-            INSERT INTO controlroom_store (key, data, updated_at)
-            VALUES ('bom_store', $1, NOW())
-            ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()
-          `, [JSON.stringify(mergedList)]).catch(() => null);
-        }
-        console.log(`[BOM Store] BOM ${finalCode} saved to disk and normalized public.bom_orders (isNew: ${shouldAssignNewCode}).`);
 
-        // Automatically reconcile and deduct inventory in raw_materials_store and item_store
+        console.log(`[BOM Store] BOM ${finalCode} transaction-safely committed to PostgreSQL (isNew: ${shouldAssignNewCode}).`);
+
+        // 4. Post-commit inventory reconciliation
         try {
-          await reconcileServerInventoryWithBoms(mergedList);
+          await reconcileServerInventoryWithBoms(fullStoreList);
         } catch (rErr) {
           console.error('Error reconciling inventory after BOM save:', rErr);
         }
 
-        // Real-time sub-second push to all connected browsers/devices immediately
+        // 5. Real-time sub-second push to all connected browsers/devices immediately
         try {
-          broadcastRealtimeEvent('bom_updated', { bom, bomList: mergedList });
+          broadcastRealtimeEvent('bom_updated', { bom: persistedBom, bomList: fullStoreList });
           broadcastRealtimeEvent('inventory_updated', { rawMaterials: supabaseMemoryStore.raw_materials_store });
           broadcastRealtimeEvent('item_store_updated', { items: supabaseMemoryStore.item_store });
           broadcastRealtimeEvent('store_updated', { key: 'raw_materials_store', storeData: supabaseMemoryStore.raw_materials_store });
-          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: mergedList });
+          broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullStoreList });
         } catch (_) {}
 
-        // Update server high-speed memory cache immediately so subsequent GET requests return updated list
-        cachedBomsResult = mergedList;
-        lastBomFetchTimestamp = Date.now();
-
-        // RESPOND TO CLIENT WITH CONFIRMED BOM IMMEDIATELY (Sub-second response)
-        res.json({ success: true, bom, bomCode: finalCode, nextCode: finalCode, nextBomCode: finalCode, total: mergedList.length });
-        resolveOuter();
-
-        // Asynchronous single-row upsert to public.bom_orders with safety timeout
-        (async () => {
-          try {
-            const mergedBom = map.get(finalCode) || bom;
-            const dbRow = toDatabaseBomRowServer(mergedBom);
-            if (dbRow) {
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase single BOM upsert timeout')), 5000));
-              const upsertPromise = supabase.from('bom_orders').upsert(dbRow, { onConflict: 'id' });
-              const { error: upsertErr } = await Promise.race([upsertPromise, timeoutPromise]);
-              if (upsertErr) console.warn('[POST /api/boms] Single row upsert notice:', upsertErr.message);
+        // 6. Update sequence metadata in leaves table if needed
+        try {
+          const vrmMatch = String(finalCode).match(/^VRM-BOM-(\d{4})-(\d+)$/i);
+          if (vrmMatch) {
+            const fy = parseInt(vrmMatch[1], 10);
+            const seqVal = parseInt(vrmMatch[2], 10);
+            if (serverBomSequenceCounter && typeof serverBomSequenceCounter === 'object' && serverBomSequenceCounter.fy === fy) {
+              serverBomSequenceCounter.maxNum = Math.max(serverBomSequenceCounter.maxNum || 0, seqVal);
+            } else {
+              serverBomSequenceCounter = { fy, maxNum: seqVal };
             }
-          } catch (e) {
-            console.warn('[POST /api/boms] Background Supabase upsert notice:', e?.message || e);
-          }
-
-          try {
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 5000));
             const seqPromise = supabase.from('leaves').update({
-              reason: JSON.stringify({ lastNumber: serverBomSequenceCounter, updatedAt: new Date().toISOString() }),
-              duration: String(serverBomSequenceCounter),
+              reason: JSON.stringify({ fy, lastNumber: seqVal, updatedAt: new Date().toISOString() }),
+              duration: String(seqVal),
               dates: new Date().toISOString()
-            }).eq('employee', 'BOM_SEQUENCE');
+            }).eq('employee', `BOM_SEQUENCE_${fy}`);
             await Promise.race([seqPromise, timeoutPromise]);
-          } catch (_) {}
-
-          // Synchronize source PI record so its convertedBomCode matches finalCode
-          if (bom.sourcePiNo) {
-            try {
-              if (isDbConnected()) {
-                await query(`
-                  UPDATE public.proforma_invoices
-                  SET status = 'Converted to BOM',
-                      converted_to_bom = true,
-                      converted_bom_code = $1,
-                      updated_at = NOW()
-                  WHERE pi_no = $2 OR id = $2
-                `, [finalCode, bom.sourcePiNo]).catch(() => null);
-
-                const piStoreRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`).catch(() => null);
-                if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
-                  let piList = piStoreRes.rows[0].data;
-                  let changed = false;
-                  piList = piList.map(p => {
-                    if (p && (p.piNo === bom.sourcePiNo || p.id === bom.sourcePiNo)) {
-                      changed = true;
-                      return { ...p, status: 'Converted to BOM', convertedToBom: true, convertedBomCode: finalCode };
-                    }
-                    return p;
-                  });
-                  if (changed) {
-                    await query(`UPDATE public.controlroom_store SET data = $1, updated_at = NOW() WHERE key = 'sales_pi_store'`, [JSON.stringify(piList)]).catch(() => null);
-                    supabaseMemoryStore['sales_pi_store'] = piList;
-                    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piList });
-                  }
-                }
-              }
-            } catch (_) {}
+          } else {
+            const numMatch = String(finalCode).match(/^BOM-(\d+)$/i);
+            if (numMatch) {
+              const seqVal = parseInt(numMatch[1], 10);
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Sequence timeout')), 5000));
+              const seqPromise = supabase.from('leaves').update({
+                reason: JSON.stringify({ lastNumber: seqVal, updatedAt: new Date().toISOString() }),
+                duration: String(seqVal),
+                dates: new Date().toISOString()
+              }).eq('employee', 'BOM_SEQUENCE');
+              await Promise.race([seqPromise, timeoutPromise]);
+            }
           }
-        })();
-        return;
+        } catch (_) {}
+
+        // 7. Synchronize source PI in-memory cache and broadcast if applicable
+        if (bom.sourcePiNo) {
+          try {
+            const piStoreRes = await query(`SELECT data FROM public.controlroom_store WHERE key = 'sales_pi_store'`).catch(() => null);
+            if (piStoreRes?.rows?.[0]?.data && Array.isArray(piStoreRes.rows[0].data)) {
+              supabaseMemoryStore['sales_pi_store'] = piStoreRes.rows[0].data;
+              broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: piStoreRes.rows[0].data });
+            }
+          } catch (_) {}
+        }
+
+        // RESPOND TO CLIENT WITH CONFIRMED BOM (Persisted to database & disk)
+        res.json({
+          success: true,
+          bom: persistedBom,
+          bomCode: finalCode,
+          nextCode: finalCode,
+          nextBomCode: finalCode,
+          total: fullStoreList.length
+        });
+        return resolveOuter();
       } catch (err) {
         console.error('Error saving BOM:', err);
         res.status(500).json({ success: false, message: err.message });
@@ -4721,7 +4339,7 @@ app.post('/api/invoices', async (req, res) => {
     fs.writeFileSync(invStorePath, JSON.stringify(localInvList, null, 2), 'utf8');
     if (!supabaseMemoryStore['invoice_store']) supabaseMemoryStore['invoice_store'] = [];
     supabaseMemoryStore['invoice_store'] = localInvList;
-    pushStoreToSupabase('invoice_store', localInvList);
+    pushStoreToSupabase('invoice_store', localInvList).catch(() => {});
 
     // Synchronize matching BOM record with assigned invoice
     const targetBomCode = invRecord.bomCode || invRecord.poNo;
@@ -4778,70 +4396,153 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 // Proforma Invoices / Estimates endpoints
-// Returns next sequential PI number matching sequence (PI-000XX) from BUSINZ local stores
+// Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01)
 app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) => {
-  let maxNum = 0;
+  try {
+    const fy = getFinancialYear();
+    let records = [];
 
-  // 1. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
-  const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
-  for (const sf of storeFiles) {
-    try {
-      const p = getStoreFilePath(sf);
-      if (fs.existsSync(p)) {
-        const localPIs = JSON.parse(fs.readFileSync(p, 'utf8'));
-        if (Array.isArray(localPIs)) {
-          localPIs.forEach(item => {
-            const numStr = String(item.piNo || item.id || '');
-            const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
-            if (vrmMatch) {
-              const val = parseInt(vrmMatch[1], 10);
-              if (val > maxNum) maxNum = val;
-            } else {
-              const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-              if (match) {
-                const val = parseInt(match[1], 10);
-                if (val > maxNum && val < 1000000) maxNum = val;
-              }
-            }
-          });
-        }
-      }
-    } catch (_) {}
-  }
-
-  // 2. Check memory stores
-  ['proforma_invoice_store', 'sales_pi_store'].forEach(key => {
-    const list = supabaseMemoryStore[key];
-    if (Array.isArray(list)) {
-      list.forEach(item => {
-        const numStr = String(item.piNo || item.id || '');
-        const vrmMatch = numStr.match(/VRMS\/PI\/\d{2}-\d{2}\/(\d+)/i) || numStr.match(/\/(\d{3,6})$/);
-        if (vrmMatch) {
-          const val = parseInt(vrmMatch[1], 10);
-          if (val > maxNum) maxNum = val;
-        } else {
-          const match = numStr.match(/^PI-(\d+)/i) || numStr.match(/^QI-(\d+)/i);
-          if (match) {
-            const val = parseInt(match[1], 10);
-            if (val > maxNum && val < 1000000) maxNum = val;
-          }
-        }
-      });
+    // 1. Query PostgreSQL proforma_invoices if connected
+    if (isDbConnected()) {
+      try {
+        const dbRes = await query(`
+          SELECT pi_no FROM public.proforma_invoices
+          WHERE pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (dbRes?.rows) records.push(...dbRes.rows);
+      } catch (_) {}
     }
-  });
 
-  const nextNum = maxNum > 0 ? maxNum + 1 : 56;
-  // Compute fiscal year string: e.g., 2026-2027 => 26-27
-  const now = new Date();
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth() + 1; // 1-12
-  const fyStart = curMonth >= 4 ? curYear : curYear - 1;
-  const fyEnd = fyStart + 1;
-  const fyStr = `${String(fyStart).slice(-2)}-${String(fyEnd).slice(-2)}`;
+    // 2. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
+    const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
+    for (const sf of storeFiles) {
+      try {
+        const p = getStoreFilePath(sf);
+        if (fs.existsSync(p)) {
+          const localPIs = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (Array.isArray(localPIs)) records.push(...localPIs);
+        }
+      } catch (_) {}
+    }
 
-  const nextPiNo = maxNum >= 1000 ? `VRMS/PI/${fyStr}/${nextNum}` : `PI-${String(nextNum).padStart(5, '0')}`;
-  res.json({ nextPiNo, nextNum, fiscalYear: fyStr });
+    ['proforma_invoice_store', 'sales_pi_store'].forEach(key => {
+      const list = supabaseMemoryStore[key];
+      if (Array.isArray(list)) records.push(...list);
+    });
+
+    const { code, nextNum } = getNextSequence('PI', records);
+    res.json({
+      nextPiNo: code,
+      nextEstimateNo: code,
+      nextNum,
+      fiscalYear: String(fy),
+      financialYear: fy
+    });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextPiNo: `VRM-PI-${fy}-01`, nextEstimateNo: `VRM-PI-${fy}-01`, nextNum: 1, fiscalYear: String(fy), financialYear: fy });
+  }
 });
+
+// Quotations endpoint: Returns next sequential quotation number matching VRM-QT-[YYYY]-[SEQ] (e.g. VRM-QT-2026-01)
+app.get(['/api/next-quotation-number', '/api/next-quote-number'], async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const files = ['crm_quotations.json', 'quotation_store.json', 'sales_pi_store.json'];
+    for (const f of files) {
+      try {
+        const p = getStoreFilePath(f);
+        if (fs.existsSync(p)) {
+          const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (Array.isArray(d)) records.push(...d);
+        }
+      } catch (_) {}
+    }
+    ['crm_quotations', 'quotation_store'].forEach(key => {
+      if (Array.isArray(supabaseMemoryStore[key])) records.push(...supabaseMemoryStore[key]);
+    });
+    const { code, nextNum } = getNextSequence('QT', records);
+    res.json({ nextQuoteNo: code, nextQuotationNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextQuoteNo: `VRM-QT-${fy}-01`, nextQuotationNumber: `VRM-QT-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// CRM Leads endpoint: Returns next sequential lead number matching VRM-LEAD-[YYYY]-[SEQ] (e.g. VRM-LEAD-2026-01)
+app.get('/api/next-lead-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    const leads = await loadDatabaseLeads();
+    const { code, nextNum } = getNextSequence('LEAD', leads);
+    res.json({ nextLeadNo: code, nextLeadNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextLeadNo: `VRM-LEAD-${fy}-01`, nextLeadNumber: `VRM-LEAD-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// Delivery Challan endpoint: Returns next sequential DC number matching VRM-DC-[YYYY]-[SEQ] (e.g. VRM-DC-2026-01)
+app.get('/api/next-dc-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const p = getStoreFilePath('dc_store.json');
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(d)) records.push(...d);
+      } catch (_) {}
+    }
+    const { code, nextNum } = getNextSequence('DC', records);
+    res.json({ nextDcNo: code, nextChallanNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextDcNo: `VRM-DC-${fy}-01`, nextChallanNumber: `VRM-DC-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// GRN endpoint: Returns next sequential GRN number matching VRM-GRN-[YYYY]-[SEQ] (e.g. VRM-GRN-2026-01)
+app.get('/api/next-grn-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const p = getStoreFilePath('grn_store.json');
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(d)) records.push(...d);
+      } catch (_) {}
+    }
+    const { code, nextNum } = getNextSequence('GRN', records);
+    res.json({ nextGrnNo: code, nextGrnNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextGrnNo: `VRM-GRN-${fy}-01`, nextGrnNumber: `VRM-GRN-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// Work Order endpoint: Returns next sequential Work Order number matching VRM-WO-[YYYY]-[SEQ] (e.g. VRM-WO-2026-01)
+app.get('/api/next-wo-number', async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    const p = getStoreFilePath('workorder_store.json');
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (Array.isArray(d)) records.push(...d);
+      } catch (_) {}
+    }
+    const { code, nextNum } = getNextSequence('WO', records);
+    res.json({ nextWoNo: code, nextWorkOrderNumber: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextWoNo: `VRM-WO-${fy}-01`, nextWorkOrderNumber: `VRM-WO-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
 
 app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
   const p1 = getStoreFilePath('proforma_invoice_store.json');
@@ -4974,8 +4675,8 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
     fs.writeFileSync(pSales, JSON.stringify(updatedSales, null, 2), 'utf8');
   } catch (_) {}
 
-  pushStoreToSupabase('proforma_invoice_store', updatedProforma);
-  pushStoreToSupabase('sales_pi_store', updatedProforma);
+  pushStoreToSupabase('proforma_invoice_store', updatedProforma).catch(() => {});
+  pushStoreToSupabase('sales_pi_store', updatedProforma).catch(() => {});
 
   return res.json({
     success: true,
@@ -5008,7 +4709,7 @@ app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req,
           return p;
         });
         fs.writeFileSync(pProforma, JSON.stringify(localProforma, null, 2), 'utf8');
-        pushStoreToSupabase('proforma_invoice_store', localProforma);
+        pushStoreToSupabase('proforma_invoice_store', localProforma).catch(() => {});
       }
     }
 
@@ -5023,7 +4724,7 @@ app.post(['/api/estimates/cancel', '/api/proforma-invoices/cancel'], async (req,
           return p;
         });
         fs.writeFileSync(pSales, JSON.stringify(localSales, null, 2), 'utf8');
-        pushStoreToSupabase('sales_pi_store', localSales);
+        pushStoreToSupabase('sales_pi_store', localSales).catch(() => {});
       }
     }
   } catch (e) {
@@ -5069,7 +4770,7 @@ app.post(['/api/deliverychallans', '/api/delivery-challans'], async (req, res) =
   try { 
     fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8'); 
     supabaseMemoryStore['dc_store'] = updated;
-    pushStoreToSupabase('dc_store', updated);
+    pushStoreToSupabase('dc_store', updated).catch(() => {});
   } catch (_) {}
 
   res.json({ 
@@ -6844,6 +6545,103 @@ app.post('/api/crm/whatsapp/send-message', async (req, res) => {
   });
 });
 
+// ==========================================
+// 📱 MULTI-SESSION WHATSAPP FOR SALES REPS (METHOD 1)
+// ==========================================
+
+// Get user's session status & QR code
+app.get('/api/whatsapp/multi/status/:userId', (req, res) => {
+  const { userId } = req.params;
+  const status = getUserSessionStatus(userId);
+  res.json({ success: true, ...status });
+});
+
+// Start or request QR code connection for a sales rep
+app.post('/api/whatsapp/multi/connect/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const status = await initUserSession(userId, {
+      onMessageReceived: (msgData) => {
+        console.log(`📩 [WhatsApp Multi] Rep ${userId} received message from ${msgData.formattedPhone}: "${msgData.text}"`);
+        broadcastRealtimeEvent('whatsapp_message', msgData);
+      },
+      onStatusChange: (statusData) => {
+        broadcastRealtimeEvent('whatsapp_session_update', statusData);
+      }
+    });
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnect / logout sales rep's WhatsApp session
+app.post('/api/whatsapp/multi/disconnect/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await logoutUserSession(userId);
+    broadcastRealtimeEvent('whatsapp_session_update', { userId, status: 'DISCONNECTED', isReady: false });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List all active sales reps sessions
+app.get('/api/whatsapp/multi/sessions', (req, res) => {
+  const sessions = getAllUserSessions();
+  res.json({ success: true, sessions });
+});
+
+// Send message or PDF document from a specific sales rep's WhatsApp
+app.post('/api/whatsapp/multi/send', async (req, res) => {
+  const { userId, to, text, document, fileName, mimetype, caption } = req.body;
+  if (!userId || !to) {
+    return res.status(400).json({ error: 'Both userId and recipient phone (to) are required.' });
+  }
+
+  try {
+    const result = await sendUserWhatsAppMessage(userId, {
+      to,
+      text,
+      document,
+      fileName,
+      mimetype,
+      caption
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error(`[WhatsApp Multi Send Error for ${userId}]:`, err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Get real synced WhatsApp chats & contacts for a sales rep
+app.get('/api/whatsapp/multi/chats/:userId', (req, res) => {
+  const { userId } = req.params;
+  try {
+    const chats = getUserChats(userId);
+    const session = getUserSessionStatus(userId);
+    res.json({ success: true, chats, isConnected: session.isReady, phoneNumber: session.phoneNumber });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, chats: [] });
+  }
+});
+
+// Start a new chat conversation with a specific contact/phone number
+app.post('/api/whatsapp/multi/start-chat', (req, res) => {
+  const { userId, phone, name, company } = req.body;
+  if (!userId || !phone) {
+    return res.status(400).json({ error: 'Both userId and phone are required.' });
+  }
+  try {
+    const chat = addUserChat(userId, { phone, name, company });
+    res.json({ success: true, chat });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // AI Solar Enquiry Analysis endpoint
 app.post('/api/crm/ai/analyze-enquiry', (req, res) => {
   const { message = '' } = req.body;
@@ -7027,8 +6825,9 @@ app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
     if (!newLead || Object.keys(newLead).length === 0) return res.status(400).json({ success: false, error: 'No lead data provided' });
 
     let current = await loadDatabaseLeads();
-    const leadId = newLead.id || `LEAD-2026-${Date.now().toString().slice(-4)}`;
-    const nextNum = newLead.leadNumber || `LEAD-${String(current.length + 1).padStart(3, '0')}`;
+    const { code: autoLeadCode } = getNextSequence('LEAD', current);
+    const leadId = newLead.id || autoLeadCode;
+    const nextNum = newLead.leadNumber || autoLeadCode;
 
     const leadRecord = {
       ...newLead,
@@ -7236,8 +7035,27 @@ app.supabaseMemoryStore = supabaseMemoryStore;
 
 app.listen(PORT, () => {
   console.log(`BUSINZ Native Server running on port ${PORT}`);
+  autoRestoreAllSavedSessions({
+    onMessageReceived: (msgData) => {
+      broadcastRealtimeEvent('whatsapp_message', msgData);
+    },
+    onStatusChange: (statusData) => {
+      broadcastRealtimeEvent('whatsapp_session_update', statusData);
+    }
+  }).catch(() => {});
 });
 
 export default app;
-export { supabaseMemoryStore };
+export {
+  supabaseMemoryStore,
+  saveLocalBoms,
+  syncMissingRelationalBoms,
+  toDatabaseBomRowServer,
+  toConsumerBomServer,
+  getWorkflowRankServer,
+  loadDatabaseBoms,
+  persistBomsTransactionSafe,
+  saveDatabaseStore,
+  getDatabaseStore
+};
 

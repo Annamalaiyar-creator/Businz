@@ -2,9 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Send, Bot, Sparkles, User, Paperclip, Check, CheckCheck,
   Search, Phone, Building2, Calendar, FileText, ArrowRight, RefreshCw, X,
-  Clock, ShieldAlert, Tag, Layers, ChevronRight, Zap
+  Clock, ShieldAlert, Tag, Layers, ChevronRight, Zap, QrCode, Smartphone, Plus
 } from 'lucide-react';
 import { analyzeSolarEnquiry } from '../../services/crmStore';
+import WhatsAppQrModal from './WhatsAppQrModal';
+import { 
+  getCleanCurrentUserId, 
+  getCurrentSalesRepName, 
+  getWhatsAppStatus, 
+  sendDirectWhatsApp,
+  getWhatsAppChats,
+  startWhatsAppChat
+} from '../../utils/whatsappDispatchService';
 
 export default function CrmWhatsAppInbox({
   conversations = [],
@@ -13,16 +22,64 @@ export default function CrmWhatsAppInbox({
   onAutoCreateLead,
   onNavigateTab
 }) {
+  const [chatList, setChatList] = useState(conversations);
   const [activeConvId, setActiveConvId] = useState(conversations[0]?.id || null);
   const [searchFilter, setSearchFilter] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [waSession, setWaSession] = useState(null);
+  const [isSyncingChats, setIsSyncingChats] = useState(false);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatName, setNewChatName] = useState('');
 
   const messagesEndRef = useRef(null);
+  const currentUserId = getCleanCurrentUserId();
+  const salesRepName = getCurrentSalesRepName();
 
-  const activeConv = conversations.find(c => c.id === activeConvId) || conversations[0];
+  // Sync real WhatsApp chats from connected phone
+  const syncChatsFromWhatsApp = async () => {
+    setIsSyncingChats(true);
+    try {
+      const data = await getWhatsAppChats(currentUserId);
+      if (data?.chats && data.chats.length > 0) {
+        setChatList(data.chats);
+        if (!activeConvId || !data.chats.some(c => c.id === activeConvId)) {
+          setActiveConvId(data.chats[0].id);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching real WhatsApp chats:', e);
+    } finally {
+      setIsSyncingChats(false);
+    }
+  };
+
+  // Check initial WhatsApp session status
+  const checkStatus = async () => {
+    try {
+      const data = await getWhatsAppStatus(currentUserId);
+      setWaSession(data);
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // When WhatsApp connects or user changes, sync real chats
+  useEffect(() => {
+    if (waSession?.status === 'CONNECTED') {
+      syncChatsFromWhatsApp();
+    }
+  }, [waSession?.status]);
+
+  const activeConv = chatList.find(c => c.id === activeConvId) || chatList[0];
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -43,6 +100,30 @@ export default function CrmWhatsAppInbox({
     }
   }, [activeConv]);
 
+  const handleStartNewChat = async (e) => {
+    e.preventDefault();
+    const cleanPhone = newChatPhone.replace(/[^0-9]/g, '');
+    if (!cleanPhone) return;
+
+    try {
+      const res = await startWhatsAppChat({
+        userId: currentUserId,
+        phone: cleanPhone,
+        name: newChatName.trim() || `Customer +${cleanPhone}`,
+        company: 'Client Contact'
+      });
+      if (res?.chat) {
+        setChatList(prev => [res.chat, ...prev.filter(c => c.id !== res.chat.id)]);
+        setActiveConvId(res.chat.id);
+        setShowNewChatModal(false);
+        setNewChatPhone('');
+        setNewChatName('');
+      }
+    } catch (err) {
+      alert('Could not start chat: ' + err.message);
+    }
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
     if (!messageInput.trim() || !activeConv) return;
@@ -51,27 +132,48 @@ export default function CrmWhatsAppInbox({
     const newMsg = {
       id: `MSG-${Date.now()}`,
       sender: 'agent',
-      senderName: localStorage.getItem('controlroom_logged_user_name') || 'Sales Representative',
+      senderName: salesRepName,
       text: messageInput.trim(),
       timestamp: new Date().toISOString(),
       status: 'sent'
     };
 
+    // Update local chatList immediately
+    setChatList(prev => prev.map(c => {
+      if (c.id === activeConv.id) {
+        return {
+          ...c,
+          timestamp: new Date().toISOString(),
+          messages: [...(c.messages || []), newMsg]
+        };
+      }
+      return c;
+    }));
+
     try {
-      // Fire backend Meta API endpoint
-      await fetch('/api/crm/whatsapp/send-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      if (waSession?.status === 'CONNECTED') {
+        // Send via Sales Rep's individual connected WhatsApp
+        await sendDirectWhatsApp({
+          userId: currentUserId,
           to: activeConv.phone,
           text: messageInput.trim()
-        })
-      });
+        });
+      } else {
+        // Fallback to central API
+        await fetch('/api/crm/whatsapp/send-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: activeConv.phone,
+            text: messageInput.trim()
+          })
+        });
+      }
     } catch (err) {
       console.warn('Backend send notice:', err);
     }
 
-    onSendMessage(activeConv.id, newMsg);
+    if (onSendMessage) onSendMessage(activeConv.id, newMsg);
     setMessageInput('');
     setIsSending(false);
   };
@@ -90,7 +192,7 @@ export default function CrmWhatsAppInbox({
     }
   };
 
-  const filteredConversations = conversations.filter(c => {
+  const filteredConversations = chatList.filter(c => {
     const q = searchFilter.toLowerCase();
     return !searchFilter ||
       c.customerName?.toLowerCase().includes(q) ||
@@ -122,9 +224,27 @@ export default function CrmWhatsAppInbox({
               <MessageSquare size={18} color="#16A34A" />
               <span style={{ fontWeight: '800', fontSize: '14px', color: '#0F172A' }}>WhatsApp Chats</span>
             </div>
-            <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#15803D' }}>
-              Meta Cloud API Live
-            </span>
+            <button
+              onClick={() => setIsQrModalOpen(true)}
+              title="Click to connect or view your WhatsApp device"
+              style={{
+                fontSize: '11px',
+                fontWeight: '800',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                backgroundColor: waSession?.status === 'CONNECTED' ? '#DCFCE7' : '#EFF6FF',
+                color: waSession?.status === 'CONNECTED' ? '#15803D' : '#1D4ED8',
+                border: waSession?.status === 'CONNECTED' ? '1px solid #86EFAC' : '1px solid #BFDBFE',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Smartphone size={12} />
+              {waSession?.status === 'CONNECTED' ? `Linked (+${waSession.phoneNumber?.slice(-10) || 'Active'})` : 'Link WhatsApp'}
+            </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1' }}>
@@ -136,6 +256,51 @@ export default function CrmWhatsAppInbox({
               onChange={(e) => setSearchFilter(e.target.value)}
               style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%' }}
             />
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+            <button
+              onClick={() => setShowNewChatModal(true)}
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#0F172A',
+                fontSize: '11px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px'
+              }}
+            >
+              <Plus size={13} color="#16A34A" /> New Chat
+            </button>
+
+            <button
+              onClick={syncChatsFromWhatsApp}
+              disabled={isSyncingChats}
+              title="Sync contacts and conversations from your linked WhatsApp"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                fontSize: '11px',
+                fontWeight: '700',
+                cursor: isSyncingChats ? 'wait' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <RefreshCw size={12} className={isSyncingChats ? 'spin' : ''} />
+              {isSyncingChats ? 'Syncing...' : 'Sync'}
+            </button>
           </div>
         </div>
 
@@ -426,7 +591,9 @@ export default function CrmWhatsAppInbox({
           <div style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
             <div style={{ fontWeight: '800', fontSize: '13px', color: '#0F172A' }}>{activeConv?.companyName}</div>
             <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>{activeConv?.customerName}</div>
-            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px' }}>📞 {activeConv?.phone}</div>
+            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Phone size={12} /> {activeConv?.phone}
+            </div>
           </div>
         </div>
 
@@ -451,7 +618,10 @@ export default function CrmWhatsAppInbox({
                 justifyContent: 'space-between'
               }}
             >
-              <span>📐 Calculate BOM Order</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Layers size={13} color="#0E7490" />
+                <span>Calculate BOM Order</span>
+              </div>
               <ChevronRight size={14} />
             </button>
 
@@ -471,7 +641,10 @@ export default function CrmWhatsAppInbox({
                 justifyContent: 'space-between'
               }}
             >
-              <span>📄 Create Quotation</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={13} color="#0E7490" />
+                <span>Create Quotation</span>
+              </div>
               <ChevronRight size={14} />
             </button>
 
@@ -491,21 +664,192 @@ export default function CrmWhatsAppInbox({
                 justifyContent: 'space-between'
               }}
             >
-              <span>⏰ Set Follow-up Reminder</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={13} color="#0E7490" />
+                <span>Set Follow-up Reminder</span>
+              </div>
               <ChevronRight size={14} />
             </button>
           </div>
         </div>
 
-        <div style={{ padding: '12px', backgroundColor: '#F0FDFA', borderRadius: '8px', border: '1px solid #CCFBF1' }}>
-          <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', marginBottom: '4px' }}>
-            WhatsApp API Status
+        <div style={{ padding: '14px', backgroundColor: waSession?.status === 'CONNECTED' ? '#F0FDF4' : '#F8FAFC', borderRadius: '10px', border: waSession?.status === 'CONNECTED' ? '1px solid #BBF7D0' : '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '800', color: waSession?.status === 'CONNECTED' ? '#166534' : '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Smartphone size={14} color={waSession?.status === 'CONNECTED' ? '#16A34A' : '#64748B'} />
+              My WhatsApp Device
+            </div>
+            <span style={{ fontSize: '10px', fontWeight: '800', color: waSession?.status === 'CONNECTED' ? '#15803D' : '#64748B' }}>
+              {waSession?.status === 'CONNECTED' ? 'Active' : 'Unlinked'}
+            </span>
           </div>
-          <div style={{ fontSize: '11px', color: '#334155' }}>
-            Connected to official Meta Graph API v19.0. Incoming messages auto-sync with CRM store.
+
+          <div style={{ fontSize: '11.5px', color: '#475569', lineHeight: '1.4', marginBottom: '10px' }}>
+            {waSession?.status === 'CONNECTED' ? (
+              <span>Your phone <strong>+{waSession.phoneNumber}</strong> is linked. Quotations and messages will send directly from your personal number.</span>
+            ) : (
+              <span>Link your WhatsApp to send official Quotations, PIs, and BOM documents directly in 1 click without downloading to your phone.</span>
+            )}
           </div>
+
+          <button
+            onClick={() => setIsQrModalOpen(true)}
+            style={{
+              width: '100%',
+              padding: '7px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: waSession?.status === 'CONNECTED' ? '#16A34A' : '#0E7490',
+              color: '#FFFFFF',
+              fontSize: '11px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <QrCode size={13} />
+            {waSession?.status === 'CONNECTED' ? 'Manage Connection / Switch' : 'Link WhatsApp (Scan QR)'}
+          </button>
         </div>
       </div>
+
+      {/* WhatsApp QR Pairing & Multi-Session Modal */}
+      <WhatsAppQrModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        onSessionChanged={(s) => setWaSession(s)}
+      />
+
+      {/* NEW CHAT MODAL */}
+      {showNewChatModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100003,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '440px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              backgroundColor: '#075E54',
+              padding: '16px 20px',
+              color: '#FFFFFF',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MessageSquare size={18} />
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800' }}>
+                  Start New WhatsApp Chat
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowNewChatModal(false)}
+                style={{ backgroundColor: 'transparent', border: 'none', color: '#FFFFFF', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleStartNewChat} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Customer Phone Number (with Country Code)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 919876543210 or 9876543210"
+                  value={newChatPhone}
+                  onChange={(e) => setNewChatPhone(e.target.value)}
+                  required
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Contact Name (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ramesh Kumar"
+                  value={newChatName}
+                  onChange={(e) => setNewChatName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowNewChatModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newChatPhone.trim()}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#16A34A',
+                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Plus size={14} /> Start Chat
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

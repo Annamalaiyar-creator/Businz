@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck
+  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import ModernDateRangePicker from '../ModernDateRangePicker';
@@ -572,18 +572,17 @@ export default function ProductionTableView({
                       targetRow.status === 'Dispatched - Awaiting LR Copy' ||
                       targetRow.tabGroup === 'AwaitingLrCopy'
                     );
-                    const isAwaitingLoading = !isClosed && !isAwaitingLr && targetRow && (
-                      targetRow.status === 'AWAITING VEHICLE LOADING' || 
-                      targetRow.status === 'Awaiting Vehicle Loading & Dispatch' || 
-                      targetRow.status === 'Invoice Confirmed' ||
-                      targetRow.tabGroup === 'AwaitingLoading' ||
-                      Boolean(targetRow.invoiceConfirmed) ||
-                      Boolean(targetRow.isAccountsDone) ||
-                      targetRow.status === 'Accounts Verified & Passed to Invoice' ||
-                      Boolean(targetRow.invoiceNo && targetRow.status !== 'Closed') ||
+                    const isAccountsDone = Boolean(targetRow.isAccountsDone || targetRow.accountsVerification?.verified);
+                    const isInvoiceDone = Boolean(targetRow.invoiceConfirmed || targetRow.status === 'Invoice Confirmed');
+                    const isFullyPacked = Boolean(
                       targetRow.packingStatus === 'PACKING_VERIFIED' ||
                       targetRow.tabGroup === 'Packed' ||
-                      (targetRow.c4 && (targetRow.c4.includes('100%') || targetRow.c4 === '100% Paid') && (targetRow.tabGroup === 'Packed' || targetRow.status?.includes('Packed')))
+                      (targetRow.status && targetRow.status.toLowerCase().includes('packed'))
+                    );
+                    const isAwaitingLoading = !isClosed && !isAwaitingLr && targetRow && (
+                      targetRow.tabGroup === 'AwaitingLoading' ||
+                      ((targetRow.status === 'AWAITING VEHICLE LOADING' || targetRow.status === 'Awaiting Vehicle Loading & Dispatch') && isAccountsDone && isInvoiceDone) ||
+                      (isFullyPacked && isAccountsDone && isInvoiceDone)
                     );
                     if (isClosed) {
                       return (
@@ -606,12 +605,32 @@ export default function ProductionTableView({
                         </>
                       );
                     }
+                    if (isFullyPacked) {
+                      if (!isAccountsDone) {
+                        return (
+                          <>
+                            <Package size={14} style={{ color: '#0E7490' }} /> View / Edit Packing
+                          </>
+                        );
+                      }
+                      if (!isInvoiceDone) {
+                        return (
+                          <>
+                            <Package size={14} style={{ color: '#0E7490' }} /> View Packing (Awaiting Invoice)
+                          </>
+                        );
+                      }
+                    }
                     return (
                       <>
                         <Package size={14} style={{ color: '#0E7490' }} /> Pack BOM
                       </>
                     );
                   })()
+                ) : activeTab === 'Accounts Verification' ? (
+                  <>
+                    <CheckCircle size={14} style={{ color: '#0E7490' }} /> Verify Accounts & Pass to Invoice
+                  </>
                 ) : activeTab === 'Invoice Management' ? (
                   <>
                     <FileText size={14} style={{ color: '#0E7490' }} /> View / Confirm Invoice
@@ -751,7 +770,31 @@ export default function ProductionTableView({
           {canCancelBom && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (() => {
             const hasCancellable = (selectedRows || []).some(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === codeVal);
-              return r && !r.cancelled && r.status !== 'CANCELLED' && r.status !== 'Cancelled' && r.status !== 'Cancelled & Stock Restored' && !(typeof r.status === 'string' && r.status.toLowerCase().includes('cancel'));
+              if (!r || r.cancelled || r.status === 'CANCELLED' || r.status === 'Cancelled' || r.status === 'Cancelled & Stock Restored' || (typeof r.status === 'string' && r.status.toLowerCase().includes('cancel'))) {
+                return false;
+              }
+              // Dispatch person cannot cancel if order is already forwarded to Accounts or beyond
+              if (activeTab === 'Dispatch Orders') {
+                const isSentToAccounts = Boolean(
+                  r.status === 'Packed & Awaiting Accounts Verification' ||
+                  r.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
+                  r.status === 'Packing Verified - Sent to Accounts' ||
+                  r.status === 'Accounts Verified & Passed to Invoice' ||
+                  r.status === 'ACCOUNTS VERIFIED' ||
+                  r.status === 'Invoice Confirmed' ||
+                  r.status === 'Awaiting Vehicle Loading & Dispatch' ||
+                  r.status === 'AWAITING VEHICLE LOADING' ||
+                  r.status === 'Closed' ||
+                  r.status === 'Completed' ||
+                  r.tabGroup === 'Packed' ||
+                  r.tabGroup === 'AwaitingLoading' ||
+                  r.tabGroup === 'Closed' ||
+                  r.accountsVerification?.readyForAccounts ||
+                  r.accountsVerification?.verified
+                );
+                if (isSentToAccounts) return false;
+              }
+              return true;
             });
             if (!hasCancellable) return null;
 

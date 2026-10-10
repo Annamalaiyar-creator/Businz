@@ -112,7 +112,8 @@ class CentralInventoryStore {
                 st.includes('delivered') ||
                 st.includes('awaiting lr copy')
               );
-              if (isSent && !isCompletedOrDeducted && !st.includes('cancel') && !st.includes('restored')) {
+              const isCancelledOrRestored = st.includes('cancel') || st.includes('restored') || Boolean(b?.cancelled);
+              if (!isCompletedOrDeducted && !isCancelledOrRestored) {
                 (b.items || []).forEach(it => {
                   const c = String(it.code || '').toUpperCase().trim();
                   const q = parseFloat(it.qty || it.bomQty || 0) || 0;
@@ -623,11 +624,11 @@ class CentralInventoryStore {
       if (item) {
         const curPhysical = Math.max(0, parseFloat(item.physicalStock !== undefined ? item.physicalStock : (item.stock !== undefined ? item.stock : (item.openingStock || 0))) || 0);
         const nextStock = Math.max(0, curPhysical - qty);
-        item.stock = nextStock;
         item.physicalStock = nextStock;
-        item.available = nextStock;
-        item.availableStock = nextStock;
         item.reserved = Math.max(0, (parseFloat(item.reserved) || 0) - qty);
+        item.available = Math.max(0, nextStock - item.reserved);
+        item.availableStock = item.available;
+        item.stock = item.available;
       }
 
       // Release reservation since stock is now physically dispatched

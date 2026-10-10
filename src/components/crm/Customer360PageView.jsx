@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, MessageSquare, Edit3, Mail, Phone, CheckCircle2,
   FileText, MoreHorizontal, ChevronDown, ChevronRight,
@@ -191,6 +191,7 @@ export default function Customer360PageView({
   onNavigateTab,
   opportunities = [],
   quotations = [],
+  boms = [],
   activeAccountUser = ''
 }) {
   const [profileTab, setProfileTab] = useState('Timeline');
@@ -293,38 +294,62 @@ export default function Customer360PageView({
     );
   }
 
-  const currentTasks = customerTasks[custKey] || [
-    { id: 'def_1', text: 'Verify GSTIN & billing address with finance team', dueDate: 'Today', completed: true },
-    { id: 'def_2', text: `Schedule Solar structure proposal review with ${customer.primaryContact?.name || customer.companyName}`, dueDate: 'Tomorrow', completed: false },
-    { id: 'def_3', text: 'Share technical BOM specifications & preliminary GA drawing', dueDate: '12 Sep', completed: false }
-  ];
+  const currentTasks = customerTasks[custKey] || [];
+  const currentNotes = customerNotes[custKey] || [];
 
-  const currentNotes = customerNotes[custKey] || [
-    { id: 'def_n1', author: customer.assignedSalesperson || customer.salesPerson || activeAccountUser, date: '08 Sep, 2026 01:15 PM', text: `Initial customer onboarding completed. Commercial terms set to ${customer.paymentTerms || '50% Advance + 50% Dispatch'}. Ready for sales BOM generation.` },
-    { id: 'def_n2', author: 'System Sync', date: '08 Sep, 2026 12:59 PM', text: (customer.source === 'Zoho Books' || customer.source === 'Central Ledger') ? 'Contact details imported and verified via Central Ledger.' : 'Direct customer registration initialized in BUSINZ.' }
-  ];
+  // Resolve BOM orders from props or local fallback
+  const allBoms = useMemo(() => {
+    if (Array.isArray(boms) && boms.length > 0) return boms;
+    try {
+      const stored = localStorage.getItem('controlroom_bom_store') || localStorage.getItem('bom_orders_store');
+      if (stored) return JSON.parse(stored);
+    } catch (_) {}
+    return [];
+  }, [boms]);
 
-  const custQuotations = quotations.filter(q =>
-    (q.customerName && q.customerName.toLowerCase() === customer.companyName.toLowerCase()) ||
-    (q.companyName && q.companyName.toLowerCase() === customer.companyName.toLowerCase()) ||
-    (customer.customerCode && q.customerCode === customer.customerCode)
-  );
+  const custBoms = useMemo(() => {
+    const cComp = (customer.companyName || '').toLowerCase().trim();
+    const cName = (customer.customerName || '').toLowerCase().trim();
+    const cCode = (customer.customerCode || '').toLowerCase().trim();
+    return allBoms.filter(b => {
+      const bCust = (b.customerName || b.clientName || b.companyName || b.customer || '').toLowerCase().trim();
+      const bCode = (b.customerCode || '').toLowerCase().trim();
+      return (cComp && bCust && (bCust === cComp || bCust.includes(cComp) || cComp.includes(bCust))) ||
+             (cName && bCust && (bCust === cName || bCust.includes(cName) || cName.includes(bCust))) ||
+             (cCode && bCode && bCode === cCode);
+    });
+  }, [allBoms, customer]);
+
+  const custQuotations = quotations.filter(q => {
+    const cComp = (customer.companyName || '').toLowerCase().trim();
+    const cName = (customer.customerName || '').toLowerCase().trim();
+    const qComp = (q.customerName || q.companyName || '').toLowerCase().trim();
+    return (cComp && qComp && (qComp === cComp || qComp.includes(cComp) || cComp.includes(qComp))) ||
+           (cName && qComp && (qComp === cName || qComp.includes(cName) || cName.includes(qComp))) ||
+           (customer.customerCode && q.customerCode && q.customerCode === customer.customerCode) ||
+           (customer.id && q.customerId && q.customerId === customer.id);
+  });
 
   const custDeals = opportunities.filter(o =>
-    o.customerId === customer.id ||
-    o.companyName === customer.companyName
+    (customer.id && o.customerId === customer.id) ||
+    (customer.companyName && o.companyName && o.companyName.toLowerCase().trim() === customer.companyName.toLowerCase().trim())
   );
 
-  // ─── Derived display values (read-only, no business logic changes) ───
-  const repName = customer.assignedSalesperson || customer.salesPerson || activeAccountUser;
-  const contactName = customer.primaryContact?.name || customer.customerName || customer.companyName;
+  // ─── Derived display values (read-only, real data only) ───
+  const repName = customer.assignedSalesperson || customer.salesPerson || '';
+  const contactName = customer.primaryContact?.name || customer.customerName || customer.companyName || '';
   const isLinked = customer.source === 'Zoho Books' || !!customer.zohoContactId || !!customer.customerCode;
-  const quoteAmount = (q) => Number(q.totalAmount || q.amount || 1500000);
+  const quoteAmount = (q) => Number(q.totalAmount || q.amount || q.grandTotal || 0);
   const openDeals = custDeals.filter(d => d.stage !== 'Won' && d.stage !== 'Lost');
   const pipelineValue = openDeals.reduce((s, d) => s + (Number(d.dealValue) || 0), 0);
   const quotationsValue = custQuotations.reduce((s, q) => s + quoteAmount(q), 0);
   const pendingTasks = currentTasks.filter(t => !t.completed).length;
   const locationText = [customer.city, customer.state].filter(Boolean).join(', ') || '—';
+
+  const customerCreationDate = customer.createdAt || customer.created_time || customer.createdTime || customer.date;
+  const creationDateText = customerCreationDate
+    ? new Date(customerCreationDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : null;
 
   const profileTabs = [
     { key: 'Timeline', icon: Activity },
@@ -332,55 +357,119 @@ export default function Customer360PageView({
     { key: 'Notes', icon: FileText, count: currentNotes.length },
     { key: 'Quotations', icon: Receipt, count: custQuotations.length },
     { key: 'WhatsApp Chat', icon: MessageSquare },
-    { key: 'BOM Orders', icon: Layers },
+    { key: 'BOM Orders', icon: Layers, count: custBoms.length },
     { key: 'Opportunities', icon: TrendingUp, count: custDeals.length },
     { key: 'Details', icon: Info }
   ];
 
+  const hasCreditLimit = customer.creditLimit !== undefined && customer.creditLimit !== null && customer.creditLimit !== '' && Number(customer.creditLimit) > 0;
   const kpis = [
     { label: 'Open Pipeline', value: formatINR(pipelineValue), sub: `${openDeals.length} open deal${openDeals.length === 1 ? '' : 's'}`, icon: TrendingUp, fg: C.teal, bg: C.tealSoft },
     { label: 'Quotations', value: formatINR(quotationsValue), sub: `${custQuotations.length} issued`, icon: Receipt, fg: C.green, bg: C.greenSoft },
     { label: 'Pending Tasks', value: String(pendingTasks), sub: `${currentTasks.length} total follow-ups`, icon: CheckCircle2, fg: '#A21CAF', bg: '#FDF4FF' },
-    { label: 'Credit Limit', value: formatINR(customer.creditLimit || 2500000), sub: `${customer.creditDays || 30} days credit`, icon: Wallet, fg: C.amber, bg: C.amberSoft }
+    {
+      label: 'Credit Limit',
+      value: hasCreditLimit ? formatINR(customer.creditLimit) : 'Not Set',
+      sub: customer.creditDays ? `${customer.creditDays} days credit` : (customer.paymentTerms || 'No terms set'),
+      icon: Wallet,
+      fg: C.amber,
+      bg: C.amberSoft
+    }
   ];
 
   const quickActions = [
-    { label: 'Email', icon: Mail, fg: C.teal, bg: '#F0FDFA', border: '#CCFBF1', onClick: () => window.open(`mailto:${customer.primaryContact?.email || ''}`) },
-    { label: 'Call', icon: Phone, fg: '#2563EB', bg: '#EFF6FF', border: '#DBEAFE', onClick: () => window.open(`tel:${customer.primaryContact?.phone || ''}`) },
+    { label: 'Email', icon: Mail, fg: C.teal, bg: '#F0FDFA', border: '#CCFBF1', onClick: () => {
+      const email = customer.primaryContact?.email || customer.email;
+      if (email) window.open(`mailto:${email}`);
+      else alert('No email address registered for this customer.');
+    }},
+    { label: 'Call', icon: Phone, fg: '#2563EB', bg: '#EFF6FF', border: '#DBEAFE', onClick: () => {
+      const phone = customer.primaryContact?.phone || customer.phone;
+      if (phone) window.open(`tel:${phone}`);
+      else alert('No phone number registered for this customer.');
+    }},
     { label: 'Task', icon: CheckCircle2, fg: '#A21CAF', bg: '#FDF4FF', border: '#F5D0FE', onClick: () => setProfileTab('Tasks') },
     { label: 'WhatsApp', icon: MessageSquare, fg: C.green, bg: C.greenSoft, border: '#DCFCE7', onClick: () => (onOpenWhatsAppChat ? onOpenWhatsAppChat(customer) : onNavigateTab('WhatsApp Inbox')) },
     { label: 'Notes', icon: FileText, fg: C.amber, bg: C.amberSoft, border: '#FEF3C7', onClick: () => setProfileTab('Notes') },
     { label: 'More', icon: MoreHorizontal, fg: C.muted, bg: C.bg, border: C.line, onClick: () => onEditCustomer(customer) }
   ];
 
-  const timelineEvents = [
-    {
-      icon: User, color: C.teal, title: 'Account Active in BUSINZ', meta: 'Today',
-      body: <>Assigned to Lead Owner <strong>{repName}</strong>. Commercial terms configured for B2B solar structure dispatch.</>
-    },
-    {
-      icon: Zap, color: C.purple, title: 'Central Accounting Link', meta: 'Master Store',
-      body: <>Contact linked with Reference ID: <strong>{customer.zohoContactId || customer.customerCode || 'AUTO_LINKED'}</strong>. Accounting ledgers and invoices connected.</>
-    },
-    {
-      icon: ShieldCheck, color: '#10B981', title: 'Payment & Commercial Terms Verified', meta: 'Finance Checked',
-      body: <>Payment Terms: <strong>{customer.paymentTerms || '50% Advance + 50% Dispatch'}</strong> • Credit Days: <strong>{customer.creditDays || 30} Days</strong>.</>
-    },
-    {
-      icon: MapPin, color: '#F59E0B', title: 'Dispatch & KYC Location Confirmed', meta: 'Dispatch Gate',
-      body: <>GSTIN: <strong>{customer.gstNumber || 'Unregistered'}</strong> • Address: {customer.address || 'Standard Plant Dispatch'}</>
-    }
-  ];
+  const timelineEvents = useMemo(() => {
+    const events = [];
 
-  const overviewItems = [
-    { icon: Calendar, label: 'Created At', value: customer.createdAt ? new Date(customer.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '08 Sep, 2026 12:59 PM' },
-    { icon: Clock, label: 'Last Communication', value: 'Today, 11:30 AM' },
-    { icon: Mail, label: 'Last Email Sent', value: '08 Sep, 2026' },
-    { icon: Phone, label: 'Last Call Done', value: 'Yesterday, 04:15 PM' },
-    { icon: CheckCircle2, label: 'Last Touchpoint', value: 'WhatsApp Quotation Follow-up' },
-    { icon: MessageSquare, label: 'Preferred Channel', value: 'WhatsApp Business' },
-    { icon: Clock, label: 'Best Time to Call', value: '02:30 PM - 05:00 PM' }
-  ];
+    if (creationDateText) {
+      events.push({
+        icon: User,
+        color: C.teal,
+        title: 'Customer Account Created',
+        meta: creationDateText,
+        body: <>Customer account registered in BUSINZ{repName ? ` assigned to ${repName}` : ''}{customer.source ? ` via ${customer.source}` : ''}.</>
+      });
+    }
+
+    custQuotations.forEach(q => {
+      events.push({
+        icon: Receipt,
+        color: C.green,
+        title: `Quotation: ${q.quotationNumber || 'Issued'}`,
+        meta: q.date ? new Date(q.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Quotation',
+        body: <>Commercial quotation generated for <strong>{formatINR(quoteAmount(q))}</strong>. Status: <strong>{q.status || 'Active'}</strong>.</>
+      });
+    });
+
+    custBoms.forEach(b => {
+      events.push({
+        icon: Layers,
+        color: '#0284C7',
+        title: `BOM Order: ${b.bomNumber || b.bomCode || 'Order'}`,
+        meta: b.date || (b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'BOM'),
+        body: <>Bill of Materials generated{b.projectName ? ` for ${b.projectName}` : ''}{b.totalWeight ? ` • Total Weight: ${b.totalWeight} kg` : ''}. Status: <strong>{b.status || 'Active'}</strong>.</>
+      });
+    });
+
+    custDeals.forEach(opp => {
+      events.push({
+        icon: TrendingUp,
+        color: C.teal,
+        title: `Opportunity: ${opp.title || 'Deal'}`,
+        meta: opp.stage || 'Pipeline',
+        body: <>Pipeline stage: <strong>{opp.stage || 'Active'}</strong> • Deal value: <strong>₹ {Number(opp.dealValue || 0).toLocaleString()}</strong>.</>
+      });
+    });
+
+    currentNotes.forEach(n => {
+      events.push({
+        icon: FileText,
+        color: C.amber,
+        title: `Note by ${n.author || 'User'}`,
+        meta: n.date || 'Note',
+        body: <>{n.text}</>
+      });
+    });
+
+    currentTasks.filter(t => t.completed).forEach(t => {
+      events.push({
+        icon: CheckCircle2,
+        color: '#10B981',
+        title: 'Completed Task',
+        meta: t.dueDate || 'Done',
+        body: <>{t.text}</>
+      });
+    });
+
+    return events;
+  }, [customer, custQuotations, custBoms, custDeals, currentNotes, currentTasks, repName, creationDateText]);
+
+  const overviewItems = useMemo(() => [
+    { icon: Calendar, label: 'Created At', value: creationDateText || '—' },
+    { icon: User, label: 'Lead Owner', value: repName || 'Unassigned' },
+    { icon: Building2, label: 'Account Type', value: customer.customerType || '—' },
+    { icon: Tag, label: 'Industry', value: customer.industry || '—' },
+    { icon: Receipt, label: 'Quotations', value: `${custQuotations.length} (${formatINR(quotationsValue)})` },
+    { icon: Layers, label: 'BOM Orders', value: `${custBoms.length}` },
+    { icon: TrendingUp, label: 'Pipeline Deals', value: `${openDeals.length} (${formatINR(pipelineValue)})` },
+    { icon: CheckCircle2, label: 'Open Tasks', value: `${pendingTasks}` }
+  ], [creationDateText, repName, customer, custQuotations, quotationsValue, custBoms, openDeals, pipelineValue, pendingTasks]);
 
   const metaChip = (Icon, text, opts = {}) => (
     <span style={{
@@ -429,11 +518,11 @@ export default function Customer360PageView({
                 {customer.companyName}
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-                {metaChip(Hash, customer.customerCode || customer.id)}
+                {metaChip(Hash, customer.customerCode || customer.id || 'CUST')}
                 {isLinked
                   ? metaChip(Zap, `Ledger Connected${customer.zohoContactId ? ` · ${customer.zohoContactId}` : customer.customerCode ? ` · ${customer.customerCode}` : ''}`, { fg: C.purple, bg: C.purpleSoft, border: C.purpleBorder })
                   : metaChip(Sparkles, 'BUSINZ Account', { fg: C.teal, bg: C.tealSoft, border: '#A5F3FC' })}
-                {metaChip(User, repName)}
+                {metaChip(User, repName || 'Unassigned')}
                 {locationText !== '—' && metaChip(MapPin, locationText)}
                 {customer.industry && metaChip(Building2, customer.industry)}
               </div>
@@ -477,12 +566,12 @@ export default function Customer360PageView({
           <Card>
             <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: C.tealSoft, color: C.teal, border: `1px solid ${C.tealBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '800', flexShrink: 0 }}>
-                {contactName?.charAt(0) || 'C'}
+                {(contactName || customer.companyName || 'C').charAt(0)}
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '14px', fontWeight: '800', color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contactName}</div>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contactName || customer.companyName || '—'}</div>
                 <div style={{ fontSize: '11.5px', color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {customer.primaryContact?.designation || 'Purchase / Commercial Head'}
+                  {customer.primaryContact?.designation || customer.designation || '—'}
                 </div>
               </div>
             </div>
@@ -522,12 +611,12 @@ export default function Customer360PageView({
             {isContactInfoExpanded && (
               <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <InfoRow icon={User} label="Contact Name" value={customer.primaryContact?.name || customer.customerName || '—'} />
-                <InfoRow icon={Building2} label="Company" value={customer.companyName} />
-                <InfoRow icon={Mail} label="Email" value={customer.primaryContact?.email || '—'} />
-                <InfoRow icon={Phone} label="Phone" value={customer.primaryContact?.phone || '—'} />
-                <InfoRow icon={Briefcase} label="Designation / Role" value={customer.primaryContact?.designation || 'Purchase / Commercial Head'} />
+                <InfoRow icon={Building2} label="Company" value={customer.companyName || '—'} />
+                <InfoRow icon={Mail} label="Email" value={customer.primaryContact?.email || customer.email || '—'} />
+                <InfoRow icon={Phone} label="Phone" value={customer.primaryContact?.phone || customer.phone || '—'} />
+                <InfoRow icon={Briefcase} label="Designation / Role" value={customer.primaryContact?.designation || customer.designation || '—'} />
                 <InfoRow icon={MapPin} label="Location" value={locationText} />
-                <InfoRow icon={Zap} label="Lead Source" value={customer.source || 'Direct Master'} />
+                <InfoRow icon={Zap} label="Lead Source" value={customer.source || '—'} />
               </div>
             )}
           </Card>
@@ -536,7 +625,7 @@ export default function Customer360PageView({
           <Card>
             <CardHeader icon={Sparkles} title="Account Profile" subtitle="BUSINZ CRM intelligence" right={<SourceChip type="businz" />} />
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <InfoRow icon={User} label="Lead Owner" value={repName} valueColor={C.teal} />
+              <InfoRow icon={User} label="Lead Owner" value={repName || 'Unassigned'} valueColor={repName ? C.teal : C.muted} />
               <InfoRow
                 icon={Tag}
                 label="Tags & Industry"
@@ -549,7 +638,16 @@ export default function Customer360PageView({
                   </span>
                 }
               />
-              <InfoRow icon={CreditCard} label="Credit Limit & Terms" value={`₹ ${Number(customer.creditLimit || 2500000).toLocaleString()} • ${customer.creditDays || 30} Days`} valueColor="#059669" />
+              <InfoRow
+                icon={CreditCard}
+                label="Credit Limit & Terms"
+                value={
+                  hasCreditLimit
+                    ? `₹ ${Number(customer.creditLimit).toLocaleString()}${customer.creditDays ? ` • ${customer.creditDays} Days` : (customer.paymentTerms ? ` • ${customer.paymentTerms}` : '')}`
+                    : (customer.paymentTerms ? `${customer.paymentTerms}${customer.creditDays ? ` • ${customer.creditDays} Days` : ''}` : (customer.creditDays ? `${customer.creditDays} Days` : '—'))
+                }
+                valueColor={hasCreditLimit ? '#059669' : C.body}
+              />
             </div>
           </Card>
         </div>
@@ -600,23 +698,31 @@ export default function Customer360PageView({
             {profileTab === 'Timeline' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 <TabHeading title="Activity & Touchpoint Timeline" subtitle="Audit stream synchronized with BUSINZ ERP" />
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ position: 'absolute', left: '17px', top: '18px', bottom: '18px', width: '2px', backgroundColor: C.line }} />
-                  {timelineEvents.map((ev, i) => (
-                    <div key={i} style={{ display: 'flex', gap: '14px', position: 'relative' }}>
-                      <span style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#FFFFFF', border: `2px solid ${ev.color}`, color: ev.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
-                        <ev.icon size={15} />
-                      </span>
-                      <div className="c360-row" style={{ backgroundColor: '#FFFFFF', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${C.line}`, flex: 1, transition: 'all 0.15s ease' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                          <strong style={{ fontSize: '13px', color: C.ink }}>{ev.title}</strong>
-                          <span style={{ fontSize: '10.5px', color: C.muted, backgroundColor: C.lineSoft, padding: '2px 8px', borderRadius: '50px', fontWeight: '700', whiteSpace: 'nowrap' }}>{ev.meta}</span>
+                {timelineEvents.length === 0 ? (
+                  <EmptyState
+                    icon={Activity}
+                    title="No timeline events"
+                    text={`No activity recorded for ${customer.companyName} yet. Interactions, quotations, deals, and follow-ups will appear here as they are created.`}
+                  />
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ position: 'absolute', left: '17px', top: '18px', bottom: '18px', width: '2px', backgroundColor: C.line }} />
+                    {timelineEvents.map((ev, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '14px', position: 'relative' }}>
+                        <span style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#FFFFFF', border: `2px solid ${ev.color}`, color: ev.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
+                          <ev.icon size={15} />
+                        </span>
+                        <div className="c360-row" style={{ backgroundColor: '#FFFFFF', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${C.line}`, flex: 1, transition: 'all 0.15s ease' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '13px', color: C.ink }}>{ev.title}</strong>
+                            <span style={{ fontSize: '10.5px', color: C.muted, backgroundColor: C.lineSoft, padding: '2px 8px', borderRadius: '50px', fontWeight: '700', whiteSpace: 'nowrap' }}>{ev.meta}</span>
+                          </div>
+                          <p style={{ fontSize: '12.5px', color: '#475569', margin: 0, lineHeight: 1.5 }}>{ev.body}</p>
                         </div>
-                        <p style={{ fontSize: '12.5px', color: '#475569', margin: 0, lineHeight: 1.5 }}>{ev.body}</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -646,44 +752,52 @@ export default function Customer360PageView({
                   <PrimaryButton icon={Plus} onClick={() => handleAddCustomerTask(custKey)}>Add Task</PrimaryButton>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {currentTasks.map(task => (
-                    <div
-                      key={task.id}
-                      className="c360-row"
-                      style={{
-                        backgroundColor: task.completed ? C.bg : '#FFFFFF', padding: '12px 14px', borderRadius: '10px',
-                        border: `1px solid ${C.line}`, borderLeft: `4px solid ${task.completed ? '#CBD5E1' : C.teal}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => handleToggleCustomerTask(custKey, task.id)}
-                          style={{ accentColor: C.teal, cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
-                        />
-                        <span style={{ fontSize: '13px', fontWeight: task.completed ? '500' : '700', color: task.completed ? C.muted : C.ink, textDecoration: task.completed ? 'line-through' : 'none' }}>
-                          {task.text}
-                        </span>
-                      </label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                        <span style={{ fontSize: '11px', color: C.muted, backgroundColor: C.lineSoft, padding: '3px 8px', borderRadius: '50px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Calendar size={11} /> {task.dueDate}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCustomerTask(custKey, task.id)}
-                          title="Delete task"
-                          style={{ background: 'none', border: 'none', color: C.faint, cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '6px' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                {currentTasks.length === 0 ? (
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No follow-up tasks"
+                    text={`No tasks scheduled for ${customer.companyName}. Add a task above to schedule follow-ups.`}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {currentTasks.map(task => (
+                      <div
+                        key={task.id}
+                        className="c360-row"
+                        style={{
+                          backgroundColor: task.completed ? C.bg : '#FFFFFF', padding: '12px 14px', borderRadius: '10px',
+                          border: `1px solid ${C.line}`, borderLeft: `4px solid ${task.completed ? '#CBD5E1' : C.teal}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            onChange={() => handleToggleCustomerTask(custKey, task.id)}
+                            style={{ accentColor: C.teal, cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
+                          />
+                          <span style={{ fontSize: '13px', fontWeight: task.completed ? '500' : '700', color: task.completed ? C.muted : C.ink, textDecoration: task.completed ? 'line-through' : 'none' }}>
+                            {task.text}
+                          </span>
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          <span style={{ fontSize: '11px', color: C.muted, backgroundColor: C.lineSoft, padding: '3px 8px', borderRadius: '50px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Calendar size={11} /> {task.dueDate}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomerTask(custKey, task.id)}
+                            title="Delete task"
+                            style={{ background: 'none', border: 'none', color: C.faint, cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '6px' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -705,22 +819,30 @@ export default function Customer360PageView({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {currentNotes.map(note => (
-                    <div key={note.id} className="c360-row" style={{ backgroundColor: '#FFFFFF', padding: '14px 16px', borderRadius: '10px', border: `1px solid ${C.line}`, display: 'flex', gap: '12px', transition: 'all 0.15s ease' }}>
-                      <span style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: C.tealSoft, color: C.teal, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
-                        {(note.author || 'N').charAt(0)}
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '12.5px', fontWeight: '800', color: C.ink }}>{note.author}</span>
-                          <span style={{ fontSize: '11px', color: C.faint, whiteSpace: 'nowrap' }}>{note.date}</span>
+                {currentNotes.length === 0 ? (
+                  <EmptyState
+                    icon={FileText}
+                    title="No account notes"
+                    text={`No internal notes added for ${customer.companyName} yet. Use the field above to record updates.`}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {currentNotes.map(note => (
+                      <div key={note.id} className="c360-row" style={{ backgroundColor: '#FFFFFF', padding: '14px 16px', borderRadius: '10px', border: `1px solid ${C.line}`, display: 'flex', gap: '12px', transition: 'all 0.15s ease' }}>
+                        <span style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: C.tealSoft, color: C.teal, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0 }}>
+                          {(note.author || 'N').charAt(0)}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '12.5px', fontWeight: '800', color: C.ink }}>{note.author}</span>
+                            <span style={{ fontSize: '11px', color: C.faint, whiteSpace: 'nowrap' }}>{note.date}</span>
+                          </div>
+                          <p style={{ fontSize: '13px', color: C.body, margin: 0, lineHeight: 1.55 }}>{note.text}</p>
                         </div>
-                        <p style={{ fontSize: '13px', color: C.body, margin: 0, lineHeight: 1.55 }}>{note.text}</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -751,7 +873,9 @@ export default function Customer360PageView({
                           </span>
                           <div>
                             <div style={{ fontWeight: '800', color: C.ink, fontSize: '13px' }}>{q.quotationNumber || `QUOTE-${idx + 1}`}</div>
-                            <div style={{ fontSize: '11.5px', color: C.muted }}>Date: {q.date || 'Recent'} • Valid for 15 Days</div>
+                            <div style={{ fontSize: '11.5px', color: C.muted }}>
+                              Date: {q.date || '—'}{q.validUntil ? ` • Valid until: ${q.validUntil}` : ''}
+                            </div>
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -779,9 +903,15 @@ export default function Customer360PageView({
                 <TabHeading
                   title="WhatsApp Business Messenger"
                   action={
-                    <span style={{ fontSize: '11.5px', color: C.green, fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: C.greenSoft, border: '1px solid #BBF7D0', padding: '3px 10px', borderRadius: '50px' }}>
-                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: C.green }} /> Connected Number
-                    </span>
+                    (customer.primaryContact?.whatsapp || customer.primaryContact?.phone || customer.phone) ? (
+                      <span style={{ fontSize: '11.5px', color: C.green, fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: C.greenSoft, border: '1px solid #BBF7D0', padding: '3px 10px', borderRadius: '50px' }}>
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: C.green }} /> Registered Number
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11.5px', color: C.muted, fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: C.lineSoft, padding: '3px 10px', borderRadius: '50px' }}>
+                        No Number
+                      </span>
+                    )
                   }
                 />
                 <div style={{ backgroundColor: '#FFFFFF', padding: '20px', borderRadius: '12px', border: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -790,22 +920,24 @@ export default function Customer360PageView({
                       <MessageSquare size={20} />
                     </div>
                     <div>
-                      <div style={{ fontWeight: '800', color: C.ink, fontSize: '14px' }}>{customer.primaryContact?.name || customer.companyName}</div>
-                      <div style={{ fontSize: '12px', color: C.muted }}>WhatsApp: {customer.primaryContact?.whatsapp || customer.primaryContact?.phone || 'Not Registered'}</div>
+                      <div style={{ fontWeight: '800', color: C.ink, fontSize: '14px' }}>{customer.primaryContact?.name || customer.customerName || customer.companyName}</div>
+                      <div style={{ fontSize: '12px', color: C.muted }}>WhatsApp: {customer.primaryContact?.whatsapp || customer.primaryContact?.phone || customer.phone || 'Not Registered'}</div>
                     </div>
                   </div>
-                  <div style={{ backgroundColor: C.greenSoft, border: '1px solid #BBF7D0', padding: '12px', borderRadius: '10px', fontSize: '12.5px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Lightbulb size={15} style={{ flexShrink: 0 }} />
-                    You can launch direct WhatsApp conversations, share quotation PDFs, and dispatch notifications with 1-click.
-                  </div>
-                  <button
-                    type="button"
-                    className="c360-btn"
-                    onClick={() => (onOpenWhatsAppChat ? onOpenWhatsAppChat(customer) : onNavigateTab('WhatsApp Inbox'))}
-                    style={{ backgroundColor: C.green, color: '#FFFFFF', border: 'none', padding: '12px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)' }}
-                  >
-                    <MessageSquare size={16} /> Open in WhatsApp Inbox
-                  </button>
+                  {(customer.primaryContact?.whatsapp || customer.primaryContact?.phone || customer.phone) ? (
+                    <button
+                      type="button"
+                      className="c360-btn"
+                      onClick={() => (onOpenWhatsAppChat ? onOpenWhatsAppChat(customer) : onNavigateTab('WhatsApp Inbox'))}
+                      style={{ backgroundColor: C.green, color: '#FFFFFF', border: 'none', padding: '12px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)' }}
+                    >
+                      <MessageSquare size={16} /> Open in WhatsApp Inbox
+                    </button>
+                  ) : (
+                    <div style={{ color: C.muted, fontSize: '12.5px', padding: '8px 0' }}>
+                      No contact number registered for this customer. Please update customer profile with a mobile or WhatsApp number.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -815,15 +947,49 @@ export default function Customer360PageView({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <TabHeading
                   title="Linked Bills of Materials (BOM)"
+                  subtitle={custBoms.length > 0 ? `${custBoms.length} BOM order(s) generated for ${customer.companyName}` : undefined}
                   action={<PrimaryButton small icon={Plus} onClick={() => onNavigateTab('Sales BOM')}>Create Sales BOM</PrimaryButton>}
                 />
-                <EmptyState
-                  icon={Layers}
-                  title={`Engineered Solar Structures for ${customer.companyName}`}
-                  text="Access technical BOM configurations, module presets, cold-formed section weights, and production orders generated for this client."
-                  actionLabel="Open BOM Orders Center"
-                  onAction={() => onNavigateTab('Sales BOM')}
-                />
+                {custBoms.length === 0 ? (
+                  <EmptyState
+                    icon={Layers}
+                    title="No BOM Orders Found"
+                    text={`No Bill of Materials (BOM) orders have been generated for ${customer.companyName} yet.`}
+                    actionLabel="Create Sales BOM"
+                    onAction={() => onNavigateTab('Sales BOM')}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {custBoms.map((bom, idx) => (
+                      <div key={bom.id || idx} className="c360-row" style={{ backgroundColor: '#FFFFFF', padding: '12px 14px', borderRadius: '10px', border: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', transition: 'all 0.15s ease' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ width: '34px', height: '34px', borderRadius: '9px', backgroundColor: '#F0F9FF', color: '#0284C7', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Layers size={16} />
+                          </span>
+                          <div>
+                            <div style={{ fontWeight: '800', color: C.ink, fontSize: '13px' }}>{bom.bomNumber || bom.bomCode || `BOM-${idx + 1}`}</div>
+                            <div style={{ fontSize: '11.5px', color: C.muted }}>
+                              {bom.projectName ? `Project: ${bom.projectName} • ` : ''}
+                              Date: {bom.date || (bom.createdAt ? new Date(bom.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Recent')}
+                              {bom.totalWeight ? ` • ${bom.totalWeight} kg` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontSize: '11px', backgroundColor: '#E0F2FE', color: '#0369A1', padding: '2px 10px', borderRadius: '50px', fontWeight: '800' }}>{bom.status || 'Active'}</span>
+                          <button
+                            type="button"
+                            className="c360-btn"
+                            onClick={() => onNavigateTab('Sales BOM')}
+                            style={{ padding: '5px 12px', backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', color: C.body, borderRadius: '8px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            Open BOM
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -888,17 +1054,17 @@ export default function Customer360PageView({
                       <span style={{ fontSize: '10px', backgroundColor: C.purpleSoft, color: C.purple, padding: '2px 8px', borderRadius: '50px', fontWeight: '800' }}>Required for Invoicing</span>
                     </div>
                     <div style={{ padding: '6px 16px 12px' }}>
-                      <KeyValue label="Company Name" value={customer.companyName} />
+                      <KeyValue label="Company Name" value={customer.companyName || '—'} />
                       <KeyValue label="Primary Contact" value={customer.primaryContact?.name || customer.customerName || '—'} />
-                      <KeyValue label="Phone" value={customer.primaryContact?.phone || '—'} />
-                      <KeyValue label="Email" value={customer.primaryContact?.email || '—'} />
+                      <KeyValue label="Phone" value={customer.primaryContact?.phone || customer.phone || '—'} />
+                      <KeyValue label="Email" value={customer.primaryContact?.email || customer.email || '—'} />
                       <KeyValue label="Billing Address" value={customer.address || '—'} />
-                      <KeyValue label="City & State" value={`${customer.city || '—'}, ${customer.state || ''} - ${customer.pincode || ''}`} />
-                      <KeyValue label="Dispatch Address" value={customer.dispatchAddress || customer.address || 'Same as billing'} />
-                      <KeyValue label="GSTIN" value={customer.gstNumber || 'Not Registered'} mono />
+                      <KeyValue label="City & State" value={[customer.city, customer.state].filter(Boolean).join(', ') + (customer.pincode ? ` - ${customer.pincode}` : '') || '—'} />
+                      <KeyValue label="Dispatch Address" value={customer.dispatchAddress || (customer.address ? 'Same as billing address' : '—')} />
+                      <KeyValue label="GSTIN" value={customer.gstNumber || '—'} mono />
                       <KeyValue label="PAN" value={customer.panNumber || '—'} mono />
-                      <KeyValue label="Payment Terms" value={customer.paymentTerms || '50% Advance + 50% Dispatch'} />
-                      <KeyValue label="Contact ID" value={customer.zohoContactId || customer.customerCode || 'Auto-generated on Sync'} mono />
+                      <KeyValue label="Payment Terms" value={customer.paymentTerms || '—'} />
+                      <KeyValue label="Contact ID" value={customer.zohoContactId || customer.customerCode || '—'} mono />
                     </div>
                   </div>
 
@@ -910,15 +1076,13 @@ export default function Customer360PageView({
                       <span style={{ fontSize: '10px', backgroundColor: C.tealSoft, color: C.teal, padding: '2px 8px', borderRadius: '50px', fontWeight: '800' }}>Engineering & Sales CRM</span>
                     </div>
                     <div style={{ padding: '6px 16px 12px' }}>
-                      <KeyValue label="Assigned Rep / Owner" value={repName} valueColor={C.teal} />
+                      <KeyValue label="Assigned Rep / Owner" value={repName || 'Unassigned'} valueColor={repName ? C.teal : C.muted} />
                       <KeyValue label="Customer Type" value={customer.customerType || '—'} />
                       <KeyValue label="Industry Domain" value={customer.industry || '—'} />
-                      <KeyValue label="Credit Limit" value={`₹ ${Number(customer.creditLimit || 2500000).toLocaleString()}`} valueColor="#059669" />
-                      <KeyValue label="Credit Days Granted" value={`${customer.creditDays || 30} Days`} />
-                      <KeyValue label="Preferred Channel" value="WhatsApp & Direct Call" />
-                      <KeyValue label="Best Time to Call" value="10:00 AM - 1:00 PM" />
-                      <KeyValue label="Engineering BOMs Linked" value="Active Solar Structural Orders" />
-                      <KeyValue label="Internal Account Notes" value={customer.notes || 'B2B Client account.'} />
+                      <KeyValue label="Credit Limit" value={hasCreditLimit ? `₹ ${Number(customer.creditLimit).toLocaleString()}` : '—'} valueColor={hasCreditLimit ? "#059669" : C.body} />
+                      <KeyValue label="Credit Days Granted" value={customer.creditDays ? `${customer.creditDays} Days` : '—'} />
+                      <KeyValue label="Preferred Channel" value={customer.preferredChannel || '—'} />
+                      <KeyValue label="Internal Account Notes" value={customer.notes || '—'} />
                     </div>
                   </div>
                 </div>
@@ -967,19 +1131,19 @@ export default function Customer360PageView({
               <div style={{ padding: '6px 16px 14px' }}>
                 <KeyValue
                   label="Ledger Status"
-                  value={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Zap size={11} /> Connected</span>}
-                  valueColor={C.purple}
+                  value={isLinked ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Zap size={11} /> Connected</span> : 'Not Synced'}
+                  valueColor={isLinked ? C.purple : C.muted}
                 />
-                <KeyValue label="Contact ID" value={customer.zohoContactId || customer.customerCode || 'AUTO_SYNCED'} mono />
-                <KeyValue label="GSTIN" value={customer.gstNumber || 'Not Registered'} mono />
+                <KeyValue label="Contact ID" value={customer.zohoContactId || customer.customerCode || '—'} mono />
+                <KeyValue label="GSTIN" value={customer.gstNumber || '—'} mono />
                 <KeyValue label="PAN" value={customer.panNumber || '—'} mono />
-                <KeyValue label="Payment Terms" value={customer.paymentTerms || '50% Advance'} valueColor="#B45309" />
-                <KeyValue label="Credit Days" value={`${customer.creditDays || 30} Days`} />
-                <KeyValue label="Credit Limit" value={`₹ ${Number(customer.creditLimit || 2500000).toLocaleString()}`} valueColor="#059669" />
+                <KeyValue label="Payment Terms" value={customer.paymentTerms || '—'} valueColor={customer.paymentTerms ? "#B45309" : C.muted} />
+                <KeyValue label="Credit Days" value={customer.creditDays ? `${customer.creditDays} Days` : '—'} />
+                <KeyValue label="Credit Limit" value={hasCreditLimit ? `₹ ${Number(customer.creditLimit).toLocaleString()}` : '—'} valueColor={hasCreditLimit ? "#059669" : C.body} />
                 <div style={{ paddingTop: '10px' }}>
                   <div style={{ fontSize: '10.5px', color: C.faint, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Billing Address</div>
-                  <div style={{ fontSize: '12px', color: C.ink, fontWeight: '600', marginTop: '3px', lineHeight: 1.45 }}>
-                    {customer.address || 'Standard Registered Address'}
+                  <div style={{ fontSize: '12px', color: customer.address ? C.ink : C.muted, fontWeight: '600', marginTop: '3px', lineHeight: 1.45 }}>
+                    {customer.address || '—'}
                   </div>
                 </div>
               </div>
@@ -999,15 +1163,7 @@ export default function Customer360PageView({
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {custDeals.length === 0 ? (
                   <div style={{ color: C.muted, fontSize: '12px', textAlign: 'center', padding: '8px 0' }}>
-                    <div>No open deals currently recorded.</div>
-                    <button
-                      type="button"
-                      className="c360-btn"
-                      onClick={() => onNavigateTab('Opportunities')}
-                      style={{ margin: '10px auto 0', padding: '5px 12px', backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', color: C.teal, borderRadius: '8px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <Plus size={12} /> Create Deal
-                    </button>
+                    <div>No open deals recorded.</div>
                   </div>
                 ) : (
                   custDeals.map(deal => (

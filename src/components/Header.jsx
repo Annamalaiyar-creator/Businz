@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, HelpCircle, ChevronDown, LogOut, CheckCircle2, ArrowRight, Menu, ChevronRight, LayoutDashboard, GitBranch, Users, ShieldCheck, X } from 'lucide-react';
+import { 
+  Bell, HelpCircle, ChevronDown, LogOut, CheckCircle2, ArrowRight, 
+  Menu, ChevronRight, LayoutDashboard, GitBranch, Users, ShieldCheck, 
+  X, Share2, MessageSquare, Mail, Sliders, ExternalLink, Check, RefreshCw 
+} from 'lucide-react';
 
 import { isRoleTargeted, speakNotificationVoice, playPorterOrderAlert, getPorterVoiceCue } from '../services/notificationService';
 
@@ -356,7 +360,15 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {(activeTab === 'Purchase Orders' && isExecutiveOrMD) ? 'Purchase Order Approvals' : (activeTab === 'Purchase Orders' && userRole.includes('Accounts')) ? 'Purchase Order Verification' : (activeTab || 'Dashboard')}
+            {(activeTab === 'Purchase Orders' && isExecutiveOrMD) 
+              ? 'Purchase Order Approvals' 
+              : (activeTab === 'Purchase Orders' && userRole.includes('Accounts')) 
+                ? 'Purchase Order Verification' 
+                : (activeTab === 'Dashboard' && (userRole === 'Billing' || userRole === 'Invoice Executive'))
+                  ? 'Billing Dashboard'
+                  : (activeTab === 'Dashboard' && (userRole.includes('Accounts') || userRole === 'Finance & Accounts'))
+                    ? 'Finance Dashboard'
+                    : (activeTab || 'Dashboard')}
           </h2>
         </div>
       </div>
@@ -672,6 +684,38 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
                   <span style={{ flex: 1 }}>
                     <span className="bz-menu-title">My Dashboard</span>
                     <span className="bz-menu-sub">Go to your home screen</span>
+                  </span>
+                  <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="bz-menu-item"
+                  onClick={() => {
+                    setShowRoleMenu(false);
+                    onSelectTab && onSelectTab('Integration');
+                  }}
+                >
+                  <span className="bz-menu-icon" style={{ backgroundColor: '#EEF2FF', color: '#4F46E5' }}>
+                    <Share2 size={16} />
+                  </span>
+                  <span style={{ flex: 1 }}>
+                    <span className="bz-menu-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      Integration
+                      <span style={{
+                        fontSize: '9.5px',
+                        fontWeight: '800',
+                        backgroundColor: '#ECFDF5',
+                        color: '#059669',
+                        padding: '1px 6px',
+                        borderRadius: '6px',
+                        border: '1px solid #A7F3D0'
+                      }}>
+                        Live
+                      </span>
+                    </span>
+                    <span className="bz-menu-sub">WhatsApp, Mail, Meta & Zoho APIs</span>
                   </span>
                   <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
                 </button>

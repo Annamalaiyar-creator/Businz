@@ -905,17 +905,17 @@ export function notifyInvoiceCompletedReadyForDispatch({ invoiceNo, bomCode, cus
  * Immediately notifies the Sales Person who raised this BOM with the exact reason,
  * releases inventory, and logs to the audit notification center.
  */
-export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, reason, cancelledBy }) {
+export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerson, reason, cancelledBy, cancelledByRole, cancelledByTeam }) {
   const safeCustomer = customerName || 'Customer';
   const safeCode = bomCode || 'BOM';
-  const safeReason = reason || 'Order cancelled by Dispatch';
-  const safeCancelledBy = cancelledBy || 'Dispatch Head';
+  const safeReason = reason || 'Order cancelled';
+  const displayCanceller = cancelledBy || 'Authorized Personnel';
   const safeSalesPerson = salesPerson || 'Sales Executive';
 
   // 5a. High-priority notification specifically targeting the Sales Person and Sales Team
   return sendWorkflowNotification({
     title: `❌ BOM Cancelled: ${safeCode}`,
-    message: `BOM ${safeCode} (${safeCustomer}) was CANCELLED by ${safeCancelledBy}. Reason: "${safeReason}". Blocked stock has been released.`,
+    message: `BOM ${safeCode} (${safeCustomer}) was CANCELLED by ${displayCanceller}. Reason: "${safeReason}". Blocked stock has been released.`,
     targetTab: 'BOM Orders',
     targetRoles: [safeSalesPerson, 'Sales Executive', 'Sales Head', 'All', 'Admin', 'CEO', 'MD'],
     type: 'error',
@@ -924,7 +924,9 @@ export function notifyBomCancelledByDispatch({ bomCode, customerName, salesPerso
       bomCode: safeCode,
       customerName: safeCustomer,
       salesPerson: safeSalesPerson,
-      cancelledBy: safeCancelledBy,
+      cancelledBy: displayCanceller,
+      cancelledByRole: cancelledByRole || '',
+      cancelledByTeam: cancelledByTeam || '',
       reason: safeReason,
       step: 'BOM_CANCELLED_NOTIF'
     }
@@ -990,6 +992,56 @@ export function notifyDispatchCompletedToSales({
       lrNo,
       transporter,
       step: 'DISPATCH_COMPLETED'
+    }
+  });
+}
+
+/**
+ * Triggers a real-time notification with melodic chime to Accounts & Procurement when a GRN (partial or full) is completed.
+ */
+export function notifyGrnCompletedToAccounts({
+  grnNo,
+  poNo,
+  vendor,
+  receivedQty,
+  totalOrderedQty,
+  isPartial,
+  challanNo,
+  receivedBy
+}) {
+  const accountsTargets = [
+    'Accounts Head',
+    'Accounts Executive',
+    'Finance & Accounts',
+    'Procurement Head',
+    'Procurement Executive',
+    'CEO',
+    'Managing Director',
+    'MD',
+    'Technical Administrator',
+    'All'
+  ];
+
+  const receiptType = isPartial ? 'Partially Received' : 'Fully Received';
+  const qtyText = totalOrderedQty ? `${receivedQty} of ${totalOrderedQty} Units` : `${receivedQty} Units`;
+
+  return sendWorkflowNotification({
+    title: `📦 GRN ${receiptType}: ${grnNo} (PO: ${poNo || '—'})`,
+    message: `GRN ${grnNo} inwarded for ${poNo || 'PO'} (${vendor || 'Vendor'}): ${qtyText} received (DC/Inv: ${challanNo || '—'}). Ready for Accounts bill verification.`,
+    targetTab: 'Goods Receipt Note',
+    targetRoles: accountsTargets,
+    type: isPartial ? 'info' : 'success',
+    soundType: isPartial ? 'chime' : 'success',
+    metadata: {
+      grnNo,
+      poNo,
+      vendor,
+      receivedQty,
+      totalOrderedQty,
+      isPartial,
+      challanNo,
+      receivedBy,
+      step: isPartial ? 'GRN_PARTIAL_INWARDED' : 'GRN_FULLY_INWARDED'
     }
   });
 }

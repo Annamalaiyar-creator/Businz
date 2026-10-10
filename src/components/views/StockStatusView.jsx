@@ -28,8 +28,9 @@ export default function StockStatusView(props) {
     onClearConvertingPiData
   } = props;
 
-  const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
-  const isDispatchUser = userRole === 'Dispatch Head' || String(userRole || '').toLowerCase().includes('dispatch');
+  const effectiveRole = userRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
+  const isSalesUser = effectiveRole === 'Sales Executive' || effectiveRole === 'Sales Head' || String(effectiveRole || '').toLowerCase().includes('sales');
+  const isDispatchUser = effectiveRole === 'Dispatch Head' || effectiveRole === 'Dispatch' || effectiveRole === 'Dispatch Executive' || String(effectiveRole || '').toLowerCase().includes('dispatch');
 
   // Common states
   const [searchQuery, setSearchQuery] = useState('');
@@ -2253,27 +2254,29 @@ export default function StockStatusView(props) {
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={() => handleExportStockCSV()}
-                style={{
-                  height: '38px',
-                  padding: '0 16px',
-                  borderRadius: '8px',
-                  border: '1px solid #E2E8F0',
-                  backgroundColor: '#FFFFFF',
-                  color: '#1E293B',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer'
-                }}
-              >
-                <Download style={{ width: '16px', height: '16px', color: '#475569' }} />
-                Export
-              </button>
-              {!isSalesUser && (
+              {!isDispatchUser && (
+                <button
+                  onClick={() => handleExportStockCSV()}
+                  style={{
+                    height: '38px',
+                    padding: '0 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    backgroundColor: '#FFFFFF',
+                    color: '#1E293B',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Download style={{ width: '16px', height: '16px', color: '#475569' }} />
+                  Export
+                </button>
+              )}
+              {!isSalesUser && !isDispatchUser && (
                 <button
                   onClick={() => setShowAddStockForm(true)}
                   style={{
@@ -2519,8 +2522,8 @@ export default function StockStatusView(props) {
 
           {/* Bottom Row: Stock Status List Table (Full Width) */}
           {(() => {
-            const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
-            const isDispatchUser = userRole === 'Dispatch Head' || String(userRole || '').toLowerCase().includes('dispatch');
+            const isSalesUser = effectiveRole === 'Sales Executive' || effectiveRole === 'Sales Head' || String(effectiveRole || '').toLowerCase().includes('sales');
+            const isDispatchUser = effectiveRole === 'Dispatch Head' || effectiveRole === 'Dispatch' || effectiveRole === 'Dispatch Executive' || String(effectiveRole || '').toLowerCase().includes('dispatch');
 
             // 1. Calculate reserved quantities ONLY from active BOMs sent to dispatch (completed/deducted BOMs release reservation)
             const bomReservedMap = new Map();
@@ -2795,26 +2798,28 @@ export default function StockStatusView(props) {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      onClick={() => handleExportStockCSV(filteredList)}
-                      style={{
-                        height: '36px',
-                        padding: '0 14px',
-                        borderRadius: '8px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                        color: '#334155',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Download style={{ width: '14px', height: '14px', color: '#64748B' }} />
-                      Export CSV
-                    </button>
+                    {!isDispatchUser && (
+                      <button
+                        onClick={() => handleExportStockCSV(filteredList)}
+                        style={{
+                          height: '36px',
+                          padding: '0 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                          backgroundColor: '#FFFFFF',
+                          color: '#334155',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Download style={{ width: '14px', height: '14px', color: '#64748B' }} />
+                        Export CSV
+                      </button>
+                    )}
 
                     <button
                       onClick={() => {
@@ -3362,7 +3367,7 @@ export default function StockStatusView(props) {
                       <Eye size={14} style={{ color: '#0E7490' }} /> View Details
                     </button>
 
-                    {!isSalesUser && (
+                    {!isSalesUser && !isDispatchUser && (
                       <button
                         onClick={() => {
                           const targets = [...selectedStockRows];
@@ -3390,31 +3395,33 @@ export default function StockStatusView(props) {
                       </button>
                     )}
 
-                    <button
-                      onClick={() => {
-                        const selectedData = combinedList.filter(r => selectedStockRows.includes(r.code || r.item));
-                        setSelectedStockRows([]);
-                        handleExportStockCSV(selectedData);
-                      }}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        color: '#1E293B',
-                        borderRadius: '10px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      <Download size={14} style={{ color: '#059669' }} /> Export Selected
-                    </button>
+                    {!isDispatchUser && (
+                      <button
+                        onClick={() => {
+                          const selectedData = combinedList.filter(r => selectedStockRows.includes(r.code || r.item));
+                          setSelectedStockRows([]);
+                          handleExportStockCSV(selectedData);
+                        }}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          color: '#1E293B',
+                          borderRadius: '10px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                        }}
+                      >
+                        <Download size={14} style={{ color: '#059669' }} /> Export Selected
+                      </button>
+                    )}
 
                     <button
                       onClick={() => setSelectedStockRows([])}
@@ -3574,7 +3581,7 @@ export default function StockStatusView(props) {
                         >
                           Close
                         </button>
-                        {!isSalesUser && (
+                        {!isSalesUser && !isDispatchUser && (
                           <button
                             onClick={() => {
                               const itemKey = viewingStockItem.code || viewingStockItem.item;
@@ -3606,7 +3613,7 @@ export default function StockStatusView(props) {
       )}
 
       {/* Add Stock Form View */}
-      {activeTab === 'Stock Status' && showAddStockForm && !isSalesUser && (
+      {activeTab === 'Stock Status' && showAddStockForm && !isSalesUser && !isDispatchUser && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

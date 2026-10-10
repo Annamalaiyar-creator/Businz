@@ -128,13 +128,15 @@ export function getStatusStyleConfig(statusOrType, customLabel) {
   if (
     raw === 'accounts verified' ||
     raw === 'accounts_verified' ||
-    raw === 'accounts verified & passed to invoice'
+    raw === 'accounts verified & passed to invoice' ||
+    raw === 'accounts verified & sent to billing' ||
+    raw.includes('accounts verified')
   ) {
     return {
-      label: customLabel || 'Accounts Verified',
-      bg: '#dcfce7',
-      color: '#166534',
-      border: '1px solid #bbf7d0',
+      label: customLabel || (raw.includes('billing') ? 'Accounts Verified & Sent to Billing' : 'Accounts Verified'),
+      bg: '#ecfdf5',
+      color: '#047857',
+      border: '1px solid #a7f3d0',
       Icon: IconSuccess
     };
   }

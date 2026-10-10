@@ -20,11 +20,23 @@ import {
   Trash2,
   PenTool,
   Stamp,
-  Undo2
+  Undo2,
+  MessageSquare,
+  Smartphone,
+  Send,
+  QrCode
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
+import WhatsAppQrModal from './crm/WhatsAppQrModal';
+import {
+  getCleanCurrentUserId,
+  getCurrentSalesRepName,
+  getWhatsAppStatus,
+  sendDirectWhatsApp,
+  formatPiWhatsAppText
+} from '../utils/whatsappDispatchService';
 
 // Default Template Configuration Settings
 export const DEFAULT_PI_TEMPLATE_SETTINGS = {
@@ -3348,6 +3360,15 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
   const [undoToast, setUndoToast] = useState(null);
   const undoTimeoutRef = useRef(null);
 
+  // WhatsApp 1-Click Dispatch State
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [showWhatsAppQrModal, setShowWhatsAppQrModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [waSession, setWaSession] = useState(null);
+  const [waRecipientPhone, setWaRecipientPhone] = useState('');
+  const [waMessage, setWaMessage] = useState('');
+  const [waAttachPdf, setWaAttachPdf] = useState(true);
+
   // Load saved preferences or fall back to defaults synced with master company branding
   const [templateSettings, setTemplateSettings] = useState(() => {
     try {
@@ -3606,6 +3627,83 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
     }
   };
 
+  const handleOpenWhatsAppModal = async () => {
+    const rawPhone = currentPiData.phone || currentPiData.contactPhone || currentPiData.customerPhone || '';
+    setWaRecipientPhone(rawPhone);
+    setWaMessage(formatPiWhatsAppText(currentPiData));
+    setShowWhatsAppModal(true);
+    try {
+      const status = await getWhatsAppStatus(getCleanCurrentUserId());
+      setWaSession(status);
+    } catch (_) {}
+  };
+
+  const handleSendWhatsAppPi = async () => {
+    const cleanPhone = waRecipientPhone.replace(/[^0-9]/g, '');
+    if (!cleanPhone) {
+      alert('Please enter a valid recipient phone number.');
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    try {
+      let pdfBase64 = null;
+      if (waAttachPdf) {
+        const sheetEl = document.getElementById('printable-proforma-invoice');
+        if (sheetEl) {
+          const canvas = await html2canvas(sheetEl, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            ignoreElements: (element) => element.classList?.contains('no-print')
+          });
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          let heightLeft = pdfHeight;
+          let position = 0;
+          pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
+          heightLeft -= pageHeight;
+          while (heightLeft > 0) {
+            position -= pageHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight, '', 'FAST');
+            heightLeft -= pageHeight;
+          }
+          pdfBase64 = pdf.output('datauristring');
+        }
+      }
+
+      const status = await getWhatsAppStatus(getCleanCurrentUserId());
+      if (status?.status === 'CONNECTED') {
+        const piNumberSafe = (currentPiData.piNo || 'Proforma_Invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
+        await sendDirectWhatsApp({
+          userId: getCleanCurrentUserId(),
+          to: cleanPhone,
+          text: waMessage,
+          document: pdfBase64,
+          fileName: `${piNumberSafe}.pdf`,
+          caption: waMessage
+        });
+        alert(`Proforma Invoice ${currentPiData.piNo || ''} dispatched directly from your WhatsApp (+${status.phoneNumber}) with official PDF document attached.`);
+        setShowWhatsAppModal(false);
+      } else {
+        const encoded = encodeURIComponent(waMessage);
+        const formatted = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+        window.open(`https://wa.me/${formatted}?text=${encoded}`, '_blank');
+        alert(`Opened in WhatsApp Web. To send attachments directly in 1 click without mobile downloads, link your WhatsApp in BUSINZ!`);
+        setShowWhatsAppModal(false);
+      }
+    } catch (err) {
+      alert(`Failed to send WhatsApp message: ${err.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
   const modalContent = (
     <div
       className="vrm-print-portal-overlay"
@@ -3702,6 +3800,29 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
             }}
           >
             <Download size={14} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
+          </button>
+
+          {/* SEND VIA WHATSAPP (1-CLICK) */}
+          <button
+            onClick={handleOpenWhatsAppModal}
+            disabled={isSendingWhatsApp}
+            style={{
+              backgroundColor: '#16A34A',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '7px 16px',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: isSendingWhatsApp ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 6px rgba(22,163,74,0.3)',
+              opacity: isSendingWhatsApp ? 0.7 : 1
+            }}
+          >
+            <MessageSquare size={14} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
           </button>
 
           {/* NATIVE PRINT */}
@@ -3824,10 +3945,195 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
             <Undo2 size={13} />
             Undo
           </button>
-        </div>
-      )}
-    </div>
-  );
+          </div>
+        )}
+
+        {/* WHATSAPP PI SEND PROMPT MODAL */}
+        {showWhatsAppModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100002,
+            padding: '16px'
+          }}>
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '520px',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <div style={{
+                backgroundColor: '#075E54',
+                padding: '16px 20px',
+                color: '#FFFFFF',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <MessageSquare size={18} />
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800' }}>
+                    Send Proforma Invoice ({currentPiData.piNo || 'PI'}) via WhatsApp
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowWhatsAppModal(false)}
+                  style={{ backgroundColor: 'transparent', border: 'none', color: '#FFFFFF', cursor: 'pointer' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Sender Device Status */}
+                <div style={{
+                  backgroundColor: waSession?.status === 'CONNECTED' ? '#F0FDF4' : '#FFFBEB',
+                  border: waSession?.status === 'CONNECTED' ? '1px solid #BBF7D0' : '1px solid #FDE68A',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Smartphone size={16} color={waSession?.status === 'CONNECTED' ? '#16A34A' : '#D97706'} />
+                    <span style={{ fontSize: '12px', color: '#1E293B' }}>
+                      Sender Phone: <strong>{waSession?.status === 'CONNECTED' ? `+${waSession.phoneNumber} (${getCurrentSalesRepName()})` : 'Not Linked'}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowWhatsAppQrModal(true)}
+                    style={{ backgroundColor: 'transparent', border: 'none', color: '#0E7490', fontSize: '11px', fontWeight: '800', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    {waSession?.status === 'CONNECTED' ? 'Manage' : 'Link WhatsApp'}
+                  </button>
+                </div>
+
+                {/* Recipient Phone */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Recipient Phone Number (Client)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 919876543210"
+                    value={waRecipientPhone}
+                    onChange={(e) => setWaRecipientPhone(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* PDF Document Attachment Toggle */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: '#0F172A', fontWeight: '600' }}>
+                  <input
+                    type="checkbox"
+                    checked={waAttachPdf}
+                    onChange={(e) => setWaAttachPdf(e.target.checked)}
+                    style={{ accentColor: '#16A34A', width: '16px', height: '16px' }}
+                  />
+                  <span>Attach Official Proforma Invoice PDF Document</span>
+                </label>
+
+                {/* Message Content */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    WhatsApp Message Text (Editable)
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={waMessage}
+                    onChange={(e) => setWaMessage(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '12px',
+                      lineHeight: '1.5',
+                      boxSizing: 'border-box',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                </div>
+
+                {/* Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowWhatsAppModal(false)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSendingWhatsApp || !waRecipientPhone}
+                    onClick={handleSendWhatsAppPi}
+                    style={{
+                      padding: '9px 20px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#16A34A',
+                      color: '#FFFFFF',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: isSendingWhatsApp ? 'wait' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 12px rgba(22,163,74,0.3)',
+                      opacity: isSendingWhatsApp ? 0.7 : 1
+                    }}
+                  >
+                    <Send size={14} />
+                    <span>
+                      {isSendingWhatsApp 
+                        ? 'Generating & Dispatching...' 
+                        : waSession?.status === 'CONNECTED' 
+                          ? 'Send PI via WhatsApp' 
+                          : 'Send via WhatsApp Web'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WhatsApp QR Modal */}
+        <WhatsAppQrModal
+          isOpen={showWhatsAppQrModal}
+          onClose={() => setShowWhatsAppQrModal(false)}
+          onSessionChanged={(s) => setWaSession(s)}
+        />
+      </div>
+    );
 
   return typeof document !== 'undefined'
     ? createPortal(modalContent, document.body)

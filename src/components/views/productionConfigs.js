@@ -1,5 +1,5 @@
-import { prodModuleEngine } from '../../utils/productionModuleEngine';
-import { formatCurrency } from '../../utils/otherViewsShared';
+import { prodModuleEngine } from '../../utils/productionModuleEngine.js';
+import { formatCurrency } from '../../utils/otherViewsShared.js';
 
 export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [] }) {
   const visibleBomStore = passedVisibleBom || bomStore || [];
@@ -11,19 +11,17 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             const acc = b.accountsVerification || {};
             const isAccVerified = Boolean(
               acc.verified === true ||
-              acc.readyForAccounts === true ||
               b.isAccountsDone === true ||
               s.includes('accounts verified') ||
               s.includes('passed to invoice') ||
-              s.includes('ready for payment') ||
-              s.includes('ready for invoicing') ||
-              s.includes('packing verified') ||
-              s.includes('ready for dispatch') ||
-              s.includes('awaiting accounts') ||
-              s.includes('sent to accounts') ||
               b.invoiceConfirmed === true ||
               s.includes('invoice confirmed') ||
-              Boolean(b.invoiceNo)
+              (Boolean(b.invoiceNo) && b.invoiceNo !== 'Pending Confirmation') ||
+              s.includes('awaiting vehicle load') ||
+              s.includes('dispatched') ||
+              s.includes('delivered') ||
+              s.includes('completed') ||
+              s.includes('closed')
             );
             return isAccVerified;
           };
@@ -32,9 +30,9 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             .filter(isInvoiceEligibleBom)
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
-              const cleanNum = bCode.replace(/[^0-9]/g, '') || '101';
-              const isConf = b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed || Boolean(b.invoiceNo && b.invoiceNo !== 'Pending Confirmation');
-              const invNo = (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') ? b.invoiceNo : (isConf ? (b.invoiceNo || `INV-2026-${cleanNum}`) : 'Pending Confirmation');
+              const cleanNum = (bCode.match(/(\d+)$/)?.[1] || '01');
+              const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
+              const invNo = (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') ? b.invoiceNo : (isConf ? (b.invoiceNo || `VRM-INV-2026-${cleanNum}`) : 'Pending Confirmation');
               const s = String(b.status || '').toLowerCase();
               const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
 
@@ -96,58 +94,203 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               };
             });
 
+          const cleanDateStr = (rawDate) => {
+            if (!rawDate) return '-';
+            const s = String(rawDate).trim();
+            if (s.includes('T')) {
+              const parts = s.split('T')[0].split('-');
+              if (parts.length === 3) {
+                const [y, m, d] = parts;
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const mIdx = parseInt(m, 10) - 1;
+                if (mIdx >= 0 && mIdx < 12) {
+                  return `${d} ${months[mIdx]} ${y}`;
+                }
+              }
+            }
+            return s;
+          };
+
+          const cleanAmtNum = (amt) => {
+            if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
+            if (!amt) return 0;
+            const n = parseFloat(String(amt).replace(/[^0-9.]/g, ''));
+            return (isNaN(n) || n <= 0) ? 0 : n;
+          };
+
+          const findMatchingBom = (inv) => {
+            if (!inv) return null;
+            const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
+            const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
+            const invNum = (inv.invNo || inv.code || inv.id || '').toLowerCase().trim();
+
+            return (bomStore || []).find(b => {
+              if (!b) return false;
+              const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
+              const soNo = (b.salesOrderNo || '').toLowerCase().trim();
+              const bInv = (b.invoiceNo || '').toLowerCase().trim();
+
+              // 1. Direct match on BOM code or SO
+              if (bCode && (bCode === directRef || bCode === fromNotes)) return true;
+              if (soNo && (soNo === directRef || soNo === fromNotes)) return true;
+
+              // 2. Direct match on Invoice No
+              if (bInv && invNum && bInv !== 'pending confirmation' && !bInv.includes('pending') && (bInv === invNum || bInv.replace(/[^a-z0-9]/gi, '') === invNum.replace(/[^a-z0-9]/gi, ''))) return true;
+
+              return false;
+            });
+          };
+
           const mergedInvoices = (invoiceList || []).filter(inv => {
-            const matchingBom = (bomStore || []).find(b =>
-              b.bomCode === inv.poNo ||
-              b.code === inv.poNo ||
-              b.bomCode === inv.code ||
-              b.bomCode === inv.invNo ||
-              (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3))
-            );
+            const matchingBom = findMatchingBom(inv);
             if (matchingBom) {
               if (matchingBom.cancelled || matchingBom.status === 'Cancelled' || matchingBom.status === 'Cancelled & Stock Restored') return false;
               return isInvoiceEligibleBom(matchingBom);
             }
             return true;
           }).map(inv => {
-            const matchingBom = (bomStore || []).find(b =>
-              b.bomCode === inv.poNo ||
-              b.code === inv.poNo ||
-              b.bomCode === inv.code ||
-              b.bomCode === inv.invNo ||
-              (b.salesOrderNo && (b.salesOrderNo === inv.poNo || b.salesOrderNo === inv.c3))
+            const matchingBom = findMatchingBom(inv);
+            const resolvedBomCode = matchingBom?.bomCode || matchingBom?.code || inv.poNo || inv.bomCode || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
+            const isConf = Boolean(
+              (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed === true)) ||
+              inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed === true
             );
-            if (matchingBom) {
-              const isConf = matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed || inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.pay === 'Completed & Locked' || Boolean(matchingBom.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation');
-              return {
-                ...inv,
-                invNo: (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo : (matchingBom.invoiceNo || inv.invNo),
-                vendor: inv.vendor || matchingBom.customerName || 'Customer',
-                customerName: matchingBom.customerName || inv.vendor || 'Customer',
-                billingAddress: inv.billingAddress || matchingBom.billingAddress,
-                deliveryAddress: inv.deliveryAddress || matchingBom.deliveryAddress,
-                deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom.deliveryAddressProofDoc,
-                accountsVerification: matchingBom.accountsVerification || inv.accountsVerification,
-                status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
-                pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
-                items: (inv.items && inv.items.length > 0) ? inv.items : (matchingBom.dispatchPacking || matchingBom.items || [])
+            
+            const resolvedCustomer = (matchingBom?.customerName && matchingBom.customerName !== 'Customer Order' && matchingBom.customerName !== 'Customer')
+              ? matchingBom.customerName
+              : (inv.vendor && inv.vendor !== 'Customer Order' ? inv.vendor : (inv.customerName || matchingBom?.customerName || 'Customer'));
+
+            const bomTotal = cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount) || 0;
+            const existingAmt = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal);
+            const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : 0);
+
+            return {
+              ...inv,
+              poNo: resolvedBomCode,
+              bomCode: resolvedBomCode,
+              invNo: (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo : (matchingBom?.invoiceNo || inv.invNo || 'Pending Confirmation'),
+              vendor: resolvedCustomer,
+              customerName: resolvedCustomer,
+              billingAddress: inv.billingAddress || matchingBom?.billingAddress,
+              deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
+              deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc,
+              accountsVerification: matchingBom?.accountsVerification || inv.accountsVerification,
+              status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
+              pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
+              invAmt: resolvedAmount,
+              total: resolvedAmount,
+              amount: formatCurrency(resolvedAmount),
+              items: (inv.items && inv.items.length > 0) ? inv.items : (matchingBom?.dispatchPacking || matchingBom?.items || [])
+            };
+          });
+
+          // Strict order-level and sequence-level deduplication engine
+          const extractOrderSeq = (str) => {
+            if (!str || typeof str !== 'string') return '';
+            const m = str.match(/(?:VRM-(?:INV|BOM)-(\d{4}-\d+)|(?:INV|BOM)-(\d+)|VRM-INV-(\d+)|VRM-BOM-(\d+))/i);
+            if (m) return m[1] || m[2] || m[3] || m[4] || '';
+            const digits = str.replace(/[^0-9]/g, '');
+            return digits || '';
+          };
+
+          const isSameInvoiceOrOrder = (a, b) => {
+            if (!a || !b) return false;
+            if (a.id && b.id && a.id === b.id) return true;
+
+            const aInv = (a.invNo || a.invoiceNo || a.code || '').toUpperCase().trim();
+            const bInv = (b.invNo || b.invoiceNo || b.code || '').toUpperCase().trim();
+            const aHasRealInv = aInv && aInv !== 'PENDING CONFIRMATION' && !aInv.includes('PENDING');
+            const bHasRealInv = bInv && bInv !== 'PENDING CONFIRMATION' && !bInv.includes('PENDING');
+            if (aHasRealInv && bHasRealInv && (aInv === bInv || aInv.replace(/[^A-Z0-9]/g, '') === bInv.replace(/[^A-Z0-9]/g, ''))) {
+              return true;
+            }
+
+            const aBom = (a.bomCode || a.poNo || '').toUpperCase().trim();
+            const bBom = (b.bomCode || b.poNo || '').toUpperCase().trim();
+            if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) {
+              return true;
+            }
+
+            return false;
+          };
+
+          const canonicalInvoices = [];
+
+          const upsertCanonicalInvoice = (item) => {
+            if (!item) return;
+            const existingIdx = canonicalInvoices.findIndex(ex => isSameInvoiceOrOrder(ex, item));
+
+            if (existingIdx === -1) {
+              canonicalInvoices.push(item);
+            } else {
+              const existing = canonicalInvoices[existingIdx];
+              const isCurrConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
+              const isExistConf = existing.status === 'Invoice Confirmed' || existing.pay === 'Completed & Locked';
+
+              const itemInv = (item.invNo || item.invoiceNo || item.code || '').trim();
+              const existInv = (existing.invNo || existing.invoiceNo || existing.code || '').trim();
+              const itemHasRealInv = itemInv && itemInv !== 'Pending Confirmation' && !itemInv.toLowerCase().includes('pending');
+              const existHasRealInv = existInv && existInv !== 'Pending Confirmation' && !existInv.toLowerCase().includes('pending');
+
+              let master, secondary;
+              if (isCurrConf && !isExistConf) {
+                master = item; secondary = existing;
+              } else if (!isCurrConf && isExistConf) {
+                master = existing; secondary = item;
+              } else if (itemHasRealInv && !existHasRealInv) {
+                master = item; secondary = existing;
+              } else if (!itemHasRealInv && existHasRealInv) {
+                master = existing; secondary = item;
+              } else {
+                master = item; secondary = existing;
+              }
+
+              canonicalInvoices[existingIdx] = {
+                ...secondary,
+                ...master,
+                invNo: (master.invNo && master.invNo !== 'Pending Confirmation') ? master.invNo : (secondary.invNo || master.invNo),
+                code: (master.code && master.code !== 'Pending Confirmation') ? master.code : (secondary.code || master.code),
+                bomCode: master.bomCode || secondary.bomCode,
+                poNo: master.poNo || secondary.poNo,
+                items: (master.items && master.items.length > 0) ? master.items : (secondary.items || []),
+                dispatchPacking: master.dispatchPacking || secondary.dispatchPacking,
+                accountsVerification: master.accountsVerification || secondary.accountsVerification,
+                billingAddress: master.billingAddress || secondary.billingAddress,
+                deliveryAddress: master.deliveryAddress || secondary.deliveryAddress,
+                deliveryAddressProofDoc: master.deliveryAddressProofDoc || secondary.deliveryAddressProofDoc,
+                sameAsBilling: master.sameAsBilling !== undefined ? master.sameAsBilling : secondary.sameAsBilling
               };
             }
-            return inv;
+          };
+
+          // 1. Process merged invoices from invoiceList
+          mergedInvoices.forEach(upsertCanonicalInvoice);
+
+          // 2. Process verified BOM invoices from bomStore
+          verifiedBomInvoices.forEach(upsertCanonicalInvoice);
+
+          // 3. Strict elimination of duplicate "Pending Confirmation" rows for any BOM that already has an invoice entry
+          const knownBomRefsWithInvoice = new Set();
+          canonicalInvoices.forEach(item => {
+            const num = (item.invNo || item.invoiceNo || item.code || '').trim();
+            const hasRealNo = num && num !== 'Pending Confirmation' && !num.toLowerCase().includes('pending');
+            const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
+            if (hasRealNo && bRef) {
+              knownBomRefsWithInvoice.add(bRef);
+            }
           });
 
-          const missingVerified = verifiedBomInvoices.filter(v => {
-            const vPo = (v.poNo || '').toLowerCase();
-            const vInv = (v.invNo || '').toLowerCase();
-            return !mergedInvoices.some(m =>
-              (m.poNo && m.poNo.toLowerCase() === vPo) ||
-              (m.bomCode && m.bomCode.toLowerCase() === vPo) ||
-              (m.invNo && m.invNo.toLowerCase() === vInv) ||
-              (m.code && m.code.toLowerCase() === vInv)
-            );
+          const dedupedInvoices = canonicalInvoices.filter(item => {
+            const num = (item.invNo || item.invoiceNo || item.code || '').trim();
+            const isPending = !num || num === 'Pending Confirmation' || num.toLowerCase().includes('pending');
+            const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
+            if (isPending && bRef && knownBomRefsWithInvoice.has(bRef)) {
+              return false;
+            }
+            return true;
           });
 
-          const allInvoicesUnified = [...missingVerified, ...mergedInvoices].sort((a, b) => {
+          const allInvoicesUnified = dedupedInvoices.sort((a, b) => {
             const numA = parseInt((a.poNo || a.bomCode || a.invNo || '').replace(/[^0-9]/g, ''), 10) || 0;
             const numB = parseInt((b.poNo || b.bomCode || b.invNo || '').replace(/[^0-9]/g, ''), 10) || 0;
             return numB - numA;
@@ -171,13 +314,17 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 const isConfirmed = i.status === 'Invoice Confirmed' || i.status === 'Completed' || i.status === 'Confirmed' || i.pay === 'Completed & Locked';
                 const isReady = i.status === 'Ready for Payment' || i.status === 'Accounts Verified & Passed to Invoice' || i.status === 'Packing Verified - Ready for Billing' || i.status === 'Ready for Invoicing' || i.pay === 'Ready' || i.pay === 'Ready for Payment';
 
+                const matchingBom = findMatchingBom(i);
+                const resolvedBomCode = i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code || 'BOM-001';
+                const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || 0;
+
                 return {
                   ...i,
                   code: i.invNo,
-                  c2: i.vendor || i.customerName || 'Customer',
-                  c3: i.poNo || i.bomCode || 'BOM-001',
-                  c4: i.date,
-                  c5: typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : i.invAmt,
+                  c2: i.vendor || i.customerName || matchingBom?.customerName || 'Customer',
+                  c3: resolvedBomCode,
+                  c4: cleanDateStr(i.date),
+                  c5: resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (i.invAmt || '₹ 0.00')),
                   c6: isConfirmed ? 'Completed & Locked' : (i.pay || 'Ready for Payment'),
                   status: isConfirmed ? 'Invoice Confirmed' : (i.status || 'Ready for Payment'),
                   stBg: isConfirmed ? '#DCFCE7' : (isReady ? '#EFF6FF' : '#FEF3C7'),
@@ -192,13 +339,15 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 if (!b) return false;
                 if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
                 const s = String(b.status || '').toLowerCase().trim();
-                const isPacked = s.includes('packed') || s.includes('ready for dispatch') || s.includes('sent to accounts') || s.includes('awaiting dispatch') || s.includes('packing verified') || s.includes('awaiting accounts');
+                const isSentToAccounts = Boolean(
+                  b.accountsVerification?.readyForAccounts ||
+                  s.includes('sent to accounts') ||
+                  s.includes('awaiting accounts') ||
+                  b.pendingSalesDispatchPayment
+                );
                 const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
-                const isReadyForAccounts = Boolean(b.accountsVerification?.readyForAccounts);
-                const isAllItemsPacked = Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 && b.dispatchPacking.every(p => Boolean(p.packed));
-                const isPartiallyPacked = Array.isArray(b.dispatchPacking) && b.dispatchPacking.some(p => Boolean(p.packed));
                 const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
-                return isPacked || isAccDone || isReadyForAccounts || isAllItemsPacked || isPartiallyPacked || isInvoiceOrLater || Boolean(b.pendingSalesDispatchPayment);
+                return isSentToAccounts || isAccDone || isInvoiceOrLater;
               };
 
               const isAccVerifiedOrder = (b) => {
@@ -228,6 +377,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
 
               const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort((a, b) => {
                 const parseBomSeq = (code) => {
+                  const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                  if (vrm) return parseInt(vrm[1], 10);
                   const m = String(code || '').match(/BOM-(\d+)/i);
                   return m ? parseInt(m[1], 10) : 0;
                 };
@@ -253,7 +404,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
-                  const payStatus = acc.paymentStatus || (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : isVerified ? '100% Received' : 'Pending Confirmation');
+                  const payStatus = acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification');
                   
                   // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
                   const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
@@ -279,15 +430,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
 
                   // Format Total Amount
                   let totalAmtFormatted = '—';
-                  const rawAmt = Number(acc.totalAmount || b.grandTotal || b.subTotal || b.totalAmount || 0);
+                  const rawAmt = Number(acc.totalAmount || (isVerified ? (b.grandTotal || b.subTotal || b.totalAmount || 0) : 0));
                   if (rawAmt > 0) {
                     totalAmtFormatted = `₹ ${rawAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                  } else if (isVerified) {
-                    const itemsArr = Array.isArray(b.items) && b.items.length > 0 ? b.items : (Array.isArray(b.dispatchPacking) ? b.dispatchPacking : []);
-                    const calculated = itemsArr.reduce((sum, it) => sum + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0);
-                    if (calculated > 0) {
-                      totalAmtFormatted = `₹ ${calculated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                    }
+                  } else {
+                    const orderEst = Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
+                    totalAmtFormatted = orderEst > 0 ? `₹ ${orderEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Order)` : '—';
                   }
 
                   const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(
@@ -391,26 +539,47 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 if (isClosedOrder(b)) return false;
                 if (isAwaitingLrOrder(b)) return false;
 
-                const isFullyPacked = isPackedOrder(b);
-                const is100Paid = Boolean(
-                  b.paymentType === '100% Paid' ||
-                  b.paymentType === '100% Advance' ||
-                  (b.paymentType && b.paymentType.includes('100%')) ||
-                  (b.c4 && b.c4.includes('100%'))
-                );
+                const isAccountsDone = Boolean(b.isAccountsDone || b.accountsVerification?.verified);
+                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed');
 
-                return Boolean(
-                  b.status === 'Awaiting Vehicle Loading & Dispatch' ||
-                  b.status === 'AWAITING VEHICLE LOADING' ||
-                  b.status === 'Invoice Confirmed' ||
-                  b.invoiceConfirmed ||
-                  b.status === 'Accounts Verified & Passed to Invoice' ||
-                  b.isAccountsDone ||
-                  b.accountsVerification?.verified ||
-                  (b.invoiceNo && !isClosedOrder(b)) ||
-                  (isFullyPacked && (b.isAccountsDone || b.status === 'Accounts Verified & Passed to Invoice' || b.accountsVerification?.verified || b.invoiceConfirmed || b.invoiceNo || is100Paid))
-                );
+                // An order qualifies for Awaiting Vehicle Loading ONLY when Accounts verification AND Invoice confirmation are both completed
+                if (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.status === 'AWAITING VEHICLE LOADING' || String(b.status || '').toLowerCase().includes('awaiting vehicle load')) {
+                  if (!isAccountsDone || !isInvoiceDone) {
+                    return false;
+                  }
+                  return true;
+                }
+
+                const isFullyPacked = isPackedOrder(b);
+                return Boolean(isFullyPacked && isAccountsDone && isInvoiceDone);
               };
+
+              const isDispatchEligible = (b) => {
+                if (!b) return false;
+                const s = String(b.status || '').toLowerCase().trim();
+                if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') {
+                  return Boolean(b.salesConfirmed || b.isSentToDispatch || s.includes('dispatch') || s.includes('packed'));
+                }
+                const isDraftOrPending = (b.status === 'Draft' || s === 'draft' || s.includes('pending confirmation') || s === 'pending sales confirmation');
+                const hasEnteredDispatch = Boolean(
+                  b.salesConfirmed ||
+                  b.isSentToDispatch ||
+                  s.includes('sent to dispatch') ||
+                  s.includes('dispatch') ||
+                  s.includes('packed') ||
+                  s.includes('accounts') ||
+                  s.includes('invoice') ||
+                  s.includes('loading') ||
+                  s.includes('completed') ||
+                  s.includes('closed')
+                );
+                if (isDraftOrPending && !hasEnteredDispatch) {
+                  return false;
+                }
+                return hasEnteredDispatch || !isDraftOrPending;
+              };
+
+              const allDispatchBoms = (bomStore || []).filter(isDispatchEligible);
 
               return {
                 title: 'Dispatch & Packing Fulfillment Center',
@@ -418,18 +587,20 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 actionText: '',
                 searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
                 tabs: [
-                  { id: 'All', label: 'All Orders', count: (bomStore || []).filter(Boolean).length, bg: '#F1F5F9', fg: '#334155' },
-                  { id: 'PendingPacking', label: 'Pending Packing', count: (bomStore || []).filter(b => b && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
-                  { id: 'PartiallyPacked', label: 'Partially Packed', count: (bomStore || []).filter(b => isPartiallyPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
-                  { id: 'Packed', label: 'Packing Verified', count: (bomStore || []).filter(b => isPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b)).length, bg: '#DCFCE7', fg: '#166534' },
-                  { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: (bomStore || []).filter(b => isOrderAwaitingLoading(b)).length, bg: '#DBEAFE', fg: '#1E40AF' },
-                  { id: 'AwaitingLrCopy', label: 'Awaiting LR Copy', count: (bomStore || []).filter(b => isAwaitingLrOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
-                  { id: 'Closed', label: 'Closed / Dispatched', count: (bomStore || []).filter(b => isClosedOrder(b)).length, bg: '#F1F5F9', fg: '#475569' },
-                  { id: 'Cancelled', label: 'Cancelled', count: (bomStore || []).filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
+                  { id: 'All', label: 'All Orders', count: allDispatchBoms.length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'PendingPacking', label: 'Pending Packing', count: allDispatchBoms.filter(b => b && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
+                  { id: 'PartiallyPacked', label: 'Partially Packed', count: allDispatchBoms.filter(b => isPartiallyPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Packed', label: 'Packing Verified', count: allDispatchBoms.filter(b => isPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b)).length, bg: '#DCFCE7', fg: '#166534' },
+                  { id: 'AwaitingLoading', label: 'Awaiting Vehicle Loading', count: allDispatchBoms.filter(b => isOrderAwaitingLoading(b)).length, bg: '#DBEAFE', fg: '#1E40AF' },
+                  { id: 'AwaitingLrCopy', label: 'Awaiting LR Copy', count: allDispatchBoms.filter(b => isAwaitingLrOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Closed', label: 'Closed / Dispatched', count: allDispatchBoms.filter(b => isClosedOrder(b)).length, bg: '#F1F5F9', fg: '#475569' },
+                  { id: 'Cancelled', label: 'Cancelled', count: allDispatchBoms.filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
-                rows: (bomStore || []).filter(Boolean).sort((a, b) => {
+                rows: allDispatchBoms.sort((a, b) => {
                   const parseBomSeq = (code) => {
+                    const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+                    if (vrm) return parseInt(vrm[1], 10);
                     const m = String(code || '').match(/BOM-(\d+)/i);
                     return m ? parseInt(m[1], 10) : 0;
                   };
@@ -511,9 +682,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     stBorder = '1px solid #86EFAC';
                     tabGroup = 'Closed';
                   } else if (isAwaitingLoad) {
-                    statusLabel = (b.status === 'Invoice Confirmed' || b.invoiceConfirmed) 
-                      ? 'INVOICE CONFIRMED - READY FOR LOADING' 
-                      : 'AWAITING VEHICLE LOADING';
+                    statusLabel = 'AWAITING VEHICLE LOAD';
                     stBg = '#DBEAFE';
                     stFg = '#1E40AF';
                     stBorder = '1px solid #93C5FD';
@@ -865,8 +1034,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
-                c2: b.date || new Date().toISOString().split('T')[0],
-                c3: b.customerName || b.companyName || 'Customer Order',
+                c2: (b.date ? String(b.date).slice(0, 10) : new Date().toISOString().split('T')[0]),
+                c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
                 status: b.status || 'Pending Confirmation',
@@ -891,8 +1060,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
-                c2: b.date || new Date().toISOString().split('T')[0],
-                c3: b.customerName || b.companyName || 'Customer Order',
+                c2: (b.date ? String(b.date).slice(0, 10) : new Date().toISOString().split('T')[0]),
+                c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
                 status: b.status || 'Pending Confirmation',
@@ -917,8 +1086,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
-                c2: b.date || new Date().toISOString().split('T')[0],
-                c3: b.customerName || b.companyName || 'Customer Order',
+                c2: (b.date ? String(b.date).slice(0, 10) : new Date().toISOString().split('T')[0]),
+                c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
                 status: b.status || 'Pending Confirmation',
@@ -963,8 +1132,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               rows: (visibleBomStore || []).map(b => ({
                 ...b,
                 code: b.bomCode || 'BOM-101',
-                c2: b.date || new Date().toISOString().split('T')[0],
-                c3: b.customerName || b.companyName || 'Customer Order',
+                c2: (b.date ? String(b.date).slice(0, 10) : new Date().toISOString().split('T')[0]),
+                c3: [b.companyName, b.customerName, b.vendor].find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', '—', '-'].includes(s.trim())) || b.companyName || b.customerName || 'Customer Order',
                 c4: b.paymentType || b.paymentTerms || '50% Advance + 50% Dispatch',
                 c5: formatCurrency(b.grandTotal),
                 status: b.status || 'Pending Confirmation',

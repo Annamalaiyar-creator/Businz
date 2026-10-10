@@ -17,6 +17,7 @@ export default function CrmCustomersView({
   customers = [],
   opportunities = [],
   quotations = [],
+  boms = [],
   onSaveCustomer,
   onBatchUpdateCustomers,
   onOpenWhatsAppChat,
@@ -158,10 +159,10 @@ export default function CrmCustomersView({
     dispatchPincode: '',
     sameAsBilling: true,
     // Background defaults (no longer required in UI)
-    creditLimit: 2500000,
-    creditDays: 30,
-    paymentTerms: '50% Advance + 50% Dispatch',
-    source: 'Direct Client',
+    creditLimit: '',
+    creditDays: '',
+    paymentTerms: '',
+    source: '',
     notes: '',
     primaryContact: {
       name: '',
@@ -532,9 +533,9 @@ export default function CrmCustomersView({
       const city = getVal('city');
       const state = getVal('state');
       const pincode = getVal('pincode');
-      const paymentTerms = getVal('paymentTerms') || '50% Advance + 50% Dispatch';
+      const paymentTerms = getVal('paymentTerms') || '';
       const limitRaw = getVal('creditLimit');
-      const creditLimit = limitRaw ? (parseFloat(limitRaw.replace(/[^0-9.]/g, '')) || 2500000) : 2500000;
+      const creditLimit = limitRaw ? (parseFloat(limitRaw.replace(/[^0-9.]/g, '')) || 0) : 0;
 
       return {
         id: 'CUST-VRM-' + String(100 + customers.length + idx + 1),
@@ -642,7 +643,7 @@ export default function CrmCustomersView({
     setFormCust({
       customerName: cust.customerName || cust.companyName || '',
       companyName: cust.companyName || '',
-      assignedSalesperson: cust.assignedSalesperson || cust.salesPerson || activeAccountUser,
+      assignedSalesperson: cust.assignedSalesperson || cust.salesPerson || '',
       customerType: cust.customerType || 'EPC Contractor',
       gstNumber: cust.gstNumber || '',
       panNumber: cust.panNumber || '',
@@ -655,10 +656,10 @@ export default function CrmCustomersView({
       dispatchState: cust.dispatchState || cust.state || '',
       dispatchPincode: cust.dispatchPincode || cust.pincode || '',
       sameAsBilling: cust.sameAsBilling !== undefined ? cust.sameAsBilling : (!cust.dispatchAddress || cust.dispatchAddress === cust.address),
-      creditLimit: cust.creditLimit || 2500000,
-      creditDays: cust.creditDays || 30,
-      paymentTerms: cust.paymentTerms || '50% Advance + 50% Dispatch',
-      source: cust.source || 'Direct Client',
+      creditLimit: cust.creditLimit !== undefined && cust.creditLimit !== null ? cust.creditLimit : '',
+      creditDays: cust.creditDays !== undefined && cust.creditDays !== null ? cust.creditDays : '',
+      paymentTerms: cust.paymentTerms || '',
+      source: cust.source || '',
       notes: cust.notes || '',
       primaryContact: {
         name: cust.primaryContact?.name || '',
@@ -1364,6 +1365,7 @@ export default function CrmCustomersView({
         onNavigateTab={onNavigateTab}
         opportunities={opportunities}
         quotations={quotations}
+        boms={boms}
         activeAccountUser={activeAccountUser}
       />
     );

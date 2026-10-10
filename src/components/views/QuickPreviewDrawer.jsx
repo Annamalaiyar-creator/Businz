@@ -95,32 +95,54 @@ export default function QuickPreviewDrawer({
             View Full Details
           </button>
 
-          {canCancelBom && ['Dispatch Orders', 'Accounts Verification', 'BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && quickPreviewRecord.status !== 'CANCELLED' && !quickPreviewRecord.cancelled && (
-            <button
-              onClick={() => {
-                const rec = quickPreviewRecord;
-                handleCancelBomOrder(rec);
-                onClose();
-              }}
-              style={{
-                border: '1px solid #FECACA',
-                backgroundColor: '#FEF2F2',
-                color: '#DC2626',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
-              }}
-              title="Cancel BOM and restore blocked stock back into inventory"
-            >
-              <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
-            </button>
-          )}
+          {canCancelBom && ['Dispatch Orders', 'Accounts Verification', 'BOM Orders', 'BOM', 'BOM / Routing'].includes(activeTab) && quickPreviewRecord.status !== 'Cancelled & Stock Restored' && quickPreviewRecord.status !== 'CANCELLED' && !quickPreviewRecord.cancelled && (() => {
+            if (activeTab === 'Dispatch Orders') {
+              const isSent = Boolean(
+                quickPreviewRecord.status === 'Packed & Awaiting Accounts Verification' ||
+                quickPreviewRecord.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
+                quickPreviewRecord.status === 'Packing Verified - Sent to Accounts' ||
+                quickPreviewRecord.status === 'Accounts Verified & Passed to Invoice' ||
+                quickPreviewRecord.status === 'ACCOUNTS VERIFIED' ||
+                quickPreviewRecord.status === 'Invoice Confirmed' ||
+                quickPreviewRecord.status === 'Awaiting Vehicle Loading & Dispatch' ||
+                quickPreviewRecord.status === 'AWAITING VEHICLE LOADING' ||
+                quickPreviewRecord.status === 'Closed' ||
+                quickPreviewRecord.status === 'Completed' ||
+                quickPreviewRecord.tabGroup === 'Packed' ||
+                quickPreviewRecord.tabGroup === 'AwaitingLoading' ||
+                quickPreviewRecord.tabGroup === 'Closed' ||
+                quickPreviewRecord.accountsVerification?.readyForAccounts ||
+                quickPreviewRecord.accountsVerification?.verified
+              );
+              if (isSent) return null;
+            }
+            return (
+              <button
+                onClick={() => {
+                  const rec = quickPreviewRecord;
+                  handleCancelBomOrder(rec);
+                  onClose();
+                }}
+                style={{
+                  border: '1px solid #FECACA',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  padding: '6px 14px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
+                }}
+                title="Cancel BOM and restore blocked stock back into inventory"
+              >
+                <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
+              </button>
+            );
+          })()}
           <button
             onClick={() => onClose()}
             style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B', padding: '4px', display: 'inline-flex', alignItems: 'center' }}
@@ -161,53 +183,146 @@ export default function QuickPreviewDrawer({
         </div>
       </div>
 
-      {/* Primary Dispatch Action Button */}
-      {activeTab === 'Dispatch Orders' && !quickPreviewRecord.cancelled && (
-        <div style={{ padding: '2px 0' }}>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof onViewFullDetails === 'function') {
-                onViewFullDetails(quickPreviewRecord);
-              }
-              onClose();
-            }}
-            style={{
-              width: '100%',
-              padding: '13px 20px',
-              borderRadius: '12px',
-              border: 'none',
-              background: (quickPreviewRecord.tabGroup === 'Closed' || quickPreviewRecord.status === 'Completed' || quickPreviewRecord.status === 'COMPLETED & DISPATCHED')
-                ? 'linear-gradient(135deg, #15803D, #16A34A)'
-                : (quickPreviewRecord.tabGroup === 'AwaitingLrCopy' || quickPreviewRecord.status?.includes('Awaiting LR'))
-                  ? 'linear-gradient(135deg, #D97706, #F59E0B)'
-                  : (quickPreviewRecord.tabGroup === 'AwaitingLoading' || quickPreviewRecord.status?.includes('Loading') || quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' || quickPreviewRecord.tabGroup === 'Packed')
-                    ? 'linear-gradient(135deg, #0284C7, #0EA5E9)'
-                    : 'linear-gradient(135deg, #0E7490, #06B6D4)',
-              color: '#FFFFFF',
-              fontWeight: '800',
-              fontSize: '14px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              boxShadow: '0 4px 14px rgba(14,116,144,0.25)',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {(quickPreviewRecord.tabGroup === 'Closed' || quickPreviewRecord.status === 'Completed' || quickPreviewRecord.status === 'COMPLETED & DISPATCHED') ? (
-              <>👁️ View Dispatched Shipment Details</>
-            ) : (quickPreviewRecord.tabGroup === 'AwaitingLrCopy' || quickPreviewRecord.status?.includes('Awaiting LR')) ? (
-              <>📄 Upload Transporter LR Copy & Close Order</>
-            ) : (quickPreviewRecord.tabGroup === 'AwaitingLoading' || quickPreviewRecord.status?.includes('Loading') || quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' || quickPreviewRecord.tabGroup === 'Packed') ? (
-              <>🚚 Proceed to Vehicle Loading & Complete Dispatch</>
-            ) : (
-              <>📦 Pack Goods & Verify Items for Dispatch</>
+      {/* Cancellation Notice Banner */}
+      {(quickPreviewRecord.cancelled || quickPreviewRecord.status === 'Cancelled & Stock Restored' || quickPreviewRecord.status === 'CANCELLED') && (
+        <div style={{
+          backgroundColor: '#FEF2F2',
+          border: '1.5px solid #FECACA',
+          borderRadius: '12px',
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0 2px 6px rgba(220, 38, 38, 0.06)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <XCircle style={{ width: '18px', height: '18px', color: '#DC2626', flexShrink: 0 }} />
+            <span style={{ fontSize: '13.5px', fontWeight: '900', color: '#991B1B' }}>
+              This Order was Cancelled &amp; Stock Restored
+            </span>
+          </div>
+          <div style={{ fontSize: '12.5px', color: '#7F1D1D', lineHeight: 1.5, paddingLeft: '26px' }}>
+            <strong>Reason:</strong> {quickPreviewRecord.cancellationReason || 'Order cancelled before dispatch'}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontSize: '11px', color: '#991B1B', paddingLeft: '26px', marginTop: '2px' }}>
+            <span>
+              <strong>Cancelled By:</strong>{' '}
+              <strong style={{ color: '#7F1D1D' }}>
+                {quickPreviewRecord.cancelledBy || 'Authorized Personnel'}
+              </strong>
+              {(quickPreviewRecord.cancelledByRole || quickPreviewRecord.cancelledByTeam) && (
+                <span style={{
+                  marginLeft: '6px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#991B1B',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #FECACA',
+                  fontWeight: '800'
+                }}>
+                  {quickPreviewRecord.cancelledByRole || ''}
+                  {quickPreviewRecord.cancelledByRole && quickPreviewRecord.cancelledByTeam ? ` • ${quickPreviewRecord.cancelledByTeam}` : (quickPreviewRecord.cancelledByTeam || '')}
+                </span>
+              )}
+            </span>
+            {quickPreviewRecord.cancelledAt && (
+              <>
+                <span>•</span>
+                <span>{new Date(quickPreviewRecord.cancelledAt).toLocaleString('en-IN')}</span>
+              </>
             )}
-          </button>
+          </div>
         </div>
       )}
+
+      {/* Primary Dispatch Action Button */}
+      {activeTab === 'Dispatch Orders' && !quickPreviewRecord.cancelled && (() => {
+        const isClosed = Boolean(
+          quickPreviewRecord.tabGroup === 'Closed' ||
+          quickPreviewRecord.status === 'Completed' ||
+          quickPreviewRecord.status === 'COMPLETED' ||
+          quickPreviewRecord.status === 'COMPLETED & DISPATCHED' ||
+          quickPreviewRecord.status === 'Fully Dispatched & Delivered'
+        );
+        const isAwaitingLr = !isClosed && Boolean(
+          quickPreviewRecord.tabGroup === 'AwaitingLrCopy' ||
+          quickPreviewRecord.status?.includes('Awaiting LR') ||
+          quickPreviewRecord.status === 'AWAITING LR COPY'
+        );
+        const isAccountsDone = Boolean(
+          quickPreviewRecord.isAccountsDone ||
+          quickPreviewRecord.accountsVerification?.verified
+        );
+        const isInvoiceDone = Boolean(
+          quickPreviewRecord.invoiceConfirmed ||
+          quickPreviewRecord.status === 'Invoice Confirmed'
+        );
+        const isFullyPacked = Boolean(
+          quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' ||
+          quickPreviewRecord.tabGroup === 'Packed' ||
+          (quickPreviewRecord.status && quickPreviewRecord.status.toLowerCase().includes('packed'))
+        );
+        const isReadyForVehicleLoading = !isClosed && !isAwaitingLr && Boolean(
+          (quickPreviewRecord.tabGroup === 'AwaitingLoading' && isAccountsDone && isInvoiceDone) ||
+          ((quickPreviewRecord.status === 'Awaiting Vehicle Loading & Dispatch' || quickPreviewRecord.status === 'AWAITING VEHICLE LOADING' || quickPreviewRecord.status === 'AWAITING VEHICLE LOAD' || quickPreviewRecord.status === 'Awaiting Vehicle Load') && isAccountsDone && isInvoiceDone) ||
+          (isFullyPacked && isAccountsDone && isInvoiceDone)
+        );
+        const isSentToAccounts = !isClosed && !isAwaitingLr && !isReadyForVehicleLoading && Boolean(
+          isFullyPacked ||
+          quickPreviewRecord.status?.includes('Sent to Accounts') ||
+          quickPreviewRecord.status?.includes('SENT TO ACCOUNTS') ||
+          quickPreviewRecord.status?.includes('Accounts Verification')
+        );
+
+        let buttonBg = 'linear-gradient(135deg, #0E7490, #06B6D4)';
+        let buttonContent = <>📦 Pack Goods & Verify Items for Dispatch</>;
+
+        if (isClosed) {
+          buttonBg = 'linear-gradient(135deg, #15803D, #16A34A)';
+          buttonContent = <>👁️ View Dispatched Shipment Details</>;
+        } else if (isAwaitingLr) {
+          buttonBg = 'linear-gradient(135deg, #D97706, #F59E0B)';
+          buttonContent = <>📄 Upload Transporter LR Copy & Close Order</>;
+        } else if (isReadyForVehicleLoading) {
+          buttonBg = 'linear-gradient(135deg, #0284C7, #0EA5E9)';
+          buttonContent = <>🚚 Proceed to Vehicle Loading & Complete Dispatch</>;
+        } else if (isSentToAccounts) {
+          return null;
+        }
+
+        return (
+          <div style={{ padding: '2px 0' }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof onViewFullDetails === 'function') {
+                  onViewFullDetails(quickPreviewRecord);
+                }
+                onClose();
+              }}
+              style={{
+                width: '100%',
+                padding: '13px 20px',
+                borderRadius: '12px',
+                border: 'none',
+                background: buttonBg,
+                color: '#FFFFFF',
+                fontWeight: '800',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                boxShadow: '0 4px 14px rgba(14,116,144,0.25)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {buttonContent}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* 4 Stat Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
@@ -392,8 +507,11 @@ export default function QuickPreviewDrawer({
                         }}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Camera size={10} /> Photo</span>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(15,23,42,0.8)', color: 'white', padding: '3px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }} title={ph.uploadTime || ph.uploadedAt || ph.name}>
+                          <Camera size={10} style={{ color: '#38BDF8', flexShrink: 0 }} />
+                          {ph.uploadTime || (ph.uploadedAt ? new Date(ph.uploadedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Photo')}
+                        </span>
                         <span>›</span>
                       </div>
                     </div>

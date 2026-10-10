@@ -6,6 +6,7 @@ import {
   FileText, Check, ChevronDown, Zap, Send, TrendingUp, Layers, Award,
   Trash2, UserCheck, RotateCcw, Download, Printer, MapPin
 } from 'lucide-react';
+import { getNextSequence } from '../../utils/sequenceGenerator';
 
 const STRUCTURE_CATEGORIES = [
   'Aluminium Mounting Structures',
@@ -366,12 +367,12 @@ export default function CrmLeadsView({
       return;
     }
 
-    const nextNumber = `LEAD-${String(leads.length + 1).padStart(3, '0')}`;
+    const nextNumber = getNextSequence('LEAD', leads || []).code;
     const kw = parseFloat(newLeadForm.estimatedKw) || 50;
     const isAutoQualified = kw >= 10;
 
     const newRecord = {
-      id: `LEAD-2026-${String(Date.now()).slice(-4)}`,
+      id: nextNumber,
       leadNumber: nextNumber,
       companyName: newLeadForm.companyName,
       contactPerson: newLeadForm.contactPerson,

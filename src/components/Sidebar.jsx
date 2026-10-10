@@ -8,7 +8,7 @@ import {
   Search, HelpCircle, MessageSquare, Rocket, Sparkles, ChevronUp,
   CheckCircle, ClipboardList, Truck, Warehouse, ShieldCheck, Activity, FileCheck,
   Calendar, Wrench, Calculator, RefreshCw, Scale, Building2, BarChart3,
-  Zap, CreditCard, Layers, Briefcase, Palette, Factory
+  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2
 } from 'lucide-react';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
@@ -21,6 +21,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const [realBOMCount, setRealBOMCount] = useState(0);
   const [realPendingPOCount, setRealPendingPOCount] = useState(0);
   const [realAccountsAwaitingPOCount, setRealAccountsAwaitingPOCount] = useState(0);
+  const [realAccountsGrnCount, setRealAccountsGrnCount] = useState(0);
   const [realPendingDispatchCount, setRealPendingDispatchCount] = useState(0);
 
   useEffect(() => {
@@ -33,9 +34,10 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   useEffect(() => {
     const updateCounts = async () => {
       try {
-        const [boms, pos] = await Promise.all([
+        const [boms, pos, grnsCloud] = await Promise.all([
           fetchCloudStore('bom_store', []),
-          fetchCloudStore('po_store', [])
+          fetchCloudStore('po_store', []),
+          fetchCloudStore('grn_store', []).catch(() => [])
         ]);
         if (Array.isArray(boms)) {
           setRealBOMCount(boms.length);
@@ -51,11 +53,21 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           setRealPendingPOCount(pos.filter(p => p.status === 'Draft' || p.status === 'WAITING FOR APPROVAL' || p.status === 'Pending Approval' || p.statusType === 'draft' || p.statusType === 'pending').length);
           setRealAccountsAwaitingPOCount(pos.filter(p => p.status === 'MD Approved' || p.statusType === 'md_approved').length);
         }
+        let localGrns = [];
+        try {
+          localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+        } catch (_) {}
+        const totalGrns = (Array.isArray(localGrns) && localGrns.length > 0) ? localGrns : (Array.isArray(grnsCloud) ? grnsCloud : []);
+        setRealAccountsGrnCount(totalGrns.length);
       } catch (_) {}
     };
     updateCounts();
     window.addEventListener('controlroom_storage_update', updateCounts);
-    return () => window.removeEventListener('controlroom_storage_update', updateCounts);
+    window.addEventListener('central_inventory_updated', updateCounts);
+    return () => {
+      window.removeEventListener('controlroom_storage_update', updateCounts);
+      window.removeEventListener('central_inventory_updated', updateCounts);
+    };
   }, []);
 
   // Only count active/open work orders (decreases when a work order is completed / approved & closed)
@@ -127,7 +139,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
 
     if (role === 'Production Head' || role === 'Production Admin') {
       sections = [...productionSections];
-    } else if (role === 'Dispatch Head') {
+    } else if (role === 'Dispatch Head' || role === 'Dispatch' || role === 'Dispatch Executive' || String(role || '').toLowerCase().includes('dispatch')) {
       sections = [
         {
           category: 'MAIN MENU',
@@ -135,7 +147,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
             { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
-            { label: 'Delivery Challans', icon: FileCheck },
             { label: 'Stock Status', icon: Layers }
           ]
         },
@@ -183,6 +194,9 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'PO Verification', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: ShoppingCart, badge: realAccountsAwaitingPOCount > 0 ? String(realAccountsAwaitingPOCount) : undefined },
+            { label: 'Goods Receipt Note (GRN)', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined },
+            { label: 'Store Inventory', targetTab: 'Inventory Stores', icon: Warehouse },
+            { label: 'Raw Material Inventory', targetTab: 'Raw Material Directory', icon: Layers },
             { label: 'Accounts Verification', icon: CheckCircle }
           ]
         }
@@ -235,14 +249,16 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'Preset Management', icon: Layers },
-            { label: 'BOM Orders', icon: GitBranch },
-            { label: 'Stock Status', icon: Warehouse }
+            { label: 'Stock Status', icon: Warehouse },
+            { label: 'Raw Material Directory', icon: Layers }
           ]
         },
         {
-          category: 'TOOLS & ENGINE',
+          category: 'SUPPORT CHANNELS',
           items: [
-            { label: 'Raw Material Directory', icon: Layers }
+            { label: 'WhatsApp Inbox', icon: MessageSquare, badge: 'Live' },
+            { label: 'Mail Inbox', icon: Mail, badge: 'Direct' },
+            { label: 'Facebook & Meta', icon: Share2, badge: 'Meta' }
           ]
         }
       ];
@@ -251,7 +267,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'MAIN MENU',
           items: [
-            { label: 'Finance Dashboard', icon: LayoutDashboard },
+            { label: 'Billing Dashboard', icon: LayoutDashboard },
             { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
             { label: 'Delivery Challans', icon: FileCheck }
           ]
@@ -296,6 +312,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
 
     const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director');
     const isTa = (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA'));
+    const isTechSupport = (role === 'Tech Support' || role === 'Technical Support' || (role || '').toLowerCase().includes('tech support'));
 
     const isProcurementRole = role === 'Procurement Head' || role === 'Procurement Admin' || (role || '').includes('Procurement');
     const templateLabel = isProcurementRole ? 'PO Template' : 'Templates';
@@ -305,12 +322,14 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.label === 'PO Template' || i.targetTab === 'Templates'));
     const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
+    const showTemplates = !hasTemplates && !isCeo && !isTechSupport;
+
     if (sysSection) {
-      if (!hasTemplates && !isCeo) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
+      if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
       if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
     } else {
       const sysItems = [];
-      if (!hasTemplates && !isCeo) {
+      if (showTemplates) {
         sysItems.push({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
       }
       sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
@@ -318,6 +337,16 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         category: 'SYSTEM & CONFIG',
         items: sysItems
       });
+    }
+
+    if (isTechSupport) {
+      sections = sections.map(s => ({
+        ...s,
+        items: (s.items || []).filter(i => 
+          i.targetTab !== 'Templates' && i.label !== 'Templates' && i.label !== 'Print Templates' && i.label !== 'PO Template' && i.label !== 'Template Studio' &&
+          i.targetTab !== 'BOM Orders' && i.label !== 'BOM Orders' && i.label !== 'BOM' && i.label !== 'Sales BOM' && i.targetTab !== 'BOM'
+        )
+      })).filter(s => s.items.length > 0);
     }
 
     return sections;
@@ -328,6 +357,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
     if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes' || tab === 'PO Template') return 'Templates';
+    if (tab === 'Store Inventory' || tab === 'Inventory Stores') return 'Store Inventory';
+    if (tab === 'Raw Material Inventory' || tab === 'Raw Material Directory') return 'Raw Material Inventory';
     return tab;
   };
 

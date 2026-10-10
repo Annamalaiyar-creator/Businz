@@ -18,7 +18,9 @@ import VRMTemplateStudioView from './components/VRMTemplateStudioView';
 import ProductionAdminView from './components/ProductionAdminView';
 import SalesExecutiveDashboardView from './components/views/SalesExecutiveDashboardView';
 import AccountsFinanceDashboard from './components/views/AccountsFinanceDashboard';
+import BillingDashboardView from './components/views/BillingDashboardView';
 import CeoExecutiveDashboardView from './components/views/CeoExecutiveDashboardView';
+import TechSupportDashboardView from './components/views/TechSupportDashboardView';
 import LoginScreen from './components/LoginScreen';
 import DeveloperPortalView from './components/DeveloperPortalView';
 import NotificationToast from './components/NotificationToast';
@@ -308,6 +310,11 @@ function App() {
     if (isAccountsRole && 
         (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports' || activeTab === 'Delivery Challans')) {
       handleTabChange('Finance Dashboard');
+    }
+
+    const isDispatchRole = userRole === 'Dispatch Head' || userRole === 'Dispatch' || userRole === 'Dispatch Executive' || String(userRole || '').toLowerCase().includes('dispatch');
+    if (isDispatchRole && activeTab === 'Delivery Challans') {
+      handleTabChange('Dispatch Dashboard');
     }
   }, [userRole, activeTab]);
 
@@ -627,7 +634,11 @@ function App() {
               }} 
             />
           ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer' || activeTab === 'PO Template') ? (
-            <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : 'Proforma Invoice')} />
+            (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) ? (
+              <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : (
+              <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : 'Proforma Invoice')} />
+            )
           ) : activeTab === 'Purchase Orders' ? (
             <PurchaseOrdersView 
               userRole={userRole} 
@@ -641,23 +652,31 @@ function App() {
             <InventoryAutoConversion />
           ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
             <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard') ? (
-            <OtherViews 
-              activeTab={activeTab} 
-              onChangeTab={handleTabChange} 
-              userRole={userRole} 
-              convertingPiData={convertingPiData}
-              onClearConvertingPiData={() => setConvertingPiData(null)}
-              targetBomCode={targetBomCode}
-              clearTargetBom={() => setTargetBomCode(null)}
-              targetPiNo={targetPiNo}
-              itemsList={itemsList}
-              purchaseOrders={purchaseOrders}
-            />
-          ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard' && activeTab !== 'Tech Support Dashboard') ? (
+            ((userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) && (activeTab === 'BOM Orders' || activeTab === 'BOM' || activeTab === 'Sales BOM' || activeTab === 'BOM / Routing')) ? (
+              <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : (
+              <OtherViews 
+                activeTab={activeTab} 
+                onChangeTab={handleTabChange} 
+                userRole={userRole} 
+                convertingPiData={convertingPiData}
+                onClearConvertingPiData={() => setConvertingPiData(null)}
+                targetBomCode={targetBomCode}
+                clearTargetBom={() => setTargetBomCode(null)}
+                targetPiNo={targetPiNo}
+                itemsList={itemsList}
+                purchaseOrders={purchaseOrders}
+              />
+            )
+          ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+            <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+          ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts'))) ? (
             <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
           ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
             <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+          ) : ((activeTab === 'Dashboard' || activeTab === 'Tech Support Dashboard') && (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support'))) ? (
+            <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
           ) : (
             <DashboardFullReference userRole={userRole} />
           )}

@@ -13,11 +13,18 @@ export default function ConfirmingBomModal({
   setBomStore,
   setActiveMediaPreviewModal = () => {}
 }) {
-  const isEditMode = Boolean(
+  const isCancelled = Boolean(
+    confirmingBomModal.cancelled ||
+    confirmingBomModal.status === 'Cancelled' ||
+    confirmingBomModal.status === 'CANCELLED' ||
+    confirmingBomModal.status === 'Cancelled & Stock Restored' ||
+    (confirmingBomModal.status && typeof confirmingBomModal.status === 'string' && confirmingBomModal.status.toLowerCase().includes('cancel'))
+  );
+  const isEditMode = !isCancelled && Boolean(
     confirmingBomModal.isEditMode !== false &&
     ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'ACTIVE', 'Active', 'Pending Verification', 'Pending'].includes(confirmingBomModal.status)
   );
-  const isAlreadyForwarded = !isEditMode;
+  const isAlreadyForwarded = !isEditMode || isCancelled;
   const allItemsConfirmed = confirmingBomModal.items && confirmingBomModal.items.length > 0 && confirmingBomModal.items.every(i => i.confirmed);
 
   const modalPresetGroups = (Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0)
@@ -57,33 +64,84 @@ export default function ConfirmingBomModal({
   const orderGstAmount = parseFloat(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
   const grandTotalCalc = orderGrandTotal;
 
-  const bObj = confirmingBomModal.billingAddressObj || {
-    address: confirmingBomModal.billingAddress || '',
-    city: '',
-    state: '',
-    pincode: ''
-  };
-  const dObj = confirmingBomModal.deliveryAddressObj || {
-    address: confirmingBomModal.deliveryAddress || '',
-    city: '',
-    state: '',
-    pincode: ''
-  };
-
-  const formatAddr = (obj, fallbackStr) => {
-    if (!obj) return fallbackStr || '—';
-    const { address, city, state, pincode } = obj;
-    const parts = [];
-    if (address && address.trim() && address.trim() !== '—') parts.push(address.trim());
-    if (city && city.trim() && city.trim() !== '—') parts.push(city.trim());
-    if (state && state.trim() && state.trim() !== '—' && pincode && pincode.trim() && pincode.trim() !== '—') {
-      parts.push(`${state.trim()} - ${pincode.trim()}`);
-    } else {
-      if (state && state.trim() && state.trim() !== '—') parts.push(state.trim());
-      if (pincode && pincode.trim() && pincode.trim() !== '—') parts.push(pincode.trim());
+    let sourcePi = null;
+    const piNum = confirmingBomModal.sourcePiNo || confirmingBomModal.piNo;
+    if (piNum) {
+      try {
+        const rawPis = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_proforma_invoice_store');
+        if (rawPis) {
+          const parsedPis = JSON.parse(rawPis);
+          if (Array.isArray(parsedPis)) {
+            sourcePi = parsedPis.find(p => {
+              const pNo = String(p.piNo || p.estimate_number || p.id || '').trim().toLowerCase();
+              return pNo === String(piNum).trim().toLowerCase();
+            });
+          }
+        }
+      } catch (e) {}
     }
-    return parts.length > 0 ? parts.join(', ') : (fallbackStr || '—');
-  };
+
+    const rawBObj = (confirmingBomModal.billingAddressObj && typeof confirmingBomModal.billingAddressObj === 'object' && Object.keys(confirmingBomModal.billingAddressObj).length > 0)
+      ? confirmingBomModal.billingAddressObj
+      : (confirmingBomModal.billingAddress && typeof confirmingBomModal.billingAddress === 'object'
+          ? confirmingBomModal.billingAddress
+          : (sourcePi?.billingAddressObj && typeof sourcePi.billingAddressObj === 'object' && Object.keys(sourcePi.billingAddressObj).length > 0
+              ? sourcePi.billingAddressObj
+              : (sourcePi?.billingAddress && typeof sourcePi.billingAddress === 'object' ? sourcePi.billingAddress : {})));
+
+    const rawDObj = (confirmingBomModal.deliveryAddressObj && typeof confirmingBomModal.deliveryAddressObj === 'object' && Object.keys(confirmingBomModal.deliveryAddressObj).length > 0)
+      ? confirmingBomModal.deliveryAddressObj
+      : (confirmingBomModal.deliveryAddress && typeof confirmingBomModal.deliveryAddress === 'object'
+          ? confirmingBomModal.deliveryAddress
+          : (sourcePi?.deliveryAddressObj && typeof sourcePi.deliveryAddressObj === 'object' && Object.keys(sourcePi.deliveryAddressObj).length > 0
+              ? sourcePi.deliveryAddressObj
+              : (sourcePi?.deliveryAddress && typeof sourcePi.deliveryAddress === 'object' ? sourcePi.deliveryAddress : {})));
+
+    const resolvedBStreet = confirmingBomModal.billingStreet || rawBObj.street || rawBObj.address || sourcePi?.billingStreet || (typeof confirmingBomModal.billingAddress === 'string' && !confirmingBomModal.billingAddress.includes('on file') ? confirmingBomModal.billingAddress : '') || (typeof sourcePi?.billingAddress === 'string' ? sourcePi.billingAddress : '') || '';
+    const resolvedBCity = confirmingBomModal.billingCity || rawBObj.city || sourcePi?.billingCity || '';
+    const resolvedBState = confirmingBomModal.billingState || rawBObj.state || sourcePi?.billingState || '';
+    const resolvedBPincode = confirmingBomModal.billingPincode || rawBObj.pincode || rawBObj.pin || sourcePi?.billingPincode || '';
+
+    const bObj = {
+      address: resolvedBStreet,
+      street: resolvedBStreet,
+      city: resolvedBCity,
+      state: resolvedBState,
+      pincode: resolvedBPincode
+    };
+
+    const isSameAddr = confirmingBomModal.sameAsBilling !== false && (!rawDObj.address && !rawDObj.street || (rawDObj.address || rawDObj.street) === (rawBObj.address || rawBObj.street));
+
+    const resolvedDStreet = isSameAddr && resolvedBStreet
+      ? resolvedBStreet
+      : (confirmingBomModal.deliveryStreet || rawDObj.street || rawDObj.address || sourcePi?.deliveryStreet || (typeof confirmingBomModal.deliveryAddress === 'string' && !confirmingBomModal.deliveryAddress.includes('on file') ? confirmingBomModal.deliveryAddress : '') || resolvedBStreet);
+    const resolvedDCity = isSameAddr && resolvedBCity ? resolvedBCity : (confirmingBomModal.deliveryCity || rawDObj.city || sourcePi?.deliveryCity || resolvedBCity);
+    const resolvedDState = isSameAddr && resolvedBState ? resolvedBState : (confirmingBomModal.deliveryState || rawDObj.state || sourcePi?.deliveryState || resolvedBState);
+    const resolvedDPincode = isSameAddr && resolvedBPincode ? resolvedBPincode : (confirmingBomModal.deliveryPincode || rawDObj.pincode || rawDObj.pin || sourcePi?.deliveryPincode || resolvedBPincode);
+
+    const dObj = {
+      address: resolvedDStreet,
+      street: resolvedDStreet,
+      city: resolvedDCity,
+      state: resolvedDState,
+      pincode: resolvedDPincode
+    };
+
+    const formatAddr = (obj, fallbackStr) => {
+      if (!obj) return fallbackStr || '—';
+      const { address, street, city, state, pincode } = obj;
+      const addrLine = address || street || '';
+      const parts = [];
+      if (addrLine && addrLine.trim() && addrLine.trim() !== '—') parts.push(addrLine.trim());
+      if (city && city.trim() && city.trim() !== '—') parts.push(city.trim());
+      if (state && state.trim() && state.trim() !== '—' && pincode && pincode.trim() && pincode.trim() !== '—') {
+        parts.push(`${state.trim()} - ${pincode.trim()}`);
+      } else {
+        if (state && state.trim() && state.trim() !== '—') parts.push(state.trim());
+        if (pincode && pincode.trim() && pincode.trim() !== '—') parts.push(pincode.trim());
+      }
+      return parts.length > 0 ? parts.join(', ') : (fallbackStr || '—');
+    };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
@@ -250,6 +308,72 @@ export default function ConfirmingBomModal({
         </div>
       </div>
 
+      {/* CANCELLATION NOTICE BANNER FOR SALES PERSON */}
+      {isCancelled && (
+        <div style={{
+          backgroundColor: '#FEF2F2',
+          border: '1.5px solid #FECACA',
+          borderRadius: '16px',
+          padding: '18px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '18px',
+          boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)'
+        }}>
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '12px',
+            backgroundColor: '#DC2626', color: '#FFFFFF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <XCircle style={{ width: '24px', height: '24px' }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '16px', fontWeight: '900', color: '#991B1B' }}>
+                This BOM was Cancelled &amp; Stock Restored
+              </span>
+              <span style={{
+                backgroundColor: '#FFFFFF', color: '#DC2626',
+                fontSize: '11px', fontWeight: '800', padding: '2px 8px',
+                borderRadius: '6px', border: '1px solid #FECACA'
+              }}>
+                Non-Editable • Inventory Released
+              </span>
+            </div>
+            <div style={{ marginTop: '6px', fontSize: '13px', color: '#7F1D1D', lineHeight: 1.5 }}>
+              <strong>Cancellation Reason:</strong> {confirmingBomModal.cancellationReason || 'Order cancelled'}
+            </div>
+            <div style={{ marginTop: '8px', display: 'flex', gap: '16px', fontSize: '11.5px', color: '#991B1B', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>
+                <strong>Cancelled By:</strong>{' '}
+                <strong style={{ color: '#7F1D1D' }}>
+                  {confirmingBomModal.cancelledBy || 'Authorized Personnel'}
+                </strong>
+                {(confirmingBomModal.cancelledByRole || confirmingBomModal.cancelledByTeam) && (
+                  <span style={{
+                    marginLeft: '6px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#991B1B',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #FECACA',
+                    fontWeight: '800'
+                  }}>
+                    {confirmingBomModal.cancelledByRole || ''}
+                    {confirmingBomModal.cancelledByRole && confirmingBomModal.cancelledByTeam ? ` • ${confirmingBomModal.cancelledByTeam}` : (confirmingBomModal.cancelledByTeam || '')}
+                  </span>
+                )}
+              </span>
+              <span>•</span>
+              <span><strong>Cancelled At:</strong> {confirmingBomModal.cancelledAt ? new Date(confirmingBomModal.cancelledAt).toLocaleString('en-IN') : 'Recently'}</span>
+              <span>•</span>
+              <span><strong>Sales Person Notified:</strong> {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || 'Sales Executive').replace(/\s*\([^)]*\)/g, '').trim()}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* GENERAL BOM & ORDER DETAILS */}
       <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
@@ -377,15 +501,15 @@ export default function ConfirmingBomModal({
 
         {/* STRUCTURED ADDRESS CARDS (EDITABLE OR READ-ONLY) */}
         {(() => {
-          const bStreet = bObj.address || '—';
+          const bStreet = bObj.address || bObj.street || (typeof confirmingBomModal.billingAddress === 'string' ? confirmingBomModal.billingAddress : '') || '—';
           const bCity = bObj.city || '—';
           const bState = bObj.state || '—';
           const bPin = bObj.pincode || '—';
 
-          const dStreet = dObj.address || '—';
-          const dCity = dObj.city || '—';
-          const dState = dObj.state || '—';
-          const dPin = dObj.pincode || '—';
+          const dStreet = dObj.address || dObj.street || (typeof confirmingBomModal.deliveryAddress === 'string' ? confirmingBomModal.deliveryAddress : '') || bStreet;
+          const dCity = dObj.city || bCity;
+          const dState = dObj.state || bState;
+          const dPin = dObj.pincode || bPin;
 
           const isDeliveryMatching = Boolean(confirmingBomModal.sameAsBilling) || (
             ((dObj.address || '').trim() === (bObj.address || '').trim()) &&
@@ -860,11 +984,13 @@ export default function ConfirmingBomModal({
                         <img src={photoUrl || ph.dataUrl} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         <div style={{
                           position: 'absolute', bottom: 0, left: 0, right: 0,
-                          backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
-                          padding: '2px 6px', fontSize: '10px', fontWeight: '700',
+                          backgroundColor: 'rgba(15,23,42,0.8)', color: '#FFFFFF',
+                          padding: '3px 6px', fontSize: '9px', fontWeight: '700',
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                         }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Camera size={11} /> View Photo</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '105px' }} title={ph.uploadTime || ph.name}>
+                            <Camera size={10} style={{ color: '#38BDF8', flexShrink: 0 }} /> {ph.uploadTime || (ph.uploadedAt ? new Date(ph.uploadedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Photo')}
+                          </span>
                           <span>›</span>
                         </div>
                       </div>

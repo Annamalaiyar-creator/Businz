@@ -10,9 +10,10 @@
  * - Full Partial / Rejection Output & Additional Material Request handling
  */
 
-import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from './supabaseDataSync';
-import { stripDataUrlsFromRecord } from './mediaUtils';
-import { CANONICAL_PRODUCT_ALIASES } from './vrmProductsData';
+import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from './supabaseDataSync.js';
+import { stripDataUrlsFromRecord } from './mediaUtils.js';
+import { CANONICAL_PRODUCT_ALIASES } from './vrmProductsData.js';
+import { getNextSequence } from './sequenceGenerator.js';
 
 // Initial Manufacturing Recipes (BOMs)
 export const INITIAL_MANUFACTURING_RECIPES = [
@@ -543,21 +544,9 @@ class ProductionModuleEngine {
     };
   }
 
-  // Get Next Sequential WO Number (Format: WO-1, WO-2, WO-3, etc.)
+  // Get Next Sequential WO Number (Format: VRM-WO-[YYYY]-[SEQ])
   getNextWoNumber() {
-    const existing = this.workOrders || [];
-    let maxSeq = 0;
-    existing.forEach(w => {
-      if (w && w.id) {
-        const match = String(w.id).match(/WO-(\d+)/i);
-        if (match && match[1]) {
-          const num = parseInt(match[1], 10);
-          if (!isNaN(num) && num > maxSeq) maxSeq = num;
-        }
-      }
-    });
-    const nextSeq = maxSeq + 1;
-    return `WO-${nextSeq}`;
+    return getNextSequence('WO', this.workOrders || []).code;
   }
 
   // Create Work Order (Production Head)

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2 } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, XCircle, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Truck, Info, Mail, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, AlertCircle, Copy, Tag, MoreHorizontal, CreditCard, Send, Image, Boxes, Clock, FileCode, Loader2, FileCheck, ExternalLink } from 'lucide-react';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../services/businzDataService';
 import StatusBadge from './StatusBadge';
 import NotificationToast from './NotificationToast';
 import ModernDateRangePicker from './ModernDateRangePicker';
+import { getNextSequence } from '../utils/sequenceGenerator';
 
 const PRESET_MATERIALS = [
   { name: 'GI Steel Coil 2mm', account: 'Raw Material', unit: 'MT', rate: 45000, tax: 18 },
@@ -1525,12 +1526,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
       const res = await fetch('/api/next-po-number');
       if (res.ok) {
         const data = await res.json();
-        if (data.nextPoNumber) {
-          setPoNumber(data.nextPoNumber);
+        if (data.nextPoNumber || data.nextPoNo) {
+          setPoNumber(data.nextPoNumber || data.nextPoNo);
         }
       }
     } catch (e) {
-      setPoNumber('PO-' + String(poList.length + 1).padStart(5, '0'));
+      setPoNumber(getNextPoNumber(poList));
     }
 
     setViewMode('create');
@@ -1560,8 +1561,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
           const nextRes = await fetch('/api/next-po-number');
           if (nextRes.ok) {
             const nextData = await nextRes.json();
-            if (nextData.nextPoNumber) {
-              setPoNumber(nextData.nextPoNumber);
+            if (nextData.nextPoNumber || nextData.nextPoNo) {
+              setPoNumber(nextData.nextPoNumber || nextData.nextPoNo);
             }
           }
         }
@@ -1573,20 +1574,9 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     }
   };
 
-  // Helper to calculate next PO number matching standard sequential format (PO-000XX)
+  // Helper to calculate next PO number matching standard sequential format (VRM-PO-[YYYY]-[SEQ])
   const getNextPoNumber = (list) => {
-    let maxNum = 43;
-    (list || []).forEach(p => {
-      const str = String(p.poNo || p.id || '');
-      const match = str.match(/^PO-(\d+)/i);
-      if (match) {
-        const val = parseInt(match[1], 10);
-        if (val > maxNum && val < 2000) {
-          maxNum = val;
-        }
-      }
-    });
-    return 'PO-' + String(maxNum + 1).padStart(5, '0');
+    return getNextSequence('PO', list || []).code;
   };
 
   // Triggers fresh form initialization
@@ -1596,8 +1586,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
     fetch('/api/next-po-number')
       .then(res => res.json())
       .then(data => {
-        if (data && data.nextPoNo) {
-          setPoNumber(data.nextPoNo);
+        if (data && (data.nextPoNo || data.nextPoNumber)) {
+          setPoNumber(data.nextPoNo || data.nextPoNumber);
         }
       })
       .catch(() => { });
@@ -3312,6 +3302,134 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             <span style={{ color: '#334155' }}>{prd.remarks}</span>
                           </div>
                         )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* GRN Inwarding & Receipt History Card for Accounts & Procurement (Partial & Full) */}
+                {(() => {
+                  let matchedGrns = [];
+                  try {
+                    const localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+                    if (Array.isArray(localGrns)) {
+                      matchedGrns = localGrns.filter(g => {
+                        const gRef = String(g.poRef || g.poNo || g.poId || '').toLowerCase().trim();
+                        const pRef = String(poNumber || '').toLowerCase().trim();
+                        return gRef && pRef && (gRef === pRef || gRef.includes(pRef) || pRef.includes(gRef));
+                      });
+                    }
+                  } catch (_) {}
+
+                  if (matchedGrns.length === 0) return null;
+
+                  return (
+                    <div style={{
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '12px',
+                      padding: '16px 20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <FileCheck size={18} style={{ color: '#0E7490' }} />
+                          <strong style={{ fontSize: '13px', color: '#0F172A' }}>
+                            GRN Inwarding & Delivery Receipts ({matchedGrns.length})
+                          </strong>
+                          <span style={{ fontSize: '11px', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>
+                            Sent to Accounts for Bill Verification
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (typeof onNavigateTab === 'function') {
+                              onNavigateTab('Goods Receipt Note');
+                            } else {
+                              localStorage.setItem('controlroom_active_tab', 'Goods Receipt Note');
+                              window.location.reload();
+                            }
+                          }}
+                          style={{
+                            border: '1px solid #0E7490',
+                            backgroundColor: '#FFFFFF',
+                            color: '#0E7490',
+                            padding: '4px 10px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <ExternalLink size={12} /> Open Full GRN Ledger
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {matchedGrns.map((g, gIdx) => {
+                          const isFullyRec = String(g.status || '').toUpperCase().includes('FULLY') || String(g.status || '').toUpperCase().includes('CLOSED');
+                          const recQty = g.receivedQty || (Array.isArray(g.items) ? g.items.reduce((s, it) => s + Number(it.accepted || it.now || 0), 0) : '—');
+                          const accQty = g.acceptedQty !== undefined ? g.acceptedQty : recQty;
+                          const rejQty = Number(g.rejectedQty || 0);
+
+                          return (
+                            <div key={gIdx} style={{
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #E2E8F0',
+                              borderRadius: '8px',
+                              padding: '10px 14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '10px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  width: '28px', height: '28px', borderRadius: '6px',
+                                  backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}>
+                                  <Boxes size={14} style={{ color: isFullyRec ? '#166534' : '#B45309' }} />
+                                </div>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{g.grnNo || g.id}</strong>
+                                    <span style={{
+                                      fontSize: '10px',
+                                      fontWeight: '700',
+                                      padding: '1px 6px',
+                                      borderRadius: '6px',
+                                      backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
+                                      color: isFullyRec ? '#166534' : '#B45309',
+                                      border: isFullyRec ? '1px solid #86EFAC' : '1px solid #FDE68A'
+                                    }}>
+                                      {isFullyRec ? 'Fully Received' : 'Partially Received'}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                    Date: {g.date || '—'} • DC / Inv No: <strong>{g.challanNo || '—'}</strong> • Received by: {g.receivedBy || 'Store Inwarder'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: 'right', fontSize: '11.5px' }}>
+                                <div>
+                                  <strong style={{ color: '#0E7490' }}>{recQty} Units</strong> Received
+                                  {rejQty > 0 && <span style={{ color: '#DC2626', marginLeft: '4px' }}>({rejQty} rejected)</span>}
+                                </div>
+                                <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '600', marginTop: '2px' }}>
+                                  ✓ Inwarded into Live Inventory
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );

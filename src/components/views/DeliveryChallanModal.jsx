@@ -4,6 +4,7 @@ import { saveCloudStore } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { resolveProductCode, normalizeProductName, CANONICAL_PRODUCT_ALIASES, VRM_PRODUCTS } from "../../utils/vrmProductsData";
 import { notifyDispatchCompletedToSales } from "../../services/notificationService";
+import { getNextSequence } from "../../utils/sequenceGenerator";
 
 export default function DeliveryChallanModal({
   pendingDcModal,
@@ -15,7 +16,7 @@ export default function DeliveryChallanModal({
   userRole = 'Billing'
 }) {
   const isExistingDc = Boolean(
-    pendingDcModal && !pendingDcModal.isNew && (pendingDcModal.dcNo || (pendingDcModal.code && String(pendingDcModal.code).startsWith('DC-')))
+    pendingDcModal && !pendingDcModal.isNew && (pendingDcModal.dcNo || (pendingDcModal.code && (String(pendingDcModal.code).startsWith('DC-') || String(pendingDcModal.code).startsWith('VRM-DC-'))))
   );
   const isLinkedInvoice = Boolean(
     pendingDcModal && !isExistingDc && !pendingDcModal.isNew && (pendingDcModal.invNo || pendingDcModal.invoiceNo)
@@ -85,28 +86,14 @@ export default function DeliveryChallanModal({
     try {
       const raw = localStorage.getItem('controlroom_dc_store');
       const list = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(list) && list.length > 0) {
-        let maxNum = 0;
-        list.forEach(item => {
-          const str = String(item.dcNo || item.code || '');
-          const match = str.match(/DC-\d{4}-(\d+)/i) || str.match(/DC-(\d+)/i);
-          if (match && match[1]) {
-            const seq = parseInt(match[1], 10);
-            if (seq > maxNum) maxNum = seq;
-          }
-        });
-        const year = new Date().getFullYear();
-        const nextSeq = String(maxNum + 1).padStart(4, '0');
-        return `DC-${year}-${nextSeq}`;
-      }
+      return getNextSequence('DC', Array.isArray(list) ? list : []).code;
     } catch (_) {}
-    const year = new Date().getFullYear();
-    return `DC-${year}-0001`;
+    return getNextSequence('DC', []).code;
   };
 
   const generatedDcNo = useMemo(() => {
     if (isExistingDc) {
-      return initialInv.dcNo || initialInv.code || 'DC-2026-0001';
+      return initialInv.dcNo || initialInv.code || getNextSequence('DC', []).code;
     }
     return getNextDcNumber();
   }, [isExistingDc, initialInv?.dcNo, initialInv?.code]);

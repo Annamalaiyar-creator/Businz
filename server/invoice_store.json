@@ -1,28 +1,144 @@
 [
   {
-    "id": "INV-000012",
-    "invNo": "INV-000012",
-    "invoiceNo": "INV-000012",
-    "code": "INV-000012",
-    "poNo": "BOM-663",
-    "bomCode": "BOM-663",
-    "vendor": "Customer Order",
-    "customerName": "Customer Order",
-    "date": "2026-10-07",
-    "invAmt": 28000,
+    "invNo": "VRM-INV-2026-03",
+    "invoiceNo": "VRM-INV-2026-03",
+    "poNo": "VRM-BOM-2026-03",
+    "bomCode": "VRM-BOM-2026-03",
+    "vendor": "SunPower Systems India Pvt Ltd",
+    "customerName": "SunPower Systems India Pvt Ltd",
+    "date": "2026-10-09",
+    "invAmt": 56640,
     "isPreset": false,
+    "items": [
+      {
+        "code": "MR-300MM",
+        "name": "Mini Rail - 300 mm",
+        "rate": 120,
+        "qty": 400,
+        "bomQty": 400,
+        "invQty": 400,
+        "unit": "NOS",
+        "uom": "NOS",
+        "description": "Aluminium Profiles",
+        "selected": true,
+        "packed": true
+      }
+    ],
+    "notes": "Sales Invoice confirmed for BOM VRM-BOM-2026-03.",
+    "id": "VRM-INV-2026-03",
+    "status": "Invoice Confirmed",
+    "pay": "Completed & Locked",
+    "createdAt": "2026-10-09T11:37:31.080Z",
+    "code": "VRM-INV-2026-03",
+    "invoiceNumber": "VRM-INV-2026-03",
+    "total": 56640,
+    "rawTotal": 56640,
+    "amount": "₹ 56,640.00",
+    "poVal": "₹ 56,640.00",
+    "grnVal": "₹ 56,640.00",
+    "diff": "0.00",
+    "match": "Matched",
+    "billingAddress": "Corporate Park, Phase 2, Whitefield, Chennai, Tamil Nadu, PIN: 600058",
+    "deliveryAddress": "Corporate Park, Phase 2, Whitefield, Chennai, Tamil Nadu, PIN: 600058",
+    "stockDeducted": true
+  },
+  {
+    "pay": "Completed & Locked",
+    "code": "VRM-INV-2026-02",
+    "date": "09 Oct 2026",
+    "diff": "0.00",
+    "poNo": "VRM-BOM-2026-02",
+    "grnNo": "GRN-VERIFIED",
+    "invNo": "VRM-INV-2026-02",
+    "items": [
+      {
+        "qty": 200,
+        "code": "L500",
+        "name": "LEG 500 mm (HDG)",
+        "rate": 1000,
+        "bomQty": 200,
+        "invQty": 200,
+        "packed": true,
+        "selected": true
+      }
+    ],
+    "match": "Matched",
+    "poVal": "₹ 2,83,200.00",
+    "grnVal": "₹ 2,83,200.00",
+    "invAmt": "₹ 2,83,200.00",
+    "status": "Invoice Confirmed",
+    "vendor": "VRM Structures India Private Limited",
+    "bomCode": "VRM-BOM-2026-02",
+    "proofDoc": "3b1643a3089a9f84eb42f0fc68c35636.jpg",
+    "invoiceNo": "VRM-INV-2026-02",
+    "salesPerson": "sales",
+    "customerName": "VRM Structures India Private Limited",
+    "proofDocData": null,
+    "stockDeducted": true,
+    "billingAddress": "Plot 48, GIDC Industrial Estate, Sachin, Chennai , Karnataka, PIN: 600098, Chennai , Karnataka, Pincode: 600098",
+    "deliveryAddress": "Plot 48, GIDC Industrial Estate, Sachin, Chennai , Karnataka, PIN: 600098, Chennai , Karnataka, Pincode: 600098",
+    "dispatchPacking": [
+      {
+        "qty": 200,
+        "code": "L500",
+        "name": "LEG 500 mm (HDG)",
+        "bomQty": 200,
+        "packed": true
+      }
+    ],
+    "paymentProofDoc": {
+      "name": "3b1643a3089a9f84eb42f0fc68c35636.jpg",
+      "size": "0.15 MB",
+      "type": "image/jpeg",
+      "uploadedAt": "2026-10-09T10:36:12.019Z"
+    },
+    "salesPersonCode": "SE-1000",
+    "billingAddressObj": {
+      "city": "Chennai ",
+      "state": "Karnataka",
+      "address": "Plot 48, GIDC Industrial Estate, Sachin, Chennai , Karnataka, PIN: 600098",
+      "pincode": "600098"
+    },
+    "deliveryAddressObj": {
+      "city": "Chennai ",
+      "state": "Karnataka",
+      "address": "Plot 48, GIDC Industrial Estate, Sachin, Chennai , Karnataka, PIN: 600098",
+      "pincode": "600098"
+    },
+    "stockDeductionDate": "2026-10-09T11:01:50.151Z",
+    "accountsVerification": {
+      "verified": true,
+      "paymentDate": "2026-10-09",
+      "totalAmount": 283200,
+      "paymentStatus": "Payment Received — 100%",
+      "hardCopyReceived": false
+    },
+    "deliveryAddressProofDoc": null
+  },
+  {
+    "id": "INV-000012",
+    "pay": "Completed & Locked",
+    "code": "INV-000012",
+    "date": "2026-10-07",
+    "poNo": "BOM-663",
+    "invNo": "INV-000012",
     "items": [
       {
         "name": "Mini Rail - 300 mm",
         "rate": 140,
-        "quantity": 200,
         "unit": "NOS",
+        "quantity": 200,
         "description": "Aluminium Profiles"
       }
     ],
     "notes": "Sales Invoice confirmed for BOM BOM-663.",
+    "invAmt": 28000,
     "status": "Invoice Confirmed",
-    "pay": "Completed & Locked",
-    "createdAt": "2026-10-07T18:21:30.818Z"
+    "vendor": "Customer Order",
+    "bomCode": "BOM-663",
+    "isPreset": false,
+    "createdAt": "2026-10-07T18:21:30.818Z",
+    "invoiceNo": "INV-000012",
+    "customerName": "Customer Order"
   }
 ]

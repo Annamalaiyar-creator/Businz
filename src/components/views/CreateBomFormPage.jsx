@@ -14,6 +14,7 @@ import { getFullProductsCatalogWithStock } from "../../utils/productCatalogServi
 import { resolveProductCode, normalizeProductName } from "../../utils/vrmProductsData";
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
+import { getNextSequence } from "../../utils/sequenceGenerator";
 
 export default function CreateBomFormPage(props) {
   const {
@@ -1826,7 +1827,15 @@ export default function CreateBomFormPage(props) {
                     // BOM code is strictly assigned atomically upon submission
                     const finalCode = 'BOM-PENDING';
 
-                    const effectiveSalesPersonName = (() => {
+                    const pendingPiFromStorage = (() => {
+                      try {
+                        return (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('controlroom_pending_pi_to_bom') || '{}') : {});
+                      } catch (e) {
+                        return {};
+                      }
+                    })();
+
+                    const loggedInOperatorName = (() => {
                       const stored = localStorage.getItem('controlroom_logged_user_name');
                       if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null') return stored.trim();
                       const storedUser = localStorage.getItem('controlroom_logged_user');
@@ -1837,14 +1846,26 @@ export default function CreateBomFormPage(props) {
                       if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
                       return userRole || 'Sales Executive';
                     })();
-                    const effectiveSalesPersonCode = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+                    const loggedInOperatorId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
+
+                    // PRESERVE ORIGINAL PI SALESPERSON: Prioritize PI salesperson over converting admin
+                    const effectiveSalesPersonName = (pendingPiFromStorage?.salesPerson && pendingPiFromStorage.salesPerson.trim()) ||
+                      (pendingPiFromStorage?.createdBy && pendingPiFromStorage.createdBy.trim()) ||
+                      loggedInOperatorName;
+
+                    const effectiveSalesPersonCode = (pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
+                      (pendingPiFromStorage?.createdById && pendingPiFromStorage.createdById.trim()) ||
+                      loggedInOperatorId;
+
+                    const effectiveCreatorName = loggedInOperatorName;
+                    const effectiveCreatedById = loggedInOperatorId || effectiveSalesPersonCode;
 
                     const hasPaymentProof = Boolean(newBomPaymentProofDoc);
                     const newBomRecord = {
                       id: finalCode,
                       bomCode: finalCode,
                       code: finalCode,
-                      sourcePiNo: props.newBomSourcePiNo || props.sourcePiNo || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('controlroom_pending_pi_to_bom') || '{}').sourcePiNo : null) || null,
+                      sourcePiNo: props.newBomSourcePiNo || props.sourcePiNo || pendingPiFromStorage?.sourcePiNo || pendingPiFromStorage?.piNo || pendingPiFromStorage?.id || null,
                       date: new Date().toISOString().split('T')[0],
                       customerName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || 'Customer Order',
                       companyName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || '-',
@@ -1872,8 +1893,10 @@ export default function CreateBomFormPage(props) {
                       salesConfirmedAt: !isDraft ? new Date().toISOString() : null,
                       salesPerson: effectiveSalesPersonName,
                       salesPersonCode: effectiveSalesPersonCode,
-                      createdBy: effectiveSalesPersonName,
-                      createdById: effectiveSalesPersonCode,
+                      createdBy: effectiveCreatorName,
+                      createdById: effectiveCreatedById,
+                      convertedBy: loggedInOperatorName,
+                      convertedById: loggedInOperatorId,
                       items: (bomMaterialsList || []).map(item => ({
                         code: item.code || item.sku || item.itemId || resolveProductCode(item) || '',
                         name: item.name || 'Custom Item',
@@ -1921,17 +1944,12 @@ export default function CreateBomFormPage(props) {
                     if (!isDraft) {
                       try {
                         const reserved = await getAndReserveNextBomCode(true);
-                        if (reserved && /^BOM-\d+$/i.test(reserved)) {
+                        if (reserved && (/^VRM-BOM-\d{4}-\d+$/i.test(reserved) || /^BOM-\d+$/i.test(reserved))) {
                           finalAssignedCode = reserved;
                         }
                       } catch (err) {
                         console.error('Error reserving atomic BOM code:', err);
-                        const existingNums = (props.bomStore || []).map(b => {
-                          const match = String(b.bomCode || b.code || b.id || '').match(/BOM-(\d+)/i);
-                          return match ? parseInt(match[1], 10) : 0;
-                        }).filter(n => Number.isFinite(n) && n > 0);
-                        const maxNum = Math.max(663, ...(existingNums.length > 0 ? existingNums : []));
-                        finalAssignedCode = `BOM-${String(maxNum + 1).padStart(3, '0')}`;
+                        finalAssignedCode = getNextSequence('BOM', props.bomStore || []).code;
                       }
                     }
                     sanitizedNewBom.bomCode = finalAssignedCode;
