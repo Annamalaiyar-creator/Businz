@@ -80,5 +80,17 @@
     "employee_code": "CEO-1000",
     "employee_name": "CEO",
     "dashboard_type": "CEO"
+  },
+  {
+    "role": "Tech Support",
+    "email": "ts@gmail.com",
+    "prefix": "TS",
+    "status": "Pending Approval",
+    "password": "12345",
+    "created_at": "2026-10-10T07:22:31.209Z",
+    "last_login": "2026-10-10T07:22:31.209Z",
+    "employee_code": "TS-1000",
+    "employee_name": "Tech Support",
+    "dashboard_type": "Tech Support"
   }
 ]

@@ -17,6 +17,7 @@ build/
 
 # Token and cache files
 server/zoho_token_cache.json
+server/wa_sessions/
 server/backups/
 backups/
 backup_recovered/

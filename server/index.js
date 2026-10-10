@@ -40,6 +40,16 @@ import {
   extractMaxSequence,
   getNextSequence
 } from './sequenceService.js';
+import {
+  getUserSessionStatus,
+  getAllUserSessions,
+  initUserSession,
+  sendUserWhatsAppMessage,
+  logoutUserSession,
+  autoRestoreAllSavedSessions,
+  getUserChats,
+  addUserChat
+} from './whatsappMultiService.js';
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -6535,6 +6545,103 @@ app.post('/api/crm/whatsapp/send-message', async (req, res) => {
   });
 });
 
+// ==========================================
+// 📱 MULTI-SESSION WHATSAPP FOR SALES REPS (METHOD 1)
+// ==========================================
+
+// Get user's session status & QR code
+app.get('/api/whatsapp/multi/status/:userId', (req, res) => {
+  const { userId } = req.params;
+  const status = getUserSessionStatus(userId);
+  res.json({ success: true, ...status });
+});
+
+// Start or request QR code connection for a sales rep
+app.post('/api/whatsapp/multi/connect/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const status = await initUserSession(userId, {
+      onMessageReceived: (msgData) => {
+        console.log(`📩 [WhatsApp Multi] Rep ${userId} received message from ${msgData.formattedPhone}: "${msgData.text}"`);
+        broadcastRealtimeEvent('whatsapp_message', msgData);
+      },
+      onStatusChange: (statusData) => {
+        broadcastRealtimeEvent('whatsapp_session_update', statusData);
+      }
+    });
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnect / logout sales rep's WhatsApp session
+app.post('/api/whatsapp/multi/disconnect/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await logoutUserSession(userId);
+    broadcastRealtimeEvent('whatsapp_session_update', { userId, status: 'DISCONNECTED', isReady: false });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List all active sales reps sessions
+app.get('/api/whatsapp/multi/sessions', (req, res) => {
+  const sessions = getAllUserSessions();
+  res.json({ success: true, sessions });
+});
+
+// Send message or PDF document from a specific sales rep's WhatsApp
+app.post('/api/whatsapp/multi/send', async (req, res) => {
+  const { userId, to, text, document, fileName, mimetype, caption } = req.body;
+  if (!userId || !to) {
+    return res.status(400).json({ error: 'Both userId and recipient phone (to) are required.' });
+  }
+
+  try {
+    const result = await sendUserWhatsAppMessage(userId, {
+      to,
+      text,
+      document,
+      fileName,
+      mimetype,
+      caption
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error(`[WhatsApp Multi Send Error for ${userId}]:`, err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Get real synced WhatsApp chats & contacts for a sales rep
+app.get('/api/whatsapp/multi/chats/:userId', (req, res) => {
+  const { userId } = req.params;
+  try {
+    const chats = getUserChats(userId);
+    const session = getUserSessionStatus(userId);
+    res.json({ success: true, chats, isConnected: session.isReady, phoneNumber: session.phoneNumber });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, chats: [] });
+  }
+});
+
+// Start a new chat conversation with a specific contact/phone number
+app.post('/api/whatsapp/multi/start-chat', (req, res) => {
+  const { userId, phone, name, company } = req.body;
+  if (!userId || !phone) {
+    return res.status(400).json({ error: 'Both userId and phone are required.' });
+  }
+  try {
+    const chat = addUserChat(userId, { phone, name, company });
+    res.json({ success: true, chat });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // AI Solar Enquiry Analysis endpoint
 app.post('/api/crm/ai/analyze-enquiry', (req, res) => {
   const { message = '' } = req.body;
@@ -6928,6 +7035,14 @@ app.supabaseMemoryStore = supabaseMemoryStore;
 
 app.listen(PORT, () => {
   console.log(`BUSINZ Native Server running on port ${PORT}`);
+  autoRestoreAllSavedSessions({
+    onMessageReceived: (msgData) => {
+      broadcastRealtimeEvent('whatsapp_message', msgData);
+    },
+    onStatusChange: (statusData) => {
+      broadcastRealtimeEvent('whatsapp_session_update', statusData);
+    }
+  }).catch(() => {});
 });
 
 export default app;

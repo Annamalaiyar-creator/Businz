@@ -12,6 +12,7 @@
     "clean:prod": "node server/cleanProductionData.js"
   },
   "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -19,6 +20,7 @@
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
     "undici": "^5.28.5"
   },
   "devDependencies": {

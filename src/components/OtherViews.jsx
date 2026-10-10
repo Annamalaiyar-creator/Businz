@@ -18,6 +18,9 @@ import BomOrdersView from './views/BomOrdersView';
 import PresetManagementView from './views/PresetManagementView';
 import SalesCrmEngine from './crm/SalesCrmEngine';
 import BackupVaultView from './views/BackupVaultView';
+import SupportMailInboxView from './views/SupportMailInboxView';
+import FacebookMetaIntegrationView from './views/FacebookMetaIntegrationView';
+import IntegrationsHubView from './views/IntegrationsHubView';
 import { RefreshCw } from 'lucide-react';
 
 class ViewErrorBoundary extends Component {
@@ -172,6 +175,21 @@ export default function OtherViews(props) {
           <BackupVaultView userRole={userRole} />
         )}
 
+        {/* Support Mail Inbox view */}
+        {['Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email'].includes(activeTab) && (
+          <SupportMailInboxView userRole={userRole} onNavigateTab={props.onChangeTab || props.onSelectTab} />
+        )}
+
+        {/* Facebook & Meta Integration view */}
+        {['Facebook & Meta', 'Facebook', 'Meta Integration', 'Facebook Leads', 'Facebook Messenger'].includes(activeTab) && (
+          <FacebookMetaIntegrationView userRole={userRole} onNavigateTab={props.onChangeTab || props.onSelectTab} />
+        )}
+
+        {/* Omnichannel & ERP Integrations Hub view */}
+        {['Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations'].includes(activeTab) && (
+          <IntegrationsHubView userRole={userRole} onNavigateTab={props.onChangeTab || props.onSelectTab} />
+        )}
+
         {/* Production & BOM & Invoices engine */}
         {(![
           'Requests for Purchase', 'Vendor Management', 'Quotations',
@@ -182,12 +200,14 @@ export default function OtherViews(props) {
           'Dispatch Dashboard', 'BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing',
           'Preset Management', 'Presets', 'BOM Presets',
           'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault',
-          'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports'
+          'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports',
+          'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Facebook Leads', 'Facebook Messenger',
+          'Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations'
         ].includes(activeTab) || ['Work Orders', 'Planning & Scheduling', 'Production Monitoring',
           'Quality Control', 'Machine Maintenance', 'Inventory',
           'Production Reports', 'Efficiency Reports', 'Downtime Analytics',
           'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management', 'Delivery Challans'
-        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault'].includes(activeTab) && (
+        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault', 'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Integration', 'Integrations'].includes(activeTab) && (
           <ProductionViewsEngine {...props} />
         )}
       </div>
