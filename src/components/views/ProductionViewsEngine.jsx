@@ -925,12 +925,6 @@ export default function ProductionViewsEngine(props) {
   const [confirmInvoiceSuccessModal, setConfirmInvoiceSuccessModal] = useState(null);
   const deduplicateInvoices = (list) => {
     if (!Array.isArray(list) || list.length === 0) return [];
-    const extractSeq = (str) => {
-      if (!str || typeof str !== 'string') return '';
-      const m = str.match(/(?:VRM-(?:INV|BOM)-(\d{4}-\d+)|(?:INV|BOM)-(\d+)|VRM-INV-(\d+)|VRM-BOM-(\d+))/i);
-      if (m) return m[1] || m[2] || m[3] || m[4] || '';
-      return str.replace(/[^0-9]/g, '');
-    };
 
     const isMatch = (a, b) => {
       if (!a || !b) return false;
@@ -945,9 +939,6 @@ export default function ProductionViewsEngine(props) {
       const bBom = (b.bomCode || b.poNo || '').toUpperCase().trim();
       if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) return true;
 
-      const aSeq = extractSeq(aInv || aBom);
-      const bSeq = extractSeq(bInv || bBom);
-      if (aSeq && bSeq && aSeq === bSeq) return true;
       return false;
     };
 
@@ -983,7 +974,8 @@ export default function ProductionViewsEngine(props) {
           invNo: (master.invNo && master.invNo !== 'Pending Confirmation') ? master.invNo : (secondary.invNo || master.invNo),
           code: (master.code && master.code !== 'Pending Confirmation') ? master.code : (secondary.code || master.code),
           bomCode: master.bomCode || secondary.bomCode,
-          poNo: master.poNo || secondary.poNo
+          poNo: master.poNo || secondary.poNo,
+          items: (master.items && master.items.length > 0) ? master.items : (secondary.items || [])
         };
       }
     });
@@ -992,10 +984,8 @@ export default function ProductionViewsEngine(props) {
     result.forEach(i => {
       const invNo = (i.invNo || i.invoiceNo || i.code || '').trim();
       const bRef = (i.bomCode || i.poNo || '').toUpperCase().trim();
-      const seq = extractSeq(invNo || bRef);
       if (invNo && invNo !== 'Pending Confirmation' && !invNo.toLowerCase().includes('pending')) {
         if (bRef) knownRefs.add(bRef);
-        if (seq) knownRefs.add(`SEQ_${seq}`);
       }
     });
 
@@ -1003,8 +993,7 @@ export default function ProductionViewsEngine(props) {
       const invNo = (i.invNo || i.invoiceNo || i.code || '').trim();
       const isPending = !invNo || invNo === 'Pending Confirmation' || invNo.toLowerCase().includes('pending');
       const bRef = (i.bomCode || i.poNo || '').toUpperCase().trim();
-      const seq = extractSeq(invNo || bRef);
-      if (isPending && (knownRefs.has(bRef) || (seq && knownRefs.has(`SEQ_${seq}`)))) {
+      if (isPending && bRef && knownRefs.has(bRef)) {
         return false;
       }
       return true;

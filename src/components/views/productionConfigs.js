@@ -120,34 +120,22 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
 
           const findMatchingBom = (inv) => {
             if (!inv) return null;
-            const directRef = (inv.poNo || inv.bomCode || inv.c3 || '').toLowerCase().trim();
+            const directRef = (inv.poNo || inv.bomCode || '').toLowerCase().trim();
             const fromNotes = (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0]?.toLowerCase() || '';
             const invNum = (inv.invNo || inv.code || inv.id || '').toLowerCase().trim();
-            const custName = (inv.vendor || inv.customerName || '').toLowerCase().trim();
 
             return (bomStore || []).find(b => {
               if (!b) return false;
               const bCode = (b.bomCode || b.code || '').toLowerCase().trim();
               const soNo = (b.salesOrderNo || '').toLowerCase().trim();
               const bInv = (b.invoiceNo || '').toLowerCase().trim();
-              const bCust = (b.customerName || b.companyName || '').toLowerCase().trim();
 
               // 1. Direct match on BOM code or SO
               if (bCode && (bCode === directRef || bCode === fromNotes)) return true;
               if (soNo && (soNo === directRef || soNo === fromNotes)) return true;
 
               // 2. Direct match on Invoice No
-              if (bInv && invNum && (bInv === invNum || bInv.replace(/[^a-z0-9]/gi, '') === invNum.replace(/[^a-z0-9]/gi, ''))) return true;
-
-              // 3. Sequence digits match (e.g. VRM-INV-2026-03 and VRM-BOM-2026-03)
-              const invDigits = invNum.match(/(?:VRM-INV-\d{4}-|INV-)(\d+)/i)?.[1];
-              const bomDigits = bCode.match(/(?:VRM-BOM-\d{4}-|BOM-)(\d+)/i)?.[1];
-              if (invDigits && bomDigits && parseInt(invDigits, 10) === parseInt(bomDigits, 10)) return true;
-
-              // 4. Specific customer match (if unique and not generic)
-              if (custName && bCust && custName === bCust && !['customer', 'customer order', 'pending'].includes(custName)) {
-                return true;
-              }
+              if (bInv && invNum && bInv !== 'pending confirmation' && !bInv.includes('pending') && (bInv === invNum || bInv.replace(/[^a-z0-9]/gi, '') === invNum.replace(/[^a-z0-9]/gi, ''))) return true;
 
               return false;
             });
@@ -223,13 +211,6 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               return true;
             }
 
-            // Cross match sequence digits (e.g. VRM-INV-2026-03 and VRM-BOM-2026-03)
-            const aSeq = extractOrderSeq(aInv || aBom);
-            const bSeq = extractOrderSeq(bInv || bBom);
-            if (aSeq && bSeq && aSeq === bSeq) {
-              return true;
-            }
-
             return false;
           };
 
@@ -294,10 +275,8 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             const num = (item.invNo || item.invoiceNo || item.code || '').trim();
             const hasRealNo = num && num !== 'Pending Confirmation' && !num.toLowerCase().includes('pending');
             const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            const bSeq = extractOrderSeq(num || bRef);
-            if (hasRealNo) {
-              if (bRef) knownBomRefsWithInvoice.add(bRef);
-              if (bSeq) knownBomRefsWithInvoice.add(`SEQ_${bSeq}`);
+            if (hasRealNo && bRef) {
+              knownBomRefsWithInvoice.add(bRef);
             }
           });
 
@@ -305,8 +284,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             const num = (item.invNo || item.invoiceNo || item.code || '').trim();
             const isPending = !num || num === 'Pending Confirmation' || num.toLowerCase().includes('pending');
             const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            const bSeq = extractOrderSeq(num || bRef);
-            if (isPending && (knownBomRefsWithInvoice.has(bRef) || (bSeq && knownBomRefsWithInvoice.has(`SEQ_${bSeq}`)))) {
+            if (isPending && bRef && knownBomRefsWithInvoice.has(bRef)) {
               return false;
             }
             return true;
@@ -426,7 +404,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
-                  const payStatus = acc.paymentStatus || (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : isVerified ? '100% Received' : 'Pending Confirmation');
+                  const payStatus = acc.paymentStatus || (isVerified ? (b.paymentType === 'Net 30 Days' || b.paymentType === 'Credit Payment' ? 'Credit Payment' : '100% Received') : 'Pending Verification');
                   
                   // Format Payment Date (should NOT be prefilled from createdAt/today if accounts haven't entered it)
                   const rawDate = acc.paymentDate || (isVerified ? (b.paymentDate || b.payments?.paymentDate || b.payments?.date) : null);
@@ -452,15 +430,12 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
 
                   // Format Total Amount
                   let totalAmtFormatted = '—';
-                  const rawAmt = Number(acc.totalAmount || b.grandTotal || b.subTotal || b.totalAmount || 0);
+                  const rawAmt = Number(acc.totalAmount || (isVerified ? (b.grandTotal || b.subTotal || b.totalAmount || 0) : 0));
                   if (rawAmt > 0) {
                     totalAmtFormatted = `₹ ${rawAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                  } else if (isVerified) {
-                    const itemsArr = Array.isArray(b.items) && b.items.length > 0 ? b.items : (Array.isArray(b.dispatchPacking) ? b.dispatchPacking : []);
-                    const calculated = itemsArr.reduce((sum, it) => sum + (Number(it.rate || it.price || 0) * Number(it.qty || it.bomQty || 1)), 0);
-                    if (calculated > 0) {
-                      totalAmtFormatted = `₹ ${calculated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-                    }
+                  } else {
+                    const orderEst = Number(b.grandTotal || b.subTotal || b.totalAmount || 0);
+                    totalAmtFormatted = orderEst > 0 ? `₹ ${orderEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Order)` : '—';
                   }
 
                   const isWhileDispPendingProof = (b.paymentType === 'Payment While Dispatch' || String(b.paymentType || '').includes('While Dispatch')) && !Boolean(

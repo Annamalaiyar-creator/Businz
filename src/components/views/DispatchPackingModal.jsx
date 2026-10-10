@@ -129,19 +129,6 @@ export default function DispatchPackingModal({
     setLocalActiveMediaPreview(finalMedia);
   };
 
-  const rawItems = (dispatchPackingModal.items || []).map(it => {
-    const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
-    const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
-    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: false };
-  });
-  const itemsToPack = (dispatchPackingModal.dispatchPacking && Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0)
-    ? dispatchPackingModal.dispatchPacking.map(p => {
-        const nameStr = (p.name || '').toLowerCase().trim();
-        const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || null));
-        return { ...p, code };
-      })
-    : rawItems;
-
   const isCancelled = Boolean(
     dispatchPackingModal.cancelled ||
     dispatchPackingModal.status === 'Cancelled' ||
@@ -166,9 +153,24 @@ export default function DispatchPackingModal({
     dispatchPackingModal.tabGroup === 'Packed' ||
     dispatchPackingModal.tabGroup === 'AwaitingLoading' ||
     dispatchPackingModal.tabGroup === 'Closed' ||
+    dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
     dispatchPackingModal.accountsVerification?.readyForAccounts ||
     dispatchPackingModal.accountsVerification?.verified
   );
+
+  const rawItems = (dispatchPackingModal.items || []).map(it => {
+    const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
+    const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
+    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: isAlreadySentToAccounts ? true : false };
+  });
+  const itemsToPack = (dispatchPackingModal.dispatchPacking && Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0)
+    ? dispatchPackingModal.dispatchPacking.map(p => {
+        const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
+        const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || null));
+        const isPacked = isAlreadySentToAccounts ? (p.packed !== false) : Boolean(p.packed || p.scanned || p.packedQty > 0);
+        return { ...p, code, packed: isPacked };
+      })
+    : rawItems;
 
   const isPackedAndReady = Boolean(
     isCancelled ||
@@ -217,11 +219,11 @@ export default function DispatchPackingModal({
     } catch (_) {}
   };
 
-  const packedItemsCount = itemsToPack.filter(p => p.packed).length;
+  const packedItemsCount = isAlreadySentToAccounts ? itemsToPack.length : itemsToPack.filter(p => p.packed).length;
   const totalItemsCount = itemsToPack.length;
-  const allItemsPacked = totalItemsCount > 0 && packedItemsCount === totalItemsCount;
-  const progressPercent = totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0;
-  const isPartial = packedItemsCount > 0 && !allItemsPacked;
+  const allItemsPacked = isAlreadySentToAccounts || (totalItemsCount > 0 && packedItemsCount === totalItemsCount);
+  const progressPercent = isAlreadySentToAccounts ? 100 : (totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0);
+  const isPartial = !isAlreadySentToAccounts && packedItemsCount > 0 && !allItemsPacked;
 
   const savePackingData = (isPartialSave = false, proceedToLoading = false) => {
     if (uploadingCount > 0) {
@@ -271,7 +273,7 @@ export default function DispatchPackingModal({
       ? ((dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.verified)
           ? dispatchPackingModal.accountsVerification
           : {
-              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : (is100Paid ? 'Payment Received — 100%' : null)),
+              paymentStatus: (dispatchPackingModal.accountsVerification && dispatchPackingModal.accountsVerification.paymentStatus) || (isWhileDispatch ? 'Awaiting Sales Payment Slip' : null),
               hardCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.hardCopyReceived),
               softCopyReceived: Boolean(dispatchPackingModal.accountsVerification?.softCopyReceived),
               verified: Boolean(dispatchPackingModal.accountsVerification?.verified),
@@ -414,18 +416,15 @@ export default function DispatchPackingModal({
       }).catch(() => {});
     } catch (_) {}
 
-    const targetBomCode = dispatchPackingModal.bomCode;
-    const targetNum = targetBomCode ? targetBomCode.replace(/[^0-9]/g, '') : '';
-    if (typeof setInvoiceList === 'function') {
+    const targetBomCode = dispatchPackingModal.bomCode || dispatchPackingModal.code;
+    if (targetBomCode && typeof setInvoiceList === 'function') {
       setInvoiceList(prev => (prev || []).map(inv => {
-        const invPoNum = inv.poNo ? inv.poNo.replace(/[^0-9]/g, '') : '';
-        const invNoNum = inv.invNo ? inv.invNo.replace(/[^0-9]/g, '') : '';
-        const isMatch = inv.poNo === targetBomCode || inv.invNo === targetBomCode || inv.code === targetBomCode || (targetNum && (invPoNum === targetNum || invNoNum === targetNum));
+        const isMatch = inv.poNo === targetBomCode || inv.bomCode === targetBomCode;
         if (isMatch) {
           const currentItems = (inv.items && inv.items.length > 0) ? inv.items : (dispatchPackingModal.items || []);
           const updatedInvItems = currentItems.map((it, idx) => {
-            const matchingPacked = itemsToPack.find(p => p.name === it.name || p.code === it.code || (it.name && p.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim())) || itemsToPack[idx];
-            return { ...it, selected: matchingPacked ? Boolean(matchingPacked.packed) : false };
+            const matchingPacked = itemsToPack.find(p => (p.name && it.name && p.name.toLowerCase().trim() === it.name.toLowerCase().trim()) || (p.code && it.code && p.code === it.code));
+            return matchingPacked ? { ...it, selected: Boolean(matchingPacked.packed), packed: Boolean(matchingPacked.packed) } : it;
           });
           return { ...inv, items: updatedInvItems };
         }
@@ -544,6 +543,17 @@ export default function DispatchPackingModal({
                 }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }}></span>
                   CANCELLED (VIEW ONLY)
+                </span>
+              ) : isAlreadySentToAccounts ? (
+                <span style={{
+                  backgroundColor: '#DCFCE7',
+                  color: '#166534',
+                  padding: '3px 12px', borderRadius: '20px',
+                  fontSize: '11px', fontWeight: '800',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#166534' }}></span>
+                  PACKING VERIFIED • SENT TO ACCOUNTS
                 </span>
               ) : (
                 <span style={{
