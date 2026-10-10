@@ -14,6 +14,7 @@ import POTrendChart from '../POTrendChart';
 import StatusBadge from '../StatusBadge';
 import ModernDateRangePicker from '../ModernDateRangePicker';
 import { getPurchaseOrders, getVendors, getItems, savePurchaseOrder } from '../../services/businzDataService';
+import { notifyGrnCompletedToAccounts } from '../../services/notificationService';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
 import { getNextSequence } from '../../utils/sequenceGenerator';
@@ -57,6 +58,15 @@ export default function GoodsReceiptNoteView(props) {
     convertingPiData = null,
     onClearConvertingPiData
   } = props;
+
+  const effectiveRole = userRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
+  const isAccountsUser = Boolean(
+    effectiveRole === 'Accounts Head' ||
+    effectiveRole === 'Accounts Executive' ||
+    effectiveRole === 'Finance & Accounts' ||
+    effectiveRole.toLowerCase().includes('account') ||
+    effectiveRole.toLowerCase().includes('finance')
+  );
 
   // Common states
   const [searchQuery, setSearchQuery] = useState('');
@@ -220,6 +230,10 @@ export default function GoodsReceiptNoteView(props) {
   };
 
   const handleOpenEditGrn = (row) => {
+    if (isAccountsUser) {
+      handleOpenViewGrn(row);
+      return;
+    }
     resetCreateGRNForm();
     loadPOItems(row.poRef);
     if (row.challanNo) setGrnChallanNo(row.challanNo);
@@ -503,7 +517,7 @@ export default function GoodsReceiptNoteView(props) {
     setGrnInspectionRemarks('');
     setGrnItems([]);
     setPoReceivingHistory([]);
-    setIsViewOnlyMode(false);
+    setIsViewOnlyMode(isAccountsUser ? true : false);
     setEditingGrnId(null);
   };
 
@@ -553,7 +567,7 @@ export default function GoodsReceiptNoteView(props) {
         }
 
         loadPOItems(poRef, currentPOs, true, poTarget);
-        setIsViewOnlyMode(false);
+        setIsViewOnlyMode(isAccountsUser ? true : false);
         setShowCreateGRN(true);
       }
     } catch (_) {}
@@ -592,7 +606,7 @@ export default function GoodsReceiptNoteView(props) {
         setGrnItems(initialItems);
       }
       loadPOItems(poRef, livePOs, true, poTarget);
-      setIsViewOnlyMode(false);
+      setIsViewOnlyMode(isAccountsUser ? true : false);
       setShowCreateGRN(true);
     };
 
@@ -865,6 +879,10 @@ export default function GoodsReceiptNoteView(props) {
   const [grnValidationModal, setGrnValidationModal] = useState(null);
 
   const handleSaveAndReceive = async () => {
+    if (isAccountsUser) {
+      alert('Accounts team has read-only access to Goods Receipt Notes.');
+      return;
+    }
     const missing = [];
     if (!selectedGRNPo) missing.push('Purchase Order');
     if (!selectedGRNVendor) missing.push('Vendor');
@@ -1053,6 +1071,18 @@ export default function GoodsReceiptNoteView(props) {
     window.dispatchEvent(new Event('controlroom_storage_update'));
     window.dispatchEvent(new CustomEvent('storage'));
 
+    // Trigger real-time melodic notification to Accounts team for bill verification
+    notifyGrnCompletedToAccounts({
+      grnNo: newGRNRecord.grnNo,
+      poNo: newGRNRecord.poRef,
+      vendor: newGRNRecord.vendor,
+      receivedQty: totalNow,
+      totalOrderedQty: curOrd,
+      isPartial: !isFull,
+      challanNo: newGRNRecord.challanNo,
+      receivedBy: newGRNRecord.receivedBy
+    });
+
     // 5. Notify server backend asynchronously
     fetch('/api/grns', {
       method: 'POST',
@@ -1067,6 +1097,10 @@ export default function GoodsReceiptNoteView(props) {
   };
 
   const handleFullyReceived = async () => {
+    if (isAccountsUser) {
+      alert('Accounts team has read-only access to Goods Receipt Notes.');
+      return;
+    }
     if (!selectedGRNPo) {
       setGrnValidationModal({ title: 'Purchase Order Required', message: 'Please select a Purchase Order to mark as Fully Received.' });
       return;
@@ -1231,6 +1265,18 @@ export default function GoodsReceiptNoteView(props) {
     window.dispatchEvent(new Event('controlroom_raw_materials_update'));
     window.dispatchEvent(new Event('controlroom_storage_update'));
     window.dispatchEvent(new CustomEvent('storage'));
+
+    // Trigger real-time melodic notification to Accounts team for bill verification
+    notifyGrnCompletedToAccounts({
+      grnNo: newGRNRecord.grnNo,
+      poNo: newGRNRecord.poRef,
+      vendor: newGRNRecord.vendor,
+      receivedQty: totalAccepted,
+      totalOrderedQty: totalAccepted,
+      isPartial: false,
+      challanNo: newGRNRecord.challanNo,
+      receivedBy: newGRNRecord.receivedBy
+    });
 
     // 4. Notify server backend asynchronously
     fetch('/api/grns', {
@@ -2464,50 +2510,52 @@ export default function GoodsReceiptNoteView(props) {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    onClick={() => {
-                      setSelectedGRNPo('');
-                      setSelectedGRNVendor('');
-                      setGrnChallanNo('');
-                      setGrnItems([]);
-                      setShowCreateGRN(true);
-                    }}
-                    style={{
-                      backgroundColor: '#0E7490',
-                      border: 'none',
-                      color: 'white',
-                      height: '40px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '0 6px 0 20px',
-                      borderRadius: '50px',
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                      boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
-                      transition: 'all 0.2s ease',
-                      letterSpacing: '0.2px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
-                  >
-                    <span>Create GRN</span>
-                    <div style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      backgroundColor: '#FFFFFF',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#0E7490',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                    }}>
-                      <ArrowRight size={16} strokeWidth={2.5} />
-                    </div>
-                  </button>
+                  {!isAccountsUser && (
+                    <button
+                      onClick={() => {
+                        setSelectedGRNPo('');
+                        setSelectedGRNVendor('');
+                        setGrnChallanNo('');
+                        setGrnItems([]);
+                        setShowCreateGRN(true);
+                      }}
+                      style={{
+                        backgroundColor: '#0E7490',
+                        border: 'none',
+                        color: 'white',
+                        height: '40px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '0 6px 0 20px',
+                        borderRadius: '50px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 14px rgba(14, 116, 144, 0.35)',
+                        transition: 'all 0.2s ease',
+                        letterSpacing: '0.2px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#085D75'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0E7490'}
+                    >
+                      <span>Create GRN</span>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        backgroundColor: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#0E7490',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}>
+                        <ArrowRight size={16} strokeWidth={2.5} />
+                      </div>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2747,7 +2795,7 @@ export default function GoodsReceiptNoteView(props) {
                           {sortedGrns.length === 0 ? (
                             <tr>
                               <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
-                                No Goods Receipt Notes found matching the criteria. Click "Create GRN" to record a receipt.
+                                No Goods Receipt Notes found matching the criteria.{!isAccountsUser ? ' Click "Create GRN" to record a receipt.' : ''}
                               </td>
                             </tr>
                           ) : (
@@ -2968,7 +3016,7 @@ export default function GoodsReceiptNoteView(props) {
                     <Eye size={14} style={{ color: '#0E7490' }} /> View Details
                   </button>
 
-                  {selectedGrnRows.length === 1 && (() => {
+                  {!isAccountsUser && selectedGrnRows.length === 1 && (() => {
                     const target = grnList.find(g => g.id === selectedGrnRows[0]);
                     if (!target) return null;
                     const isClosed = String(target.status || '').toUpperCase().includes('CLOSED') || String(target.status || '').toUpperCase().includes('APPROVED') || target.status === 'Fully Accepted';
@@ -3028,50 +3076,52 @@ export default function GoodsReceiptNoteView(props) {
                     <Printer size={14} style={{ color: '#64748B' }} /> Export / Print PDF
                   </button>
 
-                  <button
-                    onClick={() => {
-                      const eligibleToDelete = selectedGrnRows.filter(id => {
-                        const t = grnList.find(g => g.id === id);
-                        return t && !(String(t.status || '').toUpperCase().includes('CLOSED') || String(t.status || '').toUpperCase().includes('APPROVED') || t.status === 'Fully Accepted');
-                      });
-                      if (eligibleToDelete.length === 0) {
-                        alert('Selected GRN(s) are approved or fully received and cannot be deleted.');
-                        return;
-                      }
-                      if (window.confirm(`Are you sure you want to delete ${eligibleToDelete.length} draft GRN(s)?`)) {
-                        eligibleToDelete.forEach(id => {
-                          fetch(`/api/grns/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+                  {!isAccountsUser && (
+                    <button
+                      onClick={() => {
+                        const eligibleToDelete = selectedGrnRows.filter(id => {
+                          const t = grnList.find(g => g.id === id);
+                          return t && !(String(t.status || '').toUpperCase().includes('CLOSED') || String(t.status || '').toUpperCase().includes('APPROVED') || t.status === 'Fully Accepted');
                         });
-                        const remaining = grnList.filter(g => !eligibleToDelete.includes(g.id));
-                        setGrnList(remaining);
-                        setSelectedGrnRows([]);
-                        try {
-                          localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(remaining));
-                          localStorage.setItem('goods_receipt_notes', JSON.stringify(remaining));
-                        } catch (_) {}
-                        saveCloudStoreImmediate('grn_store', remaining).catch(() => {});
-                      }
-                    }}
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      color: '#DC2626',
-                      borderRadius: '10px',
-                      padding: '6px 14px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                  >
-                    <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
-                  </button>
+                        if (eligibleToDelete.length === 0) {
+                          alert('Selected GRN(s) are approved or fully received and cannot be deleted.');
+                          return;
+                        }
+                        if (window.confirm(`Are you sure you want to delete ${eligibleToDelete.length} draft GRN(s)?`)) {
+                          eligibleToDelete.forEach(id => {
+                            fetch(`/api/grns/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+                          });
+                          const remaining = grnList.filter(g => !eligibleToDelete.includes(g.id));
+                          setGrnList(remaining);
+                          setSelectedGrnRows([]);
+                          try {
+                            localStorage.setItem('controlroom_central_grns_v2', JSON.stringify(remaining));
+                            localStorage.setItem('goods_receipt_notes', JSON.stringify(remaining));
+                          } catch (_) {}
+                          saveCloudStoreImmediate('grn_store', remaining).catch(() => {});
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        color: '#DC2626',
+                        borderRadius: '10px',
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                    >
+                      <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
+                    </button>
+                  )}
 
                   <button
                     onClick={() => setSelectedGrnRows([])}

@@ -21,6 +21,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const [realBOMCount, setRealBOMCount] = useState(0);
   const [realPendingPOCount, setRealPendingPOCount] = useState(0);
   const [realAccountsAwaitingPOCount, setRealAccountsAwaitingPOCount] = useState(0);
+  const [realAccountsGrnCount, setRealAccountsGrnCount] = useState(0);
   const [realPendingDispatchCount, setRealPendingDispatchCount] = useState(0);
 
   useEffect(() => {
@@ -33,9 +34,10 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   useEffect(() => {
     const updateCounts = async () => {
       try {
-        const [boms, pos] = await Promise.all([
+        const [boms, pos, grnsCloud] = await Promise.all([
           fetchCloudStore('bom_store', []),
-          fetchCloudStore('po_store', [])
+          fetchCloudStore('po_store', []),
+          fetchCloudStore('grn_store', []).catch(() => [])
         ]);
         if (Array.isArray(boms)) {
           setRealBOMCount(boms.length);
@@ -51,11 +53,21 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           setRealPendingPOCount(pos.filter(p => p.status === 'Draft' || p.status === 'WAITING FOR APPROVAL' || p.status === 'Pending Approval' || p.statusType === 'draft' || p.statusType === 'pending').length);
           setRealAccountsAwaitingPOCount(pos.filter(p => p.status === 'MD Approved' || p.statusType === 'md_approved').length);
         }
+        let localGrns = [];
+        try {
+          localGrns = JSON.parse(localStorage.getItem('controlroom_central_grns_v2') || localStorage.getItem('goods_receipt_notes') || '[]');
+        } catch (_) {}
+        const totalGrns = (Array.isArray(localGrns) && localGrns.length > 0) ? localGrns : (Array.isArray(grnsCloud) ? grnsCloud : []);
+        setRealAccountsGrnCount(totalGrns.length);
       } catch (_) {}
     };
     updateCounts();
     window.addEventListener('controlroom_storage_update', updateCounts);
-    return () => window.removeEventListener('controlroom_storage_update', updateCounts);
+    window.addEventListener('central_inventory_updated', updateCounts);
+    return () => {
+      window.removeEventListener('controlroom_storage_update', updateCounts);
+      window.removeEventListener('central_inventory_updated', updateCounts);
+    };
   }, []);
 
   // Only count active/open work orders (decreases when a work order is completed / approved & closed)
@@ -182,6 +194,9 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Finance Dashboard', icon: LayoutDashboard },
             { label: 'PO Verification', targetTab: 'Purchase Orders', poTabTarget: 'MD_APPROVED', icon: ShoppingCart, badge: realAccountsAwaitingPOCount > 0 ? String(realAccountsAwaitingPOCount) : undefined },
+            { label: 'Goods Receipt Note (GRN)', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined },
+            { label: 'Store Inventory', targetTab: 'Inventory Stores', icon: Warehouse },
+            { label: 'Raw Material Inventory', targetTab: 'Raw Material Directory', icon: Layers },
             { label: 'Accounts Verification', icon: CheckCircle }
           ]
         }
@@ -250,7 +265,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'MAIN MENU',
           items: [
-            { label: 'Finance Dashboard', icon: LayoutDashboard },
+            { label: 'Billing Dashboard', icon: LayoutDashboard },
             { label: 'Billing', targetTab: 'Invoice Management', icon: Receipt },
             { label: 'Delivery Challans', icon: FileCheck }
           ]
@@ -327,6 +342,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const normalizeTab = (tab) => {
     if (tab === 'Performa Invoice') return 'Proforma Invoice';
     if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes' || tab === 'PO Template') return 'Templates';
+    if (tab === 'Store Inventory' || tab === 'Inventory Stores') return 'Store Inventory';
+    if (tab === 'Raw Material Inventory' || tab === 'Raw Material Directory') return 'Raw Material Inventory';
     return tab;
   };
 

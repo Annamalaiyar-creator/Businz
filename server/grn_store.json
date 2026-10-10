@@ -1,1 +1,45 @@
-[]
+[
+  {
+    "id": "VRM-GRN-2026-01",
+    "date": "10 Oct 2026",
+    "poId": "VRM-PO-2026-01",
+    "poNo": "VRM-PO-2026-01",
+    "grnNo": "VRM-GRN-2026-01",
+    "items": [
+      {
+        "id": "PO-ITEM-0.10286889371091623",
+        "name": "ACDB (1-5 KW) With MCB AND SPD",
+        "sku": "SKU-101",
+        "desc": "",
+        "uom": "NOS",
+        "ordered": 2000,
+        "prev": 0,
+        "remaining": 2000,
+        "now": 2000,
+        "accepted": 2000,
+        "rejected": 0,
+        "reason": "—",
+        "batch": "LOT-2026-1"
+      }
+    ],
+    "poRef": "VRM-PO-2026-01",
+    "status": "CLOSED / FULLY RECEIVED",
+    "vendor": "Annamalaiyar",
+    "challanNo": "12345",
+    "documents": [
+      {
+        "title": "Delivery Challan *",
+        "filename": "9f5ba9255fa83e2fd7987957a177d31f.jpg",
+        "size": "0.1 MB",
+        "fileObj": {}
+      }
+    ],
+    "receivedBy": "Annamalaiyar",
+    "acceptedQty": 2000,
+    "receivedQty": 2000,
+    "rejectedQty": 0,
+    "inspectorName": "Quality Inspector",
+    "inspectionRemarks": "",
+    "totalOrderedQty": 2000
+  }
+]

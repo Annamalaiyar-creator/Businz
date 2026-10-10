@@ -18,6 +18,7 @@ import VRMTemplateStudioView from './components/VRMTemplateStudioView';
 import ProductionAdminView from './components/ProductionAdminView';
 import SalesExecutiveDashboardView from './components/views/SalesExecutiveDashboardView';
 import AccountsFinanceDashboard from './components/views/AccountsFinanceDashboard';
+import BillingDashboardView from './components/views/BillingDashboardView';
 import CeoExecutiveDashboardView from './components/views/CeoExecutiveDashboardView';
 import LoginScreen from './components/LoginScreen';
 import DeveloperPortalView from './components/DeveloperPortalView';
@@ -646,7 +647,7 @@ function App() {
             <InventoryAutoConversion />
           ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
             <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard') ? (
+          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard') ? (
             <OtherViews 
               activeTab={activeTab} 
               onChangeTab={handleTabChange} 
@@ -659,7 +660,9 @@ function App() {
               itemsList={itemsList}
               purchaseOrders={purchaseOrders}
             />
-          ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+          ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+            <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+          ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts'))) ? (
             <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
           ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
             <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />

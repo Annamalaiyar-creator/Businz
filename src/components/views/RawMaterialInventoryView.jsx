@@ -51,7 +51,16 @@ const RAW_MATERIAL_SAMPLE_ROWS = [
 ];
 
 const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowAddStockForm: externalSetShowForm, userRole, activeTab, itemsLoading, showCustomAlert, itemsList: passedItemsList = [] }) => {
+  const effectiveRole = userRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '';
+  const isAccountsRole = Boolean(
+    effectiveRole === 'Accounts Head' ||
+    effectiveRole === 'Accounts Executive' ||
+    effectiveRole === 'Finance & Accounts' ||
+    effectiveRole.toLowerCase().includes('account') ||
+    effectiveRole.toLowerCase().includes('finance')
+  );
   const isSalesUser = userRole === 'Sales Executive' || userRole === 'Sales Head' || String(userRole || '').toLowerCase().includes('sales');
+  const isReadOnlyUser = isSalesUser || isAccountsRole;
   const [internalShowAddStockForm, setInternalShowAddStockForm] = useState(false);
   const isAddStockActive = externalShowForm !== undefined ? externalShowForm : internalShowAddStockForm;
   const setAddStockActive = externalSetShowForm || setInternalShowAddStockForm;
@@ -1964,14 +1973,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   };
 
   const handleOpenAddStock = () => {
-    if (isSalesUser) return;
+    if (isReadOnlyUser) return;
     setReceiptForm(getFreshReceiptForm());
     setReceiptItems(getFreshReceiptItems());
     setAddStockActive(true);
   };
 
   const handleOpenStockAdj = (mat) => {
-    if (isSalesUser) {
+    if (isReadOnlyUser) {
       if (mat && mat.code) {
         setSelectedCode(mat.code);
         setShowTxModal(true);
@@ -2191,7 +2200,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     setAddStockActive(false);
   };
 
-  if (isAddStockActive && !isSalesUser) {
+  if (isAddStockActive && !isReadOnlyUser) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif" }}>
 
@@ -2542,10 +2551,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     );
   }
 
-  const isRawMaterialDirectory = activeTab === 'Raw Material Directory' || (activeTab && activeTab.toLowerCase().includes('raw material'));
+  const isRawMaterialDirectory = activeTab === 'Raw Material Directory' || 
+    activeTab === 'Raw Material Inventory' || 
+    (activeTab && activeTab.toLowerCase().includes('raw material'));
 
   const pageConfig = {
-    title: isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores',
+    title: isRawMaterialDirectory 
+      ? (activeTab === 'Raw Material Inventory' ? 'Raw Material Inventory' : 'Raw Material Directory') 
+      : (activeTab === 'Store Inventory' ? 'Store Inventory' : 'Inventory Stores'),
     subtitle: isRawMaterialDirectory
       ? 'Master catalog of raw aluminum coils, extrusions, raw lengths, and raw material stock balances'
       : 'Finished goods warehouse store, manufactured solar mounting products, and ready stock balances',
@@ -2587,7 +2600,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     }
   };
 
-  if (showAdjModal && selectedMat && !isSalesUser) {
+  if (showAdjModal && selectedMat && !isReadOnlyUser) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
         {/* Top Header Card matching Create Work Order Page */}
@@ -2801,7 +2814,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
               <span>Businz</span>
               <span>/</span>
-              <span>{isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}</span>
+              <span>{isRawMaterialDirectory ? (activeTab === 'Raw Material Inventory' ? 'Raw Material Inventory' : 'Raw Material Directory') : (activeTab === 'Store Inventory' ? 'Store Inventory' : 'Inventory Stores')}</span>
               <span>/</span>
               <span style={{ color: '#0E7490' }}>Item Audit Log & Traceability</span>
             </div>
@@ -2836,7 +2849,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#94A3B8'; }}
             onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
           >
-            <ArrowLeft size={16} /> Back to {isRawMaterialDirectory ? 'Raw Material Directory' : 'Inventory Stores'}
+            <ArrowLeft size={16} /> Back to {isRawMaterialDirectory ? (activeTab === 'Raw Material Inventory' ? 'Raw Material Inventory' : 'Raw Material Directory') : (activeTab === 'Store Inventory' ? 'Store Inventory' : 'Inventory Stores')}
           </button>
         </div>
 
@@ -3473,7 +3486,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           </span>
         </div>
 
-        {!isSalesUser && (
+        {!isReadOnlyUser && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {/* Hidden file input for Excel / CSV */}
             <input
@@ -3732,14 +3745,14 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     </td>
                     <td
                       onClick={() => {
-                        if (isSalesUser) {
+                        if (isReadOnlyUser) {
                           setSelectedCode(m.code);
                           setShowTxModal(true);
                         } else {
                           handleOpenStockAdj(m);
                         }
                       }}
-                      title={isSalesUser ? `View ${m.code} Stock Details & Traceability` : `Edit / Adjust ${m.code}`}
+                      title={isReadOnlyUser ? `View ${m.code} Stock Details & Traceability` : `Edit / Adjust ${m.code}`}
                       style={{
                         padding: '12px 14px',
                         fontWeight: 'bold',
@@ -3953,7 +3966,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             <Info size={14} /> Info
           </button>
 
-          {!isSalesUser && (
+          {!isReadOnlyUser && (
             <>
               <button
                 onClick={() => {

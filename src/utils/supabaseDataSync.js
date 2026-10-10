@@ -985,6 +985,7 @@ export function toDatabaseBomRow(item) {
   if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
   if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
+  if (item.invoiceNo) mergedExtra.invoiceNo = item.invoiceNo;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }

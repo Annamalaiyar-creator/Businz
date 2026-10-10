@@ -280,6 +280,23 @@ export default function InvoiceDetailModal({
   const balanceAmt = isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0);
   const paymentStatusText = inv.pay || (balanceAmt === 0 ? 'Verified & Paid (100%)' : 'Ready for Payment');
 
+  const getPaymentBadgeStyle = (term) => {
+    const t = String(term || '').toLowerCase();
+    if (t.includes('partial')) {
+      return { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE', dot: '#3B82F6' };
+    }
+    if (t.includes('dispatch') || t.includes('while dispatch')) {
+      return { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A', dot: '#F59E0B' };
+    }
+    if (t.includes('credit') || t.includes('net 30')) {
+      return { bg: '#F5F3FF', text: '#7C3AED', border: '#DDD6FE', dot: '#8B5CF6' };
+    }
+    if (t.includes('non-chargeable') || t.includes('sample') || t.includes('foc')) {
+      return { bg: '#F1F5F9', text: '#475569', border: '#CBD5E1', dot: '#64748B' };
+    }
+    return { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0', dot: '#10B981' };
+  };
+
   const handleStartEditingInvoice = () => {
     const bAddrInit = inv.billingAddress || matchingBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
     const dAddrInit = inv.deliveryAddress || matchingBom?.deliveryAddress || bAddrInit;
@@ -1124,8 +1141,8 @@ export default function InvoiceDetailModal({
             </div>
           </div>
 
-          {/* Metadata Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '16px', fontSize: '12px' }}>
+          {/* Metadata Grid with Complete Payment Information */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px 16px', borderTop: '1px solid #F1F5F9', paddingTop: '16px', fontSize: '12px' }}>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Related BOM</div>
               <strong style={{ color: '#2563EB' }}>{bomRefText}</strong>
@@ -1135,6 +1152,11 @@ export default function InvoiceDetailModal({
               <strong style={{ color: '#1E293B' }}>{invDateText}</strong>
             </div>
             <div>
+              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Payment Due Date</div>
+              <strong style={{ color: '#1E293B' }}>{invDateText}</strong>
+            </div>
+
+            <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Customer</div>
               <strong style={{ color: '#2563EB' }}>{customerText}</strong>
             </div>
@@ -1143,12 +1165,41 @@ export default function InvoiceDetailModal({
               <strong style={{ color: '#0E7490' }}>👤 {((inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong>
             </div>
             <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Due Date</div>
-              <strong style={{ color: '#1E293B' }}>{invDateText}</strong>
-            </div>
-            <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Payment Type</div>
               <strong style={{ color: '#1E293B' }}>{paymentTypeText}</strong>
+            </div>
+
+            <div>
+              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600', marginBottom: '3px' }}>Payment Status</div>
+              <div>
+                <span style={{
+                  backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#DCFCE7' : '#FEF3C7',
+                  color: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#166534' : '#B45309',
+                  border: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '1px solid #86EFAC' : '1px solid #FDE68A',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontSize: '10.5px',
+                  fontWeight: '800',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#16A34A' : '#D97706' }} />
+                  {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? 'Verified & Paid (100%)' : paymentStatusText}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Advance Received</div>
+              <div style={{ fontWeight: '800', color: '#0F172A' }}>
+                ₹ {advanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {isFullAdvance ? '(100%)' : (is50Percent ? '(50%)' : '')}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Balance Amount</div>
+              <div style={{ fontWeight: '800', color: balanceAmt === 0 ? '#166534' : '#DC2626' }}>
+                ₹ {balanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
             </div>
           </div>
         </div>
@@ -1932,87 +1983,35 @@ export default function InvoiceDetailModal({
         })()}
       </div>
 
-      {/* CARD 3: BOTTOM PANEL (PAYMENT INFO & TIMELINE) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-        {/* Payment Information Box */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
-          border: '1px solid #E2E8F0',
-          padding: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Receipt style={{ width: '18px', height: '18px', color: '#059669' }} />
-              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>Payment Information</h4>
+      {/* CARD 3: BOTTOM PANEL - COMPLETE ORDER & INVOICE WORKFLOW TIMELINE (FULL WIDTH) */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: '16px',
+        border: '1px solid #E2E8F0',
+        padding: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '30px', height: '30px', borderRadius: '8px', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
+              <Clock style={{ width: '16px', height: '16px' }} />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Complete Order & Invoice Workflow Timeline</h4>
+              <span style={{ fontSize: '11px', color: '#64748B' }}>End-to-end lifecycle from BOM configuration to final dispatch</span>
             </div>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
-            <div>
-              <span style={{ color: '#64748B', fontSize: '11px' }}>Payment Status</span>
-              <div>
-                <span style={{
-                  backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#DCFCE7' : '#FEF3C7',
-                  color: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#166534' : '#B45309',
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  fontSize: '10px',
-                  fontWeight: '800'
-                }}>
-                  {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? 'Verified & Paid (100%)' : paymentStatusText}
-                </span>
-              </div>
-            </div>
-            <div>
-              <span style={{ color: '#64748B', fontSize: '11px' }}>Advance Received</span>
-              <div style={{ fontWeight: '700', color: '#0F172A' }}>
-                ₹ {advanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {isFullAdvance ? '(100%)' : (is50Percent ? '(50%)' : '')}
-              </div>
-            </div>
-            <div>
-              <span style={{ color: '#64748B', fontSize: '11px' }}>Balance Amount</span>
-              <div style={{ fontWeight: '700', color: balanceAmt === 0 ? '#166534' : '#DC2626' }}>
-                ₹ {balanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
-            </div>
-            <div>
-              <span style={{ color: '#64748B', fontSize: '11px' }}>Payment Due Date</span>
-              <div style={{ fontWeight: '700', color: '#0F172A' }}>{invDateText}</div>
-            </div>
-          </div>
+          <span style={{ backgroundColor: '#F1F5F9', color: '#475569', padding: '4px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: '800' }}>
+            5 Stages Tracked
+          </span>
         </div>
 
-        {/* Invoice Timeline Box */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
-          border: '1px solid #E2E8F0',
-          padding: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '14px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
-                <Clock style={{ width: '15px', height: '15px' }} />
-              </div>
-              <div>
-                <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>Complete Order & Invoice Workflow Timeline</h4>
-                <span style={{ fontSize: '10px', color: '#64748B' }}>End-to-end lifecycle from BOM configuration to final dispatch</span>
-              </div>
-            </div>
-            <span style={{ backgroundColor: '#F1F5F9', color: '#475569', padding: '3px 9px', borderRadius: '10px', fontSize: '10px', fontWeight: '800' }}>
-              5 Stages Tracked
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '20px', borderLeft: '2px solid #E2E8F0' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '20px', borderLeft: '2px solid #E2E8F0' }}>
             {(() => {
               // 1. BOM Creation details
               const bomCreatorName = matchingBom?.createdBy || matchingBom?.createdByName || matchingBom?.salesPerson || 'Balaji (BOM Executive)';
@@ -2254,7 +2253,6 @@ export default function InvoiceDetailModal({
             })()}
           </div>
         </div>
-      </div>
 
       {/* Delivery Address Proof & Document Preview Modal */}
       {localDocPreviewModal && (

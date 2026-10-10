@@ -997,6 +997,56 @@ export function notifyDispatchCompletedToSales({
 }
 
 /**
+ * Triggers a real-time notification with melodic chime to Accounts & Procurement when a GRN (partial or full) is completed.
+ */
+export function notifyGrnCompletedToAccounts({
+  grnNo,
+  poNo,
+  vendor,
+  receivedQty,
+  totalOrderedQty,
+  isPartial,
+  challanNo,
+  receivedBy
+}) {
+  const accountsTargets = [
+    'Accounts Head',
+    'Accounts Executive',
+    'Finance & Accounts',
+    'Procurement Head',
+    'Procurement Executive',
+    'CEO',
+    'Managing Director',
+    'MD',
+    'Technical Administrator',
+    'All'
+  ];
+
+  const receiptType = isPartial ? 'Partially Received' : 'Fully Received';
+  const qtyText = totalOrderedQty ? `${receivedQty} of ${totalOrderedQty} Units` : `${receivedQty} Units`;
+
+  return sendWorkflowNotification({
+    title: `📦 GRN ${receiptType}: ${grnNo} (PO: ${poNo || '—'})`,
+    message: `GRN ${grnNo} inwarded for ${poNo || 'PO'} (${vendor || 'Vendor'}): ${qtyText} received (DC/Inv: ${challanNo || '—'}). Ready for Accounts bill verification.`,
+    targetTab: 'Goods Receipt Note',
+    targetRoles: accountsTargets,
+    type: isPartial ? 'info' : 'success',
+    soundType: isPartial ? 'chime' : 'success',
+    metadata: {
+      grnNo,
+      poNo,
+      vendor,
+      receivedQty,
+      totalOrderedQty,
+      isPartial,
+      challanNo,
+      receivedBy,
+      step: isPartial ? 'GRN_PARTIAL_INWARDED' : 'GRN_FULLY_INWARDED'
+    }
+  });
+}
+
+/**
  * Fetch latest notifications from cloud store and merge with local notifications
  * so Dispatch and Accounts logins on different devices/browsers receive live alerts.
  */

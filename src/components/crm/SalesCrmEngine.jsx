@@ -705,6 +705,7 @@ export default function SalesCrmEngine({
             customers={customers}
             opportunities={opportunities}
             quotations={quotations}
+            boms={boms}
             isLoading={isCloudSyncing}
             onSaveCustomer={handleSaveCustomer}
             onBatchUpdateCustomers={handleBatchUpdateCustomers}

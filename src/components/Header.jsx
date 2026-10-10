@@ -356,7 +356,15 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {(activeTab === 'Purchase Orders' && isExecutiveOrMD) ? 'Purchase Order Approvals' : (activeTab === 'Purchase Orders' && userRole.includes('Accounts')) ? 'Purchase Order Verification' : (activeTab || 'Dashboard')}
+            {(activeTab === 'Purchase Orders' && isExecutiveOrMD) 
+              ? 'Purchase Order Approvals' 
+              : (activeTab === 'Purchase Orders' && userRole.includes('Accounts')) 
+                ? 'Purchase Order Verification' 
+                : (activeTab === 'Dashboard' && (userRole === 'Billing' || userRole === 'Invoice Executive'))
+                  ? 'Billing Dashboard'
+                  : (activeTab === 'Dashboard' && (userRole.includes('Accounts') || userRole === 'Finance & Accounts'))
+                    ? 'Finance Dashboard'
+                    : (activeTab || 'Dashboard')}
           </h2>
         </div>
       </div>

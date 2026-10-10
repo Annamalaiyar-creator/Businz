@@ -12,8 +12,8 @@ The following core workflows and modules have been thoroughly tested, verified, 
    - File references: `BomOrdersView.jsx`, `CreateBomFormPage.jsx`, BOM order synchronization, document upload & compression, and sales confirmation.
    - Status: **LOCKED & FROZEN**.
 3. **PO Flow (Purchase Orders & Zoho Books Integration)**:
-   - File references: `PurchaseOrdersView.jsx`, `CreatePurchaseOrderModal.jsx`, Zoho sequence numbering (`PO-000XX`), disk persistence (`po_store.json`), and payload formatting.
-   - Status: **LOCKED & FROZEN**.
+   - File references: `PurchaseOrdersView.jsx`, `CreatePurchaseOrderModal.jsx`, `businzDataService.js` (`getPurchaseOrders`, `savePurchaseOrder`), Zoho sequence numbering (`PO-000XX`), disk persistence (`po_store.json`), Supabase cloud persistence (`po_store`), and payload formatting.
+   - Status: **STRICTLY LOCKED & FROZEN BY USER**. Verified fully working on localhost and dev live server. Do NOT refactor, alter, redesign, or change state persistence, Zoho API sync, approval hierarchy (MD Approval → Payment Details → Proceed PO → GRN Inwarding), or numbering logic without explicit written user instruction.
 4. **Inventory Flow**:
    - File references: `RawMaterialInventoryView.jsx`, `GoodsReceiptNoteView.jsx`, `centralInventoryStore.js`, GRN inwarding, stock deduction reconciliation, and live item audit log tracking.
    - Status: **LOCKED & FROZEN**.

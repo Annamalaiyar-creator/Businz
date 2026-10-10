@@ -2876,7 +2876,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                 Accounts & Billing Officers Accountability
               </span>
               <button
-                onClick={() => onNavigateTab && onNavigateTab('Finance Dashboard')}
+                onClick={() => onNavigateTab && onNavigateTab('Billing Dashboard')}
                 style={{
                   border: 'none',
                   backgroundColor: '#7C3AED',
@@ -2891,7 +2891,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   gap: '4px'
                 }}
               >
-                Go to Finance Dashboard <ArrowRight size={12} />
+                Go to Billing Dashboard <ArrowRight size={12} />
               </button>
             </div>
 

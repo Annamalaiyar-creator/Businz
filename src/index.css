@@ -1682,12 +1682,31 @@ table td {
   font-weight: var(--font-weight-bold);
 }
 
+.sleek-thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+.sleek-thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.sleek-thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sleek-thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.sleek-thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
 /* Responsive Breakpoints & Universal Mobile Placement Engine */
 @media (max-width: 1440px) {
   .kpi-grid-6, .kpi-grid-5, .sales-kpi-grid-6, .reports-kpi-grid-6 {
     grid-template-columns: repeat(3, 1fr) !important;
   }
-  .dashboard-grid-3, .sales-dashboard-grid-3 {
+  .dashboard-grid-3 {
     grid-template-columns: 1fr !important;
   }
   .span-2 {

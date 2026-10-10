@@ -56,5 +56,29 @@
     "employee_code": "BI-1000",
     "employee_name": "Billing",
     "dashboard_type": "Billing"
+  },
+  {
+    "role": "Procurement Head",
+    "email": "pr@gmail.com",
+    "prefix": "PR",
+    "status": "Pending Approval",
+    "password": "12345",
+    "created_at": "2026-10-10T05:07:06.216Z",
+    "last_login": "2026-10-10T05:07:06.216Z",
+    "employee_code": "PR-1000",
+    "employee_name": "Pr",
+    "dashboard_type": "Procurement Head"
+  },
+  {
+    "role": "CEO",
+    "email": "ceo@gmail.com",
+    "prefix": "CEO",
+    "status": "Active",
+    "password": "12345",
+    "created_at": "2026-10-10T05:15:49.364Z",
+    "last_login": "2026-10-10T05:15:49.364Z",
+    "employee_code": "CEO-1000",
+    "employee_name": "CEO",
+    "dashboard_type": "CEO"
   }
 ]

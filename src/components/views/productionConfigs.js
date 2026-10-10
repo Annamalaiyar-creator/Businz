@@ -196,58 +196,117 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             };
           });
 
-          // Build a strictly deduplicated canonical map
-          const invoiceMap = new Map();
+          // Strict order-level and sequence-level deduplication engine
+          const extractOrderSeq = (str) => {
+            if (!str || typeof str !== 'string') return '';
+            const m = str.match(/(?:VRM-(?:INV|BOM)-(\d{4}-\d+)|(?:INV|BOM)-(\d+)|VRM-INV-(\d+)|VRM-BOM-(\d+))/i);
+            if (m) return m[1] || m[2] || m[3] || m[4] || '';
+            const digits = str.replace(/[^0-9]/g, '');
+            return digits || '';
+          };
 
-          // 1. Process mergedInvoices (prefer officially confirmed invoices over pending)
-          mergedInvoices.forEach(inv => {
-            const bRef = (inv.bomCode || inv.poNo || '').toUpperCase().trim();
-            const invNum = (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo.toUpperCase().trim() : '';
-            const key = invNum || (bRef ? `BOM_${bRef}` : (inv.id || JSON.stringify(inv)));
+          const isSameInvoiceOrOrder = (a, b) => {
+            if (!a || !b) return false;
+            if (a.id && b.id && a.id === b.id) return true;
 
-            if (!invoiceMap.has(key)) {
-              invoiceMap.set(key, inv);
+            const aInv = (a.invNo || a.invoiceNo || a.code || '').toUpperCase().trim();
+            const bInv = (b.invNo || b.invoiceNo || b.code || '').toUpperCase().trim();
+            const aHasRealInv = aInv && aInv !== 'PENDING CONFIRMATION' && !aInv.includes('PENDING');
+            const bHasRealInv = bInv && bInv !== 'PENDING CONFIRMATION' && !bInv.includes('PENDING');
+            if (aHasRealInv && bHasRealInv && (aInv === bInv || aInv.replace(/[^A-Z0-9]/g, '') === bInv.replace(/[^A-Z0-9]/g, ''))) {
+              return true;
+            }
+
+            const aBom = (a.bomCode || a.poNo || '').toUpperCase().trim();
+            const bBom = (b.bomCode || b.poNo || '').toUpperCase().trim();
+            if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) {
+              return true;
+            }
+
+            // Cross match sequence digits (e.g. VRM-INV-2026-03 and VRM-BOM-2026-03)
+            const aSeq = extractOrderSeq(aInv || aBom);
+            const bSeq = extractOrderSeq(bInv || bBom);
+            if (aSeq && bSeq && aSeq === bSeq) {
+              return true;
+            }
+
+            return false;
+          };
+
+          const canonicalInvoices = [];
+
+          const upsertCanonicalInvoice = (item) => {
+            if (!item) return;
+            const existingIdx = canonicalInvoices.findIndex(ex => isSameInvoiceOrOrder(ex, item));
+
+            if (existingIdx === -1) {
+              canonicalInvoices.push(item);
             } else {
-              const existing = invoiceMap.get(key);
-              const isCurrConf = inv.status === 'Invoice Confirmed' || inv.pay === 'Completed & Locked';
+              const existing = canonicalInvoices[existingIdx];
+              const isCurrConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
               const isExistConf = existing.status === 'Invoice Confirmed' || existing.pay === 'Completed & Locked';
+
+              const itemInv = (item.invNo || item.invoiceNo || item.code || '').trim();
+              const existInv = (existing.invNo || existing.invoiceNo || existing.code || '').trim();
+              const itemHasRealInv = itemInv && itemInv !== 'Pending Confirmation' && !itemInv.toLowerCase().includes('pending');
+              const existHasRealInv = existInv && existInv !== 'Pending Confirmation' && !existInv.toLowerCase().includes('pending');
+
+              let master, secondary;
               if (isCurrConf && !isExistConf) {
-                invoiceMap.set(key, inv);
+                master = item; secondary = existing;
+              } else if (!isCurrConf && isExistConf) {
+                master = existing; secondary = item;
+              } else if (itemHasRealInv && !existHasRealInv) {
+                master = item; secondary = existing;
+              } else if (!itemHasRealInv && existHasRealInv) {
+                master = existing; secondary = item;
+              } else {
+                master = item; secondary = existing;
               }
+
+              canonicalInvoices[existingIdx] = {
+                ...secondary,
+                ...master,
+                invNo: (master.invNo && master.invNo !== 'Pending Confirmation') ? master.invNo : (secondary.invNo || master.invNo),
+                code: (master.code && master.code !== 'Pending Confirmation') ? master.code : (secondary.code || master.code),
+                bomCode: master.bomCode || secondary.bomCode,
+                poNo: master.poNo || secondary.poNo,
+                items: (master.items && master.items.length > 0) ? master.items : (secondary.items || []),
+                dispatchPacking: master.dispatchPacking || secondary.dispatchPacking,
+                accountsVerification: master.accountsVerification || secondary.accountsVerification,
+                billingAddress: master.billingAddress || secondary.billingAddress,
+                deliveryAddress: master.deliveryAddress || secondary.deliveryAddress,
+                deliveryAddressProofDoc: master.deliveryAddressProofDoc || secondary.deliveryAddressProofDoc,
+                sameAsBilling: master.sameAsBilling !== undefined ? master.sameAsBilling : secondary.sameAsBilling
+              };
             }
-          });
+          };
 
-          // 2. Add verified BOM invoices if not already present
-          verifiedBomInvoices.forEach(v => {
-            const bRef = (v.bomCode || v.poNo || '').toUpperCase().trim();
-            const invNum = (v.invNo && v.invNo !== 'Pending Confirmation') ? v.invNo.toUpperCase().trim() : '';
-            
-            const alreadyExists = Array.from(invoiceMap.values()).some(existing => {
-              const exBRef = (existing.bomCode || existing.poNo || '').toUpperCase().trim();
-              const exInv = (existing.invNo && existing.invNo !== 'Pending Confirmation') ? existing.invNo.toUpperCase().trim() : '';
-              return (bRef && exBRef === bRef) || (invNum && exInv === invNum);
-            });
+          // 1. Process merged invoices from invoiceList
+          mergedInvoices.forEach(upsertCanonicalInvoice);
 
-            if (!alreadyExists) {
-              const key = invNum || (bRef ? `BOM_${bRef}` : (v.id || `VERIFIED_${Math.random()}`));
-              invoiceMap.set(key, v);
-            }
-          });
+          // 2. Process verified BOM invoices from bomStore
+          verifiedBomInvoices.forEach(upsertCanonicalInvoice);
 
-          // 3. Suppress any Pending Confirmation row if that same BOM already has a Confirmed & Locked invoice
-          const confirmedBomCodes = new Set();
-          Array.from(invoiceMap.values()).forEach(item => {
-            const isConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
+          // 3. Strict elimination of duplicate "Pending Confirmation" rows for any BOM that already has an invoice entry
+          const knownBomRefsWithInvoice = new Set();
+          canonicalInvoices.forEach(item => {
+            const num = (item.invNo || item.invoiceNo || item.code || '').trim();
+            const hasRealNo = num && num !== 'Pending Confirmation' && !num.toLowerCase().includes('pending');
             const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            if (isConf && bRef) {
-              confirmedBomCodes.add(bRef);
+            const bSeq = extractOrderSeq(num || bRef);
+            if (hasRealNo) {
+              if (bRef) knownBomRefsWithInvoice.add(bRef);
+              if (bSeq) knownBomRefsWithInvoice.add(`SEQ_${bSeq}`);
             }
           });
 
-          const dedupedInvoices = Array.from(invoiceMap.values()).filter(item => {
-            const isPending = !item.invNo || item.invNo === 'Pending Confirmation' || item.pay !== 'Completed & Locked';
+          const dedupedInvoices = canonicalInvoices.filter(item => {
+            const num = (item.invNo || item.invoiceNo || item.code || '').trim();
+            const isPending = !num || num === 'Pending Confirmation' || num.toLowerCase().includes('pending');
             const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            if (isPending && bRef && confirmedBomCodes.has(bRef)) {
+            const bSeq = extractOrderSeq(num || bRef);
+            if (isPending && (knownBomRefsWithInvoice.has(bRef) || (bSeq && knownBomRefsWithInvoice.has(`SEQ_${bSeq}`)))) {
               return false;
             }
             return true;

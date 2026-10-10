@@ -923,24 +923,99 @@ export default function ProductionViewsEngine(props) {
   const [closeReasonText, setCloseReasonText] = useState('');
   const [pendingDcModal, setPendingDcModal] = useState(null);
   const [confirmInvoiceSuccessModal, setConfirmInvoiceSuccessModal] = useState(null);
+  const deduplicateInvoices = (list) => {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const extractSeq = (str) => {
+      if (!str || typeof str !== 'string') return '';
+      const m = str.match(/(?:VRM-(?:INV|BOM)-(\d{4}-\d+)|(?:INV|BOM)-(\d+)|VRM-INV-(\d+)|VRM-BOM-(\d+))/i);
+      if (m) return m[1] || m[2] || m[3] || m[4] || '';
+      return str.replace(/[^0-9]/g, '');
+    };
+
+    const isMatch = (a, b) => {
+      if (!a || !b) return false;
+      if (a.id && b.id && a.id === b.id) return true;
+      const aInv = (a.invNo || a.invoiceNo || a.code || '').toUpperCase().trim();
+      const bInv = (b.invNo || b.invoiceNo || b.code || '').toUpperCase().trim();
+      const aHasReal = aInv && aInv !== 'PENDING CONFIRMATION' && !aInv.includes('PENDING');
+      const bHasReal = bInv && bInv !== 'PENDING CONFIRMATION' && !bInv.includes('PENDING');
+      if (aHasReal && bHasReal && (aInv === bInv || aInv.replace(/[^A-Z0-9]/g, '') === bInv.replace(/[^A-Z0-9]/g, ''))) return true;
+
+      const aBom = (a.bomCode || a.poNo || '').toUpperCase().trim();
+      const bBom = (b.bomCode || b.poNo || '').toUpperCase().trim();
+      if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) return true;
+
+      const aSeq = extractSeq(aInv || aBom);
+      const bSeq = extractSeq(bInv || bBom);
+      if (aSeq && bSeq && aSeq === bSeq) return true;
+      return false;
+    };
+
+    const result = [];
+    list.forEach(item => {
+      if (!item) return;
+      const existingIdx = result.findIndex(ex => isMatch(ex, item));
+      if (existingIdx === -1) {
+        result.push(item);
+      } else {
+        const existing = result[existingIdx];
+        const isCurrConf = item.status === 'Invoice Confirmed' || item.pay === 'Completed & Locked';
+        const isExistConf = existing.status === 'Invoice Confirmed' || existing.pay === 'Completed & Locked';
+        const itemInv = (item.invNo || item.invoiceNo || item.code || '').trim();
+        const existInv = (existing.invNo || existing.invoiceNo || existing.code || '').trim();
+        const itemHasReal = itemInv && itemInv !== 'Pending Confirmation' && !itemInv.toLowerCase().includes('pending');
+        const existHasReal = existInv && existInv !== 'Pending Confirmation' && !existInv.toLowerCase().includes('pending');
+
+        let master, secondary;
+        if (isCurrConf && !isExistConf) {
+          master = item; secondary = existing;
+        } else if (!isCurrConf && isExistConf) {
+          master = existing; secondary = item;
+        } else if (itemHasReal && !existHasReal) {
+          master = item; secondary = existing;
+        } else {
+          master = existing; secondary = item;
+        }
+
+        result[existingIdx] = {
+          ...secondary,
+          ...master,
+          invNo: (master.invNo && master.invNo !== 'Pending Confirmation') ? master.invNo : (secondary.invNo || master.invNo),
+          code: (master.code && master.code !== 'Pending Confirmation') ? master.code : (secondary.code || master.code),
+          bomCode: master.bomCode || secondary.bomCode,
+          poNo: master.poNo || secondary.poNo
+        };
+      }
+    });
+
+    const knownRefs = new Set();
+    result.forEach(i => {
+      const invNo = (i.invNo || i.invoiceNo || i.code || '').trim();
+      const bRef = (i.bomCode || i.poNo || '').toUpperCase().trim();
+      const seq = extractSeq(invNo || bRef);
+      if (invNo && invNo !== 'Pending Confirmation' && !invNo.toLowerCase().includes('pending')) {
+        if (bRef) knownRefs.add(bRef);
+        if (seq) knownRefs.add(`SEQ_${seq}`);
+      }
+    });
+
+    return result.filter(i => {
+      const invNo = (i.invNo || i.invoiceNo || i.code || '').trim();
+      const isPending = !invNo || invNo === 'Pending Confirmation' || invNo.toLowerCase().includes('pending');
+      const bRef = (i.bomCode || i.poNo || '').toUpperCase().trim();
+      const seq = extractSeq(invNo || bRef);
+      if (isPending && (knownRefs.has(bRef) || (seq && knownRefs.has(`SEQ_${seq}`)))) {
+        return false;
+      }
+      return true;
+    });
+  };
+
   const [invoiceList, setInvoiceList] = useState(() => {
     try {
       const saved = localStorage.getItem('controlroom_invoice_store');
       const list = saved ? JSON.parse(saved) : [];
-      if (!Array.isArray(list)) return [];
-      const map = new Map();
-      list.forEach(inv => {
-        const bRef = (inv.bomCode || inv.poNo || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '').toUpperCase().trim();
-        const invNum = (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo.toUpperCase().trim() : '';
-        const key = invNum || (bRef ? `BOM_${bRef}` : (inv.id || JSON.stringify(inv)));
-        if (!map.has(key)) {
-          map.set(key, inv);
-        } else {
-          const isCurrConf = inv.status === 'Invoice Confirmed' || inv.pay === 'Completed & Locked';
-          if (isCurrConf) map.set(key, inv);
-        }
-      });
-      return Array.from(map.values());
+      return deduplicateInvoices(list);
     } catch (_) {
       return [];
     }
@@ -962,34 +1037,19 @@ export default function ProductionViewsEngine(props) {
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data) && data.length > 0) {
-          setInvoiceList(prev => {
-            const map = new Map();
-            data.forEach(i => {
-              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '').toUpperCase().trim();
-              const invNum = (i.invNo && i.invNo !== 'Pending Confirmation') ? i.invNo.toUpperCase().trim() : '';
-              const key = invNum || (bRef ? `BOM_${bRef}` : (i.id || JSON.stringify(i)));
-              map.set(key, i);
-            });
-            (prev || []).forEach(i => {
-              const bRef = (i.bomCode || i.poNo || (i.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '').toUpperCase().trim();
-              const invNum = (i.invNo && i.invNo !== 'Pending Confirmation') ? i.invNo.toUpperCase().trim() : '';
-              const key = invNum || (bRef ? `BOM_${bRef}` : (i.id || JSON.stringify(i)));
-              if (!map.has(key)) {
-                map.set(key, i);
-              }
-            });
-            return Array.from(map.values());
-          });
+          setInvoiceList(prev => deduplicateInvoices([...data, ...(prev || [])]));
         }
       })
       .catch(() => {});
 
     fetchCloudStore('invoice_store', []).then(data => {
-      if (data && Array.isArray(data) && data.length > 0) setInvoiceList(data);
+      if (data && Array.isArray(data) && data.length > 0) {
+        setInvoiceList(prev => deduplicateInvoices([...data, ...(prev || [])]));
+      }
     });
     const sub = subscribeToCloudStore('invoice_store', (latest) => {
       if (latest && Array.isArray(latest)) {
-        if (latest.length > 0) setInvoiceList(latest);
+        if (latest.length > 0) setInvoiceList(prev => deduplicateInvoices([...latest, ...(prev || [])]));
       } else if (latest && typeof latest === 'object' && !Array.isArray(latest)) {
         if (latest._deleted && latest.id) {
           setInvoiceList(prev => (prev || []).filter(i => i.id !== latest.id && i.invNo !== latest.id));
@@ -1000,9 +1060,9 @@ export default function ProductionViewsEngine(props) {
             if (idx >= 0) {
               const copy = [...prev];
               copy[idx] = { ...copy[idx], ...latest };
-              return copy;
+              return deduplicateInvoices(copy);
             }
-            return [latest, ...(prev || [])];
+            return deduplicateInvoices([latest, ...(prev || [])]);
           });
         }
       }

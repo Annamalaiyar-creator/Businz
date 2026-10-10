@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "id": "VEND-101",
+    "cat": "Steel & Metals",
+    "pan": "4543566546",
+    "code": "VEND-101",
+    "name": "Annamalaiyar",
+    "type": "Supplier",
+    "email": "arannamala@gmail.com",
+    "gstin": "3445435665465",
+    "phone": "7092996057",
+    "spend": "₹ 0.00",
+    "terms": "Net 30 Days",
+    "mobile": "—",
+    "status": "Active",
+    "address": "",
+    "contact": "Annnamalai",
+    "payable": "₹0.00",
+    "website": "—",
+    "currency": "INR",
+    "createdAt": "2026-10-10T05:12:40.945Z",
+    "companyName": "Annamalaiyar",
+    "gstTreatment": "—",
+    "sourceOfSupply": "—"
+  }
+]
