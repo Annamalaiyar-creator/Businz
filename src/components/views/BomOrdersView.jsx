@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow } from '../../utils/supabaseDataSync';
+import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow, saveCloudBomRow } from '../../utils/supabaseDataSync';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
@@ -165,13 +165,26 @@ export default function BomOrdersView(props) {
             });
             const cleaned = sorted.map(stripDataUrlsFromRecord);
             setBomStore(prev => {
-              if (Array.isArray(prev) && prev.length === cleaned.length) {
+              let mergedCleaned = [...cleaned];
+              if (Array.isArray(prev) && prev.length > 0) {
+                const cleanedCodes = new Set(cleaned.map(b => b?.bomCode || b?.code || b?.id).filter(Boolean));
+                const recentLocalPending = prev.filter(b => {
+                  const code = b?.bomCode || b?.code || b?.id;
+                  if (!code || cleanedCodes.has(code)) return false;
+                  const createdTime = new Date(b?.createdAt || b?.date || 0).getTime();
+                  return (Date.now() - createdTime) < 60000;
+                });
+                if (recentLocalPending.length > 0) {
+                  mergedCleaned = [...recentLocalPending, ...mergedCleaned];
+                }
+              }
+              if (Array.isArray(prev) && prev.length === mergedCleaned.length) {
                 try {
-                  if (JSON.stringify(prev) === JSON.stringify(cleaned)) return prev;
+                  if (JSON.stringify(prev) === JSON.stringify(mergedCleaned)) return prev;
                 } catch (_) {}
               }
-              safeSaveBomStoreToLocal(cleaned);
-              return cleaned;
+              safeSaveBomStoreToLocal(mergedCleaned);
+              return mergedCleaned;
             });
           }
         }
@@ -473,6 +486,7 @@ export default function BomOrdersView(props) {
     return { isValid: missingList.length === 0, missingList, errors };
   };
   const getEffectiveSalesPerson = () => {
+    if (userRole === 'Sales Head') return 'Vijay';
     const storedName = localStorage.getItem('controlroom_logged_user_name');
     if (storedName && storedName.trim() && storedName !== 'undefined' && storedName !== 'null') {
       return storedName.trim();
@@ -485,7 +499,6 @@ export default function BomOrdersView(props) {
     if (storedEmp && storedEmp.trim() && storedEmp !== 'undefined' && storedEmp !== 'null') {
       return storedEmp.trim();
     }
-    if (userRole === 'Sales Head') return 'Vijay';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Accounts Executive') return 'Priya';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
@@ -806,13 +819,6 @@ export default function BomOrdersView(props) {
         console.warn('Central store restore notice:', cErr);
       }
 
-      const rawStoreStr = localStorage.getItem('controlroom_raw_materials_store');
-      let currentMats = [];
-      if (rawStoreStr) {
-        try { currentMats = JSON.parse(rawStoreStr); } catch (_) {}
-      }
-      if (!Array.isArray(currentMats)) currentMats = [];
-
       const itemsListStr = localStorage.getItem('controlroom_items_list');
       let currentItems = [];
       if (itemsListStr) {
@@ -824,27 +830,6 @@ export default function BomOrdersView(props) {
         const qtyToRestore = parseFloat(pItem.qty || pItem.bomQty || 1) || 0;
         const pCode = (pItem.code || '').toUpperCase().trim();
         const pName = (pItem.name || pItem.description || '').toLowerCase().trim();
-
-        let match = currentMats.find(m => {
-          const mCode = (m.code || '').toUpperCase().trim();
-          const mName = (m.name || '').toLowerCase().trim();
-          if (pCode && mCode === pCode) return true;
-          if (pName && (mName === pName || mName.includes(pName) || pName.includes(mName))) return true;
-          return false;
-        });
-
-        if (match) {
-          const basePhysical = Math.max(0, parseFloat(String(match.physicalStock ?? match.openingStock ?? 0).replace(/,/g, '')) || 0);
-          match.physicalStock = basePhysical;
-          match.reserved = Math.max(0, (parseFloat(match.reserved) || 0) - qtyToRestore);
-          match.blockedForBom = Math.max(0, (match.blockedForBom || 0) - qtyToRestore);
-          const newStock = Math.max(0, basePhysical - match.reserved);
-          match.stock = newStock;
-          match.availableStock = newStock;
-          const minL = parseFloat(String(match.minLevel || '100').replace(/,/g, '')) || 100;
-          match.status = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
-          match.lastUpdated = `Restored from Cancelled BOM ${bomCode}`;
-        }
 
         let itemMatch = currentItems.find(it => {
           const itCode = (it.code || '').toUpperCase().trim();
@@ -864,10 +849,11 @@ export default function BomOrdersView(props) {
         }
       });
 
-      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
-      if (currentItems.length > 0) localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
-      saveCloudStore('raw_materials_store', currentMats);
-      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      if (currentItems.length > 0) {
+        localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
+        saveCloudStore('item_store', currentItems);
+      }
+      window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
       window.dispatchEvent(new Event('central_inventory_updated'));
       setItemsList(getFullProductsCatalogWithStock());
@@ -4803,6 +4789,16 @@ export default function BomOrdersView(props) {
                         // Safe browser localStorage backup per Rule 5 (local UI convenience only)
                         safeSaveBomStoreToLocal(updatedList);
 
+                        // Atomically push created BOM order to Supabase and Node server API
+                        saveCloudBomRow(sanitizedNewBom);
+                        try {
+                          fetch('/api/boms', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ bom: stripDataUrlsFromRecord(sanitizedNewBom), isUpdate: false })
+                          }).catch(err => console.error('Error syncing created BOM to server:', err));
+                        } catch (_) {}
+
                         // If converted from a Proforma Invoice, update the PI stores so PI knows its BOM number
                         if (sanitizedNewBom.sourcePiNo) {
                           try {
@@ -5343,7 +5339,8 @@ export default function BomOrdersView(props) {
                   setBomStore(updatedList);
                   safeSaveBomStoreToLocal(updatedList);
 
-                  // Push to server immediately so Dispatch sees it in real time
+                  // Push to Supabase and server immediately so Dispatch sees it in real time
+                  saveCloudBomRow(updatedBomData);
                   try {
                     fetch('/api/boms', {
                       method: 'POST',
@@ -7957,6 +7954,7 @@ export default function BomOrdersView(props) {
 
                       const targetBom = updatedList.find(b => b.bomCode === uploadPaymentModal.bomCode);
                       if (targetBom) {
+                        saveCloudBomRow(targetBom);
                         fetch('/api/boms', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
