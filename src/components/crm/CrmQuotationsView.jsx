@@ -309,6 +309,7 @@ export default function CrmQuotationsView({
 
   // Resolve currently logged in account user's name dynamically (matching Header & auth state)
   const getActiveUserName = () => {
+    if (userRole === 'Sales Head') return 'Vijay';
     const stored = localStorage.getItem('controlroom_logged_user_name');
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '') return stored.trim();
     try {
@@ -317,7 +318,6 @@ export default function CrmQuotationsView({
       if (u.fullName) return u.fullName;
       if (u.username) return u.username;
     } catch (e) {}
-    if (userRole === 'Sales Head') return 'Vijay';
     if (userRole === 'CEO' || userRole === 'Technical Administrator') return 'Annamalaiyar';
     return 'Mohit JV';
   };

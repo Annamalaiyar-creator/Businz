@@ -1790,7 +1790,6 @@ export default function CrmCustomersView({
                 <th style={{ width: '180px', minWidth: '180px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Type & Industry</th>
                 <th style={{ minWidth: '180px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Primary Contact</th>
                 <th style={{ width: '160px', minWidth: '160px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>GST Number</th>
-                <th style={{ width: '150px', minWidth: '150px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Assigned Rep</th>
               </tr>
             </thead>
             <tbody>
@@ -1798,7 +1797,7 @@ export default function CrmCustomersView({
                 <>
                   <tr style={{ backgroundColor: '#F0FDFA' }}>
                     <td
-                      colSpan={7}
+                      colSpan={6}
                       style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
@@ -1826,7 +1825,7 @@ export default function CrmCustomersView({
                       <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
                         <input type="checkbox" disabled style={{ opacity: 0.3 }} />
                       </td>
-                      {Array.from({ length: 6 }).map((_, hIdx) => (
+                      {Array.from({ length: 5 }).map((_, hIdx) => (
                         <td key={`cust-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
                           <div
                             className="skeleton-shimmer skeleton-text"
@@ -1842,7 +1841,7 @@ export default function CrmCustomersView({
                 </>
               ) : currentRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: '#64748B' }}>
+                  <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#64748B' }}>
                     No customer accounts found matching your filters.
                   </td>
                 </tr>
@@ -1853,7 +1852,7 @@ export default function CrmCustomersView({
 
                   return (
                     <tr
-                      key={cust.id || idx}
+                      key={`${cust.id || cust.customerCode || 'cust'}-${idx}`}
                       style={{
                         borderBottom: '1px solid #F1F5F9',
                         transition: 'all 0.15s ease',
@@ -1923,13 +1922,6 @@ export default function CrmCustomersView({
                       {/* GST Number */}
                       <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontWeight: '600', color: '#475569' }}>
                         {cust.gstNumber || 'Not Registered'}
-                      </td>
-
-                      {/* Assigned Rep Badge */}
-                      <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
-                        <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          👤 {(cust.assignedSalesperson || cust.salesPerson || activeAccountUser).replace(/\s*\([^)]*\)/g, '').trim()}
-                        </span>
                       </td>
                     </tr>
                   );

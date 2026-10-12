@@ -588,14 +588,6 @@ class CentralInventoryStore {
     if (bomCode) this.deductedBomCodes.add(bomCode);
     const timestamp = new Date().toISOString();
 
-    // Read current raw materials store to keep in sync
-    let currentMats = [];
-    try {
-      const rawStr = localStorage.getItem('controlroom_raw_materials_store');
-      if (rawStr) currentMats = JSON.parse(rawStr);
-    } catch (_) {}
-    if (!Array.isArray(currentMats)) currentMats = [];
-
     itemsList.forEach(pItem => {
       const qty = parseFloat(pItem.qty || pItem.bomQty || pItem.quantity || 1) || 0;
       if (qty <= 0) return;
@@ -605,7 +597,7 @@ class CentralInventoryStore {
       const pName = String(pItem.name || pItem.description || '').trim();
       const normPName = normalizeProductName(pName);
 
-      // Find item in this.items
+      // Find item in this.items (Inventory Store / Finished Goods)
       let item = this.items.find(i => {
         const iCode = String(i.code || '').toUpperCase().trim();
         const iName = String(i.name || '').trim();
@@ -652,53 +644,7 @@ class CentralInventoryStore {
         remarks: `Dispatched & Deducted ${qty} ${targetUnit} for BOM ${bomCode}`
       };
       this.transactions.push(tx);
-
-      // Sync to raw materials store with physical stock deduction
-      let mMatch = currentMats.find(m => {
-        const mCode = String(m.code || m.sku || '').toUpperCase().trim();
-        const mNorm = normalizeProductName(m.name);
-        return (pCode && mCode === pCode) || (normPName && mNorm === normPName) || (targetCode && mCode === targetCode);
-      });
-      if (mMatch) {
-        const baseOpen = Math.max(0, parseFloat(mMatch.openingStock !== undefined ? mMatch.openingStock : (mMatch.physicalStock !== undefined ? mMatch.physicalStock : 0)) || 0);
-        const curPhysical = Math.max(0, parseFloat(mMatch.physicalStock !== undefined ? mMatch.physicalStock : (mMatch.stock !== undefined ? mMatch.stock : baseOpen)) || 0);
-        const nextM = Math.max(0, curPhysical - qty);
-        mMatch.stock = nextM;
-        mMatch.availableStock = nextM;
-        mMatch.physicalStock = nextM;
-        mMatch.openingStock = baseOpen;
-        mMatch.reserved = Math.max(0, (parseFloat(mMatch.reserved) || 0) - qty);
-        mMatch.blockedForBom = mMatch.reserved;
-        mMatch.status = nextM <= 0 ? 'Out of Stock' : (nextM <= (mMatch.minLevel || 20) ? 'Low Stock' : 'In Stock');
-        mMatch.lastUpdated = `Deducted ${qty} for BOM ${bomCode || 'Order'} by ${user}`;
-      } else {
-        const nextM = 0;
-        currentMats.push({
-          code: targetCode,
-          name: targetName,
-          cat: pItem.category || 'Finished Goods',
-          unit: targetUnit,
-          stock: nextM,
-          availableStock: nextM,
-          physicalStock: 0,
-          openingStock: 0,
-          reserved: qty,
-          blockedForBom: qty,
-          status: 'Out of Stock'
-        });
-      }
     });
-
-    try {
-      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
-      saveCloudStore('raw_materials_store', currentMats);
-      // Synchronously post to backend atomic deduction endpoint so server disk and all tabs update immediately!
-      fetch('/api/raw-materials/deduct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bomCode, items: itemsList, user })
-      }).catch(e => console.warn('[BOM DEDUCT BACKEND NOTICE]', e));
-    } catch (_) {}
 
     // Synchronize controlroom_items_list (used by Items Directory, Product Catalog, Stock Status)
     try {
@@ -773,7 +719,6 @@ class CentralInventoryStore {
     this.notifyChange();
     try {
       window.dispatchEvent(new Event('central_inventory_updated'));
-      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
       window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
       window.dispatchEvent(new Event('storage'));

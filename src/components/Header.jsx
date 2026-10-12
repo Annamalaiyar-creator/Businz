@@ -161,6 +161,14 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
   // Map userRole or logged_user_name to person's actual name
   const storedName = localStorage.getItem('controlroom_logged_user_name');
   let userName = (storedName && storedName !== 'undefined' && storedName !== 'null') ? storedName : '';
+
+  // If role is Sales Head, ensure the person's canonical name is Vijay (override generic/email stored values)
+  if (userRole === 'Sales Head') {
+    if (!userName || userName.toLowerCase() === 'sales' || userName.toLowerCase() === 'sales head' || userName.toLowerCase() === 'sh' || userName.toLowerCase() === 'sales executive' || userName.toLowerCase() === 'mohit jv' || userName.toLowerCase() === 'mohith jv' || userName.includes('@')) {
+      userName = 'Vijay';
+    }
+  }
+
   if (!userName) {
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
@@ -189,7 +197,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
     else if (userRole === 'Procurement Head' || userRole === 'Procurement Admin') userName = 'Annamalaiyar';
     else userName = 'Annamalaiyar';
   }
-  const safeName = (userName && userName !== 'undefined' && userName !== 'null') ? userName : 'Annamalaiyar';
+  const safeName = (userName && userName !== 'undefined' && userName !== 'null') ? userName : (userRole === 'Sales Head' ? 'Vijay' : 'Annamalaiyar');
   const avatarLetter = (safeName.charAt(0) || 'A').toUpperCase();
 
   const storedEmail = localStorage.getItem('controlroom_logged_user');
