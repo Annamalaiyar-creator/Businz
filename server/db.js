@@ -141,7 +141,27 @@ export async function initPostgresDatabase() {
       }
     }
 
-    // 2. Check if normalized relational tables already exist
+    // 2. Ensure public.leaves has all required columns (used for key-value store & session registry)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.leaves (
+          id BIGSERIAL PRIMARY KEY,
+          employee TEXT NOT NULL,
+          reason TEXT,
+          status TEXT DEFAULT 'active',
+          dates TIMESTAMPTZ DEFAULT NOW(),
+          duration TEXT DEFAULT '1',
+          type TEXT DEFAULT 'Store'
+        );
+        ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS reason TEXT;
+        ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+        ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS dates TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS duration TEXT DEFAULT '1';
+        ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'Store';
+      `);
+    } catch (_) {}
+
+    // 3. Check if normalized relational tables already exist
     try {
       const checkRes = await client.query(`
         SELECT to_regclass('public.customers') as customers_exist;
