@@ -115,7 +115,6 @@ export default function PresetManagementView(props) {
     if (updatedAll) {
       setAllPresets({ ...updatedAll });
     }
-    saveCloudStore('presets_store', updatedAll);
 
     // Auto-select the preset's category (or 'All') and clear search so the user immediately sees it
     if (savedPreset.category) {
@@ -201,6 +200,7 @@ export default function PresetManagementView(props) {
     const presetToSave = {
       ...editingPreset,
       label: editingPreset.label.trim(),
+      isCustom: true,
       items: cleanItems,
       updated_at: new Date().toISOString()
     };
@@ -210,9 +210,6 @@ export default function PresetManagementView(props) {
     if (updatedAll) {
       setAllPresets(updatedAll);
     }
-
-    // Save to persistent cloud store
-    saveCloudStore('presets_store', updatedAll);
 
     setSaveSuccessMsg(`Preset "${presetToSave.label}" saved successfully! Available across the app.`);
     setTimeout(() => setSaveSuccessMsg(''), 4000);
@@ -224,7 +221,6 @@ export default function PresetManagementView(props) {
     if (!window.confirm(`Are you sure you want to delete preset "${label}"?`)) return;
     const updated = deleteCustomPreset(id);
     setAllPresets({ ...updated });
-    saveCloudStore('presets_store', updated);
   };
 
   // Render Dedicated Screen for Create / Edit Preset Kit (BOM Screen Aesthetic)
