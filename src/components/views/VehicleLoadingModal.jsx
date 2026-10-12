@@ -661,7 +661,6 @@ const handleFinalizeVehicleLoading = async () => {
 
   onClose();
   setLoadingPhotos([]);
-  setLoadingVideos([]);
 
   if (willCloseBom) {
     if (typeof setCompletedBomSummaryModal === 'function') {

@@ -91,9 +91,12 @@ export default function ProductionViewsEngine(props) {
   const [custFormCompany, setCustFormCompany] = useState('');
   const [custFormGstNo, setCustFormGstNo] = useState('');
   const [custFormMobile, setCustFormMobile] = useState('');
+  const [custFormAltPhone, setCustFormAltPhone] = useState('');
   const [custFormEmail, setCustFormEmail] = useState('');
 
   // Structured Billing Address
+  const [custFormBillingAddress1, setCustFormBillingAddress1] = useState('');
+  const [custFormBillingAddress2, setCustFormBillingAddress2] = useState('');
   const [custFormBillingAddress, setCustFormBillingAddress] = useState('');
   const [custFormBillingCity, setCustFormBillingCity] = useState('');
   const [custFormBillingState, setCustFormBillingState] = useState('');
@@ -101,6 +104,8 @@ export default function ProductionViewsEngine(props) {
 
   // Structured Delivery Address
   const [custFormSameAsBilling, setCustFormSameAsBilling] = useState(false);
+  const [custFormDeliveryAddress1, setCustFormDeliveryAddress1] = useState('');
+  const [custFormDeliveryAddress2, setCustFormDeliveryAddress2] = useState('');
   const [custFormDeliveryAddress, setCustFormDeliveryAddress] = useState('');
   const [custFormDeliveryCity, setCustFormDeliveryCity] = useState('');
   const [custFormDeliveryState, setCustFormDeliveryState] = useState('');
@@ -1372,8 +1377,14 @@ export default function ProductionViewsEngine(props) {
                 setCustFormGstNo={setCustFormGstNo}
                 custFormMobile={custFormMobile}
                 setCustFormMobile={setCustFormMobile}
+                custFormAltPhone={custFormAltPhone}
+                setCustFormAltPhone={setCustFormAltPhone}
                 custFormEmail={custFormEmail}
                 setCustFormEmail={setCustFormEmail}
+                custFormBillingAddress1={custFormBillingAddress1}
+                setCustFormBillingAddress1={setCustFormBillingAddress1}
+                custFormBillingAddress2={custFormBillingAddress2}
+                setCustFormBillingAddress2={setCustFormBillingAddress2}
                 custFormBillingAddress={custFormBillingAddress}
                 setCustFormBillingAddress={setCustFormBillingAddress}
                 custFormBillingCity={custFormBillingCity}
@@ -1382,6 +1393,10 @@ export default function ProductionViewsEngine(props) {
                 setCustFormBillingState={setCustFormBillingState}
                 custFormBillingPincode={custFormBillingPincode}
                 setCustFormBillingPincode={setCustFormBillingPincode}
+                custFormDeliveryAddress1={custFormDeliveryAddress1}
+                setCustFormDeliveryAddress1={setCustFormDeliveryAddress1}
+                custFormDeliveryAddress2={custFormDeliveryAddress2}
+                setCustFormDeliveryAddress2={setCustFormDeliveryAddress2}
                 custFormDeliveryAddress={custFormDeliveryAddress}
                 setCustFormDeliveryAddress={setCustFormDeliveryAddress}
                 custFormDeliveryCity={custFormDeliveryCity}
@@ -1652,19 +1667,29 @@ export default function ProductionViewsEngine(props) {
                   setCustFormName(targetRow.code);
                   setCustFormCompany(targetRow.c2 || targetRow.code);
                   setCustFormGstNo(targetRow.gstNo || '33AABCU9603R1ZM');
-                  setCustFormMobile(targetRow.c4 || '');
-                  setCustFormEmail(targetRow.c5 || '');
+                  setCustFormMobile(targetRow.c4 || targetRow.primaryContact?.phone || '');
+                  setCustFormAltPhone(targetRow.altPhone || targetRow.altNumber || targetRow.primaryContact?.altPhone || '');
+                  setCustFormEmail(targetRow.c5 || targetRow.primaryContact?.email || '');
 
                   const bObj = targetRow.billingAddressObj || {};
                   const dObj = targetRow.deliveryAddressObj || {};
-                  setCustFormBillingAddress(bObj.address || targetRow.c6 || targetRow.billingAddress || '');
+                  const b1 = targetRow.address1 || targetRow.billingAddress1 || bObj.address1 || '';
+                  const b2 = targetRow.address2 || targetRow.billingAddress2 || bObj.address2 || '';
+                  const d1 = targetRow.dispatchAddress1 || targetRow.shippingAddress1 || dObj.address1 || '';
+                  const d2 = targetRow.dispatchAddress2 || targetRow.shippingAddress2 || dObj.address2 || '';
+
+                  setCustFormBillingAddress1(b1);
+                  setCustFormBillingAddress2(b2);
+                  setCustFormBillingAddress([b1, b2].filter(Boolean).join(', ') || bObj.address || targetRow.c6 || targetRow.billingAddress || '');
                   setCustFormBillingCity(bObj.city || '');
                   setCustFormBillingState(bObj.state || '');
                   setCustFormBillingPincode(bObj.pincode || '');
 
-                  const isSame = (targetRow.deliveryAddress === targetRow.billingAddress && Boolean(targetRow.billingAddress)) || (!targetRow.c7 && !targetRow.deliveryAddress);
+                  const isSame = (targetRow.deliveryAddress === targetRow.billingAddress && Boolean(targetRow.billingAddress)) || (!targetRow.c7 && !targetRow.deliveryAddress) || (b1 === d1 && b2 === d2 && Boolean(b1));
                   setCustFormSameAsBilling(isSame);
-                  setCustFormDeliveryAddress(dObj.address || targetRow.c7 || targetRow.deliveryAddress || '');
+                  setCustFormDeliveryAddress1(d1 || (isSame ? b1 : ''));
+                  setCustFormDeliveryAddress2(d2 || (isSame ? b2 : ''));
+                  setCustFormDeliveryAddress([d1, d2].filter(Boolean).join(', ') || dObj.address || targetRow.c7 || targetRow.deliveryAddress || '');
                   setCustFormDeliveryCity(dObj.city || '');
                   setCustFormDeliveryState(dObj.state || '');
                   setCustFormDeliveryPincode(dObj.pincode || '');

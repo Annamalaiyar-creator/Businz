@@ -131,7 +131,10 @@ const loadDatabaseCustomers = async () => {
         industry: c.industry || '',
         gstNumber: c.gst_number || '—',
         gstNo: c.gst_number || '—',
-        panNumber: c.pan_number || '—',
+        address1: c.billing_address_obj?.address1 || c.billing_address || '',
+        address2: c.billing_address_obj?.address2 || '',
+        billingAddress1: c.billing_address_obj?.address1 || c.billing_address || '',
+        billingAddress2: c.billing_address_obj?.address2 || '',
         address: c.billing_address || '',
         city: c.city || '',
         state: c.state || '',
@@ -139,6 +142,10 @@ const loadDatabaseCustomers = async () => {
         billingAddress: c.billing_address || '',
         c6: c.billing_address || '',
         billingAddressObj: c.billing_address_obj || {},
+        dispatchAddress1: c.delivery_address_obj?.address1 || c.dispatch_address || '',
+        dispatchAddress2: c.delivery_address_obj?.address2 || '',
+        shippingAddress1: c.delivery_address_obj?.address1 || c.dispatch_address || '',
+        shippingAddress2: c.delivery_address_obj?.address2 || '',
         dispatchAddress: c.dispatch_address || '',
         deliveryAddress: c.dispatch_address || '',
         c7: c.dispatch_address || '',
@@ -2496,10 +2503,18 @@ app.post('/api/customers', async (req, res) => {
       industry: incoming.industry || '',
       gstNumber: incoming.gstNumber || incoming.gstin || '',
       panNumber: incoming.panNumber || incoming.pan || '',
+      address1: incoming.address1 || incoming.billingAddress1 || incoming.billingAddressObj?.address1 || incoming.address || incoming.streetAddress || '',
+      address2: incoming.address2 || incoming.billingAddress2 || incoming.billingAddressObj?.address2 || '',
+      billingAddress1: incoming.billingAddress1 || incoming.address1 || incoming.billingAddressObj?.address1 || '',
+      billingAddress2: incoming.billingAddress2 || incoming.address2 || incoming.billingAddressObj?.address2 || '',
       address: incoming.address || incoming.streetAddress || '',
       city: incoming.city || '',
       state: incoming.state || '',
       pincode: incoming.pincode || '',
+      dispatchAddress1: incoming.dispatchAddress1 || incoming.shippingAddress1 || incoming.deliveryAddressObj?.address1 || incoming.dispatchAddress || incoming.address || '',
+      dispatchAddress2: incoming.dispatchAddress2 || incoming.shippingAddress2 || incoming.deliveryAddressObj?.address2 || '',
+      shippingAddress1: incoming.shippingAddress1 || incoming.dispatchAddress1 || incoming.deliveryAddressObj?.address1 || '',
+      shippingAddress2: incoming.shippingAddress2 || incoming.dispatchAddress2 || incoming.deliveryAddressObj?.address2 || '',
       dispatchAddress: incoming.dispatchAddress || incoming.address || '',
       dispatchCity: incoming.dispatchCity || incoming.city || '',
       dispatchState: incoming.dispatchState || incoming.state || '',
@@ -2510,9 +2525,12 @@ app.post('/api/customers', async (req, res) => {
       paymentTerms: incoming.paymentTerms || '50% Advance + 50% Dispatch',
       assignedSalesperson: incoming.assignedSalesperson || 'Mohith JV',
       source: incoming.source || 'Direct',
+      altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || '',
+      altNumber: incoming.altNumber || incoming.altPhone || incoming.primaryContact?.altPhone || '',
       primaryContact: incoming.primaryContact || {
         name: incoming.contactPerson || incoming.contactName || '',
         phone: incoming.phone || incoming.mobile || '',
+        altPhone: incoming.altPhone || incoming.altNumber || '',
         whatsapp: incoming.whatsapp || incoming.phone || incoming.mobile || '',
         email: incoming.email || ''
       },
@@ -2523,6 +2541,8 @@ app.post('/api/customers', async (req, res) => {
       c5: incoming.c5 || (incoming.primaryContact && incoming.primaryContact.email) || incoming.email || '',
       c6: incoming.c6 || incoming.billingAddress || incoming.address || '',
       billingAddressObj: incoming.billingAddressObj || {
+        address1: incoming.address1 || incoming.billingAddress1 || '',
+        address2: incoming.address2 || incoming.billingAddress2 || '',
         address: incoming.address || '',
         city: incoming.city || '',
         state: incoming.state || '',
@@ -2530,6 +2550,8 @@ app.post('/api/customers', async (req, res) => {
       },
       c7: incoming.c7 || incoming.deliveryAddress || incoming.dispatchAddress || incoming.address || '',
       deliveryAddressObj: incoming.deliveryAddressObj || {
+        address1: incoming.dispatchAddress1 || incoming.shippingAddress1 || '',
+        address2: incoming.dispatchAddress2 || incoming.shippingAddress2 || '',
         address: incoming.dispatchAddress || incoming.address || '',
         city: incoming.dispatchCity || incoming.city || '',
         state: incoming.dispatchState || incoming.state || '',
@@ -2964,53 +2986,101 @@ app.get('/api/next-po-number', async (req, res) => {
   }
 });
 
+let serverInvSequenceCounter = null;
+let serverInvReservationLock = Promise.resolve();
+
+const getOrReserveNextInvAtomic = async (commit = false) => {
+  return new Promise((resolve, reject) => {
+    serverInvReservationLock = serverInvReservationLock.then(async () => {
+      try {
+        const fy = getFinancialYear();
+        let records = [];
+
+        // 1. Query PostgreSQL invoices if available
+        if (isDbConnected()) {
+          try {
+            const dbRes = await query(`
+              SELECT invoice_no FROM public.tax_invoices
+              WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
+            `).catch(() => null);
+            if (dbRes?.rows) records.push(...dbRes.rows);
+
+            // Also check bom_orders in PG for assigned invoice_no
+            const bomDbRes = await query(`
+              SELECT invoice_no FROM public.bom_orders
+              WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
+            `).catch(() => null);
+            if (bomDbRes?.rows) records.push(...bomDbRes.rows);
+          } catch (_) {}
+        }
+
+        // 2. Scan local invoice_store.json
+        const invStorePath = getStoreFilePath('invoice_store.json');
+        if (fs.existsSync(invStorePath)) {
+          try {
+            const localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
+            if (Array.isArray(localInvs)) records.push(...localInvs);
+          } catch (_) {}
+        }
+        if (supabaseMemoryStore.invoice_store && Array.isArray(supabaseMemoryStore.invoice_store)) {
+          records.push(...supabaseMemoryStore.invoice_store);
+        }
+
+        // 3. Scan bom_store.json for any BOM that already has an assigned invoiceNo
+        const bomStorePath = getStoreFilePath('bom_store.json');
+        if (fs.existsSync(bomStorePath)) {
+          try {
+            const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
+            if (Array.isArray(localBoms)) {
+              localBoms.forEach(b => {
+                if (b && b.invoiceNo) records.push({ invNo: b.invoiceNo });
+              });
+            }
+          } catch (_) {}
+        }
+
+        let maxSeq = extractMaxSequence('INV', fy, records);
+
+        if (serverInvSequenceCounter !== null && serverInvSequenceCounter.fy === fy && serverInvSequenceCounter.maxNum > maxSeq) {
+          maxSeq = serverInvSequenceCounter.maxNum;
+        }
+
+        const nextNum = maxSeq + 1;
+        const nextInvCode = formatSequenceCode('INV', nextNum);
+
+        if (commit) {
+          serverInvSequenceCounter = { fy, maxNum: nextNum };
+        }
+
+        resolve({ success: true, nextInvNo: nextInvCode, nextInvoiceNumber: nextInvCode, nextNum, maxNum: nextNum, financialYear: fy });
+      } catch (err) {
+        const fy = getFinancialYear();
+        resolve({ success: true, nextInvNo: `VRM-INV-${fy}-01`, nextInvoiceNumber: `VRM-INV-${fy}-01`, nextNum: 1, financialYear: fy });
+      }
+    }).catch(reject);
+  });
+};
+
 // Returns next sequential Tax Invoice number matching unified sequence VRM-INV-[YYYY]-[SEQ] (e.g. VRM-INV-2026-01)
+// Supports ?reserve=true for atomic locking across concurrent users
 app.get('/api/next-invoice-number', async (req, res) => {
   try {
-    const fy = getFinancialYear();
-    let records = [];
-
-    // 1. Query PostgreSQL invoices if available
-    if (isDbConnected()) {
-      try {
-        const dbRes = await query(`
-          SELECT invoice_no FROM public.tax_invoices
-          WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
-        `).catch(() => null);
-        if (dbRes?.rows) records.push(...dbRes.rows);
-      } catch (_) {}
-    }
-
-    // 2. Scan local invoice_store.json
-    const invStorePath = getStoreFilePath('invoice_store.json');
-    if (fs.existsSync(invStorePath)) {
-      try {
-        const localInvs = JSON.parse(fs.readFileSync(invStorePath, 'utf8'));
-        if (Array.isArray(localInvs)) records.push(...localInvs);
-      } catch (_) {}
-    }
-    if (supabaseMemoryStore.invoice_store && Array.isArray(supabaseMemoryStore.invoice_store)) {
-      records.push(...supabaseMemoryStore.invoice_store);
-    }
-
-    // 3. Scan bom_store.json for any BOM that already has an assigned invoiceNo
-    const bomStorePath = getStoreFilePath('bom_store.json');
-    if (fs.existsSync(bomStorePath)) {
-      try {
-        const localBoms = JSON.parse(fs.readFileSync(bomStorePath, 'utf8'));
-        if (Array.isArray(localBoms)) {
-          localBoms.forEach(b => {
-            if (b && b.invoiceNo) records.push({ invNo: b.invoiceNo });
-          });
-        }
-      } catch (_) {}
-    }
-
-    const { code, nextNum } = getNextSequence('INV', records);
-    res.json({ nextInvNo: code, nextInvoiceNumber: code, nextNum, financialYear: fy });
+    const isReserve = req.query.reserve === 'true' || req.query.commit === 'true';
+    const result = await getOrReserveNextInvAtomic(isReserve);
+    res.json(result);
   } catch (err) {
     const fy = getFinancialYear();
     res.json({ nextInvNo: `VRM-INV-${fy}-01`, nextInvoiceNumber: `VRM-INV-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// Explicit atomic invoice number reservation endpoint
+app.post('/api/invoices/reserve-number', async (req, res) => {
+  try {
+    const result = await getOrReserveNextInvAtomic(true);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
