@@ -86,23 +86,20 @@ export default function CreateBomFormPage(props) {
       return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
     }
 
-    // 2. Direct fallback from raw materials store in localStorage
+    // 2. Direct fallback from Central Inventory Store (Inventory Store alone)
     try {
-      const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
-      if (rawSaved) {
-        const rawList = JSON.parse(rawSaved);
-        if (Array.isArray(rawList)) {
-          const rawFound = rawList.find(rm => {
-            const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
-            const rmResCode = resolveProductCode(rm).toLowerCase().trim();
-            const rmName = (rm.name || '').toLowerCase().trim();
-            return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
-              (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
-              (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName)));
-          });
-          if (rawFound) {
-            return Number(rawFound.stock !== undefined ? rawFound.stock : (rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.physicalStock || 0)));
-          }
+      const centralItems = centralInventoryStore.getInventoryItems();
+      if (Array.isArray(centralItems)) {
+        const foundCentral = centralItems.find(it => {
+          const itCode = (it.code || it.sku || '').toLowerCase().trim();
+          const itResCode = resolveProductCode(it).toLowerCase().trim();
+          const itName = (it.name || '').toLowerCase().trim();
+          return (resolvedCode && (itCode === resolvedCode || itResCode === resolvedCode)) ||
+            (cleanCode && (itCode === cleanCode || itResCode === cleanCode)) ||
+            (cleanName && (itName === cleanName || itName.includes(cleanName) || cleanName.includes(itName)));
+        });
+        if (foundCentral) {
+          return Number(foundCentral.stock !== undefined ? foundCentral.stock : (foundCentral.availableStock !== undefined ? foundCentral.availableStock : (foundCentral.physicalStock || 0)));
         }
       }
     } catch (_) {}
@@ -1836,11 +1833,11 @@ export default function CreateBomFormPage(props) {
                     })();
 
                     const loggedInOperatorName = (() => {
+                      if (userRole === 'Sales Head') return 'Vijay';
                       const stored = localStorage.getItem('controlroom_logged_user_name');
                       if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null') return stored.trim();
                       const storedUser = localStorage.getItem('controlroom_logged_user');
                       if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
-                      if (userRole === 'Sales Head') return 'Vijay';
                       if (userRole === 'Accounts Head') return 'Venkatesh';
                       if (userRole === 'Accounts Executive') return 'Priya';
                       if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';

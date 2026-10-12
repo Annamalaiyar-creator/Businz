@@ -10,6 +10,30 @@
     "dashboard_type": "Technical Administrator"
   },
   {
+    "role": "Sales Head",
+    "email": "sales@vrm.com",
+    "prefix": "SH",
+    "status": "Active",
+    "password": "12345",
+    "created_at": "2026-10-12T10:00:00.000Z",
+    "last_login": "2026-10-12T10:00:00.000Z",
+    "employee_code": "SH-VRM001",
+    "employee_name": "Vijay",
+    "dashboard_type": "Sales Head"
+  },
+  {
+    "role": "Sales Head",
+    "email": "vijay@vrmstructures.in",
+    "prefix": "SH",
+    "status": "Active",
+    "password": "12345",
+    "created_at": "2026-10-12T10:00:00.000Z",
+    "last_login": "2026-10-12T10:00:00.000Z",
+    "employee_code": "SH-1000",
+    "employee_name": "Vijay",
+    "dashboard_type": "Sales Head"
+  },
+  {
     "role": "Sales Executive",
     "email": "sales@gmail.com",
     "prefix": "SE",

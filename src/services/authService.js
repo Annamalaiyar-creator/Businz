@@ -15,6 +15,22 @@ export const DEFAULT_CORE_EMPLOYEES = [
     password: "Efx@1234",
     role: "Technical Administrator",
     status: "Active"
+  },
+  {
+    employee_code: "SH-VRM001",
+    employee_name: "Vijay",
+    email: "sales@vrm.com",
+    password: "12345",
+    role: "Sales Head",
+    status: "Active"
+  },
+  {
+    employee_code: "SH-1000",
+    employee_name: "Vijay",
+    email: "vijay@vrmstructures.in",
+    password: "12345",
+    role: "Sales Head",
+    status: "Active"
   }
 ];
 
@@ -126,7 +142,12 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
   }
 
   const finalRoleName = accountRecord.role;
-  const finalDisplayName = accountRecord.employee_name || cleanUsername;
+  let finalDisplayName = accountRecord.employee_name || cleanUsername;
+  if (finalRoleName === 'Sales Head' || cleanEmpCodeNorm.startsWith('SH')) {
+    if (!finalDisplayName || finalDisplayName.toLowerCase() === 'sales' || finalDisplayName.toLowerCase() === 'sales head' || finalDisplayName.toLowerCase() === 'sh' || finalDisplayName.includes('@')) {
+      finalDisplayName = 'Vijay';
+    }
+  }
 
   // Developer / Technical Administrator accounts (TA-VRM###) bypass access approval requirements
   const isDeveloper = finalRoleName === 'Technical Administrator' || cleanEmpCodeNorm.startsWith('TA');
@@ -136,12 +157,16 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     finalRoleName === 'Procurement Head' || 
     finalRoleName === 'Production Head' || 
     finalRoleName === 'Dispatch Head' || 
+    finalRoleName === 'Sales Head' || 
     finalRoleName === 'CEO' || 
     cleanEmpCodeNorm.startsWith('PR') || 
     cleanEmpCodeNorm.startsWith('DH') || 
+    cleanEmpCodeNorm.startsWith('SH') || 
     cleanUsername === 'maniskremo@gmail.com' ||
     cleanUsername === 'scm@vrmstructures.in' ||
-    cleanUsername === 'dispatch@vrmstructures.in';
+    cleanUsername === 'dispatch@vrmstructures.in' ||
+    cleanUsername === 'sales@vrm.com' ||
+    cleanUsername === 'vijay@vrmstructures.in';
 
   // Check stored employee status list for access permission
   try {

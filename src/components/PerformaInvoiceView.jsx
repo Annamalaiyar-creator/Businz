@@ -338,10 +338,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   );
 
   const getEffectiveSalesPerson = () => {
+    if (userRole === 'Sales Head') return 'Vijay';
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null') return currentEmpName;
     const storedUser = localStorage.getItem('controlroom_logged_user');
     if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
-    if (userRole === 'Sales Head') return 'Vijay';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     return userRole || 'Sales Executive';
@@ -807,6 +807,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Resolve currently logged in user dynamically (matching Header & BOM creation)
   const getActiveUserName = () => {
+    if (userRole === 'Sales Head') return 'Vijay';
     const stored = localStorage.getItem('controlroom_logged_user_name');
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '') return stored.trim();
     try {
@@ -815,7 +816,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (u.fullName) return u.fullName;
       if (u.username) return u.username;
     } catch (e) {}
-    if (userRole === 'Sales Head') return 'Vijay';
     if (userRole === 'CEO' || userRole === 'Technical Administrator') return 'Annamalaiyar';
     return 'Mohit JV';
   };

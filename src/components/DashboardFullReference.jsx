@@ -234,6 +234,7 @@ export default function DashboardFullReference({ userRole }) {
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em', wordBreak: 'break-word' }}>
               Welcome back, {(() => {
+                if (userRole === 'Sales Head') return 'Vijay';
                 const storedName = localStorage.getItem('controlroom_logged_user_name');
                 if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
                 try {

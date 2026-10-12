@@ -115,7 +115,9 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
   const isCeoOrMd = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Technical Administrator' || userRole === 'Super Admin' || userRole === 'Admin';
   const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || isCeoOrMd;
-  const loggedUserName = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : null) || 'Mohit JV';
+  const loggedUserName = userRole === 'Sales Head' 
+    ? 'Vijay' 
+    : ((typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : null) || 'Mohit JV');
 
   // CEO Target State
   const getCachedObj = (key, fallback = {}) => {

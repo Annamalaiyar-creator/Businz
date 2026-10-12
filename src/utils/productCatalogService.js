@@ -28,9 +28,8 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
            (id && deletedCodes.includes(id));
   };
 
-  // 1. Build live stock map from Central Inventory Store
+  // 1. Build live stock map from Central Inventory Store (Finished Goods & Products)
   const stockMap = new Map();
-  const rawStoreMap = new Map();
 
   try {
     const centralItems = centralInventoryStore.getInventoryItems();
@@ -60,35 +59,6 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     console.warn('[CATALOG] Central store stock query notice:', e.message);
   }
 
-  // Also check raw materials store from localStorage for live inventory store stock
-  let parsedRawMats = [];
-  try {
-    const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
-    if (rawSaved) {
-      const parsed = JSON.parse(rawSaved);
-      if (Array.isArray(parsed)) {
-        parsedRawMats = parsed.filter(rm => !isItemDeleted(rm.code, rm.name, rm.sku, rm.itemId));
-        parsedRawMats.forEach(rm => {
-          const resCode = resolveProductCode(rm);
-          const codeKey = String(resCode || rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
-          const origCode = String(rm.code || rm.sku || rm.itemId || '').toLowerCase().trim();
-          const nameKey = String(rm.name || '').toLowerCase().trim();
-          const normKey = normalizeProductName(rm.name);
-          const fpKey = wordFingerprint(rm.name);
-          const isDemo = codeKey === 'alu-len-2414mm' || origCode === 'alu-len-2414mm' || codeKey === 'mr-300mm' || origCode === 'mr-300mm';
-          const isLegacyDummy = !isDemo && Number(rm.goodsReceived || 0) === 0 && Number(rm.issuedProd || 0) === 0 &&
-            (rm.lastUpdated === 'Stock Set to 5,000' || (Number(rm.stock) === 5000 && Number(rm.physicalStock) === 5000));
-          const st = isLegacyDummy ? 0 : Number(rm.availableStock !== undefined ? rm.availableStock : (rm.stock !== undefined ? rm.stock : (rm.physicalStock || 0)));
-          if (codeKey) rawStoreMap.set(codeKey, st);
-          if (origCode) rawStoreMap.set(origCode, st);
-          if (nameKey) rawStoreMap.set(nameKey, st);
-          if (normKey) rawStoreMap.set(normKey, st);
-          if (fpKey) rawStoreMap.set(fpKey, st);
-        });
-      }
-    }
-  } catch (_) {}
-
   // 2. Map all 285 VRM standardized products with true live inventory stock
   const catalogMap = new Map();
 
@@ -100,10 +70,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     const normKey = normalizeProductName(p.name);
     const fpKey = wordFingerprint(nameKey);
 
-    // Live stock balance lookup:
-    // 1. Raw materials store (Authoritative inventory store)
-    // 2. Central inventory store
-    // 3. 0 baseline
+    // Live stock balance lookup strictly from Central Inventory Store
     let realStock = null;
     let baseStock = 0;
 
@@ -115,13 +82,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       return null;
     };
 
-    const rawBal = findInStore(rawStoreMap);
     const centralBal = findInStore(stockMap);
 
-    if (rawBal !== null && !isNaN(rawBal)) {
-      realStock = Math.max(0, rawBal);
-      baseStock = realStock;
-    } else if (centralBal !== null && !isNaN(centralBal)) {
+    if (centralBal !== null && !isNaN(centralBal)) {
       realStock = Math.max(0, centralBal);
       baseStock = realStock;
     } else {
@@ -131,9 +94,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
 
     // Authoritative real stock assignments with live deduction priority
     if (codeKey === 'mr-300mm' || nameKey === 'mini rail - 300 mm' || (nameKey.includes('mini rail') && nameKey.includes('300'))) {
-      if (rawBal !== null && !isNaN(rawBal)) {
-        realStock = Math.max(0, rawBal);
-      } else if (centralBal !== null && !isNaN(centralBal)) {
+      if (centralBal !== null && !isNaN(centralBal)) {
         realStock = Math.max(0, centralBal);
       } else {
         realStock = 2000;
@@ -171,10 +132,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     }
   });
 
-  // Authoritative registration of Mini Rail - 300 mm in catalog
-  let mr300Stock = rawStoreMap.get('mr-300mm');
-  if (mr300Stock === undefined) mr300Stock = rawStoreMap.get('mini rail - 300 mm');
-  if (mr300Stock === undefined) mr300Stock = stockMap.get('mr-300mm');
+  // Authoritative registration of Mini Rail - 300 mm in catalog from Central Inventory Store
+  let mr300Stock = stockMap.get('mr-300mm');
+  if (mr300Stock === undefined) mr300Stock = stockMap.get('mini rail - 300 mm');
   if (mr300Stock === undefined || isNaN(mr300Stock) || mr300Stock <= 0) mr300Stock = 1800;
   mr300Stock = Math.max(0, Number(mr300Stock));
 
@@ -197,11 +157,23 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   catalogMap.set('mini rail 300 mm', miniRail300Record);
   catalogMap.set('mini rail', miniRail300Record);
 
-  // 3. Include any items from custom item store or raw materials store
+  // Helper to identify Raw Materials so BOM is strictly disconnected from Raw Materials
+  const isRawMaterialItem = (code = '', name = '', category = '') => {
+    const c = String(code || '').toUpperCase().trim();
+    const n = String(name || '').toUpperCase().trim();
+    const cat = String(category || '').toUpperCase().trim();
+    if (cat.includes('RAW MATERIAL') || cat.includes('RAW ALUMINIUM') || cat.includes('RAW BAR') || cat.includes('RAW PROFILE')) return true;
+    if (c.startsWith('RM-') || c.startsWith('ALU-LEN-') || c.startsWith('RAW-') || c.startsWith('BAR-')) return true;
+    if (n.startsWith('RAW ') || n.includes('RAW BAR') || n.includes('RAW LENGTH') || n.includes('ALUMINIUM RAW LENGTH') || n.includes('RAW ALUMINIUM')) return true;
+    return false;
+  };
+
+  // 3. Include any items from custom item store (Finished Goods & Products only, excluding Raw Materials)
   const mergeExtraItems = (items) => {
     if (!Array.isArray(items)) return;
     items.forEach(ci => {
       if (isItemDeleted(ci.code, ci.name, ci.sku, ci.itemId || ci.id)) return;
+      if (isRawMaterialItem(ci.code || ci.sku, ci.name, ci.category || ci.cat)) return;
       const rawCode = String(ci.code || ci.sku || ci.itemId || ci.id || '').trim();
       const nameKey = String(ci.name || '').toLowerCase().trim();
       const resCode = resolveProductCode(ci);
@@ -211,30 +183,14 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       let realStock = 0;
       const isMr300Only = (lookupCode === 'mr-300mm') || ((nameKey.includes('mini rail') || nameKey.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(nameKey) && (nameKey.includes('300') || nameKey === 'mini rail'));
       if (isMr300Only) {
-        if (rawStoreMap.has('mr-300mm')) {
-          realStock = Math.max(0, Number(rawStoreMap.get('mr-300mm')));
-        } else if (stockMap.has('mr-300mm')) {
+        if (stockMap.has('mr-300mm')) {
           realStock = Math.max(0, Number(stockMap.get('mr-300mm')));
         } else {
           realStock = mr300Stock;
         }
         if (realStock <= 0) realStock = 1800;
-      } else if (lookupCode === 'alu-len-2414mm' || lookupCode === 'rm-alu-2414') {
-        if (rawStoreMap.has('alu-len-2414mm')) {
-          realStock = Math.max(0, Number(rawStoreMap.get('alu-len-2414mm')));
-        } else if (stockMap.has('alu-len-2414mm')) {
-          realStock = Math.max(0, Number(stockMap.get('alu-len-2414mm')));
-        } else {
-          realStock = 5000;
-        }
-      } else if (lookupCode && rawStoreMap.has(lookupCode)) {
-        const val = Number(rawStoreMap.get(lookupCode));
-        realStock = Math.max(0, val);
       } else if (lookupCode && stockMap.has(lookupCode)) {
         const val = Number(stockMap.get(lookupCode));
-        realStock = Math.max(0, val);
-      } else if (nameKey && rawStoreMap.has(nameKey)) {
-        const val = Number(rawStoreMap.get(nameKey));
         realStock = Math.max(0, val);
       } else if (nameKey && stockMap.has(nameKey)) {
         const val = Number(stockMap.get(nameKey));
@@ -250,7 +206,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
           catalogMap.set(itemKey, {
             code: rawCode || ci.code || ci.sku || resCode || '',
             name: ci.name,
-            category: ci.category || ci.cat || ci.description || 'Raw Material',
+            category: ci.category || ci.cat || ci.description || 'Finished Product',
             uom: ci.uom || ci.unit || 'NOS',
             rate: String(ci.rate || ci.price || '0'),
             price: String(ci.rate || ci.price || '0'),
@@ -272,10 +228,6 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     });
   };
 
-  if (Array.isArray(parsedRawMats) && parsedRawMats.length > 0) {
-    mergeExtraItems(parsedRawMats);
-  }
-
   if (Array.isArray(directItems) && directItems.length > 0) {
     mergeExtraItems(directItems);
   }
@@ -287,7 +239,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     }
   } catch (_) {}
 
-  // Deduplicate items so fullList only contains unique items
+  // Deduplicate items so fullList only contains unique items (Finished Goods / Inventory Store only)
   const uniqueItemsMap = new Map();
   for (const it of catalogMap.values()) {
     const uKey = String(it.code || it.name || '').toLowerCase().trim();
@@ -295,7 +247,9 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       uniqueItemsMap.set(uKey, it);
     }
   }
-  const fullList = Array.from(uniqueItemsMap.values()).filter(it => !isItemDeleted(it.code, it.name, it.sku, it.itemId));
+  const fullList = Array.from(uniqueItemsMap.values())
+    .filter(it => !isItemDeleted(it.code, it.name, it.sku, it.itemId))
+    .filter(it => !isRawMaterialItem(it.code, it.name, it.category));
 
   // Save to localStorage so other modules also have the full catalog ready
   try {

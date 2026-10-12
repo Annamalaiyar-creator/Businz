@@ -42,7 +42,7 @@ export default function CrmLeadsView({
   const loggedInEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
   // Resolve effective salesperson name (e.g. "Mohith JV" or "Vijay")
-  const effectiveSalesperson = (loggedInUserName || (userRole === 'Sales Head' ? 'Vijay' : 'Mohith JV')).replace(/\s*\([^)]*\)/g, '').trim();
+  const effectiveSalesperson = (userRole === 'Sales Head' ? 'Vijay' : (loggedInUserName || 'Mohith JV')).replace(/\s*\([^)]*\)/g, '').trim();
 
   // Check if role has multi-rep visibility privileges
   const isManagerOrAdmin = ['ceo', 'md', 'managing director', 'admin', 'director', 'sales head'].some(r =>

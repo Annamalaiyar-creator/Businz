@@ -415,13 +415,6 @@ export default function ProductionViewsEngine(props) {
   const restoreInventoryForBom = (bomItems = [], bomCode = '') => {
     if (!Array.isArray(bomItems) || bomItems.length === 0) return;
     try {
-      const rawStoreStr = localStorage.getItem('controlroom_raw_materials_store');
-      let currentMats = [];
-      if (rawStoreStr) {
-        try { currentMats = JSON.parse(rawStoreStr); } catch (_) {}
-      }
-      if (!Array.isArray(currentMats)) currentMats = [];
-
       const itemsListStr = localStorage.getItem('controlroom_items_list');
       let currentItems = [];
       if (itemsListStr) {
@@ -433,25 +426,6 @@ export default function ProductionViewsEngine(props) {
         const qtyToRestore = parseFloat(pItem.qty || pItem.bomQty || 1) || 0;
         const pCode = (pItem.code || '').toUpperCase().trim();
         const pName = (pItem.name || pItem.description || '').toLowerCase().trim();
-
-        let match = currentMats.find(m => {
-          const mCode = (m.code || '').toUpperCase().trim();
-          const mName = (m.name || '').toLowerCase().trim();
-          if (pCode && mCode === pCode) return true;
-          if (pName && (mName === pName || mName.includes(pName) || pName.includes(mName))) return true;
-          return false;
-        });
-
-        if (match) {
-          const currStock = parseFloat(String(match.stock).replace(/,/g, '')) || 0;
-          const newStock = currStock + qtyToRestore;
-          match.stock = newStock;
-          match.reserved = Math.max(0, (parseFloat(match.reserved) || 0) - qtyToRestore);
-          match.blockedForBom = Math.max(0, (match.blockedForBom || 0) - qtyToRestore);
-          const minL = parseFloat(String(match.minLevel || '100').replace(/,/g, '')) || 100;
-          match.status = newStock === 0 ? 'Out of Stock' : (newStock <= minL ? 'Low Stock' : 'In Stock');
-          match.lastUpdated = `Restored from Cancelled BOM ${bomCode}`;
-        }
 
         let itemMatch = currentItems.find(it => {
           const itCode = (it.code || '').toUpperCase().trim();
@@ -470,11 +444,13 @@ export default function ProductionViewsEngine(props) {
         }
       });
 
-      localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
-      if (currentItems.length > 0) localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
-      saveCloudStore('raw_materials_store', currentMats);
-      window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+      if (currentItems.length > 0) {
+        localStorage.setItem('controlroom_items_list', JSON.stringify(currentItems));
+        saveCloudStore('item_store', currentItems);
+      }
+      window.dispatchEvent(new Event('controlroom_items_update'));
       window.dispatchEvent(new Event('controlroom_storage_update'));
+      window.dispatchEvent(new Event('central_inventory_updated'));
     } catch (err) {
       console.error('Error restoring inventory for BOM:', err);
     }
