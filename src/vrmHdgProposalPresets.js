@@ -35,8 +35,30 @@ const normalizePresetGst = (preset) => {
   return preset;
 };
 
-// In-memory active cache for custom presets directly backed by Supabase
-let customPresetsCache = {};
+// Load custom presets synchronously from localStorage on init
+const loadLocalCustomPresets = () => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem("controlroom_presets_store");
+    if (raw && raw !== "undefined" && raw !== "null") {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null) {
+        if (Array.isArray(parsed)) {
+          const map = {};
+          parsed.forEach(p => { if (p && p.id) map[p.id] = p; });
+          return map;
+        }
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to load local presets cache:", e);
+  }
+  return {};
+};
+
+// In-memory active cache for custom presets directly backed by localStorage & Supabase
+let customPresetsCache = loadLocalCustomPresets();
 
 /**
  * Synchronize custom presets with server and Supabase cloud store across all systems and devices
@@ -72,12 +94,19 @@ export async function syncPresetsWithCloud() {
 
     if (Object.keys(incomingMap).length > 0) {
       customPresetsCache = { ...customPresetsCache, ...incomingMap };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
+        } catch (_) {}
+      }
       const mergedAll = { ...basePresetsMap, ...customPresetsCache };
       const normalized = {};
       Object.keys(mergedAll).forEach(key => {
         normalized[key] = normalizePresetGst(mergedAll[key]);
       });
-      window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+      }
       return normalized;
     }
   } catch (err) {
@@ -101,7 +130,7 @@ export function getAllActivePresets() {
 /**
  * Save or update a custom preset into Supabase Database and broadcast real-time update
  */
-export async function saveCustomPreset(preset) {
+export function saveCustomPreset(preset) {
   if (!preset || !preset.id) return getAllActivePresets();
 
   try {
@@ -112,13 +141,14 @@ export async function saveCustomPreset(preset) {
     };
     customPresetsCache[preset.id] = toSave;
 
-    // Push to backend server and Supabase cloud store immediately
-    fetch('/api/store/presets_store', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(customPresetsCache)
-    }).catch(() => {});
-    await saveCloudStoreImmediate('presets_store', customPresetsCache).catch(() => {});
+    // Immediately persist to localStorage so it survives tab reloads and refreshes
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
+      } catch (err) {
+        console.warn("Could not save presets to localStorage:", err);
+      }
+    }
 
     // Create merged allPresets dictionary
     const merged = { ...basePresetsMap, ...customPresetsCache };
@@ -127,8 +157,21 @@ export async function saveCustomPreset(preset) {
       normalized[key] = normalizePresetGst(merged[key]);
     });
 
-    // Dispatch real-time update event
-    window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+    // Dispatch real-time update event immediately to all active views and selectors
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+    }
+
+    // Push to backend server and Supabase cloud store in background without blocking
+    try {
+      fetch('/api/store/presets_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customPresetsCache)
+      }).catch(() => {});
+      saveCloudStoreImmediate('presets_store', customPresetsCache).catch(() => {});
+    } catch (_) {}
+
     return normalized;
   } catch (e) {
     console.error("Error saving custom preset", e);
@@ -142,42 +185,32 @@ export async function saveCustomPreset(preset) {
 export function deleteCustomPreset(presetId) {
   if (!presetId) return getAllActivePresets();
   try {
-    let customMap = {};
-    const raw = localStorage.getItem("controlroom_presets_store");
-    if (raw && raw !== "undefined" && raw !== "null") {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === "object" && parsed !== null) {
-        if (Array.isArray(parsed)) {
-          parsed.forEach(p => {
-            if (p && p.id) customMap[p.id] = p;
-          });
-        } else {
-          Object.entries(parsed).forEach(([key, val]) => {
-            if (val && (val.isCustom || !basePresetsMap[key])) {
-              customMap[key] = val;
-            }
-          });
-        }
-      }
+    delete customPresetsCache[presetId];
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
+      } catch (err) {}
     }
 
-    delete customMap[presetId];
-    localStorage.setItem("controlroom_presets_store", JSON.stringify(customMap));
+    // Push deletion to backend server and cloud store in background
+    try {
+      fetch('/api/store/presets_store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customPresetsCache)
+      }).catch(() => {});
+      saveCloudStoreImmediate('presets_store', customPresetsCache).catch(() => {});
+    } catch (_) {}
 
-    // Push deletion to backend server and cloud store
-    fetch('/api/store/presets_store', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(customMap)
-    }).catch(() => {});
-    saveCloudStoreImmediate('presets_store', customMap).catch(() => {});
-
-    const merged = { ...basePresetsMap, ...customMap };
+    const merged = { ...basePresetsMap, ...customPresetsCache };
     const normalized = {};
     Object.keys(merged).forEach(key => {
       normalized[key] = normalizePresetGst(merged[key]);
     });
-    window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
+    }
     return normalized;
   } catch (e) {
     console.error("Error deleting custom preset", e);

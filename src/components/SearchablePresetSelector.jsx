@@ -77,6 +77,7 @@ export default function SearchablePresetSelector({
   // Categories definition
   const categorizedPresets = useMemo(() => {
     const categories = [
+      { name: 'Tech Support & Custom Presets', match: (p) => Boolean(p.isCustom || (p.id && String(p.id).includes('custom'))) },
       { name: 'GAL Hat Purline Structures (2 Row)', match: (p) => p.category === 'GAL Hat Purline Structures (2 Row)' || (p.label && p.label.includes('GAL Hat Purline (2 Row)')) },
       { name: 'GAL Hat Purline Structures (3 Row)', match: (p) => p.category === 'GAL Hat Purline Structures (3 Row)' || (p.label && p.label.includes('GAL Hat Purline (3 Row)')) },
       { name: 'GAL Hat Purline Structures (1 Row)', match: (p) => p.category === 'GAL Hat Purline Structures (1 Row)' || (p.label && p.label.includes('GAL Hat Purline (1 Row)')) },
@@ -87,8 +88,7 @@ export default function SearchablePresetSelector({
       { name: 'Adhesive Rail Kits (Penetrative / Non-Penetrative)', match: (p) => p.category === 'Adhesive Rail Kits' || (p.label && p.label.toLowerCase().includes('adhesive')) },
       { name: 'Long Rail & Double C Rail Kits', match: (p) => p.category === 'Long Rail & Double C Kits' || p.category === 'Long Rail Kits' || (p.label && (p.label.includes('Rail') || p.label.includes('rail'))) },
       { name: 'Reverse Tilt Triangle Structures', match: (p) => p.category === 'Reverse Tilt Triangle Structures' || p.category === 'Triangle Structure Kits' || (p.label && p.label.toLowerCase().includes('triangle')) },
-      { name: 'DCR BOS Solar Proposal Kits', match: (p) => p.category === 'DCR BOS Solar Kits' || p.category === 'BOS Solar Kits' || (p.label && p.label.includes('BOS KITS')) },
-      { name: 'Tech Support & Custom Presets', match: (p) => p.isCustom || (p.id && p.id.includes('custom')) }
+      { name: 'DCR BOS Solar Proposal Kits', match: (p) => p.category === 'DCR BOS Solar Kits' || p.category === 'BOS Solar Kits' || (p.label && p.label.includes('BOS KITS')) }
     ];
 
     const q = (searchTerm || '').toLowerCase().trim();
