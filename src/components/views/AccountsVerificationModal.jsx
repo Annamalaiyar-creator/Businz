@@ -180,7 +180,7 @@ export default function AccountsVerificationModal({
 
   const getExpectedInvNo = () => {
     const raw = accountsVerificationModal?.invoiceNo;
-    if (raw && raw !== 'Pending Confirmation') {
+    if (raw && raw !== 'Pending Confirmation' && raw !== 'Assigned upon Clearance') {
       const isTaken = (invoiceList || []).some(inv => 
         (inv.invNo === raw || inv.code === raw || inv.invoiceNo === raw) &&
         inv.poNo !== accountsVerificationModal?.bomCode && inv.bomCode !== accountsVerificationModal?.bomCode
@@ -191,36 +191,20 @@ export default function AccountsVerificationModal({
   };
 
   const [assignedInvoiceNo, setAssignedInvoiceNo] = useState(getExpectedInvNo);
-  const [isFetchingInvNo, setIsFetchingInvNo] = useState(false);
 
   useEffect(() => {
     const expected = getExpectedInvNo();
-    if (expected) {
-      setAssignedInvoiceNo(expected);
-      return;
-    }
-    setIsFetchingInvNo(true);
-    fetch('/api/next-invoice-number')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.nextInvNo) {
-          setAssignedInvoiceNo(data.nextInvNo);
-        }
-      })
-      .catch(err => {
-        console.warn('Could not fetch next invoice number:', err);
-      })
-      .finally(() => {
-        setIsFetchingInvNo(false);
-      });
+    setAssignedInvoiceNo(expected);
   }, [accountsVerificationModal?.bomCode, accountsVerificationModal?.code, accountsVerificationModal?.id, accountsVerificationModal?.invoiceNo]);
 
-  const currentPayDate = (accVerif.paymentDate !== undefined && accVerif.paymentDate !== null)
+  // STRICT AUDIT RULE: For unverified orders, do NOT auto-fill Payment Date or Total Amount from sales BOM.
+  // The Accounts team must inspect the payment slip below and manually enter the actual received date & amount.
+  const currentPayDate = (accVerif.paymentDate !== undefined && accVerif.paymentDate !== null && accVerif.paymentDate !== '')
     ? accVerif.paymentDate 
-    : (isAlreadyCompleted ? (accountsVerificationModal?.paymentDate || '') : (accountsVerificationModal?.paymentDate || ''));
-  const currentTotalAmount = (accVerif.totalAmount !== undefined && accVerif.totalAmount !== null)
+    : (isAlreadyCompleted ? (accountsVerificationModal?.paymentDate || '') : '');
+  const currentTotalAmount = (accVerif.totalAmount !== undefined && accVerif.totalAmount !== null && accVerif.totalAmount !== '')
     ? accVerif.totalAmount 
-    : (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || ''));
+    : (isAlreadyCompleted ? (orderValue > 0 ? orderValue : (accountsVerificationModal?.grandTotal || accountsVerificationModal?.subTotal || accountsVerificationModal?.totalAmount || '')) : '');
 
   const payType = accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3 || '';
   const isWhileDispatch = payType === 'Payment While Dispatch' || String(payType).includes('While Dispatch');
@@ -268,27 +252,28 @@ export default function AccountsVerificationModal({
       return;
     }
     if (!currentPayDate) {
-      alert('⚠️ Please select the Payment Date before completing accounts verification.');
+      alert('⚠️ Please enter the verified Payment Date from the payment slip before completing accounts verification.');
       return;
     }
     if (currentTotalAmount === '' || cleanNum(currentTotalAmount, 0) <= 0) {
-      alert('⚠️ Please enter a valid Total Amount (₹) before completing accounts verification.');
+      alert('⚠️ Please enter the verified Total Amount (₹) from the payment slip before completing accounts verification.');
       return;
     }
 
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     let finalInvNo = assignedInvoiceNo;
     const isTaken = (no) => {
-      if (!no || no === 'Pending Confirmation') return true;
+      if (!no || no === 'Pending Confirmation' || no === 'Assigned upon Clearance' || no === 'Auto-Assign') return true;
       return (invoiceList || []).some(inv => 
         (inv.invNo === no || inv.code === no || inv.invoiceNo === no) &&
         inv.poNo !== targetCode && inv.bomCode !== targetCode
       );
     };
 
-    if (!finalInvNo || finalInvNo === 'Pending Confirmation' || isTaken(finalInvNo)) {
+    // Atomically reserve next sequential Tax Invoice number upon clearance
+    if (!finalInvNo || finalInvNo === 'Pending Confirmation' || finalInvNo === 'Assigned upon Clearance' || isTaken(finalInvNo)) {
       try {
-        const res = await fetch('/api/next-invoice-number');
+        const res = await fetch('/api/next-invoice-number?reserve=true');
         if (res.ok) {
           const data = await res.json();
           if (data && data.nextInvNo && !isTaken(data.nextInvNo)) {
@@ -475,7 +460,7 @@ export default function AccountsVerificationModal({
                 display: 'inline-flex', alignItems: 'center', gap: '6px'
               }}>
                 <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
-                Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isFetchingInvNo ? 'Fetching sequence...' : 'Auto-Assign')}</strong>
+                Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isAlreadyCompleted ? 'Assigned' : 'Assigned upon Clearance')}</strong>
               </span>
               <StatusBadge
                 status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isWhileDispatch && !hasUploadedPaymentProof ? 'AWAITING PAYMENT SLIP' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
@@ -588,8 +573,8 @@ export default function AccountsVerificationModal({
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Amount</div>
-            <div style={{ fontSize: '18px', fontWeight: '900', color: '#0F172A', lineHeight: 1.2 }}>
-              {currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0 ? `₹ ${parseFloat(currentTotalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+            <div style={{ fontSize: '18px', fontWeight: '900', color: (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0) ? '#0F172A' : '#94A3B8', lineHeight: 1.2 }}>
+              {currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0 ? `₹ ${parseFloat(currentTotalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Pending Entry'}
             </div>
           </div>
         </div>
@@ -610,9 +595,9 @@ export default function AccountsVerificationModal({
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Date</div>
-            <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>
+            <div style={{ fontSize: '14px', fontWeight: '900', color: currentPayDate ? '#0F172A' : '#94A3B8', lineHeight: 1.3 }}>
               {(() => {
-                if (!currentPayDate) return '—';
+                if (!currentPayDate) return 'Pending Entry';
                 try {
                   const d = new Date(currentPayDate);
                   return !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : currentPayDate;
@@ -688,7 +673,7 @@ export default function AccountsVerificationModal({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
-                Payment Date <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted && <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span>}
+                Payment Date <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter date verified from slip</span>}
               </label>
               <input
                 type="date"
@@ -705,7 +690,7 @@ export default function AccountsVerificationModal({
                 }}
                 style={{
                   width: '100%', height: '42px', borderRadius: '10px',
-                  border: '1px solid #CBD5E1', padding: '0 12px',
+                  border: (!currentPayDate && !isAlreadyCompleted) ? '1.5px solid #F59E0B' : '1px solid #CBD5E1', padding: '0 12px',
                   fontSize: '13px', fontWeight: '600', color: '#0F172A',
                   outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
                   cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
@@ -716,12 +701,12 @@ export default function AccountsVerificationModal({
 
             <div>
               <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
-                Total Amount (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted && <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span>}
+                Total Amount (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter amount verified from slip</span>}
               </label>
               <input
                 type="number"
                 step="0.01"
-                placeholder="e.g. 52000.00"
+                placeholder="Enter verified amount received (e.g. 793800)"
                 disabled={isAlreadyCompleted}
                 value={currentTotalAmount}
                 onChange={(e) => {
@@ -735,7 +720,7 @@ export default function AccountsVerificationModal({
                 }}
                 style={{
                   width: '100%', height: '42px', borderRadius: '10px',
-                  border: '1px solid #CBD5E1', padding: '0 12px',
+                  border: ((currentTotalAmount === '' || cleanNum(currentTotalAmount, 0) <= 0) && !isAlreadyCompleted) ? '1.5px solid #F59E0B' : '1px solid #CBD5E1', padding: '0 12px',
                   fontSize: '13px', fontWeight: '700', color: '#0F172A',
                   outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
                   cursor: isAlreadyCompleted ? 'not-allowed' : 'text',

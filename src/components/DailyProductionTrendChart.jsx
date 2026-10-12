@@ -91,7 +91,7 @@ export default function DailyProductionTrendChart({ title = "DAILY PRODUCTION TR
 
       {/* SVG Bar Chart with Ocean Teal-Blue theme */}
       <div style={{ width: '100%', overflowX: 'auto', padding: '10px 0' }}>
-        <svg width="100%" height="auto" viewBox="0 0 560 225" style={{ overflow: 'visible', minWidth: '400px' }}>
+        <svg width="100%" viewBox="0 0 560 225" style={{ overflow: 'visible', minWidth: '400px', height: 'auto' }}>
           {/* Y-Axis Grid Labels */}
           {yTicks.map((tick, idx) => {
             const yPos = startY - (tick.val / maxVal) * chartHeight;

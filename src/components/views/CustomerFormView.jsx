@@ -14,8 +14,14 @@ export default function CustomerFormView({
   setCustFormGstNo,
   custFormMobile,
   setCustFormMobile,
+  custFormAltPhone = '',
+  setCustFormAltPhone,
   custFormEmail,
   setCustFormEmail,
+  custFormBillingAddress1 = '',
+  setCustFormBillingAddress1,
+  custFormBillingAddress2 = '',
+  setCustFormBillingAddress2,
   custFormBillingAddress,
   setCustFormBillingAddress,
   custFormBillingCity,
@@ -24,6 +30,10 @@ export default function CustomerFormView({
   setCustFormBillingState,
   custFormBillingPincode,
   setCustFormBillingPincode,
+  custFormDeliveryAddress1 = '',
+  setCustFormDeliveryAddress1,
+  custFormDeliveryAddress2 = '',
+  setCustFormDeliveryAddress2,
   custFormDeliveryAddress,
   setCustFormDeliveryAddress,
   custFormDeliveryCity,
@@ -95,20 +105,34 @@ export default function CustomerFormView({
                 return parts.join(', ');
               };
 
-              const billingStr = formatAddr(custFormBillingAddress, custFormBillingCity, custFormBillingState, custFormBillingPincode);
+              const b1 = (custFormBillingAddress1 || '').trim();
+              const b2 = (custFormBillingAddress2 || '').trim();
+              const billingStreet = [b1, b2].filter(Boolean).join(', ') || custFormBillingAddress.trim();
+
+              const d1 = (custFormDeliveryAddress1 || '').trim();
+              const d2 = (custFormDeliveryAddress2 || '').trim();
+              const deliveryStreet = custFormSameAsBilling
+                ? billingStreet
+                : ([d1, d2].filter(Boolean).join(', ') || custFormDeliveryAddress.trim());
+
+              const billingStr = formatAddr(billingStreet, custFormBillingCity, custFormBillingState, custFormBillingPincode);
               const deliveryStr = custFormSameAsBilling
                 ? billingStr
-                : formatAddr(custFormDeliveryAddress, custFormDeliveryCity, custFormDeliveryState, custFormDeliveryPincode);
+                : formatAddr(deliveryStreet, custFormDeliveryCity, custFormDeliveryState, custFormDeliveryPincode);
 
               const billingObj = {
-                address: custFormBillingAddress.trim(),
+                address1: b1,
+                address2: b2,
+                address: billingStreet,
                 city: custFormBillingCity.trim(),
                 state: custFormBillingState.trim(),
                 pincode: custFormBillingPincode.trim()
               };
 
               const deliveryObj = custFormSameAsBilling ? { ...billingObj } : {
-                address: custFormDeliveryAddress.trim(),
+                address1: d1,
+                address2: d2,
+                address: deliveryStreet,
                 city: custFormDeliveryCity.trim(),
                 state: custFormDeliveryState.trim(),
                 pincode: custFormDeliveryPincode.trim()
@@ -121,7 +145,19 @@ export default function CustomerFormView({
                   c2: company,
                   gstNo: gstNo,
                   c4: mobile,
+                  altPhone: custFormAltPhone,
+                  altNumber: custFormAltPhone,
                   c5: email,
+                  address1: b1,
+                  address2: b2,
+                  billingAddress1: b1,
+                  billingAddress2: b2,
+                  dispatchAddress1: custFormSameAsBilling ? b1 : d1,
+                  dispatchAddress2: custFormSameAsBilling ? b2 : d2,
+                  shippingAddress1: custFormSameAsBilling ? b1 : d1,
+                  shippingAddress2: custFormSameAsBilling ? b2 : d2,
+                  address: billingStreet,
+                  dispatchAddress: deliveryStreet,
                   c6: billingStr,
                   billingAddress: billingStr,
                   billingAddressObj: billingObj,
@@ -137,7 +173,19 @@ export default function CustomerFormView({
                   gstNo: gstNo,
                   c3: 'Primary Contact',
                   c4: mobile,
+                  altPhone: custFormAltPhone,
+                  altNumber: custFormAltPhone,
                   c5: email,
+                  address1: b1,
+                  address2: b2,
+                  billingAddress1: b1,
+                  billingAddress2: b2,
+                  dispatchAddress1: custFormSameAsBilling ? b1 : d1,
+                  dispatchAddress2: custFormSameAsBilling ? b2 : d2,
+                  shippingAddress1: custFormSameAsBilling ? b1 : d1,
+                  shippingAddress2: custFormSameAsBilling ? b2 : d2,
+                  address: billingStreet,
+                  dispatchAddress: deliveryStreet,
                   c6: billingStr,
                   billingAddress: billingStr,
                   billingAddressObj: billingObj,
@@ -168,13 +216,29 @@ export default function CustomerFormView({
                       companyName: company,
                       customerCode: name,
                       gstNumber: gstNo,
-                      address: billingStr,
+                      address1: b1,
+                      address2: b2,
+                      billingAddress1: b1,
+                      billingAddress2: b2,
+                      dispatchAddress1: custFormSameAsBilling ? b1 : d1,
+                      dispatchAddress2: custFormSameAsBilling ? b2 : d2,
+                      shippingAddress1: custFormSameAsBilling ? b1 : d1,
+                      shippingAddress2: custFormSameAsBilling ? b2 : d2,
+                      address: billingStreet,
+                      dispatchAddress: deliveryStreet,
+                      billingAddress: billingStr,
+                      deliveryAddress: deliveryStr,
+                      billingAddressObj: billingObj,
+                      deliveryAddressObj: deliveryObj,
                       city: custFormBillingCity,
                       state: custFormBillingState,
                       pincode: custFormBillingPincode,
+                      altPhone: custFormAltPhone,
+                      altNumber: custFormAltPhone,
                       primaryContact: {
                         name: name,
                         phone: mobile,
+                        altPhone: custFormAltPhone,
                         email: email
                       }
                     })
@@ -187,12 +251,17 @@ export default function CustomerFormView({
               setCustFormCompany('');
               setCustFormGstNo('');
               setCustFormMobile('');
+              if (setCustFormAltPhone) setCustFormAltPhone('');
               setCustFormEmail('');
+              if (setCustFormBillingAddress1) setCustFormBillingAddress1('');
+              if (setCustFormBillingAddress2) setCustFormBillingAddress2('');
               setCustFormBillingAddress('');
               setCustFormBillingCity('');
               setCustFormBillingState('');
               setCustFormBillingPincode('');
               setCustFormSameAsBilling(false);
+              if (setCustFormDeliveryAddress1) setCustFormDeliveryAddress1('');
+              if (setCustFormDeliveryAddress2) setCustFormDeliveryAddress2('');
               setCustFormDeliveryAddress('');
               setCustFormDeliveryCity('');
               setCustFormDeliveryState('');
@@ -248,8 +317,8 @@ export default function CustomerFormView({
           </div>
         </div>
 
-        {/* ROW 2: GST NUMBER, MOBILE & EMAIL */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '20px' }}>
+        {/* ROW 2: GST NUMBER, MOBILE, ALT NUMBER & EMAIL */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>GST Number (GSTIN)</label>
             <input
@@ -268,6 +337,17 @@ export default function CustomerFormView({
               placeholder="+91 98765 43210"
               value={custFormMobile}
               onChange={(e) => setCustFormMobile(e.target.value)}
+              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Alt Number / Phone</label>
+            <input
+              type="text"
+              placeholder="+91 98765 43211 / Landline"
+              value={custFormAltPhone}
+              onChange={(e) => setCustFormAltPhone && setCustFormAltPhone(e.target.value)}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
             />
           </div>
@@ -302,19 +382,45 @@ export default function CustomerFormView({
               </div>
             </div>
 
-            {/* Street / Building Address */}
+            {/* Street Address Line 1 */}
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Address (Street / Building / Area)
+                Billing Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Building / Door / Flat / Street)</span>
               </label>
               <input
                 type="text"
                 placeholder="e.g. No 1427, GNT Road, Nagappa Industrial Estate"
-                value={custFormBillingAddress}
+                value={custFormBillingAddress1}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setCustFormBillingAddress(val);
-                  if (custFormSameAsBilling) setCustFormDeliveryAddress(val);
+                  if (setCustFormBillingAddress1) setCustFormBillingAddress1(val);
+                  setCustFormBillingAddress([val, custFormBillingAddress2].filter(Boolean).join(', '));
+                  if (custFormSameAsBilling) {
+                    if (setCustFormDeliveryAddress1) setCustFormDeliveryAddress1(val);
+                    setCustFormDeliveryAddress([val, custFormBillingAddress2].filter(Boolean).join(', '));
+                  }
+                }}
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
+              />
+            </div>
+
+            {/* Street Address Line 2 */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Billing Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Area / Landmark / Road)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Near Puzhal Toll Plaza, Redhills Road"
+                value={custFormBillingAddress2}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (setCustFormBillingAddress2) setCustFormBillingAddress2(val);
+                  setCustFormBillingAddress([custFormBillingAddress1, val].filter(Boolean).join(', '));
+                  if (custFormSameAsBilling) {
+                    if (setCustFormDeliveryAddress2) setCustFormDeliveryAddress2(val);
+                    setCustFormDeliveryAddress([custFormBillingAddress1, val].filter(Boolean).join(', '));
+                  }
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
               />
@@ -399,6 +505,8 @@ export default function CustomerFormView({
                     const checked = e.target.checked;
                     setCustFormSameAsBilling(checked);
                     if (checked) {
+                      if (setCustFormDeliveryAddress1) setCustFormDeliveryAddress1(custFormBillingAddress1);
+                      if (setCustFormDeliveryAddress2) setCustFormDeliveryAddress2(custFormBillingAddress2);
                       setCustFormDeliveryAddress(custFormBillingAddress);
                       setCustFormDeliveryCity(custFormBillingCity);
                       setCustFormDeliveryState(custFormBillingState);
@@ -411,17 +519,46 @@ export default function CustomerFormView({
               </label>
             </div>
 
-            {/* Street / Building Address */}
+            {/* Street Address Line 1 */}
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Address (Street / Building / Area)
+                Shipping Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Warehouse / Site / Street)</span>
               </label>
               <input
                 type="text"
-                placeholder="e.g. Plot No 42, SIDCO Industrial Estate, Ambattur"
-                value={custFormSameAsBilling ? custFormBillingAddress : custFormDeliveryAddress}
+                placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
+                value={custFormSameAsBilling ? custFormBillingAddress1 : custFormDeliveryAddress1}
                 disabled={custFormSameAsBilling}
-                onChange={(e) => setCustFormDeliveryAddress(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (setCustFormDeliveryAddress1) setCustFormDeliveryAddress1(val);
+                  setCustFormDeliveryAddress([val, custFormDeliveryAddress2].filter(Boolean).join(', '));
+                }}
+                style={{
+                  width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px',
+                  color: custFormSameAsBilling ? '#64748B' : '#0F172A',
+                  backgroundColor: custFormSameAsBilling ? '#F1F5F9' : '#FFFFFF',
+                  boxSizing: 'border-box', outline: 'none',
+                  cursor: custFormSameAsBilling ? 'not-allowed' : 'text'
+                }}
+              />
+            </div>
+
+            {/* Street Address Line 2 */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Shipping Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Industrial Estate / Landmark / Road)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Near Ambattur Railway Station"
+                value={custFormSameAsBilling ? custFormBillingAddress2 : custFormDeliveryAddress2}
+                disabled={custFormSameAsBilling}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (setCustFormDeliveryAddress2) setCustFormDeliveryAddress2(val);
+                  setCustFormDeliveryAddress([custFormDeliveryAddress1, val].filter(Boolean).join(', '));
+                }}
                 style={{
                   width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px',
                   color: custFormSameAsBilling ? '#64748B' : '#0F172A',

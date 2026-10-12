@@ -24,17 +24,21 @@ export default function CustomerProfileView({
   const c = viewingCustomer;
   const bObj = c.billingAddressObj || {};
   const dObj = c.deliveryAddressObj || {};
-  const bStreet = bObj.address || c.c6 || c.billingAddress || '—';
-  const bCity = bObj.city || '—';
-  const bState = bObj.state || '—';
-  const bPin = bObj.pincode || '—';
+  const b1 = c.address1 || c.billingAddress1 || bObj.address1 || '';
+  const b2 = c.address2 || c.billingAddress2 || bObj.address2 || '';
+  const bStreet = [b1, b2].filter(Boolean).join(', ') || bObj.address || c.c6 || c.billingAddress || '—';
+  const bCity = bObj.city || c.city || '—';
+  const bState = bObj.state || c.state || '—';
+  const bPin = bObj.pincode || c.pincode || '—';
 
-  const dStreet = dObj.address || c.c7 || c.deliveryAddress || '—';
-  const dCity = dObj.city || '—';
-  const dState = dObj.state || '—';
-  const dPin = dObj.pincode || '—';
+  const d1 = c.dispatchAddress1 || c.shippingAddress1 || dObj.address1 || '';
+  const d2 = c.dispatchAddress2 || c.shippingAddress2 || dObj.address2 || '';
+  const dStreet = [d1, d2].filter(Boolean).join(', ') || dObj.address || c.c7 || c.deliveryAddress || '—';
+  const dCity = dObj.city || c.dispatchCity || bCity;
+  const dState = dObj.state || c.dispatchState || bState;
+  const dPin = dObj.pincode || c.dispatchPincode || bPin;
 
-  const isSame = (c.deliveryAddress === c.billingAddress && Boolean(c.billingAddress)) || (!c.c7 && !c.deliveryAddress);
+  const isSame = (c.deliveryAddress === c.billingAddress && Boolean(c.billingAddress)) || (!c.c7 && !c.deliveryAddress) || (bStreet === dStreet && bStreet !== '—');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>

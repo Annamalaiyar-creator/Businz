@@ -141,7 +141,22 @@ async function runProductionClean() {
     `, [JSON.stringify(masterEmployees)]);
 
     // Check and truncate relational tables if they exist
-    const tablesToTruncate = ['bom_orders', 'invoices', 'leads', 'opportunities', 'customers'];
+    const tablesToTruncate = [
+      'bom_orders',
+      'invoices',
+      'purchase_orders',
+      'proforma_invoices',
+      'goods_receipt_notes',
+      'production_work_orders',
+      'production_ledger',
+      'payments',
+      'quotations',
+      'leads',
+      'opportunities',
+      'whatsapp_conversations',
+      'notifications',
+      'customers'
+    ];
     for (const tbl of tablesToTruncate) {
       try {
         const check = await client.query(`SELECT to_regclass('public.${tbl}') as tbl_exists`);
@@ -152,6 +167,52 @@ async function runProductionClean() {
       } catch (tblErr) {
         // Table may not exist or has active foreign key constraints
       }
+    }
+
+    // Reset public.users keeping only master Technical Administrator
+    try {
+      const userCheck = await client.query(`SELECT to_regclass('public.users') as tbl_exists`);
+      if (userCheck.rows[0]?.tbl_exists) {
+        await client.query(`
+          DELETE FROM public.users WHERE email <> 'arannamalaiyar@gmail.com';
+          INSERT INTO public.users (name, email, password, role, department)
+          VALUES ('Ar.Annamalaiyar', 'arannamalaiyar@gmail.com', 'Efx@1234', 'Technical Administrator', 'Executive')
+          ON CONFLICT (email) DO UPDATE 
+          SET password = 'Efx@1234', role = 'Technical Administrator';
+        `);
+        console.log('   - Preserved master admin in public.users');
+      }
+    } catch (uErr) {
+      // Table may not exist
+    }
+
+    // Reset public.leaves if table exists
+    try {
+      const leavesCheck = await client.query(`SELECT to_regclass('public.leaves') as tbl_exists`);
+      if (leavesCheck.rows[0]?.tbl_exists) {
+        await client.query(`
+          DELETE FROM public.leaves 
+          WHERE employee IN (
+            'BOM_STORE', 'SALES_PI_STORE', 'PROFORMA_INVOICE_STORE', 'PROCUREMENT_PI_STORE',
+            'PO_STORE', 'GRN_STORE', 'INVOICE_STORE', 'PAYMENT_STORE', 'WORKORDER_STORE',
+            'VRM_PROD_WORKORDERS', 'VRM_PROD_LEDGER', 'JOBWORKS_STORE', 'RESERVATIONS_STORE',
+            'NOTIFICATIONS_STORE', 'CUSTOMER_STORE', 'CRM_CUSTOMERS', 'CRM_LEADS',
+            'CRM_OPPORTUNITIES', 'CRM_QUOTATIONS', 'BOM_SEQUENCE'
+          );
+          INSERT INTO public.leaves (employee, reason, status, type) VALUES
+          ('BOM_STORE', '[]', 'active', 'Store'),
+          ('SALES_PI_STORE', '[]', 'active', 'Store'),
+          ('PROFORMA_INVOICE_STORE', '[]', 'active', 'Store'),
+          ('PO_STORE', '[]', 'active', 'Store'),
+          ('GRN_STORE', '[]', 'active', 'Store'),
+          ('INVOICE_STORE', '[]', 'active', 'Store'),
+          ('CUSTOMER_STORE', '[]', 'active', 'Store'),
+          ('BOM_SEQUENCE', '{"lastNumber": 0}', 'active', 'Sequence');
+        `);
+        console.log('   - Cleaned operational keys in public.leaves');
+      }
+    } catch (lErr) {
+      // leaves table may not exist
     }
 
     client.release();

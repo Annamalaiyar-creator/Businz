@@ -148,11 +148,15 @@ export default function CrmCustomersView({
     gstNumber: '',
     panNumber: '',
     // Billing Address
+    address1: '',
+    address2: '',
     address: '',
     city: '',
     state: '',
     pincode: '',
-    // Dispatch Address
+    // Dispatch / Shipping Address
+    dispatchAddress1: '',
+    dispatchAddress2: '',
     dispatchAddress: '',
     dispatchCity: '',
     dispatchState: '',
@@ -164,9 +168,11 @@ export default function CrmCustomersView({
     paymentTerms: '',
     source: '',
     notes: '',
+    altPhone: '',
     primaryContact: {
       name: '',
       phone: '',
+      altPhone: '',
       whatsapp: '',
       email: ''
     }
@@ -359,10 +365,15 @@ export default function CrmCustomersView({
     { key: 'customerType', label: 'Customer Type', required: false, hint: 'e.g. EPC Contractor, Developer, Reseller' },
     { key: 'contactPerson', label: 'Primary Contact Person', required: false, hint: 'Key contact person or manager' },
     { key: 'phone', label: 'Phone / Mobile', required: true, hint: 'Primary phone or WhatsApp number' },
+    { key: 'altPhone', label: 'Alt Number / Phone', required: false, hint: 'Secondary contact number or landline' },
     { key: 'email', label: 'Email Address', required: false, hint: 'Official billing or communication email' },
     { key: 'gstin', label: 'GSTIN / Tax ID', required: false, hint: '15-digit GST identification number' },
     { key: 'pan', label: 'PAN Number', required: false, hint: '10-character PAN number' },
-    { key: 'address', label: 'Billing Address', required: false, hint: 'Street address, building, premises' },
+    { key: 'billingAddress1', label: 'Billing Address 1', required: false, hint: 'Flat / Door / Plot No, Street, Building' },
+    { key: 'billingAddress2', label: 'Billing Address 2', required: false, hint: 'Area, Landmark, Road' },
+    { key: 'shippingAddress1', label: 'Shipping Address 1', required: false, hint: 'Site, Warehouse, Premises, Street' },
+    { key: 'shippingAddress2', label: 'Shipping Address 2', required: false, hint: 'Industrial Area, Landmark, Road' },
+    { key: 'address', label: 'Billing Address (Single Line)', required: false, hint: 'Single-line billing address (legacy/fallback)' },
     { key: 'city', label: 'City', required: false, hint: 'City or town' },
     { key: 'state', label: 'State', required: false, hint: 'State / province' },
     { key: 'pincode', label: 'Pincode / ZIP', required: false, hint: 'Postal PIN code' },
@@ -389,10 +400,15 @@ export default function CrmCustomersView({
       customerName: findMatch([/^customer\s*name/i, /^customer/i, /^client\s*name/i, /^name/i]),
       customerType: findMatch([/^customer\s*type/i, /^type/i, /^category/i, /^nature/i]),
       contactPerson: findMatch([/^primary\s*contact/i, /^contact\s*person/i, /^contact\s*name/i, /^contact/i, /^person/i]),
-      phone: findMatch([/^phone/i, /^mobile/i, /^contact\s*number/i, /^cell/i, /^whatsapp/i, /^tel/i]),
+      phone: findMatch([/^primary\s*phone/i, /^phone/i, /^mobile/i, /^contact\s*number/i, /^cell/i, /^whatsapp/i, /^tel/i]),
+      altPhone: findMatch([/^alt(\s*|\.)*(phone|mobile|number|no|contact)/i, /^alternate\s*(phone|mobile|number|no|contact)/i, /^secondary\s*(phone|mobile|contact)/i, /^landline/i, /^other\s*phone/i]),
       email: findMatch([/^email/i, /^e-mail/i, /^mail/i]),
       gstin: findMatch([/^gstin/i, /^gst\s*number/i, /^gst\s*no/i, /^gst/i, /^tax\s*id/i]),
       pan: findMatch([/^pan\s*number/i, /^pan\s*no/i, /^pan/i]),
+      billingAddress1: findMatch([/^billing\s*address\s*(1|line\s*1)/i, /^billing\s*street/i, /^billing\s*addr(ess)?$/i, /^address\s*(1|line\s*1)/i, /^street\s*(1|line\s*1)/i]),
+      billingAddress2: findMatch([/^billing\s*address\s*(2|line\s*2)/i, /^billing\s*area/i, /^address\s*(2|line\s*2)/i, /^street\s*(2|line\s*2)/i, /^landmark/i]),
+      shippingAddress1: findMatch([/^(shipping|dispatch|delivery)\s*address\s*(1|line\s*1)/i, /^(shipping|dispatch|delivery)\s*street/i, /^shipping\s*addr(ess)?$/i, /^delivery\s*addr(ess)?$/i, /^dispatch\s*addr(ess)?$/i]),
+      shippingAddress2: findMatch([/^(shipping|dispatch|delivery)\s*address\s*(2|line\s*2)/i, /^(shipping|dispatch|delivery)\s*area/i, /^shipping\s*2/i, /^dispatch\s*2/i]),
       address: findMatch([/^billing\s*address/i, /^address/i, /^street/i, /^premises/i, /^location/i]),
       city: findMatch([/^city/i, /^district/i, /^town/i]),
       state: findMatch([/^state/i, /^province/i]),
@@ -412,8 +428,12 @@ export default function CrmCustomersView({
         "PAN": "AABCA1234D",
         "Contact Person": "Ramesh Kumar",
         "Phone": "9840123456",
+        "Alt Number": "9840987654",
         "Email": "ramesh@apexsolar.in",
-        "Billing Address": "Plot 12, Industrial Estate, Ambattur",
+        "Billing Address 1": "Plot 12, Phase II, Industrial Estate",
+        "Billing Address 2": "Ambattur Industrial Zone",
+        "Shipping Address 1": "Warehouse No. 4, Solar Site Gate 2",
+        "Shipping Address 2": "Near Substation, Ambattur",
         "City": "Chennai",
         "State": "Tamil Nadu",
         "Pincode": "600058",
@@ -428,8 +448,12 @@ export default function CrmCustomersView({
         "PAN": "AABCB5678E",
         "Contact Person": "Priya Sharma",
         "Phone": "9880198765",
+        "Alt Number": "9880112233",
         "Email": "priya@brightsun.com",
-        "Billing Address": "45/2, Outer Ring Road, Bellandur",
+        "Billing Address 1": "45/2, Outer Ring Road",
+        "Billing Address 2": "Bellandur Green Tech Park",
+        "Shipping Address 1": "Site Plot 88, Whitefield Central",
+        "Shipping Address 2": "Near Metro Yard",
         "City": "Bangalore",
         "State": "Karnataka",
         "Pincode": "560103",
@@ -526,16 +550,49 @@ export default function CrmCustomersView({
       const contactName = getVal('contactPerson') || customerName;
       const customerType = getVal('customerType') || 'EPC Contractor';
       const phone = getVal('phone');
+      const altPhone = getVal('altPhone');
       const email = getVal('email');
       const gstin = getVal('gstin').toUpperCase();
       const pan = getVal('pan').toUpperCase() || (gstin.length === 15 ? gstin.substring(2, 12) : '');
-      const address = getVal('address');
+      const billingAddress1 = getVal('billingAddress1');
+      const billingAddress2 = getVal('billingAddress2');
+      const shippingAddress1 = getVal('shippingAddress1');
+      const shippingAddress2 = getVal('shippingAddress2');
+      const legacyAddress = getVal('address');
+
+      const finalBilling1 = billingAddress1 || legacyAddress;
+      const finalBilling2 = billingAddress2 || '';
+      const combinedBilling = [finalBilling1, finalBilling2].filter(Boolean).join(', ') || legacyAddress;
+
+      const hasDistinctShipping = Boolean(shippingAddress1 || shippingAddress2);
+      const finalShipping1 = hasDistinctShipping ? (shippingAddress1 || '') : finalBilling1;
+      const finalShipping2 = hasDistinctShipping ? (shippingAddress2 || '') : finalBilling2;
+      const combinedShipping = [finalShipping1, finalShipping2].filter(Boolean).join(', ') || combinedBilling;
+
       const city = getVal('city');
       const state = getVal('state');
       const pincode = getVal('pincode');
       const paymentTerms = getVal('paymentTerms') || '';
       const limitRaw = getVal('creditLimit');
       const creditLimit = limitRaw ? (parseFloat(limitRaw.replace(/[^0-9.]/g, '')) || 0) : 0;
+
+      const billingAddressObj = {
+        address1: finalBilling1,
+        address2: finalBilling2,
+        address: combinedBilling,
+        city,
+        state,
+        pincode
+      };
+
+      const deliveryAddressObj = {
+        address1: finalShipping1,
+        address2: finalShipping2,
+        address: combinedShipping,
+        city,
+        state,
+        pincode
+      };
 
       return {
         id: 'CUST-VRM-' + String(100 + customers.length + idx + 1),
@@ -548,18 +605,35 @@ export default function CrmCustomersView({
         primaryContact: {
           name: contactName,
           phone: phone,
+          altPhone: altPhone,
           whatsapp: phone,
           email: email
         },
-        address,
+        altPhone: altPhone,
+        altNumber: altPhone,
+        // Billing Address
+        address1: finalBilling1,
+        address2: finalBilling2,
+        address: combinedBilling,
+        billingAddress1: finalBilling1,
+        billingAddress2: finalBilling2,
+        billingAddress: combinedBilling,
+        billingAddressObj,
         city,
         state,
         pincode,
-        dispatchAddress: address,
+        // Dispatch / Shipping Address
+        dispatchAddress1: finalShipping1,
+        dispatchAddress2: finalShipping2,
+        dispatchAddress: combinedShipping,
+        shippingAddress1: finalShipping1,
+        shippingAddress2: finalShipping2,
+        deliveryAddress: combinedShipping,
+        deliveryAddressObj,
         dispatchCity: city,
         dispatchState: state,
         dispatchPincode: pincode,
-        sameAsBilling: true,
+        sameAsBilling: !hasDistinctShipping,
         paymentTerms,
         creditLimit,
         creditDays: 30,
@@ -571,8 +645,8 @@ export default function CrmCustomersView({
         c3: contactName,
         c4: phone,
         c5: email,
-        c6: address,
-        c7: address
+        c6: combinedBilling,
+        c7: combinedShipping
       };
     }).filter(c => c.companyName || c.customerName);
 
@@ -640,6 +714,11 @@ export default function CrmCustomersView({
   // Open Edit Customer Page
   const handleOpenEditPage = (cust) => {
     setEditingCustomer(cust);
+    const b1 = cust.address1 || cust.billingAddress1 || (cust.billingAddressObj && cust.billingAddressObj.address1) || cust.address || '';
+    const b2 = cust.address2 || cust.billingAddress2 || (cust.billingAddressObj && cust.billingAddressObj.address2) || '';
+    const s1 = cust.dispatchAddress1 || cust.shippingAddress1 || (cust.deliveryAddressObj && cust.deliveryAddressObj.address1) || cust.dispatchAddress || b1 || '';
+    const s2 = cust.dispatchAddress2 || cust.shippingAddress2 || (cust.deliveryAddressObj && cust.deliveryAddressObj.address2) || b2 || '';
+
     setFormCust({
       customerName: cust.customerName || cust.companyName || '',
       companyName: cust.companyName || '',
@@ -647,23 +726,29 @@ export default function CrmCustomersView({
       customerType: cust.customerType || 'EPC Contractor',
       gstNumber: cust.gstNumber || '',
       panNumber: cust.panNumber || '',
-      address: cust.address || '',
-      city: cust.city || '',
-      state: cust.state || '',
-      pincode: cust.pincode || '',
-      dispatchAddress: cust.dispatchAddress || cust.address || '',
+      address1: b1,
+      address2: b2,
+      address: [b1, b2].filter(Boolean).join(', ') || cust.address || '',
+      city: cust.city || (cust.billingAddressObj && cust.billingAddressObj.city) || '',
+      state: cust.state || (cust.billingAddressObj && cust.billingAddressObj.state) || '',
+      pincode: cust.pincode || (cust.billingAddressObj && cust.billingAddressObj.pincode) || '',
+      dispatchAddress1: s1,
+      dispatchAddress2: s2,
+      dispatchAddress: [s1, s2].filter(Boolean).join(', ') || cust.dispatchAddress || cust.address || '',
       dispatchCity: cust.dispatchCity || cust.city || '',
       dispatchState: cust.dispatchState || cust.state || '',
       dispatchPincode: cust.dispatchPincode || cust.pincode || '',
-      sameAsBilling: cust.sameAsBilling !== undefined ? cust.sameAsBilling : (!cust.dispatchAddress || cust.dispatchAddress === cust.address),
+      sameAsBilling: cust.sameAsBilling !== undefined ? cust.sameAsBilling : (!cust.dispatchAddress || cust.dispatchAddress === cust.address || (s1 === b1 && s2 === b2)),
       creditLimit: cust.creditLimit !== undefined && cust.creditLimit !== null ? cust.creditLimit : '',
       creditDays: cust.creditDays !== undefined && cust.creditDays !== null ? cust.creditDays : '',
       paymentTerms: cust.paymentTerms || '',
       source: cust.source || '',
       notes: cust.notes || '',
+      altPhone: cust.altPhone || cust.altNumber || cust.primaryContact?.altPhone || '',
       primaryContact: {
         name: cust.primaryContact?.name || '',
         phone: cust.primaryContact?.phone || '',
+        altPhone: cust.primaryContact?.altPhone || cust.altPhone || cust.altNumber || '',
         whatsapp: cust.primaryContact?.whatsapp || '',
         email: cust.primaryContact?.email || ''
       }
@@ -710,20 +795,29 @@ export default function CrmCustomersView({
       return parts.join(', ');
     };
 
-    const billingStr = formatAddr(formCust.address, formCust.city, formCust.state, formCust.pincode);
+    const billingStreetCombined = [formCust.address1, formCust.address2].filter(Boolean).join(', ') || formCust.address || '';
+    const dispatchStreetCombined = formCust.sameAsBilling
+      ? billingStreetCombined
+      : ([formCust.dispatchAddress1, formCust.dispatchAddress2].filter(Boolean).join(', ') || formCust.dispatchAddress || '');
+
+    const billingStr = formatAddr(billingStreetCombined, formCust.city, formCust.state, formCust.pincode);
     const dispatchStr = formCust.sameAsBilling
       ? billingStr
-      : formatAddr(formCust.dispatchAddress, formCust.dispatchCity, formCust.dispatchState, formCust.dispatchPincode);
+      : formatAddr(dispatchStreetCombined, formCust.dispatchCity, formCust.dispatchState, formCust.dispatchPincode);
 
     const billingObj = {
-      address: (formCust.address || '').trim(),
+      address1: (formCust.address1 || '').trim(),
+      address2: (formCust.address2 || '').trim(),
+      address: billingStreetCombined.trim(),
       city: (formCust.city || '').trim(),
       state: (formCust.state || '').trim(),
       pincode: (formCust.pincode || '').trim()
     };
 
     const deliveryObj = formCust.sameAsBilling ? { ...billingObj } : {
-      address: (formCust.dispatchAddress || '').trim(),
+      address1: (formCust.dispatchAddress1 || '').trim(),
+      address2: (formCust.dispatchAddress2 || '').trim(),
+      address: dispatchStreetCombined.trim(),
       city: (formCust.dispatchCity || '').trim(),
       state: (formCust.dispatchState || '').trim(),
       pincode: (formCust.dispatchPincode || '').trim()
@@ -741,6 +835,18 @@ export default function CrmCustomersView({
       c3: formCust.primaryContact?.name || '',
       c4: formCust.primaryContact?.phone || '',
       c5: formCust.primaryContact?.email || '',
+      altPhone: formCust.primaryContact?.altPhone || formCust.altPhone || '',
+      altNumber: formCust.primaryContact?.altPhone || formCust.altPhone || '',
+      address1: (formCust.address1 || '').trim(),
+      address2: (formCust.address2 || '').trim(),
+      billingAddress1: (formCust.address1 || '').trim(),
+      billingAddress2: (formCust.address2 || '').trim(),
+      dispatchAddress1: formCust.sameAsBilling ? (formCust.address1 || '').trim() : (formCust.dispatchAddress1 || '').trim(),
+      dispatchAddress2: formCust.sameAsBilling ? (formCust.address2 || '').trim() : (formCust.dispatchAddress2 || '').trim(),
+      shippingAddress1: formCust.sameAsBilling ? (formCust.address1 || '').trim() : (formCust.dispatchAddress1 || '').trim(),
+      shippingAddress2: formCust.sameAsBilling ? (formCust.address2 || '').trim() : (formCust.dispatchAddress2 || '').trim(),
+      address: billingStreetCombined,
+      dispatchAddress: dispatchStreetCombined,
       c6: billingStr,
       billingAddress: billingStr,
       billingAddressObj: billingObj,
@@ -987,7 +1093,7 @@ export default function CrmCustomersView({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer Account Type
@@ -1014,22 +1120,11 @@ export default function CrmCustomersView({
                 placeholder="e.g. 33AABCV1234F1Z5"
                 value={formCust.gstNumber}
                 onChange={(e) => {
-                  setFormCust({ ...formCust, gstNumber: e.target.value.toUpperCase() });
-                  validateDuplicates('gstNumber', e.target.value, editingCustomer?.id);
+                  const val = e.target.value.toUpperCase();
+                  const derivedPan = val.length >= 12 ? val.substring(2, 12) : (formCust.panNumber || '');
+                  setFormCust({ ...formCust, gstNumber: val, panNumber: derivedPan });
+                  validateDuplicates('gstNumber', val, editingCustomer?.id);
                 }}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Permanent Account Number (PAN)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. AABCV1234F"
-                value={formCust.panNumber}
-                onChange={(e) => setFormCust({ ...formCust, panNumber: e.target.value.toUpperCase() })}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
               />
             </div>
@@ -1047,7 +1142,7 @@ export default function CrmCustomersView({
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Contact Person Name <span style={{ color: '#EF4444' }}>*</span>
@@ -1074,6 +1169,26 @@ export default function CrmCustomersView({
                 onChange={(e) => {
                   setFormCust({ ...formCust, primaryContact: { ...formCust.primaryContact, phone: e.target.value } });
                   validateDuplicates('phone', e.target.value, editingCustomer?.id);
+                }}
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Alt Number / Phone
+              </label>
+              <input
+                type="text"
+                placeholder="+91 98765 43211 / Landline"
+                value={formCust.primaryContact.altPhone || formCust.altPhone || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormCust({
+                    ...formCust,
+                    altPhone: val,
+                    primaryContact: { ...formCust.primaryContact, altPhone: val }
+                  });
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
               />
@@ -1122,17 +1237,43 @@ export default function CrmCustomersView({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Billing Street / Premise Address</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Billing Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Building / Door / Flat / Street)</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. No 1427, GNT Road, Nagappa Industrial Estate, Puzhal"
-                  value={formCust.address}
+                  placeholder="e.g. No 1427, GNT Road, Nagappa Industrial Estate"
+                  value={formCust.address1}
                   onChange={(e) => {
                     const val = e.target.value;
                     setFormCust(prev => ({
                       ...prev,
-                      address: val,
-                      dispatchAddress: prev.sameAsBilling ? val : prev.dispatchAddress
+                      address1: val,
+                      address: [val, prev.address2].filter(Boolean).join(', '),
+                      dispatchAddress1: prev.sameAsBilling ? val : prev.dispatchAddress1,
+                      dispatchAddress: prev.sameAsBilling ? [val, prev.address2].filter(Boolean).join(', ') : prev.dispatchAddress
+                    }));
+                  }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Billing Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Area / Landmark / Road)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Near Puzhal Toll Plaza, Redhills Road"
+                  value={formCust.address2}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormCust(prev => ({
+                      ...prev,
+                      address2: val,
+                      address: [prev.address1, val].filter(Boolean).join(', '),
+                      dispatchAddress2: prev.sameAsBilling ? val : prev.dispatchAddress2,
+                      dispatchAddress: prev.sameAsBilling ? [prev.address1, val].filter(Boolean).join(', ') : prev.dispatchAddress
                     }));
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
@@ -1216,7 +1357,9 @@ export default function CrmCustomersView({
                       setFormCust(prev => ({
                         ...prev,
                         sameAsBilling: checked,
-                        dispatchAddress: checked ? prev.address : prev.dispatchAddress,
+                        dispatchAddress1: checked ? prev.address1 : prev.dispatchAddress1,
+                        dispatchAddress2: checked ? prev.address2 : prev.dispatchAddress2,
+                        dispatchAddress: checked ? [prev.address1, prev.address2].filter(Boolean).join(', ') : prev.dispatchAddress,
                         dispatchCity: checked ? prev.city : prev.dispatchCity,
                         dispatchState: checked ? prev.state : prev.dispatchState,
                         dispatchPincode: checked ? prev.pincode : prev.dispatchPincode
@@ -1229,13 +1372,55 @@ export default function CrmCustomersView({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Dispatch Street / Warehouse / Site Address</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Shipping Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Warehouse / Site / Street)</span>
+                </label>
                 <input
                   type="text"
                   placeholder="e.g. Solar Project Site / Warehouse No 8, SIPCOT"
-                  value={formCust.sameAsBilling ? formCust.address : formCust.dispatchAddress}
+                  value={formCust.sameAsBilling ? formCust.address1 : formCust.dispatchAddress1}
                   disabled={formCust.sameAsBilling}
-                  onChange={(e) => setFormCust({ ...formCust, dispatchAddress: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormCust(prev => ({
+                      ...prev,
+                      dispatchAddress1: val,
+                      dispatchAddress: [val, prev.dispatchAddress2].filter(Boolean).join(', ')
+                    }));
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: '1px solid #CBD5E1',
+                    padding: '0 14px',
+                    fontSize: '13px',
+                    color: formCust.sameAsBilling ? '#64748B' : '#0F172A',
+                    backgroundColor: formCust.sameAsBilling ? '#F1F5F9' : '#FFFFFF',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    cursor: formCust.sameAsBilling ? 'not-allowed' : 'text'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Shipping Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Industrial Estate / Landmark / Road)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Near Substation, Sector 4 Industrial Corridor"
+                  value={formCust.sameAsBilling ? formCust.address2 : formCust.dispatchAddress2}
+                  disabled={formCust.sameAsBilling}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormCust(prev => ({
+                      ...prev,
+                      dispatchAddress2: val,
+                      dispatchAddress: [prev.dispatchAddress1, val].filter(Boolean).join(', ')
+                    }));
+                  }}
                   style={{
                     width: '100%',
                     height: '42px',
@@ -2536,9 +2721,9 @@ export default function CrmCustomersView({
                           <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Customer / Contact</th>
                           <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Type</th>
                           <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Phone</th>
-                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Email</th>
                           <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>GSTIN</th>
-                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>City / State</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Billing Address</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', color: '#475569' }}>Shipping Address</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2558,10 +2743,12 @@ export default function CrmCustomersView({
                             </td>
                             <td style={{ padding: '8px 12px', color: '#475569' }}>{row.customerType || 'Customer'}</td>
                             <td style={{ padding: '8px 12px', color: '#475569' }}>{row.phone || '-'}</td>
-                            <td style={{ padding: '8px 12px', color: '#475569' }}>{row.email || '-'}</td>
                             <td style={{ padding: '8px 12px', color: '#475569' }}>{row.gstNumber || '-'}</td>
-                            <td style={{ padding: '8px 12px', color: '#475569' }}>
-                              {[row.city, row.state].filter(Boolean).join(', ') || '-'}
+                            <td style={{ padding: '8px 12px', color: '#475569', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={[row.address1, row.address2].filter(Boolean).join(', ')}>
+                              {[row.address1, row.address2].filter(Boolean).join(', ') || row.address || '-'}
+                            </td>
+                            <td style={{ padding: '8px 12px', color: '#475569', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={[row.dispatchAddress1, row.dispatchAddress2].filter(Boolean).join(', ')}>
+                              {[row.dispatchAddress1, row.dispatchAddress2].filter(Boolean).join(', ') || row.dispatchAddress || '-'}
                             </td>
                           </tr>
                         ))}

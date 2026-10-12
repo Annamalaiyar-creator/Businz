@@ -42,25 +42,26 @@ import {
 export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   // Theme & Identity
   accentColor: '#0E7490', // Default VRM Teal
-  documentTitle: 'PROFORMA INVOICE',
-  companyName: '',
+  documentTitle: 'Proforma Invoice',
+  companyName: 'VRM Structures India Pvt Ltd.',
   companyTagline: '',
   showLogo: true,
   customLogoUrl: VRM_OFFICIAL_LOGO, // Official VRM Logo base64
-  logoHeight: 56, // Fixed constant size
-  showCompanyName: false,
+  logoHeight: 54, // Fixed constant size
+  showCompanyName: true,
   showCompanyTagline: false,
   showContactInfo: true,
   showCompanyAddress: true,
   showCinGst: true,
-  showCompanyPhoneEmail: true,
-  showCompanyWebsite: true,
+  showCompanyPhoneEmail: false,
+  showCompanyWebsite: false,
 
   // Company Address & Reg Details
-  companyAddressLine1: '1427, GNT Road, Nagappa Industrial Estate, Puzhal',
-  companyAddressLine2: 'Chennai, Tamil Nadu - 600066, India',
+  companyAddressLine1: '1427, GNT Road, Nagappa Industrial Estate,',
+  companyAddressLine2: 'Puzhal,\nChennai, Tamil Nadu 600066\nIndia',
   companyGstin: '33AAGCV4262N1ZZ',
   companyCin: '',
+  companyUdyam: 'MSME/Udyam No',
   companyPhone: '+91 98847 20789',
   companyEmail: 'sales@vrmstructures.com',
   companyWebsite: 'www.vrmstructures.com',
@@ -69,12 +70,12 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   showDocumentTitle: true,
   showDocNo: true,
   showDate: true,
-  showValidUntil: true,
+  showValidUntil: false,
   showShipTo: true,
-  showTransportDetails: true,
-  showSalesExecutive: true,
-  showPaymentTerms: true,
-  showPlaceOfSupply: true,
+  showTransportDetails: false,
+  showSalesExecutive: false,
+  showPaymentTerms: false,
+  showPlaceOfSupply: false,
 
   // Buyer Details Visibility
   showBillTo: true,
@@ -85,14 +86,14 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   showBuyerEmail: true,
 
   // Custom Meta & Address Labels
-  docNoLabel: 'Document No:',
-  dateLabel: 'Date:',
+  docNoLabel: 'P.I No.',
+  dateLabel: 'P.I Date',
   validUntilLabel: 'Valid Until:',
   paymentTermsLabel: 'Payment Terms:',
   placeOfSupplyLabel: 'Place Of Supply:',
   salesExecutiveLabel: 'Sales Executive:',
-  billToLabel: 'Bill To / Buyer:',
-  shipToLabel: 'Ship To / Delivery Destination:',
+  billToLabel: 'Bill To',
+  shipToLabel: 'Ship To',
 
   // Table Columns Visibility
   showSnoCol: true,
@@ -108,15 +109,15 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
 
   // Table Column Header Renaming
   colHeaderSno: '#',
-  colHeaderDesc: 'Item & Specification',
+  colHeaderDesc: 'Item & Description',
   colHeaderHsn: 'HSN/SAC',
   colHeaderQty: 'Qty',
   colHeaderUom: 'UOM',
-  colHeaderRate: 'Rate (₹)',
+  colHeaderRate: 'Rate',
   colHeaderDiscount: 'Disc%',
-  colHeaderTaxable: 'Taxable (₹)',
+  colHeaderTaxable: 'Amount',
   colHeaderGst: 'GST%',
-  colHeaderAmount: 'Total (₹)',
+  colHeaderAmount: 'Amount',
 
   // Calculation & Banking
   showSubTotal: true,
@@ -128,31 +129,31 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   showBankAccountNo: true,
   showBankIfsc: true,
   showBankBranch: true,
-  bankHeading: 'VRM Official Commercial Bank Details (NEFT / RTGS / IMPS)',
+  bankHeading: 'Account Details:',
   bankBeneficiary: 'VRM Structures India Private Limited',
   bankName: 'HDFC Bank',
   bankAccountNo: '50200031629272',
-  bankIfsc: 'HDFC0007315',
-  bankBranch: 'Vinayagapuram Branch',
+  bankIfsc: 'HDFC0000574',
+  bankBranch: 'Kodambakkam',
   bankAccountType: 'Current Account',
 
   // Terms & Conditions
   showTerms: true,
-  termsHeading: 'Terms & Conditions:',
+  termsHeading: 'Terms & Conditions',
   termsText:
-    '1. Validity: This Proforma Invoice is valid for 15 calendar days from the date of issue.\n2. Payment Terms: 100% advance along with confirmed Purchase Order.\n3. Delivery Schedule: Ex-works Puzhal Chennai, dispatch within 7-10 working days upon advance.\n4. Taxes & Duties: GST as applicable at the time of final tax invoicing and dispatch.\n5. Disputes subject to Chennai jurisdiction only.',
+    '1. TAX: Included\n2. Transport: At actuals\n3. Payment: 100% along with the Purchase Order\n4. Delivery: Immediate Dispatch\n5. Validity: 3 days',
 
   // Stamp / Seal Customization
   showSignatoryStamp: true,
   stampMode: 'custom', // 'vector' | 'custom' | 'none'
-  stampSize: 230, // Width in px (enlarged fixed size)
+  stampSize: 150, // Width in px
   customStampUrl: VRM_OFFICIAL_STAMP, // Official VRM Stamp image base64
   stampText: 'VRM STRUCTURES INDIA PRIVATE LIMITED',
   stampLocation: 'CHENNAI',
 
   // Signature Customization
-  signatureMode: 'none', // 'none' | 'vector' | 'custom' | 'blank'
-  customSignatureUrl: null, // Custom uploaded handwritten signature base64
+  signatureMode: 'vector', // 'none' | 'vector' | 'custom' | 'blank'
+  customSignatureUrl: null,
   forCompanyText: 'For VRM Structures India Pvt Ltd',
   signatoryTitle: 'Authorized Signatory',
   signatoryName: '',
@@ -233,20 +234,19 @@ function numberToWordsINR(num) {
 
   const integerPart = Math.floor(Math.abs(num));
   const words = convert(integerPart);
-  return `Indian Rupees ${words} Only`;
+  return `Indian Rupee ${words} Only`;
 }
 
-// Format date nicely
+// Format date nicely (DD-MM-YYYY to match official format)
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     const day = String(d.getDate()).padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[d.getMonth()];
+    const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
-    return `${day} ${month} ${year}`;
+    return `${day}-${month}-${year}`;
   } catch (e) {
     return dateStr;
   }
@@ -1089,734 +1089,412 @@ export function VRMProformaInvoicePrintSheet({
       )}
 
       {/* OUTER BORDER CONTAINER */}
-      <div style={{ border: `1.5px solid ${accent}`, borderRadius: '4px', overflow: 'hidden' }}>
+      <div style={{ border: '1.5px solid #334155', borderRadius: '0px', overflow: 'hidden' }}>
 
-        {/* 1. HEADER SECTION (LOGO + COMPANY DETAILS | PROFORMA INVOICE BADGE & META) */}
-        <div style={{ padding: '16px 20px', borderBottom: `1.5px solid ${accent}`, backgroundColor: '#F8FAFC' }}>
+        {/* 1. HEADER SECTION (LOGO + COMPANY DETAILS on Left | DOCUMENT TITLE on Right) */}
+        <div style={{ padding: '14px 18px', borderBottom: '1.5px solid #334155', backgroundColor: '#FFFFFF' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
-            {/* LEFT: COMPANY INFO */}
-            <div style={{ flex: '1 1 55%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                {cfg.showLogo && (
-                  <RemovableBlock
-                    visible={cfg.showLogo}
-                    settingKey="showLogo"
-                    title="Company Logo"
-                  >
-                    <img
-                      src={cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')) || VRM_OFFICIAL_LOGO}
-                      alt={cfg.companyName || 'VRM Structures'}
-                      style={{
-                        height: '56px',
-                        width: 'auto',
-                        maxWidth: '220px',
-                        objectFit: 'contain'
+            {/* LEFT: COMPANY LOGO & INFO */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flex: '1 1 auto' }}>
+              {cfg.showLogo && (
+                <RemovableBlock
+                  visible={cfg.showLogo}
+                  settingKey="showLogo"
+                  title="Company Logo"
+                >
+                  <img
+                    src={cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')) || VRM_OFFICIAL_LOGO}
+                    alt={cfg.companyName || 'VRM Structures'}
+                    style={{
+                      height: '52px',
+                      width: 'auto',
+                      maxWidth: '200px',
+                      objectFit: 'contain'
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.src = VRM_OFFICIAL_LOGO;
+                    }}
+                  />
+                </RemovableBlock>
+              )}
+              <div>
+                {cfg.showCompanyName && cfg.companyName && (
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#1E3A8A', letterSpacing: '-0.2px', marginBottom: '3px' }}>
+                    <EditableText
+                      value={cfg.companyName}
+                      fallback="VRM Structures India Pvt Ltd."
+                      onSave={(v) => onUpdateSetting?.({ companyName: v })}
+                      onRemove={() => {
+                        onUpdateSetting?.({ showCompanyName: false, companyName: '' });
+                        onElementRemoved?.('showCompanyName', 'Company Name');
                       }}
-                      onError={(e) => {
-                        e.currentTarget.src = VRM_OFFICIAL_LOGO;
-                      }}
+                      removeLabel="Company Name"
                     />
-                  </RemovableBlock>
+                  </div>
                 )}
-                {((cfg.showCompanyName && cfg.companyName) || (cfg.showCompanyTagline && cfg.companyTagline)) ? (
-                  <div>
-                    {cfg.showCompanyName && cfg.companyName && (
-                      <div style={{ fontSize: '16.5px', fontWeight: '800', color: accent, letterSpacing: '-0.3px', textTransform: 'uppercase' }}>
-                        <EditableText
-                          value={cfg.companyName}
-                          fallback=""
-                          onSave={(v) => onUpdateSetting?.({ companyName: v })}
-                          onRemove={() => {
-                            onUpdateSetting?.({ showCompanyName: false, companyName: '' });
-                            onElementRemoved?.('showCompanyName', 'Company Name');
-                          }}
-                          removeLabel="Company Name"
-                        />
-                      </div>
+                {cfg.showContactInfo && (
+                  <div style={{ fontSize: '10px', color: '#1E293B', lineHeight: '1.4' }}>
+                    {cfg.showCompanyAddress !== false && (
+                      <RemovableBlock
+                        visible={cfg.showCompanyAddress !== false}
+                        settingKey="showCompanyAddress"
+                        title="Company Address"
+                      >
+                        <div style={{ whiteSpace: 'pre-line' }}>
+                          <EditableText
+                            value={cfg.companyAddressLine1}
+                            fallback="1427, GNT Road, Nagappa Industrial Estate,"
+                            onSave={(v) => onUpdateSetting?.({ companyAddressLine1: v })}
+                          />
+                        </div>
+                        <div style={{ whiteSpace: 'pre-line' }}>
+                          <EditableText
+                            value={cfg.companyAddressLine2}
+                            fallback={"Puzhal,\nChennai, Tamil Nadu 600066\nIndia"}
+                            multiline={true}
+                            onSave={(v) => onUpdateSetting?.({ companyAddressLine2: v })}
+                          />
+                        </div>
+                      </RemovableBlock>
                     )}
-                    {cfg.showCompanyTagline && cfg.companyTagline && (
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>
-                        <EditableText
-                          value={cfg.companyTagline}
-                          fallback=""
-                          onSave={(v) => onUpdateSetting?.({ companyTagline: v })}
-                          onRemove={() => {
-                            onUpdateSetting?.({ showCompanyTagline: false, companyTagline: '' });
-                            onElementRemoved?.('showCompanyTagline', 'Company Tagline');
-                          }}
-                          removeLabel="Company Tagline"
-                        />
-                      </div>
+                    {cfg.showCinGst && (
+                      <RemovableBlock
+                        visible={cfg.showCinGst}
+                        settingKey="showCinGst"
+                        title="Company GSTIN"
+                      >
+                        <div>
+                          <strong>GSTIN </strong>
+                          <EditableText
+                            value={cfg.companyGstin}
+                            fallback="33AAGCV4262N1ZZ"
+                            onSave={(v) => onUpdateSetting?.({ companyGstin: v })}
+                            style={{ fontFamily: 'inherit', fontWeight: 'inherit' }}
+                          />
+                        </div>
+                        {cfg.companyUdyam ? (
+                          <div>
+                            <EditableText
+                              value={cfg.companyUdyam}
+                              fallback="MSME/Udyam No"
+                              onSave={(v) => onUpdateSetting?.({ companyUdyam: v })}
+                            />
+                          </div>
+                        ) : null}
+                      </RemovableBlock>
                     )}
                   </div>
-                ) : null}
+                )}
               </div>
-
-              {cfg.showContactInfo && (
-                <div style={{ fontSize: '10.5px', color: '#334155', lineHeight: '1.45', marginTop: '4px' }}>
-                  {cfg.showCompanyAddress !== false && (
-                    <RemovableBlock
-                      visible={cfg.showCompanyAddress !== false}
-                      settingKey="showCompanyAddress"
-                      title="Company Address"
-                    >
-                      <div>
-                        <EditableText
-                          value={cfg.companyAddressLine1}
-                          fallback="1427, GNT Road, Nagappa Industrial Estate, Puzhal"
-                          onSave={(v) => onUpdateSetting?.({ companyAddressLine1: v })}
-                        />
-                      </div>
-                      <div>
-                        <EditableText
-                          value={cfg.companyAddressLine2}
-                          fallback="Chennai, Tamil Nadu - 600066, India"
-                          onSave={(v) => onUpdateSetting?.({ companyAddressLine2: v })}
-                        />
-                      </div>
-                    </RemovableBlock>
-                  )}
-                  {cfg.showCinGst && (
-                    <RemovableBlock
-                      visible={cfg.showCinGst}
-                      settingKey="showCinGst"
-                      title="Company GSTIN"
-                      style={{ marginTop: '3px' }}
-                    >
-                      <strong style={{ color: '#0F172A' }}>GSTIN:</strong>{' '}
-                      <EditableText
-                        value={cfg.companyGstin}
-                        fallback="33AAGCV4262N1ZZ"
-                        onSave={(v) => onUpdateSetting?.({ companyGstin: v })}
-                        style={{ fontFamily: 'monospace', fontWeight: '700' }}
-                      />
-                      {cfg.companyCin ? (
-                        <>
-                          {' '}&nbsp;|&nbsp; <strong style={{ color: '#0F172A' }}>CIN:</strong>{' '}
-                          <EditableText
-                            value={cfg.companyCin}
-                            fallback=""
-                            onSave={(v) => onUpdateSetting?.({ companyCin: v })}
-                            onRemove={() => onUpdateSetting?.({ companyCin: '' })}
-                            removeLabel="Company CIN"
-                            style={{ fontFamily: 'monospace', fontWeight: '700' }}
-                          />
-                        </>
-                      ) : null}
-                    </RemovableBlock>
-                  )}
-                  {cfg.showCompanyPhoneEmail !== false && (
-                    <RemovableBlock
-                      visible={cfg.showCompanyPhoneEmail !== false}
-                      settingKey="showCompanyPhoneEmail"
-                      title="Company Phone & Email"
-                    >
-                      <strong style={{ color: '#0F172A' }}>Phone:</strong>{' '}
-                      <EditableText
-                        value={cfg.companyPhone}
-                        fallback="+91 98847 20789"
-                        onSave={(v) => onUpdateSetting?.({ companyPhone: v })}
-                      />{' '}
-                      &nbsp;|&nbsp; <strong style={{ color: '#0F172A' }}>Email:</strong>{' '}
-                      <EditableText
-                        value={cfg.companyEmail}
-                        fallback="sales@vrmstructures.com"
-                        onSave={(v) => onUpdateSetting?.({ companyEmail: v })}
-                      />
-                    </RemovableBlock>
-                  )}
-                  {cfg.showCompanyWebsite && (
-                    <RemovableBlock
-                      visible={cfg.showCompanyWebsite}
-                      settingKey="showCompanyWebsite"
-                      title="Company Website"
-                    >
-                      <strong style={{ color: '#0F172A' }}>Website:</strong>{' '}
-                      <EditableText
-                        value={cfg.companyWebsite}
-                        fallback="www.vrmstructures.com"
-                        onSave={(v) => onUpdateSetting?.({ companyWebsite: v })}
-                      />
-                    </RemovableBlock>
-                  )}
-                </div>
-              )}
             </div>
 
-            {/* RIGHT: DOCUMENT TITLE & ESSENTIAL METADATA */}
-            <div style={{ flex: '1 1 45%', textAlign: 'right' }}>
-              {cfg.showDocumentTitle !== false && (
-                <div style={{ display: 'inline-block', marginBottom: '10px' }}>
-                  <RemovableBlock
-                    visible={cfg.showDocumentTitle !== false}
-                    settingKey="showDocumentTitle"
-                    title="Document Title"
-                  >
-                    <div style={{
-                      display: 'inline-block',
-                      backgroundColor: accent,
-                      color: '#FFFFFF',
-                      padding: '6px 16px',
-                      borderRadius: '6px',
-                      fontSize: '15px',
-                      fontWeight: '800',
-                      letterSpacing: '1px',
-                      textTransform: 'uppercase'
-                    }}>
-                      <EditableText
-                        value={cfg.documentTitle}
-                        fallback="PROFORMA INVOICE"
-                        onSave={(v) => onUpdateSetting?.({ documentTitle: v })}
-                        style={{ color: '#FFFFFF' }}
-                      />
-                    </div>
-                  </RemovableBlock>
-                </div>
-              )}
+            {/* RIGHT: PROFORMA INVOICE TITLE */}
+            {cfg.showDocumentTitle !== false && (
+              <div style={{ textAlign: 'right', flex: '0 0 auto', paddingTop: '6px' }}>
+                <RemovableBlock
+                  visible={cfg.showDocumentTitle !== false}
+                  settingKey="showDocumentTitle"
+                  title="Document Title"
+                >
+                  <div style={{ fontSize: '24px', fontWeight: '500', color: '#0F172A', letterSpacing: '0.2px' }}>
+                    <EditableText
+                      value={cfg.documentTitle}
+                      fallback="Proforma Invoice"
+                      onSave={(v) => onUpdateSetting?.({ documentTitle: v })}
+                    />
+                  </div>
+                </RemovableBlock>
+              </div>
+            )}
+          </div>
+        </div>
 
-              <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', marginTop: '4px' }}>
-                <tbody>
-                  {cfg.showDocNo !== false && (
-                    <RemovableMetaRow
-                      visible={cfg.showDocNo !== false}
-                      settingKey="showDocNo"
-                      label={cfg.docNoLabel || "Document No:"}
-                      itemLabel="Document No"
-                      valueText={pi.piNo || "SPI-2025-101"}
-                      fallbackValue="SPI-2025-101"
-                      valueColor={accent}
-                      onSaveLabel={(v) => onUpdateSetting?.({ docNoLabel: v })}
-                      onSaveValue={(v) => {
-                        onUpdatePiData?.({ piNo: v });
-                        onUpdateSetting?.({ defaultDocNo: v });
-                      }}
+        {/* 2. P.I NO & DATE ROW */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          borderBottom: '1.5px solid #334155',
+          backgroundColor: '#FFFFFF',
+          fontSize: '11px'
+        }}>
+          {/* LEFT: P.I No & P.I Date */}
+          <div style={{ padding: '8px 16px', borderRight: '1.5px solid #334155' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 10px auto', rowGap: '3px', alignItems: 'center' }}>
+              {cfg.showDocNo !== false && (
+                <>
+                  <div style={{ color: '#0F172A' }}>
+                    <EditableText
+                      value={cfg.docNoLabel || 'P.I No.'}
+                      fallback="P.I No."
+                      onSave={(v) => onUpdateSetting?.({ docNoLabel: v })}
                     />
-                  )}
-                  {cfg.showDate !== false && (
-                    <RemovableMetaRow
-                      visible={cfg.showDate !== false}
-                      settingKey="showDate"
-                      label={cfg.dateLabel || "Date:"}
-                      itemLabel="Date"
-                      valueText={formatDate(pi.piDate)}
-                      fallbackValue="Date"
-                      onSaveLabel={(v) => onUpdateSetting?.({ dateLabel: v })}
-                      onSaveValue={(v) => onUpdatePiData?.({ piDate: v })}
+                  </div>
+                  <div>:</div>
+                  <div style={{ fontWeight: '700', color: '#0F172A' }}>
+                    <EditableText
+                      value={pi.piNo || 'VRMS/PI/26-27/1943'}
+                      fallback="VRMS/PI/26-27/1943"
+                      onSave={(v) => onUpdatePiData?.({ piNo: v })}
                     />
-                  )}
-                  {cfg.showValidUntil !== false && !Boolean(pi.convertedToBom) && pi.status !== 'Converted to BOM' && pi.status !== 'Cancelled' && (
-                    <RemovableMetaRow
-                      visible={cfg.showValidUntil !== false}
-                      settingKey="showValidUntil"
-                      label={cfg.validUntilLabel || "Valid Until:"}
-                      itemLabel="Valid Until"
-                      valueText={formatDate(pi.expDate || pi.validUntilDate)}
-                      fallbackValue="11 Oct 2026"
-                      valueColor="#B91C1C"
-                      onSaveLabel={(v) => onUpdateSetting?.({ validUntilLabel: v })}
-                      onSaveValue={(v) => onUpdatePiData?.({ expDate: v })}
+                  </div>
+                </>
+              )}
+              {cfg.showDate !== false && (
+                <>
+                  <div style={{ color: '#0F172A' }}>
+                    <EditableText
+                      value={cfg.dateLabel || 'P.I Date'}
+                      fallback="P.I Date"
+                      onSave={(v) => onUpdateSetting?.({ dateLabel: v })}
                     />
-                  )}
-                  {cfg.showPlaceOfSupply && (
-                    <RemovableMetaRow
-                      visible={cfg.showPlaceOfSupply}
-                      settingKey="showPlaceOfSupply"
-                      label={cfg.placeOfSupplyLabel || "Place Of Supply:"}
-                      itemLabel="Place Of Supply"
-                      valueText={pi.placeOfSupply || (isTamilNadu ? 'Tamil Nadu (33)' : (bState ? `${bState}` : 'Tamil Nadu (33)'))}
-                      fallbackValue="Tamil Nadu (33)"
-                      onSaveLabel={(v) => onUpdateSetting?.({ placeOfSupplyLabel: v })}
-                      onSaveValue={(v) => {
-                        onUpdatePiData?.({ placeOfSupply: v });
-                        onUpdateSetting?.({ defaultPlaceOfSupply: v });
-                      }}
+                  </div>
+                  <div>:</div>
+                  <div style={{ fontWeight: '700', color: '#0F172A' }}>
+                    <EditableText
+                      value={formatDate(pi.piDate)}
+                      fallback="23-09-2026"
+                      onSave={(v) => onUpdatePiData?.({ piDate: v })}
                     />
-                  )}
-                  {cfg.showSalesExecutive && (
-                    <RemovableMetaRow
-                      visible={cfg.showSalesExecutive}
-                      settingKey="showSalesExecutive"
-                      label={cfg.salesExecutiveLabel || "Sales Executive:"}
-                      itemLabel="Sales Executive"
-                      valueText={pi.salesPerson || pi.salesperson || pi.createdBy || 'ManojRaj (VRM Sales)'}
-                      fallbackValue="ManojRaj (VRM Sales)"
-                      onSaveLabel={(v) => onUpdateSetting?.({ salesExecutiveLabel: v })}
-                      onSaveValue={(v) => {
-                        onUpdatePiData?.({ salesPerson: v });
-                        onUpdateSetting?.({ defaultSalesPerson: v });
-                      }}
-                    />
-                  )}
-                  {cfg.showPaymentTerms && (
-                    <RemovableMetaRow
-                      visible={cfg.showPaymentTerms}
-                      settingKey="showPaymentTerms"
-                      label={cfg.paymentTermsLabel || "Payment Terms:"}
-                      itemLabel="Payment Terms"
-                      valueText={pi.paymentTerms || "50% Adv + 50% Before Dispatch"}
-                      fallbackValue="50% Adv + 50% Before Dispatch"
-                      onSaveLabel={(v) => onUpdateSetting?.({ paymentTermsLabel: v })}
-                      onSaveValue={(v) => onUpdatePiData?.({ paymentTerms: v })}
-                    />
-                  )}
-                </tbody>
-              </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: OPTIONAL METADATA (Valid Until, Place of Supply, Sales Exec) */}
+          <div style={{ padding: '8px 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '100px 10px auto', rowGap: '3px', alignItems: 'center' }}>
+              {cfg.showValidUntil && (
+                <>
+                  <div style={{ color: '#64748B' }}>Valid Until</div>
+                  <div>:</div>
+                  <div style={{ fontWeight: '600', color: '#0F172A' }}>{formatDate(pi.expDate || pi.validUntilDate)}</div>
+                </>
+              )}
+              {cfg.showPlaceOfSupply && (
+                <>
+                  <div style={{ color: '#64748B' }}>Place of Supply</div>
+                  <div>:</div>
+                  <div style={{ fontWeight: '600', color: '#0F172A' }}>{pi.placeOfSupply || 'Tamil Nadu (33)'}</div>
+                </>
+              )}
+              {cfg.showSalesExecutive && (
+                <>
+                  <div style={{ color: '#64748B' }}>Sales Executive</div>
+                  <div>:</div>
+                  <div style={{ fontWeight: '600', color: '#0F172A' }}>{pi.salesPerson || pi.salesperson || 'ManojRaj'}</div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* 2. CUSTOMER DETAILS: BILL TO & SHIP TO */}
-        {(cfg.showBillTo !== false || cfg.showShipTo) && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: (cfg.showBillTo !== false && cfg.showShipTo) ? '1fr 1fr' : '1fr',
-            borderBottom: '1px solid #CBD5E1',
-            backgroundColor: '#FFFFFF'
-          }}>
-            {/* BILL TO */}
-            {cfg.showBillTo !== false && (
-              <RemovableBlock
-                visible={cfg.showBillTo !== false}
-                title="Bill To / Buyer Section"
-                onRemove={() => onUpdateSetting?.({ showBillTo: false })}
-                style={{ padding: '12px 18px', borderRight: cfg.showShipTo ? '1px solid #CBD5E1' : 'none' }}
-              >
-                <div style={{ fontSize: '11px', fontWeight: '800', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                  <EditableText
-                    value={cfg.billToLabel}
-                    fallback="Bill To / Buyer:"
-                    onSave={(v) => onUpdateSetting?.({ billToLabel: v })}
-                    onRemove={() => onUpdateSetting?.({ showBillTo: false })}
-                  />
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginBottom: '3px' }}>
-                  <EditableText
-                    value={customerName}
-                    fallback="Customer / Buyer Company Name"
-                    onSave={(v) => onUpdatePiData?.({ customerName: v, vendor: v, vendorName: v })}
-                  />
-                </div>
-                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
-                  {cfg.showBuyerAddress !== false && (
-                    <RemovableBlock
-                      visible={cfg.showBuyerAddress !== false}
-                      title="Buyer Address"
-                      onRemove={() => onUpdateSetting?.({ showBuyerAddress: false })}
-                    >
-                      <div>
-                        <EditableText
-                          value={bStreet}
-                          fallback="Street Address"
-                          onSave={(v) => onUpdatePiData?.({ billingStreet: v, billingAddress: { ...(pi.billingAddress || {}), street: v } })}
-                          onRemove={() => onUpdateSetting?.({ showBuyerAddress: false })}
-                        />
-                      </div>
-                      <div>
-                        <EditableText
-                          value={bCity}
-                          fallback="City"
-                          onSave={(v) => onUpdatePiData?.({ billingCity: v, billingAddress: { ...(pi.billingAddress || {}), city: v } })}
-                        />{', '}
-                        <EditableText
-                          value={bState}
-                          fallback="State"
-                          onSave={(v) => onUpdatePiData?.({ billingState: v, billingAddress: { ...(pi.billingAddress || {}), state: v } })}
-                        />{' - '}
-                        <EditableText
-                          value={bPincode}
-                          fallback="Pincode"
-                          onSave={(v) => onUpdatePiData?.({ billingPincode: v, billingAddress: { ...(pi.billingAddress || {}), pincode: v } })}
-                        />
-                      </div>
-                    </RemovableBlock>
-                  )}
-                  {cfg.showBuyerGstin !== false && (
-                    <div style={{ marginTop: '3px' }}>
-                      <strong style={{ color: '#0F172A' }}>GSTIN:</strong>{' '}
-                      <span style={{ fontFamily: 'monospace', fontWeight: '700' }}>
-                        <EditableText
-                          value={pi.gstNo}
-                          fallback="Unregistered"
-                          onSave={(v) => onUpdatePiData?.({ gstNo: v })}
-                          onRemove={() => onUpdateSetting?.({ showBuyerGstin: false })}
-                        />
-                      </span>
-                    </div>
-                  )}
-                  {cfg.showBuyerContact !== false && (
-                    <div>
-                      <strong style={{ color: '#0F172A' }}>Contact:</strong>{' '}
-                      <EditableText
-                        value={pi.contactPerson}
-                        fallback="Add Contact Person"
-                        onSave={(v) => onUpdatePiData?.({ contactPerson: v })}
-                        onRemove={() => onUpdateSetting?.({ showBuyerContact: false })}
-                      />
-                    </div>
-                  )}
-                  {cfg.showBuyerPhone !== false && (
-                    <div>
-                      <strong style={{ color: '#0F172A' }}>Phone:</strong>{' '}
-                      <EditableText
-                        value={pi.phone}
-                        fallback="+91 98765 43210"
-                        onSave={(v) => onUpdatePiData?.({ phone: v })}
-                        onRemove={() => onUpdateSetting?.({ showBuyerPhone: false })}
-                      />
-                    </div>
-                  )}
-                  {cfg.showBuyerEmail !== false && (
-                    <div>
-                      <strong style={{ color: '#0F172A' }}>Email:</strong>{' '}
-                      <EditableText
-                        value={pi.email}
-                        fallback="buyer@example.com"
-                        onSave={(v) => onUpdatePiData?.({ email: v })}
-                        onRemove={() => onUpdateSetting?.({ showBuyerEmail: false })}
-                      />
-                    </div>
-                  )}
-                </div>
-              </RemovableBlock>
-            )}
-
-            {/* SHIP TO (Optional) */}
-            {cfg.showShipTo && (
-              <RemovableBlock
-                visible={cfg.showShipTo}
-                title="Ship To Section"
-                onRemove={() => onUpdateSetting?.({ showShipTo: false })}
-                style={{ padding: '12px 18px' }}
-              >
-                <div style={{ fontSize: '11px', fontWeight: '800', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                  <EditableText
-                    value={cfg.shipToLabel}
-                    fallback="Ship To / Delivery Destination:"
-                    onSave={(v) => onUpdateSetting?.({ shipToLabel: v })}
-                    onRemove={() => onUpdateSetting?.({ showShipTo: false })}
-                  />
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginBottom: '3px' }}>
-                  <EditableText
-                    value={pi.shippingName || customerName}
-                    fallback="Delivery Destination Name"
-                    onSave={(v) => onUpdatePiData?.({ shippingName: v })}
-                  />
-                </div>
-                <div style={{ fontSize: '11px', color: '#334155', lineHeight: '1.4' }}>
-                  <div>
-                    <EditableText
-                      value={dStreet}
-                      fallback="Site Delivery Address"
-                      onSave={(v) => onUpdatePiData?.({ deliveryStreet: v, deliveryAddress: { ...(pi.deliveryAddress || {}), street: v } })}
-                    />
-                  </div>
-                  <div>
-                    <EditableText
-                      value={dCity}
-                      fallback="Delivery City"
-                      onSave={(v) => onUpdatePiData?.({ deliveryCity: v, deliveryAddress: { ...(pi.deliveryAddress || {}), city: v } })}
-                    />{', '}
-                    <EditableText
-                      value={dState}
-                      fallback="Delivery State"
-                      onSave={(v) => onUpdatePiData?.({ deliveryState: v, deliveryAddress: { ...(pi.deliveryAddress || {}), state: v } })}
-                    />{' - '}
-                    <EditableText
-                      value={dPincode}
-                      fallback="Pincode"
-                      onSave={(v) => onUpdatePiData?.({ deliveryPincode: v, deliveryAddress: { ...(pi.deliveryAddress || {}), pincode: v } })}
-                    />
-                  </div>
-                  <div style={{ marginTop: '3px' }}>
-                    <strong style={{ color: '#0F172A' }}>State Code:</strong> {isTamilNadu ? '33 (Tamil Nadu)' : (dState || '—')}
-                  </div>
-                  {cfg.showTransportDetails && (
-                    <RemovableBlock
-                      visible={cfg.showTransportDetails}
-                      title="Transport / LR Details"
-                      onRemove={() => onUpdateSetting?.({ showTransportDetails: false })}
-                    >
-                      <div>
-                        <strong style={{ color: '#0F172A' }}>Dispatch Mode:</strong>{' '}
-                        <EditableText
-                          value={pi.transportMode}
-                          fallback="Road Transport"
-                          onSave={(v) => onUpdatePiData?.({ transportMode: v })}
-                          onRemove={() => onUpdateSetting?.({ showTransportDetails: false })}
-                        />
-                      </div>
-                      <div>
-                        <strong style={{ color: '#0F172A' }}>Vehicle / LR No:</strong>{' '}
-                        <EditableText
-                          value={pi.vehicleNo}
-                          fallback="TN-01-AB-1234"
-                          onSave={(v) => onUpdatePiData?.({ vehicleNo: v })}
-                        />
-                      </div>
-                    </RemovableBlock>
-                  )}
-                </div>
-              </RemovableBlock>
-            )}
-          </div>
-        )}
-
-        {/* 3. LINE ITEMS TABLE */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-            <thead>
-              <tr style={{ backgroundColor: accent, color: '#FFFFFF', fontWeight: '700', textAlign: 'center' }}>
-                {cfg.showSnoCol !== false && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderSno}
-                    settingKey="showSnoCol"
-                    label="S.No (#) Column"
-                    width="34px"
-                    align="center"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderSno: v })}
-                  />
-                )}
-                <RemovableTableHeaderCell
-                  title={cfg.colHeaderDesc}
-                  label="Item & Specification"
-                  align="left"
-                  canRemove={false}
-                  onSaveTitle={(v) => onUpdateSetting?.({ colHeaderDesc: v })}
+        {/* 3. BILL TO & SHIP TO SECTION */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          borderBottom: '1.5px solid #334155',
+          backgroundColor: '#FFFFFF',
+          fontSize: '11px'
+        }}>
+          {/* BILL TO */}
+          <div style={{ borderRight: '1.5px solid #334155' }}>
+            <div style={{ padding: '4px 14px', borderBottom: '1px solid #CBD5E1', fontWeight: '700', color: '#0F172A', backgroundColor: '#F8FAFC' }}>
+              <EditableText
+                value={cfg.billToLabel || 'Bill To'}
+                fallback="Bill To"
+                onSave={(v) => onUpdateSetting?.({ billToLabel: v })}
+              />
+            </div>
+            <div style={{ padding: '8px 14px', lineHeight: '1.45', color: '#1E293B', fontSize: '10.5px' }}>
+              <div style={{ fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '2px' }}>
+                <EditableText
+                  value={customerName}
+                  fallback="COSMIC POWER SOLUTION"
+                  onSave={(v) => onUpdatePiData?.({ customerName: v, vendor: v, vendorName: v })}
                 />
-                {cfg.showHsn && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderHsn}
-                    settingKey="showHsn"
-                    label="HSN/SAC Column"
-                    width="75px"
-                    align="center"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderHsn: v })}
+              </div>
+              {bStreet ? (
+                <div>
+                  <EditableText
+                    value={bStreet}
+                    fallback="NO 69, 4TH STREET POOMBUHAR NAGAR"
+                    onSave={(v) => onUpdatePiData?.({ billingStreet: v, billingAddress: { ...(pi.billingAddress || {}), street: v } })}
                   />
+                </div>
+              ) : null}
+              {bCity ? (
+                <div>
+                  <EditableText
+                    value={bCity}
+                    fallback="Chennai"
+                    onSave={(v) => onUpdatePiData?.({ billingCity: v, billingAddress: { ...(pi.billingAddress || {}), city: v } })}
+                  />
+                </div>
+              ) : null}
+              {(bPincode || bState) ? (
+                <div>
+                  {bPincode ? `${bPincode} ` : ''}{bState || 'Tamil Nadu'}
+                </div>
+              ) : null}
+              <div>India</div>
+              {pi.gstNo && (
+                <div style={{ marginTop: '2px' }}>
+                  <strong>GSTIN </strong>
+                  <EditableText
+                    value={pi.gstNo}
+                    fallback="33AUDPB5369C1Z3"
+                    onSave={(v) => onUpdatePiData?.({ gstNo: v })}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SHIP TO */}
+          <div>
+            <div style={{ padding: '4px 14px', borderBottom: '1px solid #CBD5E1', fontWeight: '700', color: '#0F172A', backgroundColor: '#F8FAFC' }}>
+              <EditableText
+                value={cfg.shipToLabel || 'Ship To'}
+                fallback="Ship To"
+                onSave={(v) => onUpdateSetting?.({ shipToLabel: v })}
+              />
+            </div>
+            <div style={{ padding: '8px 14px', lineHeight: '1.45', color: '#1E293B', fontSize: '10.5px' }}>
+              <div style={{ fontWeight: '700', color: '#0F172A', marginBottom: '1px' }}>
+                <EditableText
+                  value={pi.shippingName || pi.contactPerson || customerName}
+                  fallback="V N Vigneshwar"
+                  onSave={(v) => onUpdatePiData?.({ shippingName: v })}
+                />
+              </div>
+              {(pi.phone || pi.contactPhone) && (
+                <div>
+                  <EditableText
+                    value={`(${pi.phone || pi.contactPhone})`}
+                    fallback="(9341 5621 2461)"
+                    onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '') })}
+                  />
+                </div>
+              )}
+              {dStreet ? (
+                <div>
+                  <EditableText
+                    value={dStreet}
+                    fallback="8/90, 4th Street,"
+                    onSave={(v) => onUpdatePiData?.({ deliveryStreet: v, deliveryAddress: { ...(pi.deliveryAddress || {}), street: v } })}
+                  />
+                </div>
+              ) : null}
+              {dCity ? (
+                <div>
+                  <EditableText
+                    value={dCity}
+                    fallback="Poombugar nagar kolathur, Ambattur,"
+                    onSave={(v) => onUpdatePiData?.({ deliveryCity: v, deliveryAddress: { ...(pi.deliveryAddress || {}), city: v } })}
+                  />
+                </div>
+              ) : null}
+              {(dPincode || dState) ? (
+                <div>
+                  {dPincode ? `${dPincode} ` : ''}{dState || 'Tamil Nadu'}
+                </div>
+              ) : null}
+              <div>India</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. LINE ITEMS TABLE */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: '700', textAlign: 'center' }}>
+                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '6px 4px', width: '32px' }}>#</th>
+                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '6px 8px', textAlign: 'left' }}>Item &amp; Description</th>
+                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '6px 4px', width: '75px' }}>HSN<br/>/SAC</th>
+                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '6px 4px', width: '55px' }}>Qty</th>
+                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '6px 8px', width: '80px', textAlign: 'right' }}>Rate</th>
+                {isIntra ? (
+                  <>
+                    <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 6px' }}>CGST</th>
+                    <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 6px' }}>SGST</th>
+                  </>
+                ) : (
+                  <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 6px' }}>IGST</th>
                 )}
-                {cfg.showQty !== false && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderQty}
-                    settingKey="showQty"
-                    label="Qty Column"
-                    width="55px"
-                    align="center"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderQty: v })}
-                  />
-                )}
-                {cfg.showUom && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderUom}
-                    settingKey="showUom"
-                    label="UOM Column"
-                    width="50px"
-                    align="center"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderUom: v })}
-                  />
-                )}
-                {cfg.showRateCol !== false && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderRate}
-                    settingKey="showRateCol"
-                    label="Rate (₹) Column"
-                    width="85px"
-                    align="right"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderRate: v })}
-                  />
-                )}
-                {cfg.showDiscountCol && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderDiscount}
-                    settingKey="showDiscountCol"
-                    label="Disc% Column"
-                    width="55px"
-                    align="center"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderDiscount: v })}
-                  />
-                )}
-                {cfg.showTaxableCol !== false && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderTaxable}
-                    settingKey="showTaxableCol"
-                    label="Taxable (₹) Column"
-                    width="85px"
-                    align="right"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderTaxable: v })}
-                  />
-                )}
-                {cfg.showGstCol && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderGst}
-                    settingKey="showGstCol"
-                    label="GST% Column"
-                    width="55px"
-                    align="center"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderGst: v })}
-                  />
-                )}
-                {cfg.showTotalCol !== false && (
-                  <RemovableTableHeaderCell
-                    title={cfg.colHeaderAmount}
-                    settingKey="showTotalCol"
-                    label="Total (₹) Column"
-                    width="95px"
-                    align="right"
-                    onSaveTitle={(v) => onUpdateSetting?.({ colHeaderAmount: v })}
-                  />
+                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '6px 8px', width: '85px', textAlign: 'right' }}>Amount</th>
+              </tr>
+              <tr style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: '700', textAlign: 'center' }}>
+                {isIntra ? (
+                  <>
+                    <th style={{ border: '1px solid #CBD5E1', padding: '3px 4px', width: '45px' }}>%</th>
+                    <th style={{ border: '1px solid #CBD5E1', padding: '3px 6px', width: '65px', textAlign: 'right' }}>Amt</th>
+                    <th style={{ border: '1px solid #CBD5E1', padding: '3px 4px', width: '45px' }}>%</th>
+                    <th style={{ border: '1px solid #CBD5E1', padding: '3px 6px', width: '65px', textAlign: 'right' }}>Amt</th>
+                  </>
+                ) : (
+                  <>
+                    <th style={{ border: '1px solid #CBD5E1', padding: '3px 4px', width: '45px' }}>%</th>
+                    <th style={{ border: '1px solid #CBD5E1', padding: '3px 6px', width: '75px', textAlign: 'right' }}>Amt</th>
+                  </>
                 )}
               </tr>
             </thead>
             <tbody>
               {items.map((it, idx) => (
-                <tr
-                  key={idx}
-                  style={{
-                    backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC',
-                    borderBottom: '1px solid #E2E8F0',
-                    verticalAlign: 'top'
-                  }}
-                >
-                  {cfg.showSnoCol !== false && (
-                    <td style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', fontWeight: '600', color: '#64748B' }}>
-                      {it.sNo}
-                    </td>
-                  )}
-                  <td style={{ padding: '10px 10px', borderRight: '1px solid #E2E8F0' }}>
-                    <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '11.5px' }}>
+                <tr key={idx} style={{ verticalAlign: 'top' }}>
+                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', color: '#334155' }}>
+                    {it.sNo}
+                  </td>
+                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px' }}>
+                    <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '11px' }}>
                       {it.name}
                     </div>
-                    {cfg.showItemDescription && it.description && (
-                      <div style={{ fontSize: '10px', color: '#475569', marginTop: '3px', whiteSpace: 'pre-line', lineHeight: '1.35' }}>
+                    {it.description && (
+                      <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px', whiteSpace: 'pre-line', lineHeight: '1.3' }}>
                         {it.description}
                       </div>
                     )}
                   </td>
-                  {cfg.showHsn && (
-                    <td style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', fontFamily: 'monospace', color: '#334155', fontSize: '11px' }}>
-                      {it.hsn || '—'}
-                    </td>
-                  )}
-                  {cfg.showQty !== false && (
-                    <td style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', fontWeight: '700', color: '#0F172A', fontSize: '11.5px' }}>
-                      {it.qty}
-                    </td>
-                  )}
-                  {cfg.showUom && (
-                    <td style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', color: '#475569', fontSize: '11px' }}>
-                      {it.uom || 'NOS'}
-                    </td>
-                  )}
-                  {cfg.showRateCol !== false && (
-                    it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td
-                          rowSpan={it.groupCount}
-                          style={{
-                            padding: '10px 8px',
-                            borderRight: '1px solid #E2E8F0',
-                            textAlign: 'right',
-                            color: '#0F172A',
-                            verticalAlign: 'middle',
-                            fontWeight: '700',
-                            backgroundColor: '#FAFAFA'
-                          }}
-                        >
-                          ₹ {it.groupPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: 'normal' }}>
-                            for {it.setCount || 1} Set{it.setCount > 1 ? 's' : ''}
-                          </div>
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ padding: '10px 8px', borderRight: '1px solid #E2E8F0', textAlign: 'right', color: '#0F172A', fontSize: '11px', fontWeight: '600' }}>
-                        {Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontFamily: 'monospace', fontSize: '10px' }}>
+                    {it.hsn || '—'}
+                  </td>
+                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                    <div>{typeof it.qty === 'number' ? it.qty.toFixed(2) : it.qty}</div>
+                    <div style={{ fontSize: '9px', color: '#64748B' }}>{it.uom || "no's"}</div>
+                  </td>
+                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px', textAlign: 'right', fontSize: '10.5px' }}>
+                    {Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  {isIntra ? (
+                    <>
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                        {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
                       </td>
-                    )
-                  )}
-                  {cfg.showDiscountCol && (
-                    it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td rowSpan={it.groupCount} style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', verticalAlign: 'middle', color: '#64748B', backgroundColor: '#FAFAFA' }}>
-                          —
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', color: '#64748B', fontSize: '11px' }}>
-                        {it.discPct ? `${it.discPct}%` : '—'}
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
+                        {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                    )
-                  )}
-                  {cfg.showTaxableCol !== false && (
-                    it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td
-                          rowSpan={it.groupCount}
-                          style={{
-                            padding: '10px 8px',
-                            borderRight: '1px solid #E2E8F0',
-                            textAlign: 'right',
-                            fontWeight: '700',
-                            color: '#0F172A',
-                            verticalAlign: 'middle',
-                            backgroundColor: '#FAFAFA'
-                          }}
-                        >
-                          ₹ {it.groupTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ padding: '10px 8px', borderRight: '1px solid #E2E8F0', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '11px' }}>
-                        {Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                        {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
                       </td>
-                    )
-                  )}
-                  {cfg.showGstCol && (
-                    it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td
-                          rowSpan={it.groupCount}
-                          style={{
-                            padding: '10px 6px',
-                            borderRight: '1px solid #E2E8F0',
-                            textAlign: 'center',
-                            color: accent,
-                            fontWeight: '700',
-                            verticalAlign: 'middle',
-                            backgroundColor: '#FAFAFA'
-                          }}
-                        >
-                          {it.groupGstRateStr}
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ padding: '10px 6px', borderRight: '1px solid #E2E8F0', textAlign: 'center', color: accent, fontWeight: '600', fontSize: '11px' }}>
-                        {it.gRate ? `${it.gRate}%` : '18%'}
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
+                        {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                    )
-                  )}
-                  {cfg.showTotalCol !== false && (
-                    it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td
-                          rowSpan={it.groupCount}
-                          style={{
-                            padding: '10px 10px',
-                            textAlign: 'right',
-                            fontWeight: '800',
-                            color: accent,
-                            verticalAlign: 'middle',
-                            backgroundColor: '#FAFAFA'
-                          }}
-                        >
-                          ₹ {it.groupLineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: '700', color: accent, fontSize: '11px' }}>
-                        {Number(it.lineTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                        {it.gRate ? `${it.gRate}%` : '5%'}
                       </td>
-                    )
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
+                        {(it.gstAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </>
                   )}
+                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '10.5px' }}>
+                    {Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1825,17 +1503,17 @@ export function VRMProformaInvoicePrintSheet({
 
         {/* BOM TOTAL QUANTITY FOOTER */}
         {isBomDocument && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '10px 16px', borderTop: '2px solid #CBD5E1', backgroundColor: '#F8FAFC' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '10px 16px', borderTop: '1px solid #CBD5E1', backgroundColor: '#F8FAFC' }}>
             <span style={{ color: '#64748B', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: '16px' }}>Total Quantity:</span>
             <span style={{ color: accent, fontSize: '13px', fontWeight: '900' }}>
-              {displayItems.reduce((sum, it) => sum + (parseFloat(it.qty) || 0), 0)}
+              {items.reduce((sum, it) => sum + (parseFloat(it.qty) || 0), 0)}
             </span>
           </div>
         )}
 
-        {/* 4. TOTAL IN WORDS & CALCULATION SUMMARY */}
+        {/* 5. BOTTOM SECTION: WORDS + NOTES + TERMS ON LEFT | TOTALS + STAMP ON RIGHT */}
         {isBomDocument ? (
-          <div className="avoid-break" style={{ borderTop: `1.5px solid ${accent}`, paddingTop: '16px', marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="avoid-break" style={{ borderTop: '1.5px solid #334155', paddingTop: '16px', marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
             <div style={{ textAlign: 'center', minWidth: '220px' }}>
               <div style={{ height: '45px' }}></div>
               <div style={{ borderTop: '1.5px dashed #94A3B8', paddingTop: '6px', width: '100%' }}>
@@ -1845,426 +1523,184 @@ export function VRMProformaInvoicePrintSheet({
             </div>
           </div>
         ) : (
-        <div className="avoid-break" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', borderTop: `1.5px solid ${accent}`, backgroundColor: '#FFFFFF' }}>
-          {/* LEFT: WORDS + BANK DETAILS + TERMS */}
-          <div style={{ padding: '14px 18px', borderRight: '1px solid #CBD5E1' }}>
-            {cfg.showTotalInWords && (
-              <RemovableBlock
-                visible={cfg.showTotalInWords}
-                settingKey="showTotalInWords"
-                title="Amount Chargeable In Words"
-                style={{ marginBottom: '12px' }}
-              >
-                <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Amount Chargeable (in words):</div>
-                <div style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', marginTop: '2px', lineHeight: '1.3' }}>
-                  {numberToWordsINR(grandTotal)}
+          <div className="avoid-break" style={{ display: 'grid', gridTemplateColumns: '58% 42%', borderTop: '1.5px solid #334155', backgroundColor: '#FFFFFF' }}>
+            {/* LEFT: WORDS + NOTES + TERMS */}
+            <div style={{ borderRight: '1.5px solid #334155' }}>
+              {/* TOTAL IN WORDS */}
+              {cfg.showTotalInWords && (
+                <div style={{ padding: '8px 12px', borderBottom: '1px solid #CBD5E1' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#0F172A', marginBottom: '2px' }}>Total In Words</div>
+                  <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#0F172A', lineHeight: '1.3' }}>
+                    {numberToWordsINR(grandTotal)}
+                  </div>
                 </div>
-              </RemovableBlock>
-            )}
+              )}
 
-            {/* BANK DETAILS */}
-            {cfg.showBankDetails && (
-              <RemovableBlock
-                visible={cfg.showBankDetails}
-                settingKey="showBankDetails"
-                title="Bank Details Box"
-                style={{ border: '1px solid #CBD5E1', borderRadius: '4px', padding: '8px 12px', backgroundColor: '#F8FAFC', marginBottom: '12px' }}
-              >
-                <div style={{ fontSize: '10.5px', fontWeight: '800', color: accent, textTransform: 'uppercase', marginBottom: '4px' }}>
+              {/* NOTES / ACCOUNT DETAILS */}
+              <div style={{ padding: '8px 12px', borderBottom: '1px solid #CBD5E1' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#0F172A', marginBottom: '3px' }}>Notes</div>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#1E293B', marginBottom: '2px' }}>
                   <EditableText
-                    value={cfg.bankHeading}
-                    fallback="VRM Company Bank Details (NEFT / RTGS / IMPS)"
+                    value={cfg.bankHeading || 'Account Details:'}
+                    fallback="Account Details:"
                     onSave={(v) => onUpdateSetting?.({ bankHeading: v })}
-                    onRemove={() => {
-                      onUpdateSetting?.({ showBankDetails: false });
-                      onElementRemoved?.('showBankDetails', 'Bank Details Box');
-                    }}
-                    removeLabel="Bank Details"
                   />
                 </div>
-                <table style={{ width: '100%', fontSize: '10.5px', borderCollapse: 'collapse' }}>
-                  <tbody>
-                    {cfg.showBankBeneficiary !== false && (
-                      <tr>
-                        <td style={{ width: '90px', color: '#64748B', fontWeight: '600', padding: '1px 0' }}>Beneficiary:</td>
-                        <td style={{ fontWeight: '700', color: '#0F172A' }}>
-                          <EditableText
-                            value={cfg.bankBeneficiary}
-                            fallback="Beneficiary Name"
-                            onSave={(v) => onUpdateSetting?.({ bankBeneficiary: v })}
-                            onRemove={() => {
-                              onUpdateSetting?.({ showBankBeneficiary: false });
-                              onElementRemoved?.('showBankBeneficiary', 'Bank Beneficiary');
-                            }}
-                            removeLabel="Bank Beneficiary"
-                          />
-                        </td>
-                      </tr>
-                    )}
-                    {cfg.showBankName !== false && (
-                      <tr>
-                        <td style={{ color: '#64748B', fontWeight: '600', padding: '1px 0' }}>Bank Name:</td>
-                        <td style={{ fontWeight: '600', color: '#0F172A' }}>
-                          <EditableText
-                            value={cfg.bankName}
-                            fallback="Bank Name"
-                            onSave={(v) => onUpdateSetting?.({ bankName: v })}
-                            onRemove={() => {
-                              onUpdateSetting?.({ showBankName: false });
-                              onElementRemoved?.('showBankName', 'Bank Name');
-                            }}
-                            removeLabel="Bank Name"
-                          />
-                        </td>
-                      </tr>
-                    )}
-                    {cfg.showBankAccountNo !== false && (
-                      <tr>
-                        <td style={{ color: '#64748B', fontWeight: '600', padding: '1px 0' }}>Account No:</td>
-                        <td style={{ fontWeight: '800', color: accent, fontFamily: 'monospace', fontSize: '11px' }}>
-                          <EditableText
-                            value={cfg.bankAccountNo}
-                            fallback="Account Number"
-                            onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })}
-                            onRemove={() => {
-                              onUpdateSetting?.({ showBankAccountNo: false });
-                              onElementRemoved?.('showBankAccountNo', 'Account Number');
-                            }}
-                            removeLabel="Account Number"
-                          />
-                        </td>
-                      </tr>
-                    )}
-                    {cfg.showBankIfsc !== false && (
-                      <tr>
-                        <td style={{ color: '#64748B', fontWeight: '600', padding: '1px 0' }}>IFSC Code:</td>
-                        <td style={{ fontWeight: '700', color: '#0F172A', fontFamily: 'monospace' }}>
-                          <EditableText
-                            value={cfg.bankIfsc}
-                            fallback="IFSC Code"
-                            onSave={(v) => onUpdateSetting?.({ bankIfsc: v })}
-                            onRemove={() => {
-                              onUpdateSetting?.({ showBankIfsc: false });
-                              onElementRemoved?.('showBankIfsc', 'IFSC Code');
-                            }}
-                            removeLabel="IFSC Code"
-                          />
-                        </td>
-                      </tr>
-                    )}
-                    {cfg.showBankBranch !== false && (
-                      <tr>
-                        <td style={{ color: '#64748B', fontWeight: '600', padding: '1px 0' }}>Branch:</td>
-                        <td style={{ color: '#0F172A' }}>
-                          <EditableText
-                            value={cfg.bankBranch}
-                            fallback="Branch Name"
-                            onSave={(v) => onUpdateSetting?.({ bankBranch: v })}
-                            onRemove={() => {
-                              onUpdateSetting?.({ showBankBranch: false });
-                              onElementRemoved?.('showBankBranch', 'Bank Branch');
-                            }}
-                            removeLabel="Branch"
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </RemovableBlock>
-            )}
+                <div style={{ fontSize: '10px', color: '#1E293B', lineHeight: '1.4' }}>
+                  <div>
+                    Beneficiary: <EditableText value={cfg.bankBeneficiary || 'VRM Structures India Private Limited'} fallback="VRM Structures India Private Limited" onSave={(v) => onUpdateSetting?.({ bankBeneficiary: v })} />
+                  </div>
+                  <div>
+                    A/c No: <EditableText value={cfg.bankAccountNo || '50200031629272'} fallback="50200031629272" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '700' }} />
+                  </div>
+                  <div>
+                    Bank: <EditableText value={cfg.bankName || 'HDFC Bank'} fallback="HDFC Bank" onSave={(v) => onUpdateSetting?.({ bankName: v })} />
+                  </div>
+                  <div>
+                    Branch: <EditableText value={cfg.bankBranch || 'Kodambakkam'} fallback="Kodambakkam" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} />
+                  </div>
+                  <div>
+                    IFSC: <EditableText value={cfg.bankIfsc || 'HDFC0000574'} fallback="HDFC0000574" onSave={(v) => onUpdateSetting?.({ bankIfsc: v })} style={{ fontWeight: '700' }} />
+                  </div>
+                </div>
+              </div>
 
-            {/* TERMS & CONDITIONS */}
-            {cfg.showTerms && (
-              <RemovableBlock
-                visible={cfg.showTerms}
-                settingKey="showTerms"
-                title="Terms & Conditions"
-                style={{ fontSize: '10px', color: '#475569', lineHeight: '1.4' }}
-              >
-                <div style={{ fontWeight: '700', color: '#0F172A', marginBottom: '2px' }}>
-                  <EditableText
-                    value={cfg.termsHeading}
-                    fallback="Terms & Conditions:"
-                    onSave={(v) => onUpdateSetting?.({ termsHeading: v })}
-                    onRemove={() => {
-                      onUpdateSetting?.({ showTerms: false });
-                      onElementRemoved?.('showTerms', 'Terms & Conditions');
-                    }}
-                    removeLabel="Terms Heading"
-                  />
-                </div>
-                {isEditable ? (
-                  <div style={{ marginTop: '3px', whiteSpace: 'pre-line' }}>
+              {/* TERMS & CONDITIONS */}
+              {cfg.showTerms && (
+                <div style={{ padding: '8px 12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#0F172A', marginBottom: '3px' }}>
+                    <EditableText
+                      value={cfg.termsHeading || 'Terms & Conditions'}
+                      fallback="Terms & Conditions"
+                      onSave={(v) => onUpdateSetting?.({ termsHeading: v })}
+                    />
+                  </div>
+                  <div style={{ fontSize: '9.5px', color: '#1E293B', lineHeight: '1.45', whiteSpace: 'pre-line' }}>
                     <EditableText
                       value={cfg.termsText}
-                      fallback="Enter terms and conditions (one per line)..."
+                      fallback="1. TAX: Included\n2. Transport: At actuals\n3. Payment: 100% along with the Purchase Order\n4. Delivery: Immediate Dispatch\n5. Validity: 3 days"
                       multiline={true}
                       onSave={(v) => onUpdateSetting?.({ termsText: v })}
                     />
                   </div>
-                ) : (
-                  termsLines.length > 0 && (
-                    <ol style={{ margin: 0, paddingLeft: '14px' }}>
-                      {termsLines.map((line, lIdx) => (
-                        <li key={lIdx}>{line.replace(/^[0-9]+[.)]\s*/, '')}</li>
-                      ))}
-                    </ol>
-                  )
-                )}
-              </RemovableBlock>
-            )}
-          </div>
-
-          {/* RIGHT: BREAKDOWN TOTALS + SIGNATURE BOX */}
-          <div style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
-            {/* TOTALS TABLE */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                  <td style={{ padding: '6px 14px', color: '#475569', fontWeight: '600' }}>Sub Total (Taxable):</td>
-                  <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                    ₹{subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-
-                {isIntra ? (
-                  gstTiers.map((tier) => (
-                    <React.Fragment key={tier.rate}>
-                      <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                        <td style={{ padding: '5px 14px', color: '#475569', fontWeight: '600' }}>
-                          CGST ({(tier.rate / 2)}%){gstTiers.length > 1 ? ` (on ${tier.rate}% items)` : ''}:
-                        </td>
-                        <td style={{ padding: '5px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                          ₹{(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                        <td style={{ padding: '5px 14px', color: '#475569', fontWeight: '600' }}>
-                          SGST ({(tier.rate / 2)}%){gstTiers.length > 1 ? ` (on ${tier.rate}% items)` : ''}:
-                        </td>
-                        <td style={{ padding: '5px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                          ₹{(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    </React.Fragment>
-                  ))
-                ) : (
-                  gstTiers.map((tier) => (
-                    <tr key={tier.rate} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '6px 14px', color: '#475569', fontWeight: '600' }}>
-                        IGST ({tier.rate}%){gstTiers.length > 1 ? ` (on ${tier.rate}% items)` : ''}:
-                      </td>
-                      <td style={{ padding: '6px 14px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
-                        ₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))
-                )}
-
-                <tr style={{ borderBottom: `1.5px solid ${accent}`, backgroundColor: `${accent}15` }}>
-                  <td style={{ padding: '8px 14px', color: accent, fontWeight: '800', fontSize: '13px' }}>Grand Total:</td>
-                  <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: '800', color: accent, fontSize: '14px' }}>
-                    ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* SIGNATURE & STAMP BOX */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              {/* CUSTOMER ACCEPTANCE (Optional) */}
-              {cfg.showCustomerAcceptance && (
-                <RemovableBlock
-                  visible={cfg.showCustomerAcceptance}
-                  settingKey="showCustomerAcceptance"
-                  title="Customer Acceptance Box"
-                  style={{
-                    padding: '12px 14px',
-                    borderBottom: '1px dashed #CBD5E1',
-                    textAlign: 'center',
-                    minHeight: '70px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
-                    <EditableText
-                      value={cfg.customerAcceptanceHeading}
-                      fallback="Customer Acceptance & Signature"
-                      onSave={(v) => onUpdateSetting?.({ customerAcceptanceHeading: v })}
-                      onRemove={() => {
-                        onUpdateSetting?.({ showCustomerAcceptance: false });
-                        onElementRemoved?.('showCustomerAcceptance', 'Customer Acceptance');
-                      }}
-                      removeLabel="Customer Acceptance"
-                    />
-                  </div>
-                  <div style={{ borderBottom: '1px solid #94A3B8', width: '80%', margin: '14px auto 4px auto' }} />
-                  <div style={{ fontSize: '9.5px', color: '#94A3B8' }}>
-                    <EditableText
-                      value={cfg.customerAcceptanceSubtext}
-                      fallback="Authorised Signature & Stamp"
-                      onSave={(v) => onUpdateSetting?.({ customerAcceptanceSubtext: v })}
-                    />
-                  </div>
-                </RemovableBlock>
-              )}
-
-              {/* COMPANY SIGNATORY & STAMP */}
-              {cfg.showSignatoryStamp && (
-                <RemovableBlock
-                  visible={cfg.showSignatoryStamp}
-                  settingKey="showSignatoryStamp"
-                  title="Signatory & Stamp"
-                  style={{
-                    flex: 1,
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    textAlign: 'center',
-                    minHeight: '155px',
-                    backgroundColor: '#FAFAFA'
-                  }}
-                >
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A' }}>
-                    <EditableText
-                      value={cfg.forCompanyText ? `${cfg.forCompanyText} ${cfg.companyName}` : `For ${cfg.companyName}`}
-                      fallback={`For ${cfg.companyName}`}
-                      onSave={(v) => {
-                        const stripped = v.replace(/^For\s+/i, '');
-                        onUpdateSetting?.({ companyName: stripped });
-                      }}
-                      onRemove={() => onUpdateSetting?.({ showSignatoryStamp: false })}
-                    />
-                  </div>
-
-                  {/* STAMP & SIGNATURE MEDIA CONTAINER */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '12px',
-                    margin: '6px 0',
-                    position: 'relative',
-                    minHeight: '60px'
-                  }}>
-                    {/* FROZEN OFFICIAL STAMP DISPLAY */}
-                    {cfg.showSignatoryStamp !== false && (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <img
-                          src={cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')) || VRM_OFFICIAL_STAMP || '/vrm_stamp.png'}
-                          alt="VRM Structures Official Stamp"
-                          onError={(e) => {
-                            if (e.currentTarget.src !== VRM_OFFICIAL_STAMP) {
-                              e.currentTarget.src = VRM_OFFICIAL_STAMP;
-                            }
-                          }}
-                          style={{
-                            height: '115px',
-                            width: '230px',
-                            maxWidth: '240px',
-                            maxHeight: '120px',
-                            objectFit: 'contain'
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* SIGNATURE DISPLAY */}
-                    {cfg.signatureMode && cfg.signatureMode !== 'none' && (
-                      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                        {cfg.signatureMode === 'custom' && cfg.customSignatureUrl ? (
-                          <img
-                            src={cfg.customSignatureUrl}
-                            alt="Authorized Signature"
-                            style={{
-                              maxHeight: '44px',
-                              maxWidth: '120px',
-                              objectFit: 'contain'
-                            }}
-                          />
-                        ) : cfg.signatureMode === 'vector' ? (
-                          <svg width="105" height="28" viewBox="0 0 105 28">
-                            <path d="M 10 20 Q 30 5 55 18 T 95 12" stroke={accent} strokeWidth="1.8" fill="none" />
-                          </svg>
-                        ) : cfg.signatureMode === 'blank' ? (
-                          <div style={{ width: '100px', borderBottom: '1px dashed #94A3B8', height: '24px' }} />
-                        ) : null}
-                        {isEditable && (
-                          <button
-                            type="button"
-                            className="no-print"
-                            onClick={() => {
-                              onUpdateSetting?.({ signatureMode: 'none' });
-                              onElementRemoved?.('signatureMode', 'Authorized Signature');
-                            }}
-                            title="Remove Authorized Signature"
-                            style={{
-                              position: 'absolute',
-                              top: '-8px',
-                              right: '-10px',
-                              backgroundColor: '#EF4444',
-                              color: '#FFFFFF',
-                              border: 'none',
-                              borderRadius: '50%',
-                              width: '16px',
-                              height: '16px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '10px',
-                              fontWeight: '800',
-                              cursor: 'pointer',
-                              padding: 0,
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                              zIndex: 10
-                            }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* SIGNATORY NAME & TITLE */}
-                  <div>
-                    {cfg.signatoryName ? (
-                      <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#0F172A', marginBottom: '1px' }}>
-                        <EditableText
-                          value={cfg.signatoryName}
-                          fallback=""
-                          onSave={(v) => onUpdateSetting?.({ signatoryName: v })}
-                          onRemove={() => onUpdateSetting?.({ signatoryName: '' })}
-                          removeLabel="Signatory Name"
-                        />
-                      </div>
-                    ) : null}
-                    {cfg.signatoryTitle !== '' && (
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#475569' }}>
-                        <EditableText
-                          value={cfg.signatoryTitle}
-                          fallback="Authorized Signatory"
-                          onSave={(v) => onUpdateSetting?.({ signatoryTitle: v })}
-                          onRemove={() => onUpdateSetting?.({ signatoryTitle: '' })}
-                          removeLabel="Authorized Signatory"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                </RemovableBlock>
+                </div>
               )}
             </div>
 
-          </div>
-        </div>
-      )}
+            {/* RIGHT: TOTALS SUMMARY + STAMP & SIGNATURE */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {/* TOTALS TABLE */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', borderBottom: '1px solid #CBD5E1' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '5px 12px', color: '#1E293B' }}>Sub Total</td>
+                    <td style={{ padding: '5px 12px', textAlign: 'right', fontWeight: '600', color: '#0F172A' }}>
+                      {subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  {isIntra ? (
+                    gstTiers.map((tier) => (
+                      <React.Fragment key={tier.rate}>
+                        <tr>
+                          <td style={{ padding: '4px 12px', color: '#1E293B' }}>
+                            CGST{(tier.rate / 2).toFixed(1).replace(/\.0$/, '')} ({(tier.rate / 2).toFixed(1).replace(/\.0$/, '')}%)
+                          </td>
+                          <td style={{ padding: '4px 12px', textAlign: 'right', color: '#0F172A' }}>
+                            {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '4px 12px', color: '#1E293B' }}>
+                            SGST{(tier.rate / 2).toFixed(1).replace(/\.0$/, '')} ({(tier.rate / 2).toFixed(1).replace(/\.0$/, '')}%)
+                          </td>
+                          <td style={{ padding: '4px 12px', textAlign: 'right', color: '#0F172A' }}>
+                            {(tier.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    gstTiers.map((tier) => (
+                      <tr key={tier.rate}>
+                        <td style={{ padding: '4px 12px', color: '#1E293B' }}>
+                          IGST{tier.rate} ({tier.rate}%)
+                        </td>
+                        <td style={{ padding: '4px 12px', textAlign: 'right', color: '#0F172A' }}>
+                          {tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                  {Math.abs(Math.round(grandTotal) - grandTotal) > 0.001 && (
+                    <tr>
+                      <td style={{ padding: '4px 12px', color: '#1E293B' }}>Rounding</td>
+                      <td style={{ padding: '4px 12px', textAlign: 'right', color: '#0F172A' }}>
+                        {(Math.round(grandTotal) - grandTotal).toFixed(2)}
+                      </td>
+                    </tr>
+                  )}
+                  <tr style={{ borderTop: '1px solid #CBD5E1', fontWeight: '800' }}>
+                    <td style={{ padding: '6px 12px', color: '#0F172A' }}>Total</td>
+                    <td style={{ padding: '6px 12px', textAlign: 'right', color: '#0F172A', fontSize: '11px' }}>
+                      ₹{Math.round(grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
 
+              {/* STAMP & SIGNATURE BOX */}
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                padding: '16px 12px 10px 12px',
+                minHeight: '140px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: '95px'
+                }}>
+                  {/* Official Stamp */}
+                  <img
+                    src={cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')) || VRM_OFFICIAL_STAMP}
+                    alt="VRM Structures Official Stamp"
+                    style={{
+                      height: '115px',
+                      width: '115px',
+                      objectFit: 'contain'
+                    }}
+                  />
+                  {/* Signature overlay */}
+                  <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-40%)', pointerEvents: 'none' }}>
+                    <svg width="125" height="38" viewBox="0 0 125 38">
+                      <path d="M 8 26 Q 32 4 60 20 T 115 14" stroke="#1E3A8A" strokeWidth="2.2" fill="none" />
+                    </svg>
+                  </div>
+                </div>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#1E293B', marginTop: '6px', textAlign: 'center' }}>
+                  <EditableText
+                    value={cfg.signatoryTitle || 'Authorized Signatory'}
+                    fallback="Authorized Signatory"
+                    onSave={(v) => onUpdateSetting?.({ signatoryTitle: v })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* PAGE NUMBER (BOTTOM RIGHT) */}
+      <div style={{ textAlign: 'right', fontSize: '9px', color: '#64748B', marginTop: '4px', paddingRight: '2px' }}>
+        1
       </div>
 
       {/* FOOTER NOTICE */}

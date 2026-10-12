@@ -614,6 +614,9 @@ export default function Customer360PageView({
                 <InfoRow icon={Building2} label="Company" value={customer.companyName || '—'} />
                 <InfoRow icon={Mail} label="Email" value={customer.primaryContact?.email || customer.email || '—'} />
                 <InfoRow icon={Phone} label="Phone" value={customer.primaryContact?.phone || customer.phone || '—'} />
+                {(customer.altPhone || customer.altNumber || customer.primaryContact?.altPhone) && (
+                  <InfoRow icon={Phone} label="Alt Number" value={customer.altPhone || customer.altNumber || customer.primaryContact?.altPhone} />
+                )}
                 <InfoRow icon={Briefcase} label="Designation / Role" value={customer.primaryContact?.designation || customer.designation || '—'} />
                 <InfoRow icon={MapPin} label="Location" value={locationText} />
                 <InfoRow icon={Zap} label="Lead Source" value={customer.source || '—'} />
@@ -1057,10 +1060,18 @@ export default function Customer360PageView({
                       <KeyValue label="Company Name" value={customer.companyName || '—'} />
                       <KeyValue label="Primary Contact" value={customer.primaryContact?.name || customer.customerName || '—'} />
                       <KeyValue label="Phone" value={customer.primaryContact?.phone || customer.phone || '—'} />
-                      <KeyValue label="Email" value={customer.primaryContact?.email || customer.email || '—'} />
-                      <KeyValue label="Billing Address" value={customer.address || '—'} />
+                      {(customer.altPhone || customer.altNumber || customer.primaryContact?.altPhone) && (
+                        <KeyValue label="Alt Number" value={customer.altPhone || customer.altNumber || customer.primaryContact?.altPhone} />
+                      )}
+                      <KeyValue label="Billing Address 1" value={customer.address1 || customer.billingAddress1 || customer.billingAddressObj?.address1 || customer.address || '—'} />
+                      {(customer.address2 || customer.billingAddress2 || customer.billingAddressObj?.address2) && (
+                        <KeyValue label="Billing Address 2" value={customer.address2 || customer.billingAddress2 || customer.billingAddressObj?.address2} />
+                      )}
                       <KeyValue label="City & State" value={[customer.city, customer.state].filter(Boolean).join(', ') + (customer.pincode ? ` - ${customer.pincode}` : '') || '—'} />
-                      <KeyValue label="Dispatch Address" value={customer.dispatchAddress || (customer.address ? 'Same as billing address' : '—')} />
+                      <KeyValue label="Shipping Address 1" value={customer.dispatchAddress1 || customer.shippingAddress1 || customer.deliveryAddressObj?.address1 || customer.dispatchAddress || (customer.address ? 'Same as billing address' : '—')} />
+                      {(customer.dispatchAddress2 || customer.shippingAddress2 || customer.deliveryAddressObj?.address2) && (
+                        <KeyValue label="Shipping Address 2" value={customer.dispatchAddress2 || customer.shippingAddress2 || customer.deliveryAddressObj?.address2} />
+                      )}
                       <KeyValue label="GSTIN" value={customer.gstNumber || '—'} mono />
                       <KeyValue label="PAN" value={customer.panNumber || '—'} mono />
                       <KeyValue label="Payment Terms" value={customer.paymentTerms || '—'} />
@@ -1142,8 +1153,8 @@ export default function Customer360PageView({
                 <KeyValue label="Credit Limit" value={hasCreditLimit ? `₹ ${Number(customer.creditLimit).toLocaleString()}` : '—'} valueColor={hasCreditLimit ? "#059669" : C.body} />
                 <div style={{ paddingTop: '10px' }}>
                   <div style={{ fontSize: '10.5px', color: C.faint, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Billing Address</div>
-                  <div style={{ fontSize: '12px', color: customer.address ? C.ink : C.muted, fontWeight: '600', marginTop: '3px', lineHeight: 1.45 }}>
-                    {customer.address || '—'}
+                  <div style={{ fontSize: '12px', color: (customer.address || customer.address1) ? C.ink : C.muted, fontWeight: '600', marginTop: '3px', lineHeight: 1.45 }}>
+                    {[customer.address1 || customer.billingAddress1, customer.address2 || customer.billingAddress2].filter(Boolean).join(', ') || customer.address || '—'}
                   </div>
                 </div>
               </div>
