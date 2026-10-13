@@ -876,9 +876,113 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       try {
         const custMap = new Map();
         const register = (c) => {
-          if (!c) return;
-          const k = (c.companyName || c.name || c.c2 || c.code || c.customerCode || '').toLowerCase().trim();
-          if (k && !custMap.has(k)) custMap.set(k, c);
+          if (!c || typeof c !== 'object') return;
+          const name = (c.companyName || c.name || c.c2 || c.customerName || '').trim();
+          const code = (c.customerCode || c.code || c.id || '').trim();
+          const k = (name || code).toLowerCase();
+          if (!k) return;
+
+          const existing = custMap.get(k) || (code ? custMap.get(code.toLowerCase()) : null) || {};
+
+          const gstVal = (c.gstNo && c.gstNo !== '—' ? c.gstNo : '') ||
+                         (c.gstNumber && c.gstNumber !== '—' ? c.gstNumber : '') ||
+                         (c.gst && c.gst !== '—' ? c.gst : '') ||
+                         (c.gstin && c.gstin !== '—' ? c.gstin : '') ||
+                         existing.gstNo || existing.gstNumber || existing.gst || '';
+
+          const contactVal = (c.contactPerson && c.contactPerson !== '—' ? c.contactPerson : '') ||
+                            (c.contact && c.contact !== '—' ? c.contact : '') ||
+                            c.primaryContact?.name ||
+                            (c.customerName && c.customerName !== name && c.customerName !== '—' ? c.customerName : '') ||
+                            existing.contactPerson || existing.contact || existing.primaryContact?.name || '';
+
+          const phoneVal = (c.phone && c.phone !== '—' ? c.phone : '') ||
+                          (c.mobile && c.mobile !== '—' ? c.mobile : '') ||
+                          c.primaryContact?.phone ||
+                          c.primaryContact?.whatsapp ||
+                          (c.c4 && c.c4 !== '—' ? c.c4 : '') ||
+                          existing.phone || existing.mobile || existing.primaryContact?.phone || '';
+
+          const emailVal = (c.email && c.email !== '—' ? c.email : '') ||
+                           c.primaryContact?.email ||
+                           (c.c5 && c.c5 !== '—' ? c.c5 : '') ||
+                           existing.email || existing.primaryContact?.email || '';
+
+          const streetVal = (c.billingAddress && c.billingAddress !== '—' ? c.billingAddress : '') ||
+                            (c.address1 && c.address1 !== '—' ? c.address1 : '') ||
+                            (c.address && c.address !== '—' ? c.address : '') ||
+                            (c.c6 && c.c6 !== '—' ? c.c6 : '') ||
+                            c.billingAddressObj?.address1 ||
+                            c.billingAddressObj?.address ||
+                            existing.billingAddress || existing.address1 || existing.address || '';
+
+          const cityVal = (c.city && c.city !== '—' ? c.city : '') ||
+                          c.billingAddressObj?.city ||
+                          existing.city || '';
+
+          const stateVal = (c.state && c.state !== '—' ? c.state : '') ||
+                           c.billingAddressObj?.state ||
+                           (gstVal && gstVal.length >= 2 ? GST_STATE_MAP[gstVal.substring(0, 2)] : '') ||
+                           existing.state || '';
+
+          const pinVal = (c.pincode && c.pincode !== '—' ? c.pincode : '') ||
+                         (c.pinCode && c.pinCode !== '—' ? c.pinCode : '') ||
+                         (c.zip && c.zip !== '—' ? c.zip : '') ||
+                         c.billingAddressObj?.pincode ||
+                         existing.pincode || '';
+
+          const dStreetVal = (c.dispatchAddress && c.dispatchAddress !== '—' ? c.dispatchAddress : '') ||
+                             (c.dispatchAddress1 && c.dispatchAddress1 !== '—' ? c.dispatchAddress1 : '') ||
+                             (c.deliveryAddress && c.deliveryAddress !== '—' ? c.deliveryAddress : '') ||
+                             (c.shippingAddress && c.shippingAddress !== '—' ? c.shippingAddress : '') ||
+                             (c.c7 && c.c7 !== '—' ? c.c7 : '') ||
+                             c.deliveryAddressObj?.address1 ||
+                             c.deliveryAddressObj?.address ||
+                             existing.dispatchAddress || existing.deliveryAddress || streetVal;
+
+          const dCityVal = (c.dispatchCity && c.dispatchCity !== '—' ? c.dispatchCity : '') ||
+                           c.deliveryAddressObj?.city ||
+                           existing.dispatchCity || cityVal;
+
+          const dStateVal = (c.dispatchState && c.dispatchState !== '—' ? c.dispatchState : '') ||
+                            c.deliveryAddressObj?.state ||
+                            existing.dispatchState || stateVal;
+
+          const dPinVal = (c.dispatchPincode && c.dispatchPincode !== '—' ? c.dispatchPincode : '') ||
+                          c.deliveryAddressObj?.pincode ||
+                          existing.dispatchPincode || pinVal;
+
+          const merged = {
+            ...existing,
+            ...c,
+            companyName: name || existing.companyName || '',
+            name: name || existing.name || '',
+            customerCode: code || existing.customerCode || '',
+            gstNo: gstVal,
+            gstNumber: gstVal,
+            gst: gstVal,
+            contactPerson: contactVal,
+            contact: contactVal,
+            phone: phoneVal,
+            mobile: phoneVal,
+            email: emailVal,
+            paymentTerms: c.paymentTerms || existing.paymentTerms || '100% Paid',
+            billingAddress: streetVal,
+            address1: streetVal,
+            address: streetVal,
+            city: cityVal,
+            state: stateVal,
+            pincode: pinVal,
+            dispatchAddress: dStreetVal,
+            deliveryAddress: dStreetVal,
+            dispatchCity: dCityVal,
+            dispatchState: dStateVal,
+            dispatchPincode: dPinVal
+          };
+
+          custMap.set(k, merged);
+          if (name) custMap.set(name.toLowerCase(), merged);
+          if (code) custMap.set(code.toLowerCase(), merged);
         };
 
         // 1. Instant check from local storage
@@ -903,9 +1007,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           }
         } catch (_) {}
 
-        const unified = Array.from(custMap.values());
+        const unified = Array.from(new Set(custMap.values()));
         if (isMounted && unified.length > 0) {
           setCustomerList(unified);
+          try {
+            localStorage.setItem('controlroom_customer_store', JSON.stringify(unified));
+            localStorage.setItem('businz_crm_customers', JSON.stringify(unified));
+          } catch (_) {}
         }
       } catch (err) {
         console.warn('[PI] Customer sync notice:', err);
@@ -1120,19 +1228,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Deduplicated list of all registered customers for the dropdown (O(N) Set lookup)
+  // Deduplicated list of all registered customers for the dropdown (O(N) Map lookup with field enrichment)
   const uniqueCustomerList = useMemo(() => {
-    const seen = new Set();
-    const result = [];
+    const map = new Map();
     (customerList || []).forEach(c => {
-      const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
+      if (!c) return;
+      const name = (c.companyName || c.name || c.c2 || c.customerName || c.code || '').trim();
       const k = name.toLowerCase();
-      if (k && !seen.has(k)) {
-        seen.add(k);
-        result.push(c);
+      if (!k) return;
+      const existing = map.get(k);
+      if (!existing) {
+        map.set(k, c);
+      } else {
+        map.set(k, {
+          ...existing,
+          ...c,
+          gst: c.gst || c.gstNumber || c.gstNo || existing.gst || existing.gstNumber || existing.gstNo || '',
+          gstNo: c.gstNo || c.gstNumber || c.gst || existing.gstNo || existing.gstNumber || '',
+          gstNumber: c.gstNumber || c.gstNo || c.gst || existing.gstNumber || '',
+          contact: c.contact || c.contactPerson || c.primaryContact?.name || existing.contact || existing.contactPerson || '',
+          contactPerson: c.contactPerson || c.contact || c.primaryContact?.name || existing.contactPerson || existing.contact || '',
+          phone: c.phone || c.mobile || c.primaryContact?.phone || existing.phone || existing.mobile || '',
+          email: c.email || c.primaryContact?.email || existing.email || '',
+          billingAddress: c.billingAddress || c.address1 || c.address || c.c6 || existing.billingAddress || existing.address1 || existing.address || '',
+          address1: c.address1 || c.billingAddress || c.address || existing.address1 || existing.billingAddress || '',
+          address: c.address || c.billingAddress || c.address1 || existing.address || '',
+          city: c.city || existing.city || '',
+          state: c.state || existing.state || '',
+          pincode: c.pincode || c.pinCode || c.zip || existing.pincode || '',
+          dispatchAddress: c.dispatchAddress || c.deliveryAddress || existing.dispatchAddress || existing.deliveryAddress || '',
+          deliveryAddress: c.deliveryAddress || c.dispatchAddress || existing.deliveryAddress || existing.dispatchAddress || '',
+          dispatchCity: c.dispatchCity || existing.dispatchCity || '',
+          dispatchState: c.dispatchState || existing.dispatchState || '',
+          dispatchPincode: c.dispatchPincode || existing.dispatchPincode || '',
+          paymentTerms: c.paymentTerms || existing.paymentTerms || ''
+        });
       }
     });
-    return result;
+    return Array.from(map.values());
   }, [customerList]);
 
   // Filtered customer suggestions based on user typing (capped at top 50 to prevent DOM freeze)
@@ -1156,40 +1289,81 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   }, [uniqueCustomerList, vendorName]);
 
   // Customer auto-suggest handler with full field population
-  const handleSelectCustomer = (cName) => {
-    setVendorName(cName);
-    const cleanSearch = (cName || '').toLowerCase().trim();
-    if (!cleanSearch) return;
+  const handleSelectCustomer = (customerOrName) => {
+    let found = null;
+    let nameToSet = '';
 
-    const found = (customerList || []).find(c => {
-      const cComp = (c.companyName || c.name || c.c2 || c.code || '').toLowerCase().trim();
-      return cComp === cleanSearch;
-    }) || (customerList || []).find(c => {
-      const cComp = (c.companyName || c.name || c.c2 || c.code || '').toLowerCase().trim();
-      return cComp.length > 2 && (cComp.startsWith(cleanSearch) || cleanSearch.startsWith(cComp) || cComp.includes(cleanSearch));
-    });
+    if (customerOrName && typeof customerOrName === 'object') {
+      found = customerOrName;
+      nameToSet = (found.companyName || found.name || found.c2 || found.customerName || found.code || '').trim();
+    } else {
+      nameToSet = String(customerOrName || '').trim();
+      const cleanSearch = nameToSet.toLowerCase();
+      if (!cleanSearch) {
+        setVendorName('');
+        return;
+      }
+      // Exact match first
+      found = (customerList || []).find(c => {
+        const cComp = (c.companyName || c.name || c.c2 || c.code || c.customerCode || '').toLowerCase().trim();
+        return cComp === cleanSearch;
+      }) || (customerList || []).find(c => {
+        const cComp = (c.companyName || c.name || c.c2 || c.customerName || '').toLowerCase().trim();
+        return cComp.length > 2 && (cComp.startsWith(cleanSearch) || cleanSearch.startsWith(cComp) || cComp.includes(cleanSearch));
+      });
+    }
+
+    if (nameToSet) {
+      setVendorName(nameToSet);
+    }
 
     if (found) {
-      const gstVal = found.gst || found.gstNumber || found.gstNo || found.gstin || '';
+      const gstVal = (found.gst && found.gst !== '—' ? found.gst : '') ||
+                     (found.gstNumber && found.gstNumber !== '—' ? found.gstNumber : '') ||
+                     (found.gstNo && found.gstNo !== '—' ? found.gstNo : '') ||
+                     (found.gstin && found.gstin !== '—' ? found.gstin : '') || '';
       if (gstVal) setGstNo(gstVal);
 
-      const contactVal = found.contact || found.contactPerson || found.primaryContact?.name || '';
+      const contactVal = (found.contactPerson && found.contactPerson !== '—' ? found.contactPerson : '') ||
+                         (found.contact && found.contact !== '—' ? found.contact : '') ||
+                         found.primaryContact?.name ||
+                         (found.customerName && found.customerName !== nameToSet && found.customerName !== '—' ? found.customerName : '') || '';
       if (contactVal) setContactPerson(contactVal);
 
-      const phoneVal = found.phone || found.mobile || found.primaryContact?.phone || found.primaryContact?.whatsapp || '';
+      const phoneVal = (found.phone && found.phone !== '—' ? found.phone : '') ||
+                       (found.mobile && found.mobile !== '—' ? found.mobile : '') ||
+                       found.primaryContact?.phone ||
+                       found.primaryContact?.whatsapp ||
+                       (found.c4 && found.c4 !== '—' ? found.c4 : '') || '';
       if (phoneVal) setPhone(phoneVal);
 
-      const emailVal = found.email || found.primaryContact?.email || '';
+      const emailVal = (found.email && found.email !== '—' ? found.email : '') ||
+                       found.primaryContact?.email ||
+                       (found.c5 && found.c5 !== '—' ? found.c5 : '') || '';
       if (emailVal) setEmail(emailVal);
 
-      const termsVal = found.paymentTerms || '';
+      const termsVal = found.paymentTerms || found.terms || '';
       if (termsVal) setPaymentTerms(termsVal);
 
       const bAddrObj = found.billingAddressObj || {};
-      const street = found.billingAddress || found.street || found.address || bAddrObj.address || '';
-      const city = found.city || bAddrObj.city || '';
-      const state = found.state || bAddrObj.state || '';
-      const pincode = found.pincode || found.zip || bAddrObj.pincode || '';
+      const street = (found.billingAddress && found.billingAddress !== '—' ? found.billingAddress : '') ||
+                     (found.address1 && found.address1 !== '—' ? found.address1 : '') ||
+                     (found.address && found.address !== '—' ? found.address : '') ||
+                     (found.street && found.street !== '—' ? found.street : '') ||
+                     (found.c6 && found.c6 !== '—' ? found.c6 : '') ||
+                     bAddrObj.address1 ||
+                     bAddrObj.address ||
+                     '';
+      const city = (found.city && found.city !== '—' ? found.city : '') || bAddrObj.city || '';
+      const state = (found.state && found.state !== '—' ? found.state : '') ||
+                    bAddrObj.state ||
+                    (gstVal && gstVal.length >= 2 ? GST_STATE_MAP[gstVal.substring(0, 2)] : '') ||
+                    '';
+      const pincode = (found.pincode && found.pincode !== '—' ? found.pincode : '') ||
+                      (found.pinCode && found.pinCode !== '—' ? found.pinCode : '') ||
+                      (found.zip && found.zip !== '—' ? found.zip : '') ||
+                      bAddrObj.pincode ||
+                      '';
 
       if (street) setBillingStreet(street);
       if (city) setBillingCity(city);
@@ -1197,21 +1371,29 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (pincode) setBillingPincode(pincode);
 
       const dAddrObj = found.deliveryAddressObj || {};
-      const dStreet = found.deliveryAddress || found.dispatchAddress || dAddrObj.address || street;
-      const dCity = found.dispatchCity || dAddrObj.city || city;
-      const dState = found.dispatchState || dAddrObj.state || state;
-      const dPincode = found.dispatchPincode || dAddrObj.pincode || pincode;
+      const dStreet = (found.dispatchAddress && found.dispatchAddress !== '—' ? found.dispatchAddress : '') ||
+                      (found.dispatchAddress1 && found.dispatchAddress1 !== '—' ? found.dispatchAddress1 : '') ||
+                      (found.deliveryAddress && found.deliveryAddress !== '—' ? found.deliveryAddress : '') ||
+                      (found.shippingAddress && found.shippingAddress !== '—' ? found.shippingAddress : '') ||
+                      (found.c7 && found.c7 !== '—' ? found.c7 : '') ||
+                      dAddrObj.address1 ||
+                      dAddrObj.address ||
+                      street;
+      const dCity = (found.dispatchCity && found.dispatchCity !== '—' ? found.dispatchCity : '') || dAddrObj.city || city;
+      const dState = (found.dispatchState && found.dispatchState !== '—' ? found.dispatchState : '') || dAddrObj.state || state;
+      const dPincode = (found.dispatchPincode && found.dispatchPincode !== '—' ? found.dispatchPincode : '') || dAddrObj.pincode || pincode;
 
-      if (sameAsBilling) {
-        if (street) setDeliveryStreet(street);
-        if (city) setDeliveryCity(city);
-        if (state) setDeliveryState(state);
-        if (pincode) setDeliveryPincode(pincode);
+      setDeliveryStreet(dStreet || street);
+      setDeliveryCity(dCity || city);
+      setDeliveryState(dState || state);
+      setDeliveryPincode(dPincode || pincode);
+
+      if (found.sameAsBilling !== undefined) {
+        setSameAsBilling(Boolean(found.sameAsBilling));
+      } else if (dStreet && street && dStreet !== street) {
+        setSameAsBilling(false);
       } else {
-        if (dStreet) setDeliveryStreet(dStreet);
-        if (dCity) setDeliveryCity(dCity);
-        if (dState) setDeliveryState(dState);
-        if (dPincode) setDeliveryPincode(dPincode);
+        setSameAsBilling(true);
       }
     }
   };
@@ -3464,10 +3646,22 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       placeholder="Type or select company..."
                       value={vendorName}
                       onChange={(e) => {
-                        handleSelectCustomer(e.target.value);
+                        setVendorName(e.target.value);
                         setIsCustomerDropdownOpen(true);
                       }}
                       onFocus={() => setIsCustomerDropdownOpen(true)}
+                      onBlur={() => {
+                        const clean = (vendorName || '').trim().toLowerCase();
+                        if (clean) {
+                          const match = (customerList || []).find(c => {
+                            const cComp = (c.companyName || c.name || c.c2 || '').toLowerCase().trim();
+                            return cComp === clean;
+                          });
+                          if (match) {
+                            handleSelectCustomer(match);
+                          }
+                        }
+                      }}
                       style={{
                         width: '100%',
                         height: '42px',
@@ -3564,7 +3758,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             <div
                               key={idx}
                               onClick={() => {
-                                handleSelectCustomer(name);
+                                handleSelectCustomer(c);
                                 setIsCustomerDropdownOpen(false);
                               }}
                               style={{
