@@ -2623,10 +2623,117 @@ app.post('/api/customers', async (req, res) => {
   });
 });
 
-// BUSINZ Native Customers endpoint (Native BUSINZ Store)
+// BUSINZ Native Customers endpoint (Native BUSINZ Store - Bounded & Fast per Rules 4, 8, 12)
 app.get('/api/customers', async (req, res) => {
-  const customers = await loadDatabaseCustomers();
-  res.json(customers && customers.length > 0 ? customers : loadLocalCustomers());
+  try {
+    const customers = await loadDatabaseCustomers();
+    const all = (customers && customers.length > 0) ? customers : loadLocalCustomers();
+    
+    const q = String(req.query.q || req.query.search || '').trim().toLowerCase();
+    const full = req.query.full === 'true';
+    const limitParam = parseInt(req.query.limit, 10);
+
+    // Helper to format clean, lightweight summary record (Eliminates 14MB payload bloat)
+    const formatSummary = (c) => {
+      const pContact = c.primaryContact || c.primary_contact || {};
+      const effectiveContact = (c.contactPerson && c.contactPerson !== '—' ? c.contactPerson : '') ||
+                               (c.contact && c.contact !== '—' ? c.contact : '') ||
+                               (pContact.name && pContact.name !== '—' ? pContact.name : '') ||
+                               (c.customerName && c.customerName !== c.companyName ? c.customerName : '');
+      const rawPhone = (c.phone && c.phone !== '—' ? c.phone : '') ||
+                       (c.mobile && c.mobile !== '—' ? c.mobile : '') ||
+                       pContact.phone || pContact.altPhone || pContact.whatsapp || '';
+      const cleanPhone = String(rawPhone || '').replace(/^'/, '').trim();
+      const effectiveEmail = (c.email && c.email !== '—' ? c.email : '') || pContact.email || '';
+      const gst = (c.gstNo && c.gstNo !== '—' ? c.gstNo : '') ||
+                  (c.gstNumber && c.gstNumber !== '—' ? c.gstNumber : '') ||
+                  (c.gst && c.gst !== '—' ? c.gst : '') || '';
+      const bAddr = c.billingAddress || c.address1 || c.address || c.street || c.billingAddressObj?.address1 || c.billingAddressObj?.address || '';
+      const dAddr = c.dispatchAddress || c.deliveryAddress || c.dispatchAddress1 || c.deliveryAddressObj?.address1 || c.deliveryAddressObj?.address || bAddr;
+
+      return {
+        id: c.customerCode || c.id || c.code || '',
+        customerCode: c.customerCode || c.code || c.id || '',
+        code: c.customerCode || c.code || c.id || '',
+        companyName: c.companyName || c.name || c.c2 || '',
+        name: c.companyName || c.name || c.c2 || '',
+        customerName: c.customerName || effectiveContact || c.companyName || '',
+        contactPerson: effectiveContact,
+        contact: effectiveContact,
+        phone: cleanPhone,
+        mobile: cleanPhone,
+        email: effectiveEmail,
+        gstNo: gst,
+        gstNumber: gst,
+        gst: gst,
+        primaryContact: {
+          name: effectiveContact || c.companyName || '',
+          phone: cleanPhone,
+          whatsapp: cleanPhone,
+          email: effectiveEmail
+        },
+        billingAddress: bAddr,
+        address: bAddr,
+        address1: bAddr,
+        city: c.city || c.billingAddressObj?.city || '',
+        state: c.state || c.billingAddressObj?.state || '',
+        pincode: c.pincode || c.pinCode || c.zip || c.billingAddressObj?.pincode || '',
+        billingAddressObj: c.billingAddressObj || {
+          address: bAddr,
+          city: c.city || '',
+          state: c.state || '',
+          pincode: c.pincode || ''
+        },
+        dispatchAddress: dAddr,
+        deliveryAddress: dAddr,
+        dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || c.city || '',
+        dispatchState: c.dispatchState || c.deliveryAddressObj?.state || c.state || '',
+        dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || c.pincode || '',
+        deliveryAddressObj: c.deliveryAddressObj || c.delivery_address_obj || {
+          address: dAddr,
+          city: c.dispatchCity || c.city || '',
+          state: c.dispatchState || c.state || '',
+          pincode: c.dispatchPincode || c.pincode || ''
+        },
+        sameAsBilling: c.sameAsBilling !== false,
+        paymentTerms: c.paymentTerms || '',
+        creditLimit: c.creditLimit || 0,
+        creditDays: c.creditDays || 0,
+        assignedSalesperson: c.assignedSalesperson || c.salesPerson || 'Sales Rep',
+        status: (c.status || 'Active').toUpperCase()
+      };
+    };
+
+    if (q) {
+      const matches = [];
+      for (let i = 0; i < all.length; i++) {
+        const c = all[i];
+        const name = (c.companyName || c.name || c.c2 || '').toLowerCase();
+        const contact = (c.contactPerson || c.contact || c.customerName || '').toLowerCase();
+        const code = (c.customerCode || c.code || c.id || '').toLowerCase();
+        const phone = (c.phone || c.mobile || '').toLowerCase();
+        const gst = (c.gstNumber || c.gstNo || '').toLowerCase();
+        const city = (c.city || '').toLowerCase();
+
+        if (name.includes(q) || contact.includes(q) || code.includes(q) || phone.includes(q) || gst.includes(q) || city.includes(q)) {
+          matches.push(full ? c : formatSummary(c));
+          if (matches.length >= (limitParam > 0 ? limitParam : 50)) break;
+        }
+      }
+      return res.json(matches);
+    }
+
+    if (full) {
+      return res.json(all);
+    }
+
+    const defaultLimit = limitParam > 0 ? limitParam : 300;
+    const bounded = all.slice(0, defaultLimit).map(formatSummary);
+    return res.json(bounded);
+  } catch (err) {
+    console.error('Error in GET /api/customers:', err);
+    return res.json([]);
+  }
 });
 
 // BUSINZ Native Vendors endpoint (Native BUSINZ Store)
