@@ -496,12 +496,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     });
 
-    const onStoreUpdate = () => loadPiData();
-    window.addEventListener('controlroom_store_update', onStoreUpdate);
-
     return () => {
       if (sub && sub.unsubscribe) sub.unsubscribe();
-      window.removeEventListener('controlroom_store_update', onStoreUpdate);
     };
   }, [storageKey, isSalesRole]);
 
@@ -870,103 +866,106 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   });
 
   // Sync Customers directly from Zoho Books, CRM Customers & Supabase
+  const isSyncingCustRef = useRef(false);
   useEffect(() => {
     let isMounted = true;
 
     const syncCustomers = async () => {
+      if (isSyncingCustRef.current) return;
+      isSyncingCustRef.current = true;
       try {
-        let merged = [];
-        // 1. Check local storage first for instant responsiveness
+        const custMap = new Map();
+        const register = (c) => {
+          if (!c) return;
+          const k = (c.companyName || c.name || c.c2 || c.code || c.customerCode || '').toLowerCase().trim();
+          if (k && !custMap.has(k)) custMap.set(k, c);
+        };
+
+        // 1. Instant check from local storage
         try {
-          const raw = localStorage.getItem('businz_crm_customers') ||
-                      localStorage.getItem('controlroom_customer_store') || 
-                      localStorage.getItem('controlroom_crm_customers') || 
-                      localStorage.getItem('controlroom_customer_list');
+          const raw = localStorage.getItem('controlroom_customer_store') ||
+                      localStorage.getItem('businz_crm_customers') ||
+                      localStorage.getItem('controlroom_crm_customers');
           if (raw) {
             const p = JSON.parse(raw);
-            if (Array.isArray(p) && p.length > 0) merged = [...p];
+            if (Array.isArray(p)) p.forEach(register);
           }
         } catch (_) {}
 
-        // 2. Fetch live from Zoho Books endpoint to ensure all 61+ customers are always loaded
+        // 2. Fetch authoritative customers from backend
         try {
-          const zohoRes = await fetch('/api/customers');
-          if (zohoRes.ok) {
-            const zList = await zohoRes.json();
-            if (Array.isArray(zList) && zList.length > 0) {
-              zList.forEach(zc => {
-                const nameKey = (zc.companyName || zc.name || zc.c2 || zc.code || '').toLowerCase().trim();
-                const idx = merged.findIndex(m => (m.companyName || m.name || m.c2 || m.code || '').toLowerCase().trim() === nameKey);
-                if (idx >= 0) {
-                  merged[idx] = { ...merged[idx], ...zc };
-                } else if (nameKey) {
-                  merged.push(zc);
-                }
-              });
+          const res = await fetch('/api/customers');
+          if (res.ok) {
+            const list = await res.json();
+            if (Array.isArray(list) && list.length > 0) {
+              list.forEach(register);
             }
           }
         } catch (_) {}
 
-        // 3. Merge from Supabase Cloud Store
-        try {
-          const cloudCusts = await fetchCloudStore('customer_store', []);
-          if (Array.isArray(cloudCusts) && cloudCusts.length > 0) {
-            cloudCusts.forEach(cc => {
-              const nameKey = (cc.companyName || cc.name || cc.c2 || cc.code || '').toLowerCase().trim();
-              if (nameKey && !merged.some(m => (m.companyName || m.name || m.c2 || m.code || '').toLowerCase().trim() === nameKey)) {
-                merged.push(cc);
-              }
-            });
-          }
-        } catch (_) {}
-
-        if (isMounted && merged.length > 0) {
-          setCustomerList(merged);
-          try {
-            localStorage.setItem('controlroom_customer_store', JSON.stringify(merged));
-            localStorage.setItem('businz_crm_customers', JSON.stringify(merged));
-          } catch (_) {}
+        const unified = Array.from(custMap.values());
+        if (isMounted && unified.length > 0) {
+          setCustomerList(unified);
         }
       } catch (err) {
         console.warn('[PI] Customer sync notice:', err);
+      } finally {
+        isSyncingCustRef.current = false;
       }
     };
 
     syncCustomers();
 
-    // Subscribe to realtime cloud customer updates
+    // Subscribe to realtime cloud customer updates (delta row patching)
     const realtimeCustSub = subscribeToCloudStore('customer_store', (updatedCusts) => {
-      if (isMounted && Array.isArray(updatedCusts) && updatedCusts.length > 0) {
-        setCustomerList(prev => {
-          const combined = [...updatedCusts];
-          (prev || []).forEach(p => {
-            const nameKey = (p.companyName || p.name || p.c2 || p.code || '').toLowerCase().trim();
-            if (nameKey && !combined.some(c => (c.companyName || c.name || c.c2 || c.code || '').toLowerCase().trim() === nameKey)) {
-              combined.push(p);
-            }
-          });
-          return combined;
+      if (!isMounted || !updatedCusts) return;
+      setCustomerList(prev => {
+        const custMap = new Map();
+        (prev || []).forEach(p => {
+          const k = (p.customerCode || p.code || p.companyName || p.name || p.c2 || '').toLowerCase().trim();
+          if (k) custMap.set(k, p);
         });
-      }
+        const incoming = Array.isArray(updatedCusts) ? updatedCusts : [updatedCusts];
+        incoming.forEach(c => {
+          const k = (c.customerCode || c.code || c.companyName || c.name || c.c2 || '').toLowerCase().trim();
+          if (k) {
+            if (c._deleted) {
+              custMap.delete(k);
+            } else {
+              custMap.set(k, { ...(custMap.get(k) || {}), ...c });
+            }
+          }
+        });
+        return Array.from(custMap.values());
+      });
     });
 
-    const handleLocalCustUpdate = () => syncCustomers();
+    const handleLocalCustUpdate = (e) => {
+      if (e?.detail) {
+        const incoming = Array.isArray(e.detail) ? e.detail : [e.detail];
+        setCustomerList(prev => {
+          const custMap = new Map();
+          (prev || []).forEach(p => {
+            const k = (p.customerCode || p.code || p.companyName || p.name || p.c2 || '').toLowerCase().trim();
+            if (k) custMap.set(k, p);
+          });
+          incoming.forEach(c => {
+            const k = (c.customerCode || c.code || c.companyName || c.name || c.c2 || '').toLowerCase().trim();
+            if (k) custMap.set(k, { ...(custMap.get(k) || {}), ...c });
+          });
+          return Array.from(custMap.values());
+        });
+      }
+    };
+
     window.addEventListener('controlroom_customer_store_updated', handleLocalCustUpdate);
-    window.addEventListener('controlroom_storage_update', handleLocalCustUpdate);
-    window.addEventListener('controlroom_crm_update', handleLocalCustUpdate);
-    window.addEventListener('businz_crm_update', handleLocalCustUpdate);
     window.addEventListener('controlroom_customer_update', handleLocalCustUpdate);
-    window.addEventListener('storage', handleLocalCustUpdate);
 
     return () => {
       isMounted = false;
       if (realtimeCustSub && typeof realtimeCustSub === 'function') realtimeCustSub();
       window.removeEventListener('controlroom_customer_store_updated', handleLocalCustUpdate);
-      window.removeEventListener('controlroom_storage_update', handleLocalCustUpdate);
-      window.removeEventListener('controlroom_crm_update', handleLocalCustUpdate);
-      window.removeEventListener('businz_crm_update', handleLocalCustUpdate);
       window.removeEventListener('controlroom_customer_update', handleLocalCustUpdate);
-      window.removeEventListener('storage', handleLocalCustUpdate);
     };
   }, []);
 
@@ -1121,29 +1120,39 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Deduplicated list of all registered customers for the dropdown
+  // Deduplicated list of all registered customers for the dropdown (O(N) Set lookup)
   const uniqueCustomerList = useMemo(() => {
-    return (customerList || []).reduce((acc, c) => {
+    const seen = new Set();
+    const result = [];
+    (customerList || []).forEach(c => {
       const name = (c.companyName || c.name || c.c2 || c.code || '').trim();
-      if (name && !acc.some(item => (item.companyName || item.name || item.c2 || item.code || '').trim().toLowerCase() === name.toLowerCase())) {
-        acc.push(c);
+      const k = name.toLowerCase();
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        result.push(c);
       }
-      return acc;
-    }, []);
+    });
+    return result;
   }, [customerList]);
 
-  // Filtered customer suggestions based on user typing
+  // Filtered customer suggestions based on user typing (capped at top 50 to prevent DOM freeze)
   const filteredCustomerSuggestions = useMemo(() => {
     const q = (vendorName || '').toLowerCase().trim();
-    if (!q) return uniqueCustomerList;
-    return uniqueCustomerList.filter(c => {
+    if (!q) return uniqueCustomerList.slice(0, 50);
+    const matches = [];
+    for (let i = 0; i < uniqueCustomerList.length; i++) {
+      const c = uniqueCustomerList[i];
       const name = (c.companyName || c.name || c.c2 || c.code || '').toLowerCase();
       const gst = (c.gst || c.gstNumber || c.gstNo || c.gstin || '').toLowerCase();
       const city = (c.city || '').toLowerCase();
       const contact = (c.contact || c.contactPerson || c.primaryContact?.name || '').toLowerCase();
       const phone = (c.phone || c.mobile || c.primaryContact?.phone || '').toLowerCase();
-      return name.includes(q) || gst.includes(q) || city.includes(q) || contact.includes(q) || phone.includes(q);
-    });
+      if (name.includes(q) || gst.includes(q) || city.includes(q) || contact.includes(q) || phone.includes(q)) {
+        matches.push(c);
+        if (matches.length >= 50) break;
+      }
+    }
+    return matches;
   }, [uniqueCustomerList, vendorName]);
 
   // Customer auto-suggest handler with full field population
