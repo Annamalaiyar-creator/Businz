@@ -147,6 +147,37 @@ class AppErrorBoundary extends Component {
   }
 }
 
+// 🛡️ Defensive Startup Protection: Automatically sanitize bloated or corrupted legacy localStorage caches (> 400 KB)
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const bloatedKeys = [
+      'controlroom_customer_store',
+      'businz_crm_customers',
+      'controlroom_customers_store',
+      'customer_store',
+      'crm_customers',
+      'controlroom_raw_materials_store',
+      'controlroom_items_list',
+      'controlroom_central_items_v2'
+    ];
+    bloatedKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw && raw.length > 400000) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            localStorage.setItem(k, JSON.stringify(parsed.slice(0, 300)));
+          } else {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch (_) {
+        try { localStorage.removeItem(k); } catch (__) {}
+      }
+    });
+  }
+} catch (_) {}
+
 function App() {
   // Default sidebar collapsed to TRUE (closed/inside by default on loading)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);

@@ -1413,84 +1413,9 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
             return json.data.map(b => toConsumerBom(b)).filter(Boolean);
           }
           return json.data;
-        } else if (json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0) {
+        } else if (json.data && typeof json.data === 'object') {
           return json.data;
         }
-      }
-    }
-  } catch (err) {}
-
-  // For employees_store, fetch directly from Supabase users table (with 1.5s timeout)
-  if (storeKey === 'employees_store') {
-    try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
-      const fetchPromise = supabase.from('users').select('*');
-      const { data: dbUsers, error: userErr } = await Promise.race([fetchPromise, timeoutPromise]);
-
-      if (!userErr && Array.isArray(dbUsers) && dbUsers.length > 0) {
-        // Only map genuine ControlRoom registered employees (those with CODE:::ROLE:::STATUS metadata)
-        return dbUsers
-          .filter(u => u.department && u.department.includes(':::'))
-          .map(u => {
-            const parts = u.department.split(':::');
-            const empCode = parts[0];
-            const role = parts[1] || u.role || 'Sales Executive';
-            const status = parts[2] || 'Pending Approval';
-
-            return {
-              id: u.id,
-              employee_code: empCode,
-              employee_name: u.name,
-              email: u.email,
-              password: u.password,
-              role: role,
-              department: u.department,
-              status: status
-            };
-          });
-      }
-    } catch (err) {}
-  }
-
-  // 1. Fetch directly from Supabase leaves table store (for unmigrated stores only, with 5s safety timeout)
-  if (storeKey !== 'customer_store' && storeKey !== 'crm_customers' && storeKey !== 'crm_opportunities' && storeKey !== 'opportunities' && storeKey !== 'bom_store' && storeKey !== 'BOM_STORE') {
-    try {
-      const fetchPromise = supabase
-        .from('leaves')
-        .select('reason')
-        .eq('employee', storeKey.toUpperCase())
-        .order('id', { ascending: false })
-        .limit(1);
-
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud fetch timeout')), 5000));
-      const { data: records, error } = await Promise.race([fetchPromise, timeoutPromise]);
-
-      const record = (records && records.length > 0) ? records[0] : null;
-
-      if (!error && record && record.reason) {
-        try {
-          const cloudParsed = JSON.parse(record.reason);
-          if (Array.isArray(cloudParsed)) {
-            return cloudParsed;
-          } else if (cloudParsed && typeof cloudParsed === 'object') {
-            return cloudParsed;
-          }
-        } catch (pErr) {}
-      }
-    } catch (err) {
-      // continue to server API fallback
-    }
-  }
-
-
-
-  // 2. Fallback to Node server endpoint /api/store/:key (which queries Supabase)
-  try {
-    const res = await fetch(`/api/store/${storeKey}`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.data !== undefined && json.data !== null) {
-        return json.data;
       }
     }
   } catch (err) {}

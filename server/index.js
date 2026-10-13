@@ -2084,12 +2084,66 @@ app.get('/api/realtime-events', (req, res) => {
   });
 });
 
+// ⚡ Lightweight Native Active Session Management (Sub-millisecond)
+const activeSessionsMap = new Map();
+
+app.post('/api/sessions/register', (req, res) => {
+  const session = req.body;
+  if (session && session.id) {
+    activeSessionsMap.set(session.id, {
+      ...session,
+      lastActiveTimestamp: Date.now(),
+      status: 'active'
+    });
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/sessions/heartbeat', (req, res) => {
+  const { sessionId } = req.body;
+  if (sessionId && activeSessionsMap.has(sessionId)) {
+    const s = activeSessionsMap.get(sessionId);
+    s.lastActiveTimestamp = Date.now();
+    activeSessionsMap.set(sessionId, s);
+    return res.json({ success: true, status: s.status });
+  }
+  res.json({ success: true, status: 'active' });
+});
+
+app.get('/api/sessions/active', (req, res) => {
+  const now = Date.now();
+  const list = [];
+  for (const [id, s] of activeSessionsMap.entries()) {
+    if (now - (s.lastActiveTimestamp || 0) < 24 * 3600 * 1000) {
+      list.push(s);
+    } else {
+      activeSessionsMap.delete(id);
+    }
+  }
+  res.json({ success: true, data: list });
+});
+
+app.post('/api/sessions/revoke', (req, res) => {
+  const { sessionId } = req.body;
+  if (sessionId && activeSessionsMap.has(sessionId)) {
+    const s = activeSessionsMap.get(sessionId);
+    s.status = 'revoked';
+    activeSessionsMap.set(sessionId, s);
+  }
+  res.json({ success: true });
+});
+
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
+  const employeeFilter = req.query.employee;
   if (!isDbConnected()) {
     return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot read store "${key}".` });
   }
   try {
+    if (key === 'leaves' && employeeFilter) {
+      const dbRes = await query('SELECT id, reason, dates, duration, status FROM public.leaves WHERE employee = $1 ORDER BY id DESC LIMIT 50', [String(employeeFilter).toUpperCase()]);
+      return res.json({ success: true, data: dbRes.rows });
+    }
     const data = await getDatabaseStore(key);
     res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
