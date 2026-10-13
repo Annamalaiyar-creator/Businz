@@ -65,13 +65,27 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const isAddStockActive = externalShowForm !== undefined ? externalShowForm : internalShowAddStockForm;
   const setAddStockActive = externalSetShowForm || setInternalShowAddStockForm;
 
+  const [itemsTick, setItemsTick] = useState(0);
+
+  useEffect(() => {
+    const handleUpdate = () => setItemsTick(t => t + 1);
+    window.addEventListener('controlroom_items_update', handleUpdate);
+    window.addEventListener('central_inventory_updated', handleUpdate);
+    window.addEventListener('controlroom_store_update', handleUpdate);
+    return () => {
+      window.removeEventListener('controlroom_items_update', handleUpdate);
+      window.removeEventListener('central_inventory_updated', handleUpdate);
+      window.removeEventListener('controlroom_store_update', handleUpdate);
+    };
+  }, []);
+
   const getStoredItemsList = () => {
     let list = [];
     if (Array.isArray(passedItemsList) && passedItemsList.length > 0) {
       list = passedItemsList;
     } else {
       try {
-        const saved = localStorage.getItem('controlroom_items_list') || localStorage.getItem('controlroom_inventory_items');
+        const saved = localStorage.getItem('controlroom_items_list') || localStorage.getItem('controlroom_item_store') || localStorage.getItem('controlroom_inventory_items');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
@@ -84,7 +98,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
     });
   };
 
-  const itemsList = useMemo(() => getStoredItemsList(), [passedItemsList]);
+  const itemsList = useMemo(() => getStoredItemsList(), [passedItemsList, itemsTick]);
 
   const getEngineAluStock = () => {
     try {

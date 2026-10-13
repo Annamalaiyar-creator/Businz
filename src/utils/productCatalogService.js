@@ -203,17 +203,29 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       if (itemKey) {
         const existing = catalogMap.get(itemKey);
         if (!existing) {
-          catalogMap.set(itemKey, {
+          const rec = {
             code: rawCode || ci.code || ci.sku || resCode || '',
+            sku: ci.sku || rawCode || '',
+            itemId: ci.itemId || ci.id || rawCode || '',
             name: ci.name,
             category: ci.category || ci.cat || ci.description || 'Finished Product',
             uom: ci.uom || ci.unit || 'NOS',
+            unit: ci.unit || ci.uom || 'NOS',
             rate: String(ci.rate || ci.price || '0'),
             price: String(ci.rate || ci.price || '0'),
             gstRate: ci.gstRate || ci.gst || '18%',
             stock: realStock,
-            availableStock: realStock
-          });
+            availableStock: realStock,
+            physicalStock: realStock,
+            status: ci.status || 'Active'
+          };
+          catalogMap.set(itemKey, rec);
+          if (nameKey && !catalogMap.has(nameKey)) {
+            catalogMap.set(nameKey, rec);
+          }
+          if (rawCode && !catalogMap.has(rawCode.toLowerCase())) {
+            catalogMap.set(rawCode.toLowerCase(), rec);
+          }
         } else {
           if (ci.rate || ci.price) {
             existing.rate = String(ci.rate || ci.price || existing.rate);
@@ -223,15 +235,41 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
             existing.stock = realStock;
             existing.availableStock = realStock;
           }
+          if (ci.category || ci.cat) {
+            existing.category = ci.category || ci.cat;
+          }
         }
       }
     });
   };
 
+  // 3a. Include items registered in Central Inventory Store
+  try {
+    const centralItems = centralInventoryStore.getInventoryItems();
+    if (Array.isArray(centralItems) && centralItems.length > 0) {
+      mergeExtraItems(centralItems);
+    }
+  } catch (_) {}
+
+  // 3b. Include items directly passed
   if (Array.isArray(directItems) && directItems.length > 0) {
     mergeExtraItems(directItems);
   }
 
+  // 3c. Include items from server memory cache
+  if (Array.isArray(serverItemsCache) && serverItemsCache.length > 0) {
+    mergeExtraItems(serverItemsCache);
+  }
+
+  // 3d. Include items from item_store / controlroom_item_store
+  try {
+    const itemStoreStr = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
+    if (itemStoreStr) {
+      mergeExtraItems(JSON.parse(itemStoreStr));
+    }
+  } catch (_) {}
+
+  // 3e. Include items from controlroom_items_list
   try {
     const customItemsStr = localStorage.getItem('controlroom_items_list');
     if (customItemsStr) {
@@ -258,3 +296,26 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
 
   return fullList;
 };
+
+let serverItemsCache = null;
+
+export const syncFullCatalogFromBackend = async () => {
+  try {
+    const res = await fetch('/api/items');
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data) && data.length > 0) {
+        serverItemsCache = data;
+        try {
+          localStorage.setItem('controlroom_item_store', JSON.stringify(data));
+        } catch (_) {}
+        try {
+          window.dispatchEvent(new Event('central_inventory_updated'));
+        } catch (_) {}
+        return getFullProductsCatalogWithStock();
+      }
+    }
+  } catch (_) {}
+  return getFullProductsCatalogWithStock();
+};
+

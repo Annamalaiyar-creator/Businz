@@ -63,8 +63,6 @@ async function runProductionClean() {
     'notifications_store.json',
     'payment_store.json',
     'dc_store.json',
-    'customer_store.json',
-    'crm_customers.json',
     'vendor_store.json',
     'item_store.json',
     'raw_materials_store.json',
@@ -154,8 +152,7 @@ async function runProductionClean() {
       'leads',
       'opportunities',
       'whatsapp_conversations',
-      'notifications',
-      'customers'
+      'notifications'
     ];
     for (const tbl of tablesToTruncate) {
       try {
@@ -196,7 +193,7 @@ async function runProductionClean() {
             'BOM_STORE', 'SALES_PI_STORE', 'PROFORMA_INVOICE_STORE', 'PROCUREMENT_PI_STORE',
             'PO_STORE', 'GRN_STORE', 'INVOICE_STORE', 'PAYMENT_STORE', 'WORKORDER_STORE',
             'VRM_PROD_WORKORDERS', 'VRM_PROD_LEDGER', 'JOBWORKS_STORE', 'RESERVATIONS_STORE',
-            'NOTIFICATIONS_STORE', 'CUSTOMER_STORE', 'CRM_CUSTOMERS', 'CRM_LEADS',
+            'NOTIFICATIONS_STORE', 'CRM_LEADS',
             'CRM_OPPORTUNITIES', 'CRM_QUOTATIONS', 'BOM_SEQUENCE'
           );
           INSERT INTO public.leaves (employee, reason, status, type) VALUES
@@ -206,7 +203,6 @@ async function runProductionClean() {
           ('PO_STORE', '[]', 'active', 'Store'),
           ('GRN_STORE', '[]', 'active', 'Store'),
           ('INVOICE_STORE', '[]', 'active', 'Store'),
-          ('CUSTOMER_STORE', '[]', 'active', 'Store'),
           ('BOM_SEQUENCE', '{"lastNumber": 0}', 'active', 'Sequence');
         `);
         console.log('   - Cleaned operational keys in public.leaves');
