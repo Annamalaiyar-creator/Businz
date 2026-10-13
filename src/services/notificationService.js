@@ -1053,12 +1053,16 @@ export function notifyGrnCompletedToAccounts({
   });
 }
 
+let isSyncingNotifs = false;
+let notifSyncDebounceTimer = null;
+
 /**
  * Fetch latest notifications from cloud store and merge with local notifications
  * so Dispatch and Accounts logins on different devices/browsers receive live alerts.
  */
 export async function syncCloudNotifications() {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || isSyncingNotifs) return;
+  isSyncingNotifs = true;
   try {
     const cloudNotifs = await fetchCloudStore('notifications_store', []);
     if (Array.isArray(cloudNotifs) && cloudNotifs.length > 0) {
@@ -1070,14 +1074,26 @@ export async function syncCloudNotifications() {
         }
       });
       const merged = Array.from(map.values()).slice(0, 50);
-      localStorage.setItem('vrm_live_notifications', JSON.stringify(merged));
-      window.dispatchEvent(new Event('vrm_notifications_updated'));
+      const prevStr = localStorage.getItem('vrm_live_notifications');
+      const nextStr = JSON.stringify(merged);
+      if (prevStr !== nextStr) {
+        localStorage.setItem('vrm_live_notifications', nextStr);
+        window.dispatchEvent(new Event('vrm_notifications_updated'));
+      }
     }
-  } catch (_) {}
+  } catch (_) {
+  } finally {
+    isSyncingNotifs = false;
+  }
 }
 
 if (typeof window !== 'undefined') {
-  setTimeout(() => syncCloudNotifications(), 1500);
-  window.addEventListener('controlroom_storage_update', () => syncCloudNotifications());
+  setTimeout(() => syncCloudNotifications(), 2500);
+  window.addEventListener('controlroom_storage_update', () => {
+    if (notifSyncDebounceTimer) clearTimeout(notifSyncDebounceTimer);
+    notifSyncDebounceTimer = setTimeout(() => {
+      syncCloudNotifications();
+    }, 2000);
+  });
 }
 

@@ -105,16 +105,19 @@ export default function BomOrdersView(props) {
   const [itemsList, setItemsList] = useState(() => getFullProductsCatalogWithStock());
 
   useEffect(() => {
+    let timer = null;
     const refreshCatalog = () => {
-      setItemsList(getFullProductsCatalogWithStock());
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setItemsList(getFullProductsCatalogWithStock());
+      }, 300);
     };
     window.addEventListener('central_inventory_updated', refreshCatalog);
-    window.addEventListener('controlroom_storage_update', refreshCatalog);
-    window.addEventListener('storage', refreshCatalog);
+    window.addEventListener('controlroom_items_update', refreshCatalog);
     return () => {
+      if (timer) clearTimeout(timer);
       window.removeEventListener('central_inventory_updated', refreshCatalog);
-      window.removeEventListener('controlroom_storage_update', refreshCatalog);
-      window.removeEventListener('storage', refreshCatalog);
+      window.removeEventListener('controlroom_items_update', refreshCatalog);
     };
   }, []);
 

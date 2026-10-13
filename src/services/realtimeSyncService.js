@@ -4,44 +4,38 @@ let activeEventSource = null;
 let reconnectTimer = null;
 let consecutiveErrors = 0;
 let sseSupported = null;
+let storageUpdateTimer = null;
+
+const emitStorageUpdate = () => {
+  if (storageUpdateTimer) return;
+  storageUpdateTimer = setTimeout(() => {
+    storageUpdateTimer = null;
+    try {
+      window.dispatchEvent(new Event('controlroom_storage_update'));
+    } catch (_) {}
+  }, 150);
+};
 
 export const initRealtimeSync = () => {
   if (typeof window === 'undefined') return;
   if (activeEventSource) return;
 
-  const connect = async () => {
-    // If SSE is detected as unavailable on this host/port, do not throw continuous console errors
+  const connect = () => {
     if (sseSupported === false && consecutiveErrors >= 3) {
       return;
     }
 
     try {
-      // 1. Probe the endpoint first to verify text/event-stream is actually returned
-      const probe = await fetch('/api/realtime-events', { method: 'GET', cache: 'no-store' }).catch(() => null);
-      if (!probe || !probe.ok) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= 3) {
-          sseSupported = false;
-          return;
-        }
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 15000);
-        return;
+      if (activeEventSource) {
+        try { activeEventSource.close(); } catch (_) {}
+        activeEventSource = null;
       }
 
-      const contentType = probe.headers.get('content-type') || '';
-      if (!contentType.includes('text/event-stream')) {
-        // Endpoint returns JSON or HTML (e.g. static hosting or offline proxy)
-        sseSupported = false;
-        return;
-      }
-
-      // 2. Safe to connect native EventSource
-      sseSupported = true;
-      consecutiveErrors = 0;
       activeEventSource = new EventSource('/api/realtime-events');
 
       activeEventSource.onopen = () => {
+        consecutiveErrors = 0;
+        sseSupported = true;
         console.log('⚡ [Real-Time Sync] Connected to Server Push Gateway');
       };
 
@@ -62,9 +56,8 @@ export const initRealtimeSync = () => {
               } catch (_) {}
             }
             window.dispatchEvent(new CustomEvent('controlroom_raw_materials_update', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_raw_materials_update'));
             window.dispatchEvent(new Event('central_inventory_updated'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 2. Finished Goods & Component Catalog
@@ -76,52 +69,47 @@ export const initRealtimeSync = () => {
               } catch (_) {}
             }
             window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_items_update'));
             window.dispatchEvent(new Event('central_inventory_updated'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 3. BOM Orders & Routing
           if (type === 'bom_updated' || (type === 'store_updated' && payload?.key === 'bom_store')) {
             window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: payload }));
             window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_bom_updated'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 4. Production Work Orders
           if (type === 'workorder_updated' || (type === 'store_updated' && (payload?.key === 'workorder_store' || payload?.key === 'vrm_prod_workorders'))) {
             window.dispatchEvent(new CustomEvent('controlroom_workorder_updated', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_workorder_updated'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 5. Purchase Orders & Approvals
           if (type === 'po_updated' || (type === 'store_updated' && payload?.key === 'po_store')) {
             window.dispatchEvent(new CustomEvent('controlroom_po_updated', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_po_updated'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 6. Goods Receipt Notes (GRN)
           if (type === 'grn_updated' || (type === 'store_updated' && payload?.key === 'grn_store')) {
             window.dispatchEvent(new CustomEvent('controlroom_grn_completed', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_grn_completed'));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 7. Proforma Invoices & Invoices
           if (type === 'pi_updated' || (type === 'store_updated' && (payload?.key === 'sales_pi_store' || payload?.key === 'proforma_invoice_store' || payload?.key === 'invoice_store'))) {
             window.dispatchEvent(new CustomEvent('controlroom_pi_updated', { detail: payload }));
             window.dispatchEvent(new CustomEvent('controlroom_invoice_updated', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 8. CRM Leads, Opportunities, Quotations, and Customers
           if (type === 'crm_updated' || (type === 'store_updated' && (payload?.key?.startsWith('crm_') || payload?.key === 'customer_store'))) {
             window.dispatchEvent(new CustomEvent('controlroom_crm_updated', { detail: payload }));
             window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: payload }));
-            window.dispatchEvent(new Event('controlroom_storage_update'));
+            emitStorageUpdate();
           }
 
           // 9. Instant WhatsApp Messages
@@ -131,7 +119,6 @@ export const initRealtimeSync = () => {
 
           // Global broadcast for any custom listeners
           window.dispatchEvent(new CustomEvent('controlroom_realtime_event', { detail: data }));
-          window.dispatchEvent(new Event('controlroom_storage_update'));
         } catch (parseErr) {
           // Ignore keepalive comments or non-JSON packets
         }
@@ -139,18 +126,20 @@ export const initRealtimeSync = () => {
 
       activeEventSource.onerror = () => {
         if (activeEventSource) {
-          activeEventSource.close();
+          try { activeEventSource.close(); } catch (_) {}
           activeEventSource = null;
         }
         consecutiveErrors++;
-        if (consecutiveErrors < 3) {
+        if (consecutiveErrors < 5) {
           clearTimeout(reconnectTimer);
           reconnectTimer = setTimeout(connect, 15000);
+        } else {
+          sseSupported = false;
         }
       };
     } catch (err) {
       consecutiveErrors++;
-      if (consecutiveErrors < 3) {
+      if (consecutiveErrors < 5) {
         clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(connect, 15000);
       }

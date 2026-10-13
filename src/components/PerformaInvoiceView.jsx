@@ -1148,8 +1148,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [itemsList, setItemsList] = useState(() => getFullProductsCatalogWithStock());
 
   useEffect(() => {
+    let timer = null;
     const refreshCatalog = () => {
-      setItemsList(getFullProductsCatalogWithStock());
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setItemsList(getFullProductsCatalogWithStock());
+      }, 300);
     };
 
     // Ensure all 312 products from server master are loaded immediately
@@ -1160,22 +1164,19 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           try {
             localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(data));
           } catch (_) {}
-          setItemsList(getFullProductsCatalogWithStock());
+          refreshCatalog();
         }
       })
       .catch(() => {});
 
     window.addEventListener('central_inventory_updated', refreshCatalog);
-    window.addEventListener('controlroom_storage_update', refreshCatalog);
     window.addEventListener('controlroom_raw_materials_update', refreshCatalog);
     window.addEventListener('controlroom_items_update', refreshCatalog);
-    window.addEventListener('storage', refreshCatalog);
     return () => {
+      if (timer) clearTimeout(timer);
       window.removeEventListener('central_inventory_updated', refreshCatalog);
-      window.removeEventListener('controlroom_storage_update', refreshCatalog);
       window.removeEventListener('controlroom_raw_materials_update', refreshCatalog);
       window.removeEventListener('controlroom_items_update', refreshCatalog);
-      window.removeEventListener('storage', refreshCatalog);
     };
   }, []);
 

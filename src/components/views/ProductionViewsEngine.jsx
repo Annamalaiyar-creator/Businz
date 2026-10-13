@@ -179,6 +179,7 @@ export default function ProductionViewsEngine(props) {
   }, [bomStore, isRestrictedSalesUser, currentEmpId, currentEmpName, currentLoggedEmail]);
 
   const hasInitialSyncedRef = useRef(false);
+  const isSyncingCloudRef = useRef(false);
 
   // Keep local convenience cache updated without cloud egress
   useEffect(() => {
@@ -192,6 +193,8 @@ export default function ProductionViewsEngine(props) {
 
   useEffect(() => {
     const syncFromCloud = async () => {
+      if (isSyncingCloudRef.current) return;
+      isSyncingCloudRef.current = true;
       try {
         let data = null;
         try {
@@ -322,6 +325,7 @@ export default function ProductionViewsEngine(props) {
         console.error('Error syncing BOMs in ProductionViewsEngine:', err);
       } finally {
         hasInitialSyncedRef.current = true;
+        isSyncingCloudRef.current = false;
       }
     };
 
@@ -351,17 +355,24 @@ export default function ProductionViewsEngine(props) {
       }
     };
 
+    let debounceCloudTimer = null;
+    const debouncedSyncFromCloud = () => {
+      if (debounceCloudTimer) clearTimeout(debounceCloudTimer);
+      debounceCloudTimer = setTimeout(() => {
+        syncFromCloud();
+      }, 800);
+    };
+
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
-    window.addEventListener('controlroom_storage_update', syncFromCloud);
-    window.addEventListener('storage', syncFromCloud);
+    window.addEventListener('controlroom_storage_update', debouncedSyncFromCloud);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
       clearInterval(fallbackInterval);
+      if (debounceCloudTimer) clearTimeout(debounceCloudTimer);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
-      window.removeEventListener('controlroom_storage_update', syncFromCloud);
-      window.removeEventListener('storage', syncFromCloud);
+      window.removeEventListener('controlroom_storage_update', debouncedSyncFromCloud);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };

@@ -55,9 +55,11 @@ class CentralInventoryStore {
           const item = e?.detail?.item;
           const items = e?.detail?.items;
           if (item) {
-            this.registerItem(item, false);
+            this.registerItem(item, false, true);
           } else if (Array.isArray(items) && items.length > 0) {
-            items.forEach(it => this.registerItem(it, false));
+            items.forEach(it => this.registerItem(it, false, false));
+            try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
+            this.notifyChange();
           }
         } finally {
           this._isHandlingExternalUpdate = false;
@@ -351,15 +353,24 @@ class CentralInventoryStore {
   }
   saveNotifications() {
     try { localStorage.setItem(this.storageKeyNotifications, JSON.stringify(this.notifications)); } catch (_) {}
-    saveCloudStore('notifications_store', this.notifications);
+    if (this._saveNotifsTimer) clearTimeout(this._saveNotifsTimer);
+    this._saveNotifsTimer = setTimeout(() => {
+      saveCloudStore('notifications_store', this.notifications);
+    }, 2000);
   }
 
   notifyChange() {
-    this.evaluateStockAlerts();
-    window.dispatchEvent(new Event('central_inventory_updated'));
+    if (this._notifyChangeTimer) return;
+    this._notifyChangeTimer = setTimeout(() => {
+      this._notifyChangeTimer = null;
+      this.evaluateStockAlerts();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('central_inventory_updated'));
+      }
+    }, 60);
   }
 
-  registerItem(item, shouldPersistCloud = true) {
+  registerItem(item, shouldPersistCloud = true, shouldNotify = true) {
     if (!item || !item.name) return null;
     const cleanCode = String(item.code || item.sku || item.itemId || item.name).trim();
     if (!cleanCode || /^\d{10,}$/.test(cleanCode)) return null;
@@ -412,10 +423,12 @@ class CentralInventoryStore {
 
     if (shouldPersistCloud) {
       this.saveItems();
-    } else {
+    } else if (shouldNotify) {
       try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
     }
-    this.notifyChange();
+    if (shouldNotify) {
+      this.notifyChange();
+    }
     return normalizedItem;
   }
 
@@ -533,6 +546,10 @@ class CentralInventoryStore {
   // STOCK ALERTS & NOTIFICATION ENGINE
   // ----------------------------------------------------
   evaluateStockAlerts() {
+    const now = Date.now();
+    if (this._lastAlertEval && now - this._lastAlertEval < 60000) return;
+    this._lastAlertEval = now;
+
     const computedItems = this.getInventoryItems();
     computedItems.forEach(item => {
       if (item.onHand === 0) {

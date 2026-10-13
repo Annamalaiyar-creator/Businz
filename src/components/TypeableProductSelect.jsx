@@ -120,18 +120,19 @@ export default function TypeableProductSelect({
 
   // Live listener to auto-refresh dropdown whenever products or inventory are updated anywhere
   useEffect(() => {
+    let updateTimer = null;
     const handleCatalogUpdate = () => {
-      setCatalogTick(t => t + 1);
+      if (updateTimer) clearTimeout(updateTimer);
+      updateTimer = setTimeout(() => {
+        setCatalogTick(t => t + 1);
+      }, 200);
     };
     window.addEventListener('controlroom_items_update', handleCatalogUpdate);
     window.addEventListener('central_inventory_updated', handleCatalogUpdate);
-    window.addEventListener('controlroom_storage_update', handleCatalogUpdate);
-    window.addEventListener('storage', handleCatalogUpdate);
     return () => {
+      if (updateTimer) clearTimeout(updateTimer);
       window.removeEventListener('controlroom_items_update', handleCatalogUpdate);
       window.removeEventListener('central_inventory_updated', handleCatalogUpdate);
-      window.removeEventListener('controlroom_storage_update', handleCatalogUpdate);
-      window.removeEventListener('storage', handleCatalogUpdate);
     };
   }, []);
 
@@ -143,17 +144,6 @@ export default function TypeableProductSelect({
     } catch (_) {
       list = Array.isArray(itemsList) && itemsList.length > 0 ? itemsList : [];
     }
-    try {
-      const delRaw = localStorage.getItem('controlroom_deleted_raw_materials');
-      const delCodes = delRaw ? JSON.parse(delRaw).map(c => String(c).toUpperCase().trim()) : [];
-      if (delCodes.length > 0) {
-        return list.filter(it => {
-          const c = String(it?.code || it?.sku || it?.itemId || it?.id || '').toUpperCase().trim();
-          const n = String(it?.name || '').toUpperCase().trim();
-          return !delCodes.includes(c) && !delCodes.includes(n);
-        });
-      }
-    } catch (_) {}
     return list;
   }, [itemsList, catalogTick]);
 

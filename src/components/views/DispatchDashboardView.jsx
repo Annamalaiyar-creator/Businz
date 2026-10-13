@@ -237,19 +237,28 @@ export default function DispatchDashboardView(props) {
           return Array.from(map.values());
         });
       } else {
-        syncBoms();
+        debouncedSyncBoms();
       }
     };
 
+    let debounceTimer = null;
+    const debouncedSyncBoms = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        syncBoms();
+      }, 500);
+    };
+
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdate);
-    window.addEventListener('controlroom_storage_update', handleBomUpdate);
+    window.addEventListener('controlroom_storage_update', debouncedSyncBoms);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
       clearInterval(fallbackInterval);
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdate);
-      window.removeEventListener('controlroom_storage_update', handleBomUpdate);
+      window.removeEventListener('controlroom_storage_update', debouncedSyncBoms);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };

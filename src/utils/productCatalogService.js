@@ -10,12 +10,45 @@ const getDeletedCodes = () => {
   }
 };
 
+let cachedBaseCatalog = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 2000;
+
+export const invalidateCatalogCache = () => {
+  cachedBaseCatalog = null;
+  lastCacheTime = 0;
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('central_inventory_updated', invalidateCatalogCache);
+  window.addEventListener('controlroom_items_update', invalidateCatalogCache);
+  window.addEventListener('controlroom_raw_materials_update', invalidateCatalogCache);
+}
+
+let saveStorageTimer = null;
+const scheduleStorageSave = (list) => {
+  if (saveStorageTimer) return;
+  saveStorageTimer = setTimeout(() => {
+    saveStorageTimer = null;
+    try {
+      localStorage.setItem('controlroom_items_list', JSON.stringify(list));
+    } catch (_) {}
+  }, 1000);
+};
+
 /**
  * Product Catalog & Live Stock Service
  * Provides the unified, full 285+ standardized VRM products catalog
  * combined with real-time stock balances from Central Inventory Store.
  */
 export const getFullProductsCatalogWithStock = (directItems = null) => {
+  const hasDirectItems = Array.isArray(directItems) && directItems.length > 0;
+  const now = Date.now();
+
+  if (!hasDirectItems && cachedBaseCatalog && (now - lastCacheTime < CACHE_TTL_MS)) {
+    return cachedBaseCatalog;
+  }
+
   const deletedCodes = getDeletedCodes();
   const isItemDeleted = (code, name, sku, itemId) => {
     const c = String(code || '').toUpperCase().trim();
@@ -289,10 +322,11 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     .filter(it => !isItemDeleted(it.code, it.name, it.sku, it.itemId))
     .filter(it => !isRawMaterialItem(it.code, it.name, it.category));
 
-  // Save to localStorage so other modules also have the full catalog ready
-  try {
-    localStorage.setItem('controlroom_items_list', JSON.stringify(fullList));
-  } catch (_) {}
+  if (!hasDirectItems) {
+    cachedBaseCatalog = fullList;
+    lastCacheTime = now;
+    scheduleStorageSave(fullList);
+  }
 
   return fullList;
 };
