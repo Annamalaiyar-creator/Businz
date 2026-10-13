@@ -312,8 +312,8 @@ export default function SalesCrmEngine({
                 gstNo: c.gstNumber || c.gstNo || c.gst || '',
                 status: c.status || 'ACTIVE'
               }));
-              localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
-              localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
+              localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight.slice(0, 500)));
+              localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight.slice(0, 500)));
             } catch (_) {}
           }
         }
@@ -442,8 +442,8 @@ export default function SalesCrmEngine({
         gstNo: c.gstNumber || c.gstNo || c.gst || '',
         status: c.status || 'ACTIVE'
       }));
-      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
-      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight.slice(0, 500)));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight.slice(0, 500)));
       window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: unified }));
     } catch (e) {}
   };
@@ -561,8 +561,8 @@ export default function SalesCrmEngine({
         gstNo: c.gstNumber || c.gstNo || c.gst || '',
         status: c.status || 'ACTIVE'
       }));
-      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
-      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight.slice(0, 500)));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight.slice(0, 500)));
       window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: customer }));
       window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: updated }));
     } catch (e) {
