@@ -2258,10 +2258,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             
             {/* 1. Material Code */}
             <div>
-              <label style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              <label htmlFor="raw-material-inventory-material-code" style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 Material Code
               </label>
-              <input
+              <input id="raw-material-inventory-material-code" name="materialCode" aria-label="Material Code"
                 type="text"
                 value={receiptForm.materialCode || ''}
                 onChange={(e) => setReceiptForm({ ...receiptForm, materialCode: e.target.value })}
@@ -2269,15 +2269,15 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13.5px', fontWeight: '700', color: '#0E7490', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = '#0E7490'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-              />
+               />
             </div>
 
             {/* 2. Category */}
             <div>
-              <label style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              <label htmlFor="raw-material-inventory-category" style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 Category <span style={{ color: '#DC2626' }}>*</span>
               </label>
-              <select
+              <select id="raw-material-inventory-category" name="category" aria-label="Category"
                 value={receiptForm.category || ''}
                 onChange={(e) => setReceiptForm({ ...receiptForm, category: e.target.value })}
                 style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13.5px', fontWeight: '700', color: receiptForm.category ? '#0F172A' : '#94A3B8', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
@@ -2312,7 +2312,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Material Description / Name <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
+                <input id="raw-material-inventory-material" name="material" aria-label="Type or select material name ( Structural Steel Beams)"
                   type="text"
                   value={receiptItems[0]?.material || ''}
                   onFocus={() => setIsMatDropdownOpen(true)}
@@ -2333,7 +2333,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 40px 0 14px', fontSize: '13.5px', fontWeight: '600', color: '#0F172A', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
                   onFocusCapture={(e) => { e.currentTarget.style.borderColor = '#0E7490'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                   onBlurCapture={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                />
+                 />
                 <button
                   type="button"
                   onClick={() => setIsMatDropdownOpen(!isMatDropdownOpen)}
@@ -2431,10 +2431,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
             {/* 4. Unit of Measurement */}
             <div>
-              <label style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              <label htmlFor="raw-material-inventory-unit-of-measurement" style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 Unit of Measurement <span style={{ color: '#DC2626' }}>*</span>
               </label>
-              <select
+              <select id="raw-material-inventory-unit-of-measurement" name="unitOfMeasurement" aria-label="Unit of Measurement"
                 value={receiptItems[0]?.unit || 'Numbers'}
                 onChange={(e) => {
                   const newUnit = e.target.value;
@@ -2466,7 +2466,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     {fieldLabel}
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
+                    <input id="raw-material-inventory-field-placeholder" name="fieldPlaceholder" aria-label="FieldPlaceholder"
                       type="number"
                       value={receiptForm.lengthMm !== undefined ? receiptForm.lengthMm : (isMeters ? '1.0' : '1')}
                       onChange={(e) => setReceiptForm({ ...receiptForm, lengthMm: e.target.value })}
@@ -2474,7 +2474,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       style={{ flex: 1, height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '14px', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
                       onFocus={(e) => { e.currentTarget.style.borderColor = '#0E7490'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                       onBlur={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                    />
+                     />
                     <div style={{ height: '44px', padding: '0 14px', borderRadius: '10px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', color: '#0E7490', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
                       {unitBadge}
                     </div>
@@ -2489,7 +2489,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 Available Stock Quantity <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <div style={{ position: 'relative', width: '100%' }}>
-                <input
+                <input id="raw-material-inventory-100" name="100" aria-label="100"
                   type="number"
                   value={receiptItems[0]?.qty || ''}
                   onChange={(e) => updateMaterialRow(receiptItems[0]?.id || 1, 'qty', e.target.value)}
@@ -2497,7 +2497,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '15px', fontWeight: '800', color: '#0E7490', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = '#0E7490'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                   onBlur={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                />
+                 />
               </div>
             </div>
 
@@ -2505,10 +2505,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
             {/* 8. Min. Level */}
             <div>
-              <label style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              <label htmlFor="raw-material-inventory-10" style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 Min. Level (Reorder Threshold)
               </label>
-              <input
+              <input id="raw-material-inventory-10" name="10" aria-label="Min. Level (Reorder Threshold)"
                 type="number"
                 value={receiptForm.minLevel || ''}
                 onChange={(e) => setReceiptForm({ ...receiptForm, minLevel: e.target.value })}
@@ -2516,17 +2516,17 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13.5px', color: '#0F172A', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = '#0E7490'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-              />
+               />
             </div>
 
 
 
             {/* 10. Remarks / Notes */}
             <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              <label htmlFor="raw-material-inventory-remarks-notes" style={{ display: 'block', fontWeight: '700', color: '#334155', marginBottom: '7px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 Remarks / Notes
               </label>
-              <input
+              <input id="raw-material-inventory-remarks-notes" name="remarksNotes" aria-label="Remarks / Notes"
                 type="text"
                 value={receiptForm.remarks}
                 onChange={(e) => setReceiptForm({ ...receiptForm, remarks: e.target.value })}
@@ -2534,7 +2534,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                 style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13.5px', color: '#0F172A', outline: 'none', backgroundColor: '#F8FAFC', transition: 'all 0.15s ease', boxSizing: 'border-box' }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = '#0E7490'; e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-              />
+               />
             </div>
 
           </div>
@@ -2721,30 +2721,30 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
           {/* Quantity Field */}
           <div>
-            <label style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A', display: 'block', marginBottom: '8px' }}>
+            <label htmlFor="raw-material-inventory-adj-qty" style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A', display: 'block', marginBottom: '8px' }}>
               Adjustment Quantity ({selectedMat.unit})
             </label>
-            <input
+            <input id="raw-material-inventory-adj-qty" name="adjQty" aria-label="Adjustment Quantity ({selectedMat.unit})"
               type="number"
               placeholder={`Enter quantity to ${adjType === 'Add' ? 'add' : 'deduct'}...`}
               value={adjQty}
               onChange={(e) => setAdjQty(e.target.value)}
               style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 16px', fontSize: '15px', fontWeight: '700', outline: 'none', boxSizing: 'border-box' }}
-            />
+             />
           </div>
 
           {/* Reason / Remarks */}
           <div>
-            <label style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A', display: 'block', marginBottom: '8px' }}>
+            <label htmlFor="raw-material-inventory-audit-reason-remarks" style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A', display: 'block', marginBottom: '8px' }}>
               Audit Reason / Remarks
             </label>
-            <input
+            <input id="raw-material-inventory-audit-reason-remarks" name="auditReasonRemarks" aria-label="Audit Reason / Remarks"
               type="text"
               placeholder="e.g. Physical Audit Surplus, Damage Shortage, Scrapped..."
               value={adjReason}
               onChange={(e) => setAdjReason(e.target.value)}
               style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 16px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
-            />
+             />
           </div>
 
           {/* Live Calculation Preview */}
@@ -3000,7 +3000,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             {/* Search input */}
             <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-              <input
+              <input id="raw-material-inventory-audit-search-query" name="auditSearchQuery" aria-label="Search by document #, user, reason"
                 type="text"
                 placeholder="Search by document #, user, reason..."
                 value={auditSearchQuery}
@@ -3016,7 +3016,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
               {auditSearchQuery && (
                 <button
                   type="button"
@@ -3503,13 +3503,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         {!isReadOnlyUser && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {/* Hidden file input for Excel / CSV */}
-            <input
+            <input id="raw-material-inventory-input-1" name="input1" aria-label="Input 1"
               type="file"
               ref={fileInputRef}
               onChange={handleFileUpload}
               accept=".xlsx, .xls, .csv"
               style={{ display: 'none' }}
-            />
+             />
 
             {/* Upload File Button (Modern Sleek Enterprise Design) */}
             <button
@@ -3594,26 +3594,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '340px' }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-          <input
+          <input id="raw-material-inventory-search-query" name="searchQuery" aria-label="Search Inventory (Material Code, Description)"
             type="text"
             placeholder="Search Inventory (Material Code, Description)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
             <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
-            <input
+            <input id="raw-material-inventory-dd-mm-yyyy" name="ddMmYyyy" aria-label="Dd/mm/yyyy"
               type="text"
               placeholder="dd/mm/yyyy"
               style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', width: '90px', backgroundColor: 'transparent' }}
-            />
+             />
           </div>
 
-          <select
+          <select id="raw-material-inventory-selected-status" name="selectedStatus" aria-label="SelectedStatus"
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
@@ -3690,12 +3690,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold' }}>
                 <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="raw-material-inventory-select-row" name="selectRow" aria-label="SelectRow"
                     type="checkbox"
                     checked={currentMaterialsPage.length > 0 && selectedRows.length === currentMaterialsPage.length}
                     onChange={handleSelectAll}
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                  />
+                   />
                 </th>
                 <th style={{ padding: '12px 14px', width: '140px', minWidth: '130px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Code</th>
                 <th style={{ padding: '12px 14px', minWidth: '220px', fontWeight: 'bold', boxSizing: 'border-box' }}>Material Description</th>
@@ -3750,12 +3750,12 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                     className={`table-row-hover ${isSelected ? 'selected-row' : ''}`}
                   >
                     <td style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box', borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent' }}>
-                      <input
+                      <input id="raw-material-inventory-checkbox" name="checkbox" aria-label="Checkbox"
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleToggleRow(m.code)}
                         style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                      />
+                       />
                     </td>
                     <td
                       onClick={() => {
@@ -3855,7 +3855,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>Showing per page</span>
-              <select
+              <select id="raw-material-inventory-page-size" name="pageSize" aria-label="PageSize"
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
                 style={{ height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#0F172A', cursor: 'pointer' }}
@@ -3910,13 +3910,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}>
               <span>Go to page</span>
-              <input
+              <input id="raw-material-inventory-current-page-to-string" name="currentPageToString" aria-label="CurrentPage toString"
                 type="number"
                 value={goToPageInput}
                 onChange={(e) => setGoToPageInput(e.target.value)}
                 placeholder={currentPage.toString()}
                 style={{ width: '45px', height: '28px', border: '1px solid #E2E8F0', borderRadius: '6px', textAlign: 'center', fontSize: '12px', outline: 'none' }}
-              />
+               />
               <button
                 onClick={() => {
                   const p = parseInt(goToPageInput);

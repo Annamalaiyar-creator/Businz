@@ -353,7 +353,7 @@ export default function PresetManagementView(props) {
           {/* Search Input */}
           <div style={{ position: 'relative', minWidth: '320px', flex: 1 }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-            <input
+            <input id="preset-management-search-query" name="searchQuery" aria-label="Search presets by name, purlin, table size, components"
               type="text"
               placeholder="Search presets by name, purlin, table size, components..."
               value={searchQuery}
@@ -370,7 +370,7 @@ export default function PresetManagementView(props) {
                 outline: 'none',
                 backgroundColor: '#F8FAFC'
               }}
-            />
+             />
           </div>
 
           <div style={{ fontSize: '13px', color: '#64748B', fontWeight: '600' }}>
@@ -588,10 +588,10 @@ export default function PresetManagementView(props) {
               {/* Preset Meta Info */}
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="preset-management-preset-label-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Preset Label / Name *
                   </label>
-                  <input
+                  <input id="preset-management-preset-label-name" name="presetLabelName" aria-label="Preset Label / Name"
                     type="text"
                     value={editingPreset.label}
                     onChange={(e) => setEditingPreset(prev => ({ ...prev, label: e.target.value }))}
@@ -607,13 +607,13 @@ export default function PresetManagementView(props) {
                       fontWeight: '600',
                       outline: 'none'
                     }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="preset-management-category" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Category *
                   </label>
-                  <select
+                  <select id="preset-management-category" name="category" aria-label="Category"
                     value={editingPreset.category}
                     onChange={(e) => setEditingPreset(prev => ({ ...prev, category: e.target.value }))}
                     style={{
@@ -652,7 +652,7 @@ export default function PresetManagementView(props) {
                 </label>
                 <div style={{ position: 'relative' }}>
                   <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-                  <input
+                  <input id="preset-management-item-search-term" name="itemSearchTerm" aria-label="Type product name ( Leg 650, Mid Clamp 35mm, Rafter, Allen Bolt)"
                     type="text"
                     value={itemSearchTerm}
                     onChange={(e) => setItemSearchTerm(e.target.value)}
@@ -668,7 +668,7 @@ export default function PresetManagementView(props) {
                       outline: 'none',
                       backgroundColor: 'white'
                     }}
-                  />
+                   />
 
                   {/* Dropdown Suggestions */}
                   {suggestedProducts.length > 0 && (
@@ -761,7 +761,7 @@ export default function PresetManagementView(props) {
                         <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                           <td style={{ padding: '8px 12px', color: '#94A3B8', fontWeight: '600' }}>{idx + 1}</td>
                           <td style={{ padding: '8px 12px' }}>
-                            <input
+                            <input id="preset-management-component-description" name={`componentDescription_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Component description"
                               type="text"
                               value={it.name}
                               onChange={(e) => handleUpdateItem(idx, 'name', e.target.value)}
@@ -775,10 +775,10 @@ export default function PresetManagementView(props) {
                                 padding: '0 8px',
                                 fontSize: '12px'
                               }}
-                            />
+                             />
                           </td>
                           <td style={{ padding: '8px 12px' }}>
-                            <input
+                            <input id={`preset-management-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
                               type="number"
                               min="1"
                               value={it.qty}
@@ -794,10 +794,10 @@ export default function PresetManagementView(props) {
                                 fontWeight: '700',
                                 textAlign: 'center'
                               }}
-                            />
+                             />
                           </td>
                           <td style={{ padding: '8px 12px' }}>
-                            <select
+                            <select id="preset-management-uom-nos" name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
                               value={it.uom || 'NOS'}
                               onChange={(e) => handleUpdateItem(idx, 'uom', e.target.value)}
                               style={{
@@ -817,7 +817,7 @@ export default function PresetManagementView(props) {
                             </select>
                           </td>
                           <td style={{ padding: '8px 12px' }}>
-                            <input
+                            <input id="preset-management-hdg-gal-6063t6" name={`hDGGAL6063T6_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HDG, GAL, 6063T6"
                               type="text"
                               value={it.category || ''}
                               onChange={(e) => handleUpdateItem(idx, 'category', e.target.value)}
@@ -831,7 +831,7 @@ export default function PresetManagementView(props) {
                                 padding: '0 8px',
                                 fontSize: '12px'
                               }}
-                            />
+                             />
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                             <button

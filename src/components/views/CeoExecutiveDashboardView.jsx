@@ -2061,7 +2061,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
               minWidth: '220px'
             }}>
               <Search size={14} color="#64748B" />
-              <input
+              <input id="ceo-executive-dashboard-person-search-query" name="personSearchQuery" aria-label="Search person by name, code, role"
                 type="text"
                 placeholder="Search person by name, code, role..."
                 value={personSearchQuery}
@@ -2074,7 +2074,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                   width: '100%',
                   color: '#0F172A'
                 }}
-              />
+               />
               {personSearchQuery && (
                 <X size={12} color="#94A3B8" style={{ cursor: 'pointer' }} onClick={() => setPersonSearchQuery('')} />
               )}
@@ -4233,10 +4233,10 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             {/* Modal Body */}
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                <label htmlFor="ceo-executive-dashboard-editing-target-rep" style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
                   Target Scope / Sales Representative
                 </label>
-                <select
+                <select id="ceo-executive-dashboard-editing-target-rep" name="editingTargetRep" aria-label="Target Scope / Sales Representative"
                   value={editingTargetRep}
                   onChange={(e) => {
                     const newRep = e.target.value;
@@ -4274,7 +4274,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     {formatTargetCurrency(editingTargetAmount)}
                   </span>
                 </div>
-                <input
+                <input id="ceo-executive-dashboard-editing-target-amount" name="editingTargetAmount" aria-label="Enter amount in ₹ ( 18000000)"
                   type="number"
                   value={editingTargetAmount}
                   onChange={(e) => setEditingTargetAmount(e.target.value)}
@@ -4290,7 +4290,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     color: '#0F172A',
                     boxSizing: 'border-box'
                   }}
-                />
+                 />
               </div>
 
               {/* Quick Presets */}

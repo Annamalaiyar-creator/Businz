@@ -141,8 +141,8 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                 <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <span style={{ fontSize: '12px', fontWeight: '700', color: '#B45309' }}>Upload Payment Proof File:</span>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Payment Stage</label>
-                    <select
+                    <label htmlFor="payment-and-proof-modals-payment-stage" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Payment Stage</label>
+                    <select id="payment-and-proof-modals-payment-stage" name="paymentStage" aria-label="Payment Stage"
                       value={paymentStageType}
                       onChange={(e) => setPaymentStageType(e.target.value)}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none' }}
@@ -167,7 +167,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                     </select>
                   </div>
 
-                  <input
+                  <input id="payment-and-proof-modals-input-1" name="input1" aria-label="Input 1"
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.webp"
                     disabled={isUploading}
@@ -178,7 +178,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                       }
                     }}
                     style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
-                  />
+                   />
                   {paymentProofFile && (
                     <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
                       <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {paymentProofFile.name} ({Math.round(paymentProofFile.size / 1024)} KB)
@@ -231,23 +231,23 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 14px' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#0F766E', marginBottom: '4px' }}>
+                          <label htmlFor="payment-and-proof-modals-balance-amount-paid" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#0F766E', marginBottom: '4px' }}>
                             Balance Amount Paid (₹)
                           </label>
-                          <input
+                          <input id="payment-and-proof-modals-balance-amount-paid" name="balanceAmountPaid" aria-label="Balance Amount Paid (₹)"
                             type="number"
                             min="0"
                             placeholder={String(currentOutstanding || '')}
                             value={balancePaidInput}
                             onChange={(e) => setBalancePaidInput(e.target.value)}
                             style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #5EEAD4', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', fontWeight: '700', boxSizing: 'border-box' }}
-                          />
+                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#0F766E', marginBottom: '4px' }}>
+                          <label htmlFor="payment-and-proof-modals-attach-balance-proof" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#0F766E', marginBottom: '4px' }}>
                             Attach Balance Proof File
                           </label>
-                          <input
+                          <input id="payment-and-proof-modals-attach-balance-proof" name="attachBalanceProof" aria-label="Attach Balance Proof File"
                             type="file"
                             accept=".pdf,.jpg,.jpeg,.png,.webp"
                             disabled={isUploading}
@@ -258,7 +258,7 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                               }
                             }}
                             style={{ width: '100%', fontSize: '11px', boxSizing: 'border-box' }}
-                          />
+                           />
                           {balanceProofFile && (
                             <span style={{ fontSize: '10px', color: '#0F766E', fontWeight: '700' }}>
                               Selected: {balanceProofFile.name} ({Math.round(balanceProofFile.size / 1024)} KB)
@@ -432,10 +432,10 @@ export function UpdatePaymentModal({
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+          <label htmlFor="payment-and-proof-modals-input-2" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
             Upload Payment Slip / Bank Receipt <span style={{ color: '#EF4444' }}>*</span>
           </label>
-          <input
+          <input id="payment-and-proof-modals-input-2" name="input2" aria-label="Upload Payment Slip / Bank Receipt"
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.webp"
             disabled={isUploading}
@@ -446,7 +446,7 @@ export function UpdatePaymentModal({
               }
             }}
             style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
-          />
+           />
           {updatePaymentFile && (
             <span style={{ fontSize: '11px', color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
               <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {updatePaymentFile.name} ({Math.round(updatePaymentFile.size / 1024)} KB)
@@ -455,14 +455,14 @@ export function UpdatePaymentModal({
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Reference / Notes</label>
-          <textarea
+          <label htmlFor="payment-and-proof-modals-payment-reference-notes" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Reference / Notes</label>
+          <textarea id="payment-and-proof-modals-payment-reference-notes" name="paymentReferenceNotes" aria-label="Payment Reference / Notes"
             rows={2}
             value={updatePaymentNotes}
             onChange={(e) => setUpdatePaymentNotes(e.target.value)}
             placeholder="Enter transaction UTR / receipt reference (optional)..."
             style={{ width: '100%', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '10px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }}
-          />
+           />
         </div>
 
         <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '8px', padding: '10px 12px', fontSize: '11px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -609,10 +609,10 @@ export function ReuploadAddressProofModal({
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+          <label htmlFor="payment-and-proof-modals-input-3" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
             Select Verified Address Proof File (PDF / Image) <span style={{ color: '#EF4444' }}>*</span>
           </label>
-          <input
+          <input id="payment-and-proof-modals-input-3" name="input3" aria-label="Select Verified Address Proof File (PDF / Image)"
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.webp"
             disabled={isUploading}
@@ -623,7 +623,7 @@ export function ReuploadAddressProofModal({
               }
             }}
             style={{ width: '100%', padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
-          />
+           />
           {reuploadProofFile && (
             <span style={{ fontSize: '11px', color: '#166534', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}>
               <CheckCircle style={{ width: '12px', height: '12px' }} /> Selected: {reuploadProofFile.name} ({Math.round(reuploadProofFile.size / 1024)} KB)

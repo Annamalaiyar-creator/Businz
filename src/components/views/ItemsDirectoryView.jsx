@@ -1022,7 +1022,7 @@ export default function ItemsDirectoryView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="items-directory-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2164,28 +2164,28 @@ export default function ItemsDirectoryView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>1. Basic Information</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Item / Product Name *</label>
-                      <input
+                      <label htmlFor="items-directory-item-product-name" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Item / Product Name *</label>
+                      <input id="items-directory-item-product-name" name="itemProductName" aria-label="Item / Product Name"
                         type="text"
                         placeholder="e.g. Solar Panel 540W Monocrystalline"
                         value={newItemData.name}
                         onChange={(e) => setNewItemData({ ...newItemData, name: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>SKU / Item Code</label>
-                      <input
+                      <label htmlFor="items-directory-sku-item-code" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>SKU / Item Code</label>
+                      <input id="items-directory-sku-item-code" name="sKUItemCode" aria-label="SKU / Item Code"
                         type="text"
                         placeholder="e.g. SP-540W-MONO"
                         value={newItemData.sku}
                         onChange={(e) => setNewItemData({ ...newItemData, sku: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Product Type</label>
-                      <select
+                      <label htmlFor="items-directory-product-type" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Product Type</label>
+                      <select id="items-directory-product-type" name="productType" aria-label="Product Type"
                         value={newItemData.productType}
                         onChange={(e) => setNewItemData({ ...newItemData, productType: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', outline: 'none' }}
@@ -2195,8 +2195,8 @@ export default function ItemsDirectoryView(props) {
                       </select>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Warehouse Location</label>
-                      <select
+                      <label htmlFor="items-directory-warehouse-location" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Warehouse Location</label>
+                      <select id="items-directory-warehouse-location" name="warehouseLocation" aria-label="Warehouse Location"
                         value={newItemData.warehouse || 'Main Warehouse'}
                         onChange={(e) => setNewItemData({ ...newItemData, warehouse: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', outline: 'none' }}
@@ -2208,8 +2208,8 @@ export default function ItemsDirectoryView(props) {
                       </select>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Catalog Status</label>
-                      <select
+                      <label htmlFor="items-directory-catalog-status" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Catalog Status</label>
+                      <select id="items-directory-catalog-status" name="catalogStatus" aria-label="Catalog Status"
                         value={newItemData.status}
                         onChange={(e) => setNewItemData({ ...newItemData, status: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', outline: 'none' }}
@@ -2226,34 +2226,34 @@ export default function ItemsDirectoryView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>2. Pricing & Measurement</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Rate (₹) *</label>
-                      <input
+                      <label htmlFor="items-directory-sales-rate" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Rate (₹) *</label>
+                      <input id="items-directory-sales-rate" name="salesRate" aria-label="Sales Rate (₹)"
                         type="number"
                         placeholder="e.g. 15000"
                         value={newItemData.rate}
                         onChange={(e) => setNewItemData({ ...newItemData, rate: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Rate (₹)</label>
-                      <input
+                      <label htmlFor="items-directory-purchase-rate" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Rate (₹)</label>
+                      <input id="items-directory-purchase-rate" name="purchaseRate" aria-label="Purchase Rate (₹)"
                         type="number"
                         placeholder="e.g. 12000"
                         value={newItemData.purchaseRate}
                         onChange={(e) => setNewItemData({ ...newItemData, purchaseRate: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Unit of Measurement</label>
-                      <input
+                      <label htmlFor="items-directory-unit-of-measurement" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Unit of Measurement</label>
+                      <input id="items-directory-unit-of-measurement" name="unitOfMeasurement" aria-label="Unit of Measurement"
                         type="text"
                         placeholder="e.g. NOS, KG, MTR, SET"
                         value={newItemData.unit}
                         onChange={(e) => setNewItemData({ ...newItemData, unit: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                   </div>
                 </div>
@@ -2263,22 +2263,22 @@ export default function ItemsDirectoryView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>3. Descriptions & Remarks</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Description</label>
-                      <textarea
+                      <label htmlFor="items-directory-sales-description" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Description</label>
+                      <textarea id="items-directory-sales-description" name="salesDescription" aria-label="Sales Description"
                         value={newItemData.description}
                         onChange={(e) => setNewItemData({ ...newItemData, description: e.target.value })}
                         placeholder="Enter item description for sales..."
                         style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', resize: 'vertical', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Description</label>
-                      <textarea
+                      <label htmlFor="items-directory-purchase-description" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Description</label>
+                      <textarea id="items-directory-purchase-description" name="purchaseDescription" aria-label="Purchase Description"
                         value={newItemData.purchaseDescription}
                         onChange={(e) => setNewItemData({ ...newItemData, purchaseDescription: e.target.value })}
                         placeholder="Enter item description for purchase..."
                         style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', resize: 'vertical', outline: 'none' }}
-                      />
+                       />
                     </div>
                   </div>
                 </div>
@@ -2354,26 +2354,26 @@ export default function ItemsDirectoryView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>1. Basic Information</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Item Name *</label>
-                      <input
+                      <label htmlFor="items-directory-item-name" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Item Name *</label>
+                      <input id="items-directory-item-name" name="itemName" aria-label="Item Name"
                         type="text"
                         value={editingItem.name || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>SKU / Item Code</label>
-                      <input
+                      <label htmlFor="items-directory-sku-item-code" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>SKU / Item Code</label>
+                      <input id="items-directory-sku-item-code" name="sKUItemCode" aria-label="SKU / Item Code"
                         type="text"
                         value={editingItem.sku || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, sku: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Catalog Status</label>
-                      <select
+                      <label htmlFor="items-directory-catalog-status" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Catalog Status</label>
+                      <select id="items-directory-catalog-status" name="catalogStatus" aria-label="Catalog Status"
                         value={editingItem.status || 'Active'}
                         onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', outline: 'none' }}
@@ -2390,31 +2390,31 @@ export default function ItemsDirectoryView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>2. Pricing & Measurement</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Rate (₹) *</label>
-                      <input
+                      <label htmlFor="items-directory-sales-rate" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Rate (₹) *</label>
+                      <input id="items-directory-sales-rate" name="salesRate" aria-label="Sales Rate (₹)"
                         type="number"
                         value={editingItem.rate !== undefined ? editingItem.rate : ''}
                         onChange={(e) => setEditingItem({ ...editingItem, rate: Number(e.target.value) })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Rate (₹)</label>
-                      <input
+                      <label htmlFor="items-directory-purchase-rate" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Rate (₹)</label>
+                      <input id="items-directory-purchase-rate" name="purchaseRate" aria-label="Purchase Rate (₹)"
                         type="number"
                         value={editingItem.purchaseRate !== undefined ? editingItem.purchaseRate : ''}
                         onChange={(e) => setEditingItem({ ...editingItem, purchaseRate: Number(e.target.value) })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Unit of Measurement</label>
-                      <input
+                      <label htmlFor="items-directory-unit-of-measurement" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Unit of Measurement</label>
+                      <input id="items-directory-unit-of-measurement" name="unitOfMeasurement" aria-label="Unit of Measurement"
                         type="text"
                         value={editingItem.unit || 'NOS'}
                         onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}
-                      />
+                       />
                     </div>
                   </div>
                 </div>
@@ -2424,22 +2424,22 @@ export default function ItemsDirectoryView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>3. Descriptions & Remarks</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Description</label>
-                      <textarea
+                      <label htmlFor="items-directory-sales-description" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Sales Description</label>
+                      <textarea id="items-directory-sales-description" name="salesDescription" aria-label="Sales Description"
                         value={editingItem.description || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
                         placeholder="Enter item description for sales orders..."
                         style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', resize: 'vertical', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Description</label>
-                      <textarea
+                      <label htmlFor="items-directory-purchase-description" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Purchase Description</label>
+                      <textarea id="items-directory-purchase-description" name="purchaseDescription" aria-label="Purchase Description"
                         value={editingItem.purchaseDescription || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, purchaseDescription: e.target.value })}
                         placeholder="Enter item description for purchase orders..."
                         style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', resize: 'vertical', outline: 'none' }}
-                      />
+                       />
                     </div>
                   </div>
                 </div>
@@ -2670,18 +2670,18 @@ export default function ItemsDirectoryView(props) {
                   {/* Search Input */}
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '260px' }}>
                     <Search style={{ width: '15px', height: '15px', color: '#94A3B8', position: 'absolute', left: '12px' }} />
-                    <input
+                    <input id="items-directory-item-search-query" name="itemSearchQuery" aria-label="Search by Material / SKU / Code."
                       type="text"
                       placeholder="Search by Material / SKU / Code."
                       value={itemSearchQuery}
                       onChange={(e) => { setItemSearchQuery(e.target.value); setItemsCurrentPage(1); }}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
 
                   {/* Warehouses Selector */}
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '160px', flexShrink: 0 }}>
-                    <select
+                    <select id="items-directory-selected-item-warehouse" name="selectedItemWarehouse" aria-label="SelectedItemWarehouse"
                       value={selectedItemWarehouse}
                       onChange={(e) => { setSelectedItemWarehouse(e.target.value); setItemsCurrentPage(1); }}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B', width: '100%', cursor: 'pointer', outline: 'none' }}
@@ -2693,7 +2693,7 @@ export default function ItemsDirectoryView(props) {
 
                   {/* Categories Selector */}
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '160px', flexShrink: 0 }}>
-                    <select
+                    <select id="items-directory-selected-item-category" name="selectedItemCategory" aria-label="SelectedItemCategory"
                       value={selectedItemCategory}
                       onChange={(e) => { setSelectedItemCategory(e.target.value); setItemsCurrentPage(1); }}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B', width: '100%', cursor: 'pointer', outline: 'none' }}
@@ -2706,7 +2706,7 @@ export default function ItemsDirectoryView(props) {
 
                   {/* Status Selector */}
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '150px', flexShrink: 0 }}>
-                    <select
+                    <select id="items-directory-selected-item-status" name="selectedItemStatus" aria-label="SelectedItemStatus"
                       value={selectedItemStatus}
                       onChange={(e) => { setSelectedItemStatus(e.target.value); setItemsCurrentPage(1); }}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B', width: '100%', cursor: 'pointer', outline: 'none' }}
@@ -2741,7 +2741,7 @@ export default function ItemsDirectoryView(props) {
                     <thead>
                       <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                         <th style={{ padding: '12px 16px', textAlign: 'center', width: '44px' }}>
-                          <input
+                          <input id={`items-directory-select-row-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`selectRow_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="SelectRow"
                             type="checkbox"
                             checked={(() => {
                               const query = itemSearchQuery.toLowerCase().trim();
@@ -2802,7 +2802,7 @@ export default function ItemsDirectoryView(props) {
                               }
                             }}
                             style={{ accentColor: '#0E7490', width: '16px', height: '16px', cursor: 'pointer' }}
-                          />
+                           />
                         </th>
                         <th style={{ minWidth: '220px', padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: '700', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>Item / Product Name</th>
                         <th style={{ width: '140px', minWidth: '140px', padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: '700', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>SKU / Item Code</th>
@@ -2882,7 +2882,7 @@ export default function ItemsDirectoryView(props) {
                                   textAlign: 'center',
                                   borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent'
                                 }}>
-                                  <input
+                                  <input id={`items-directory-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => {
@@ -2893,7 +2893,7 @@ export default function ItemsDirectoryView(props) {
                                       }
                                     }}
                                     style={{ accentColor: '#0E7490', width: '16px', height: '16px', cursor: 'pointer' }}
-                                  />
+                                   />
                                 </td>
                                 <td style={{ padding: '14px 16px', color: '#0F172A', fontWeight: '700', fontSize: '13.5px' }}>{item.name}</td>
                                 <td style={{ padding: '14px 16px' }}>
@@ -3085,7 +3085,7 @@ export default function ItemsDirectoryView(props) {
                           <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
                             Showing per page
                           </span>
-                          <select
+                          <select id="items-directory-items-rows-per-page" name="itemsRowsPerPage" aria-label="ItemsRowsPerPage"
                             value={itemsRowsPerPage}
                             onChange={(e) => { setItemsRowsPerPage(parseInt(e.target.value)); setItemsCurrentPage(1); }}
                             style={{ height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white', fontWeight: '600', color: '#334155' }}
@@ -3171,7 +3171,7 @@ export default function ItemsDirectoryView(props) {
                           {/* Go to page jump controls */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>Go to page</span>
-                            <input
+                            <input id="items-directory-input-1" name="input1" aria-label="#"
                               type="number"
                               min="1"
                               max={totalPages}
@@ -3188,7 +3188,7 @@ export default function ItemsDirectoryView(props) {
                               }}
                               placeholder="#"
                               style={{ width: '40px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px', textAlign: 'center', outline: 'none' }}
-                            />
+                             />
                             <button
                               onClick={() => {
                                 const p = parseInt(itemsGoToPageInput);

@@ -342,8 +342,8 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
                     <td style={{ padding: '14px 16px', fontWeight: '500', color: '#1e293b', whiteSpace: 'nowrap' }}>{a.itemName} ({a.itemCode})</td>
                     <td style={{ padding: '14px 16px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{a.plannedQty} {a.uom}</td>
                     <td style={{ padding: '8px 12px' }}>
-                      <input type="number" value={a.actualQty} onChange={(e) => setActualListState(prev => prev.map((x, i) => i === idx ? { ...x, actualQty: Number(e.target.value) } : x))}
-                        style={INPUT_STYLE} />
+                      <input id="production-inventory-integration-actual-qty" name={`actualQty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="ActualQty" type="number" value={a.actualQty} onChange={(e) => setActualListState(prev => prev.map((x, i) => i === idx ? { ...x, actualQty: Number(e.target.value) } : x))}
+                        style={INPUT_STYLE}  />
                     </td>
                     <td style={{ padding: '14px 16px', fontWeight: 'bold', color: diff > 0 ? '#dc2626' : '#16a34a', whiteSpace: 'nowrap' }}>
                       {diff > 0 ? `+${diff}` : diff} {a.uom}
@@ -352,8 +352,8 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
                       {pct.toFixed(1)}%
                     </td>
                     <td style={{ padding: '8px 12px' }}>
-                      <input type="text" value={a.reason} onChange={(e) => setActualListState(prev => prev.map((x, i) => i === idx ? { ...x, reason: e.target.value } : x))}
-                        style={{ ...INPUT_STYLE, width: '100%' }} />
+                      <input id="production-inventory-integration-reason" name={`reason_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Reason" type="text" value={a.reason} onChange={(e) => setActualListState(prev => prev.map((x, i) => i === idx ? { ...x, reason: e.target.value } : x))}
+                        style={{ ...INPUT_STYLE, width: '100%' }}  />
                     </td>
                   </tr>
                 );
@@ -398,8 +398,8 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
                       <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 500 }}>{c.sub}</div>
                     </div>
                   </div>
-                  <input type="number" step={c.step || '1'} value={c.val} onChange={(e) => c.set(e.target.value)}
-                    style={{ ...INPUT_STYLE, width: '100%', fontSize: '20px', fontWeight: 800, color: c.color, textAlign: 'center', height: '48px', borderRadius: '10px' }} />
+                  <input id="production-inventory-integration-val" name="val" aria-label="Val" type="number" step={c.step || '1'} value={c.val} onChange={(e) => c.set(e.target.value)}
+                    style={{ ...INPUT_STYLE, width: '100%', fontSize: '20px', fontWeight: 800, color: c.color, textAlign: 'center', height: '48px', borderRadius: '10px' }}  />
                 </div>
               );
             })}
@@ -508,17 +508,17 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Product & BOM</label>
-              <select value={selectedBomCode} onChange={(e) => setSelectedBomCode(e.target.value)}
+              <label htmlFor="production-inventory-integration-product-bom" style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Product & BOM</label>
+              <select id="production-inventory-integration-product-bom" name="productBOM" aria-label="Product & BOM" value={selectedBomCode} onChange={(e) => setSelectedBomCode(e.target.value)}
                 style={{ ...INPUT_STYLE, height: '40px', backgroundColor: '#F8FAFC', fontWeight: 600 }}>
                 {Object.values(BOM_REGISTRY).map(b => (<option key={b.bomCode} value={b.bomCode}>{b.productName} ({b.bomCode})</option>))}
               </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Order Quantity</label>
-              <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))}
-                style={{ ...INPUT_STYLE, height: '40px' }} />
+              <label htmlFor="production-inventory-integration-order-quantity" style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Order Quantity</label>
+              <input id="production-inventory-integration-order-quantity" name="orderQuantity" aria-label="Order Quantity" type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))}
+                style={{ ...INPUT_STYLE, height: '40px' }}  />
             </div>
 
             {liveReq && (

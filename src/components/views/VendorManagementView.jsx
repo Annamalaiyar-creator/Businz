@@ -985,7 +985,7 @@ export default function VendorManagementView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="vendor-management-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2224,10 +2224,10 @@ export default function VendorManagementView(props) {
                     <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>1. Basic Information</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-vendor-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Vendor Name <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="text" value={vName} onChange={(e) => setVName(e.target.value)} required placeholder="Enter vendor name" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-vendor-name" name="vendorName" aria-label="Vendor Name" type="text" value={vName} onChange={(e) => setVName(e.target.value)} required placeholder="Enter vendor name" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
@@ -2236,15 +2236,15 @@ export default function VendorManagementView(props) {
                         {renderSelect(vType, (e) => setVType(e.target.value), ['Manufacturer', 'Supplier', 'Trader'], { height: '38px' })}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Vendor Code (Auto Generated)</label>
-                        <input type="text" readOnly value="Will be generated" style={{ height: '38px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px', backgroundColor: '#f8fafc', color: '#94a3b8', outline: 'none' }} />
+                        <label htmlFor="vendor-management-vendor-code-auto" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Vendor Code (Auto Generated)</label>
+                        <input id="vendor-management-vendor-code-auto" name="vendorCodeAuto" aria-label="Vendor Code (Auto Generated)" type="text" readOnly value="Will be generated" style={{ height: '38px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px', backgroundColor: '#f8fafc', color: '#94a3b8', outline: 'none' }}  />
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-company-registration-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Company Registration Number <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="text" value={vCompanyReg} onChange={(e) => setVCompanyReg(e.target.value)} placeholder="Enter registration number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-company-registration-number" name="companyRegistrationNumber" aria-label="Company Registration Number" type="text" value={vCompanyReg} onChange={(e) => setVCompanyReg(e.target.value)} placeholder="Enter registration number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2260,7 +2260,7 @@ export default function VendorManagementView(props) {
                             {isGstFetching ? '⏳ Fetching GST...' : '🔍 Auto-Fetch Details'}
                           </button>
                         </div>
-                        <input
+                        <input id="vendor-management-v-gst" name="vGST" aria-label="Enter 15-digit GSTIN ( 37AAACT2727Q1ZS)"
                           type="text"
                           value={vGST}
                           onChange={(e) => {
@@ -2281,39 +2281,39 @@ export default function VendorManagementView(props) {
                           maxLength={15}
                           placeholder="Enter 15-digit GSTIN (e.g. 37AAACT2727Q1ZS)"
                           style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}
-                        />
+                         />
                         {gstLookupStatus && (
                           <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 'bold' }}>{gstLookupStatus.msg}</span>
                         )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-pan-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           PAN Number <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="text" value={vPAN} onChange={(e) => setVPAN(e.target.value)} placeholder="Enter PAN number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-pan-number" name="pANNumber" aria-label="PAN Number" type="text" value={vPAN} onChange={(e) => setVPAN(e.target.value)} placeholder="Enter PAN number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Website</label>
-                        <input type="text" value={vWebsite} onChange={(e) => setVWebsite(e.target.value)} placeholder="Enter website" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <label htmlFor="vendor-management-website" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Website</label>
+                        <input id="vendor-management-website" name="website" aria-label="Website" type="text" value={vWebsite} onChange={(e) => setVWebsite(e.target.value)} placeholder="Enter website" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-email" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Email <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="Enter email address" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-email" name="email" aria-label="Email" type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="Enter email address" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Mobile Number <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <select style={{ width: '80px', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
+                          <select id="vendor-management-select-1" name="select1" aria-label="Select 1" style={{ width: '80px', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
                             <option>+91</option>
                             <option>+1</option>
                             <option>option</option>
                           </select>
-                          <input type="text" value={vPhone} onChange={(e) => setVPhone(e.target.value)} placeholder="Enter mobile number" style={{ flex: 1, height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                          <input id="vendor-management-mobile-number" name="mobileNumber" aria-label="Enter mobile number" type="text" value={vPhone} onChange={(e) => setVPhone(e.target.value)} placeholder="Enter mobile number" style={{ flex: 1, height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                         </div>
                       </div>
                     </div>
@@ -2329,14 +2329,14 @@ export default function VendorManagementView(props) {
                           Registered Address <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </strong>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <textarea value={vRegAddress} onChange={(e) => setVRegAddress(e.target.value)} placeholder="Enter registered address" style={{ height: '70px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none' }} />
+                          <textarea id="vendor-management-registered-address" name="registeredAddress" aria-label="Enter registered address" value={vRegAddress} onChange={(e) => setVRegAddress(e.target.value)} placeholder="Enter registered address" style={{ height: '70px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none' }}  />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-city" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               City <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            <input type="text" value={vCity} onChange={(e) => setVCity(e.target.value)} placeholder="Enter city" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                            <input id="vendor-management-city" name="city" aria-label="City" type="text" value={vCity} onChange={(e) => setVCity(e.target.value)} placeholder="Enter city" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
@@ -2351,10 +2351,10 @@ export default function VendorManagementView(props) {
                             {renderSelect(vCountry, (e) => setVCountry(e.target.value), ['India', 'United States', 'Singapore'], { height: '38px' })}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-pin-code" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               PIN Code <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            <input type="text" value={vPinCode} onChange={(e) => setVPinCode(e.target.value)} placeholder="Enter PIN code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                            <input id="vendor-management-pin-code" name="pINCode" aria-label="PIN Code" type="text" value={vPinCode} onChange={(e) => setVPinCode(e.target.value)} placeholder="Enter PIN code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                           </div>
                         </div>
                       </div>
@@ -2365,8 +2365,8 @@ export default function VendorManagementView(props) {
                           <strong style={{ fontSize: '12px', color: '#334155' }}>
                             Billing Address (If Different) <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                           </strong>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#475569', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={vSameAsRegistered} onChange={(e) => {
+                          <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#475569', cursor: 'pointer' }}>
+                            <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vSameAsRegistered} onChange={(e) => {
                               setVSameAsRegistered(e.target.checked);
                               if (e.target.checked) {
                                 setVBillingAddress(vRegAddress);
@@ -2375,19 +2375,19 @@ export default function VendorManagementView(props) {
                                 setVBillingCountry(vCountry);
                                 setVBillingPinCode(vPinCode);
                               }
-                            }} style={{ cursor: 'pointer' }} />
+                            }} style={{ cursor: 'pointer' }}  />
                             Same as Registered Address
                           </label>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <textarea disabled={vSameAsRegistered} value={vSameAsRegistered ? vRegAddress : vBillingAddress} onChange={(e) => setVBillingAddress(e.target.value)} placeholder="Enter billing address" style={{ height: '70px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }} />
+                          <textarea id="vendor-management-billing-address" name="billingAddress" aria-label="Enter billing address" disabled={vSameAsRegistered} value={vSameAsRegistered ? vRegAddress : vBillingAddress} onChange={(e) => setVBillingAddress(e.target.value)} placeholder="Enter billing address" style={{ height: '70px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', color: vSameAsRegistered ? '#64748b' : '#334155' }}  />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-city" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               City <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            <input disabled={vSameAsRegistered} type="text" value={vSameAsRegistered ? vCity : vBillingCity} onChange={(e) => setVBillingCity(e.target.value)} placeholder="Enter city" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white' }} />
+                            <input id="vendor-management-city" name="city" aria-label="City" disabled={vSameAsRegistered} type="text" value={vSameAsRegistered ? vCity : vBillingCity} onChange={(e) => setVBillingCity(e.target.value)} placeholder="Enter city" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white' }}  />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
@@ -2402,10 +2402,10 @@ export default function VendorManagementView(props) {
                             {renderSelect(vSameAsRegistered ? vCountry : vBillingCountry, (e) => setVBillingCountry(e.target.value), ['India', 'United States', 'Singapore'], { height: '38px', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white', disabled: vSameAsRegistered })}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                            <label htmlFor="vendor-management-pin-code" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                               PIN Code <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                             </label>
-                            <input disabled={vSameAsRegistered} type="text" value={vSameAsRegistered ? vPinCode : vBillingPinCode} onChange={(e) => setVBillingPinCode(e.target.value)} placeholder="Enter PIN code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white' }} />
+                            <input id="vendor-management-pin-code" name="pINCode" aria-label="PIN Code" disabled={vSameAsRegistered} type="text" value={vSameAsRegistered ? vPinCode : vBillingPinCode} onChange={(e) => setVBillingPinCode(e.target.value)} placeholder="Enter PIN code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none', backgroundColor: vSameAsRegistered ? '#f8fafc' : 'white' }}  />
                           </div>
                         </div>
                       </div>
@@ -2417,31 +2417,31 @@ export default function VendorManagementView(props) {
                     <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>3. Contact Details</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-primary-contact-person" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Primary Contact Person <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="text" value={vContact} onChange={(e) => setVContact(e.target.value)} placeholder="Enter contact person" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-primary-contact-person" name="primaryContactPerson" aria-label="Primary Contact Person" type="text" value={vContact} onChange={(e) => setVContact(e.target.value)} placeholder="Enter contact person" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Designation</label>
-                        <input type="text" value={vDesignation} onChange={(e) => setVDesignation(e.target.value)} placeholder="Enter designation" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <label htmlFor="vendor-management-designation" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Designation</label>
+                        <input id="vendor-management-designation" name="designation" aria-label="Designation" type="text" value={vDesignation} onChange={(e) => setVDesignation(e.target.value)} placeholder="Enter designation" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-phone" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Phone <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="text" value={vPhone} onChange={(e) => setVPhone(e.target.value)} placeholder="Enter phone number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-phone" name="phone" aria-label="Phone" type="text" value={vPhone} onChange={(e) => setVPhone(e.target.value)} placeholder="Enter phone number" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                        <label htmlFor="vendor-management-email" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                           Email <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                         </label>
-                        <input type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="Enter email address" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <input id="vendor-management-email" name="email" aria-label="Email" type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="Enter email address" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Alternate Phone</label>
-                        <input type="text" value={vAltPhone} onChange={(e) => setVAltPhone(e.target.value)} placeholder="Enter alternate phone" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <label htmlFor="vendor-management-alternate-phone" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Alternate Phone</label>
+                        <input id="vendor-management-alternate-phone" name="alternatePhone" aria-label="Alternate Phone" type="text" value={vAltPhone} onChange={(e) => setVAltPhone(e.target.value)} placeholder="Enter alternate phone" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Preferred Communication</label>
@@ -2474,8 +2474,8 @@ export default function VendorManagementView(props) {
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 3' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes</label>
-                        <input type="text" value={vTags} onChange={(e) => setVTags(e.target.value)} placeholder="Enter any additional notes" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }} />
+                        <label htmlFor="vendor-management-notes" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes</label>
+                        <input id="vendor-management-notes" name="notes" aria-label="Notes" type="text" value={vTags} onChange={(e) => setVTags(e.target.value)} placeholder="Enter any additional notes" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', outline: 'none' }}  />
                       </div>
                     </div>
                   </div>
@@ -2499,16 +2499,16 @@ export default function VendorManagementView(props) {
                   <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>6. Compliance & Settings</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={vActiveVendor} onChange={(e) => setVActiveVendor(e.target.checked)} style={{ cursor: 'pointer' }} />
+                      <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
+                        <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vActiveVendor} onChange={(e) => setVActiveVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
                         Active Vendor
                       </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={vPreferredVendor} onChange={(e) => setVPreferredVendor(e.target.checked)} style={{ cursor: 'pointer' }} />
+                      <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
+                        <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vPreferredVendor} onChange={(e) => setVPreferredVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
                         Preferred Vendor
                       </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={vBlacklistedVendor} onChange={(e) => setVBlacklistedVendor(e.target.checked)} style={{ cursor: 'pointer' }} />
+                      <label htmlFor="vendor-management-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#334155', cursor: 'pointer' }}>
+                        <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={vBlacklistedVendor} onChange={(e) => setVBlacklistedVendor(e.target.checked)} style={{ cursor: 'pointer' }}  />
                         Blacklisted Vendor
                       </label>
                     </div>
@@ -2517,7 +2517,7 @@ export default function VendorManagementView(props) {
                   {/* 7. Tags */}
                   <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>7. Tags</h3>
-                    <select style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
+                    <select id="vendor-management-select-2" name="select2" aria-label="Select 2" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
                       <option>Select or type to add tags</option>
                       <option>Reliable</option>
                       <option>Fast Delivery</option>
@@ -2528,7 +2528,7 @@ export default function VendorManagementView(props) {
                   {/* 8. Notes (Internal) */}
                   <div className="section-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>8. Notes (Internal)</h3>
-                    <textarea value={vInternalNotes} onChange={(e) => setVInternalNotes(e.target.value)} placeholder="Add internal notes about this vendor" style={{ width: '100%', height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none' }} />
+                    <textarea id="vendor-management-v-internal-notes" name="vInternalNotes" aria-label="Add internal notes about this vendor" value={vInternalNotes} onChange={(e) => setVInternalNotes(e.target.value)} placeholder="Add internal notes about this vendor" style={{ width: '100%', height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', outline: 'none', resize: 'none' }}  />
                     <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'right' }}>{vInternalNotes.length} / 500</span>
                   </div>
 
@@ -2764,17 +2764,17 @@ export default function VendorManagementView(props) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '380px' }}>
                     <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-                    <input
+                    <input id="vendor-management-v-search-query" name="vSearchQuery" aria-label="Search vendors (Vendor Name, Contact Person, Mobile, Email)"
                       type="text"
                       placeholder="Search vendors (Vendor Name, Contact Person, Mobile, Email)..."
                       value={vSearchQuery}
                       onChange={(e) => { setVSearchQuery(e.target.value); setVCurrentPage(1); }}
                       style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-                    />
+                     />
                   </div>
 
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
-                    <select
+                    <select id="vendor-management-v-status-filter" name="vStatusFilter" aria-label="VStatusFilter"
                       value={vStatusFilter}
                       onChange={(e) => { setVStatusFilter(e.target.value); setVCurrentPage(1); }}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
@@ -2849,12 +2849,12 @@ export default function VendorManagementView(props) {
                     <thead>
                       <tr style={{ backgroundColor: '#fafbfc', borderBottom: '1px solid #e2e8f0', height: '48px' }}>
                         <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', boxSizing: 'border-box' }}>
-                          <input
+                          <input id="vendor-management-select-all" name={`selectAll_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="SelectAll"
                             type="checkbox"
                             onChange={handleSelectAllVendors}
                             checked={currentVendorRows.length > 0 && currentVendorRows.every(row => selectedVendors.includes(row.code))}
                             style={{ cursor: 'pointer', accentColor: '#0E7490' }}
-                          />
+                           />
                         </th>
                         <th style={{ minWidth: '220px', padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: 'bold', boxSizing: 'border-box' }}>Company Name</th>
                         <th style={{ width: '180px', minWidth: '180px', padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: 'bold', boxSizing: 'border-box' }}>Contact Person</th>
@@ -2868,7 +2868,7 @@ export default function VendorManagementView(props) {
                         Array.from({ length: 6 }).map((_, idx) => (
                           <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '12px 0', textAlign: 'center', width: '48px' }}>
-                              <input type="checkbox" defaultChecked={false} disabled />
+                              <input id="vendor-management-input-3" name="input3" aria-label="Input 3" type="checkbox" defaultChecked={false} disabled  />
                             </td>
                             <td style={{ padding: '12px 16px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '70%', height: '13px' }} />
@@ -2913,12 +2913,12 @@ export default function VendorManagementView(props) {
                               }}
                             >
                               <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                                <input
+                                <input id="vendor-management-checkbox" name="checkbox" aria-label="Checkbox"
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={() => handleSelectVendorRow(vendor.code)}
                                   style={{ cursor: 'pointer' }}
-                                />
+                                 />
                               </td>
                               <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1e293b' }}>{vendor.name}</td>
                               <td style={{ padding: '12px 16px', color: '#475569' }}>{vendor.contact}</td>
@@ -3239,38 +3239,38 @@ export default function VendorManagementView(props) {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Vendor Name</label>
-                      <input
+                      <label htmlFor="vendor-management-vendor-name" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Vendor Name</label>
+                      <input id="vendor-management-vendor-name" name="vendorName" aria-label="Vendor Name"
                         type="text"
                         value={editingVendor.name}
                         onChange={(e) => setEditingVendor({ ...editingVendor, name: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Primary Contact</label>
-                      <input
+                      <label htmlFor="vendor-management-primary-contact" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Primary Contact</label>
+                      <input id="vendor-management-primary-contact" name="primaryContact" aria-label="Primary Contact"
                         type="text"
                         value={editingVendor.contact}
                         onChange={(e) => setEditingVendor({ ...editingVendor, contact: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Phone Number</label>
-                      <input
+                      <label htmlFor="vendor-management-phone-number" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Phone Number</label>
+                      <input id="vendor-management-phone-number" name="phoneNumber" aria-label="Phone Number"
                         type="text"
                         value={editingVendor.phone}
                         onChange={(e) => setEditingVendor({ ...editingVendor, phone: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>GST Number</label>
-                      <input
+                      <label htmlFor="vendor-management-gst-number" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>GST Number</label>
+                      <input id="vendor-management-gst-number" name="gSTNumber" aria-label="GST Number"
                         type="text"
                         value={editingVendor.gst || ''}
                         onChange={(e) => {
@@ -3288,17 +3288,17 @@ export default function VendorManagementView(props) {
                         maxLength={15}
                         placeholder="15-digit GSTIN"
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', textTransform: 'uppercase' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Payment Terms</label>
-                      <input
+                      <label htmlFor="vendor-management-payment-terms" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Payment Terms</label>
+                      <input id="vendor-management-payment-terms" name="paymentTerms" aria-label="Payment Terms"
                         type="text"
                         value={editingVendor.terms}
                         onChange={(e) => setEditingVendor({ ...editingVendor, terms: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
                   </div>
 

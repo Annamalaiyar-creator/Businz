@@ -984,7 +984,7 @@ export default function RfpView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="rfp-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2065,13 +2065,13 @@ export default function RfpView(props) {
                   <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', margin: 0 }}>1. Request Information</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Request Number</label>
-                      <input type="text" value={prNumber} disabled style={{ height: '38px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px', backgroundColor: '#f8fafc', color: '#94a3b8' }} />
+                      <label htmlFor="rfp-request-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Request Number</label>
+                      <input id="rfp-request-number" name="requestNumber" aria-label="Request Number" type="text" value={prNumber} disabled style={{ height: '38px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px', backgroundColor: '#f8fafc', color: '#94a3b8' }}  />
                       <span style={{ fontSize: '10px', color: '#94a3b8' }}>(Auto Generated)</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Request Date *</label>
-                      <input type="date" value={prDate} onChange={(e) => setPrDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }} />
+                      <label htmlFor="rfp-request-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Request Date *</label>
+                      <input id="rfp-request-date" name="requestDate" aria-label="Request Date" type="date" value={prDate} onChange={(e) => setPrDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}  />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Requested By *</label>
@@ -2083,8 +2083,8 @@ export default function RfpView(props) {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Required Date *</label>
-                      <input type="date" min={new Date().toISOString().split('T')[0]} value={prRequiredDate} onChange={(e) => setPrRequiredDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }} />
+                      <label htmlFor="rfp-required-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Required Date *</label>
+                      <input id="rfp-required-date" name="requiredDate" aria-label="Required Date" type="date" min={new Date().toISOString().split('T')[0]} value={prRequiredDate} onChange={(e) => setPrRequiredDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}  />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Priority *</label>
@@ -2100,8 +2100,8 @@ export default function RfpView(props) {
                     </div>
 
                     <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Purpose / Reason *</label>
-                      <textarea value={prPurpose} onChange={(e) => setPrPurpose(e.target.value)} required placeholder="Describe the purpose of this requisition..." style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', backgroundColor: 'white', resize: 'none', fontFamily: 'inherit' }} />
+                      <label htmlFor="rfp-purpose-reason" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Purpose / Reason *</label>
+                      <textarea id="rfp-purpose-reason" name="purposeReason" aria-label="Purpose / Reason" value={prPurpose} onChange={(e) => setPrPurpose(e.target.value)} required placeholder="Describe the purpose of this requisition..." style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', backgroundColor: 'white', resize: 'none', fontFamily: 'inherit' }}  />
                       <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'right' }}>{prPurpose.length}/500</span>
                     </div>
 
@@ -2147,16 +2147,16 @@ export default function RfpView(props) {
                               {renderTableSelect(item.name, (e) => handleItemChange(idx, 'name', e.target.value), ['GI Steel Coil 2mm', 'Aluminium Rail 120mm', 'Self Drilling Screw', 'Hex Bolt M10', 'Cement Bag 50kg', 'Industrial Fan 5KW'])}
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <input type="text" value={item.desc} onChange={(e) => handleItemChange(idx, 'desc', e.target.value)} placeholder="Item details..." style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px' }} />
+                              <input id={`rfp-item-details-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`itemDetails_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Item details" type="text" value={item.desc} onChange={(e) => handleItemChange(idx, 'desc', e.target.value)} placeholder="Item details..." style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px' }}  />
                             </td>
                             <td style={{ padding: '8px 12px' }}>
                               {renderTableSelect(item.unit, (e) => handleItemChange(idx, 'unit', e.target.value), ['MT', 'Nos', 'KG', 'Mtr'])}
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <input type="number" step="any" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value)} placeholder="0" style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px' }} />
+                              <input id={`rfp-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0" type="number" step="any" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value)} placeholder="0" style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px' }}  />
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <input type="date" value={item.date} onChange={(e) => handleItemChange(idx, 'date', e.target.value)} style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px' }} />
+                              <input id={`rfp-date-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`date_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Date" type="date" value={item.date} onChange={(e) => handleItemChange(idx, 'date', e.target.value)} style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '13px' }}  />
                             </td>
                             <td style={{ padding: '8px 12px' }}>
                               {renderTableSelect(item.vendor, (e) => handleItemChange(idx, 'vendor', e.target.value), ['Tata Steel Ltd.', 'JSW Aluminium', 'Havells India Ltd.', 'UltraTech Cement', 'N/A'])}
@@ -2183,17 +2183,17 @@ export default function RfpView(props) {
                         <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Estimated Budget (INR)</label>
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                           <span style={{ position: 'absolute', left: '12px', fontSize: '13px', color: '#64748b', fontWeight: '600' }}>₹</span>
-                          <input type="text" value={prBudget} onChange={(e) => setPrBudget(e.target.value)} style={{ width: '100%', height: '38px', padding: '0 12px 0 24px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                          <input id="rfp-pr-budget" name="prBudget" aria-label="PrBudget" type="text" value={prBudget} onChange={(e) => setPrBudget(e.target.value)} style={{ width: '100%', height: '38px', padding: '0 12px 0 24px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}  />
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Preferred Brand (Optional)</label>
-                        <input type="text" value={prBrand} onChange={(e) => setPrBrand(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                        <label htmlFor="rfp-preferred-brand-optional" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Preferred Brand (Optional)</label>
+                        <input id="rfp-preferred-brand-optional" name="preferredBrandOptional" aria-label="Preferred Brand (Optional)" type="text" value={prBrand} onChange={(e) => setPrBrand(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes (Visible to Approver)</label>
-                      <textarea value={prNotes} onChange={(e) => setPrNotes(e.target.value)} style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', backgroundColor: 'white', resize: 'none', fontFamily: 'inherit' }} />
+                      <label htmlFor="rfp-notes-visible-to" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes (Visible to Approver)</label>
+                      <textarea id="rfp-notes-visible-to" name="notesVisibleTo" aria-label="Notes (Visible to Approver)" value={prNotes} onChange={(e) => setPrNotes(e.target.value)} style={{ height: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', backgroundColor: 'white', resize: 'none', fontFamily: 'inherit' }}  />
                       <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'right' }}>{prNotes.length}/500</span>
                     </div>
                   </div>
@@ -2210,8 +2210,8 @@ export default function RfpView(props) {
                       5. This request is subject to approval and availability of budget.
                     </div>
 
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', color: '#475569' }}>
-                      <input type="checkbox" checked={prUseDefaultTerms} onChange={(e) => setPrUseDefaultTerms(e.target.checked)} />
+                    <label htmlFor="rfp-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', color: '#475569' }}>
+                      <input id="rfp-checkbox" name="checkbox" aria-label="Checkbox" type="checkbox" checked={prUseDefaultTerms} onChange={(e) => setPrUseDefaultTerms(e.target.checked)}  />
                       <span>Use default terms & conditions</span>
                     </label>
                   </div>
@@ -2244,13 +2244,13 @@ export default function RfpView(props) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '380px' }}>
                     <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-                    <input
+                    <input id="rfp-search-query" name="searchQuery" aria-label="Search Request ID, employee, item, department"
                       type="text"
                       placeholder="Search Request ID, employee, item, department..."
                       value={searchQuery}
                       onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                       style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-                    />
+                     />
                   </div>
 
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
@@ -2259,7 +2259,7 @@ export default function RfpView(props) {
                       <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
                     </div>
 
-                    <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
+                    <select id="rfp-status-filter" name="statusFilter" aria-label="StatusFilter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
                       {uniqueStatuses.map(s => (
                         <option key={s} value={s}>
                           {s === 'All' ? 'Status: All' : s}
@@ -2329,11 +2329,11 @@ export default function RfpView(props) {
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                         <th style={{ padding: '12px 16px', width: '40px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <input
+                          <input id="rfp-select-all" name="selectAll" aria-label="SelectAll"
                             type="checkbox"
                             onChange={handleSelectAll}
                             checked={currentRows.length > 0 && currentRows.every(r => selectedPRs.includes(r.id))}
-                          />
+                           />
                         </th>
                         <th style={{ padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: '600', whiteSpace: 'nowrap' }}>Request ID</th>
                         <th style={{ padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: '600', whiteSpace: 'nowrap' }}>Requested By</th>
@@ -2401,11 +2401,11 @@ export default function RfpView(props) {
                               }}
                             >
                               <td style={{ padding: '14px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                                <input
+                                <input id="rfp-checkbox" name="checkbox" aria-label="Checkbox"
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={() => handleSelectRow(rfp.id)}
-                                />
+                                 />
                               </td>
                               <td style={{ padding: '14px 16px', fontWeight: 'bold', color: '#2563eb', whiteSpace: 'nowrap' }}>{rfp.id}</td>
                               <td style={{ padding: '14px 16px', fontWeight: '500', color: '#1e293b', whiteSpace: 'nowrap' }}>{rfp.requester}</td>
@@ -2501,7 +2501,7 @@ export default function RfpView(props) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>Rows per page:</span>
-                        <select
+                        <select id="rfp-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                           value={rowsPerPage}
                           onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                           style={{ height: '30px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', padding: '0 4px', backgroundColor: 'white' }}
@@ -2624,33 +2624,33 @@ export default function RfpView(props) {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Requester</label>
-                      <input
+                      <label htmlFor="rfp-requester" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Requester</label>
+                      <input id="rfp-requester" name="requester" aria-label="Requester"
                         type="text"
                         value={editingRfp.requester}
                         onChange={(e) => setEditingRfp({ ...editingRfp, requester: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Item Requested</label>
-                      <input
+                      <label htmlFor="rfp-item-requested" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Item Requested</label>
+                      <input id="rfp-item-requested" name="itemRequested" aria-label="Item Requested"
                         type="text"
                         value={editingRfp.req}
                         onChange={(e) => setEditingRfp({ ...editingRfp, req: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Quantity</label>
-                      <input
+                      <label htmlFor="rfp-quantity" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Quantity</label>
+                      <input id="rfp-quantity" name="quantity" aria-label="Quantity"
                         type="text"
                         value={editingRfp.qty}
                         onChange={(e) => setEditingRfp({ ...editingRfp, qty: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
                   </div>
 

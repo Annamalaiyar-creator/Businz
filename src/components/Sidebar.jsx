@@ -543,7 +543,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
         }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748B', flexShrink: 0 }} />
-          <input 
+          <input id="sidebar-search" name="search" aria-label="Search" 
             type="text" 
             placeholder="Search" 
             value={searchQuery}
@@ -558,7 +558,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               width: '100%',
               fontFamily: 'inherit'
             }}
-          />
+           />
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
             <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: '1px solid #CBD5E1', borderRadius: '5px', padding: '1px 5px' }}>⌘</span>
             <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', backgroundColor: 'rgba(255, 255, 255, 0.9)', border: '1px solid #CBD5E1', borderRadius: '5px', padding: '1px 5px' }}>K</span>

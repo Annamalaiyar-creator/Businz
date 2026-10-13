@@ -741,7 +741,7 @@ export default function DashboardFullReference({ userRole }) {
 
             {/* Pill Dropdown Selector */}
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-              <select 
+              <select id="dashboard-full-reference-selected-month" name="selectedMonth" aria-label="SelectedMonth" 
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 style={{

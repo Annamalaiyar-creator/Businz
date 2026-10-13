@@ -984,7 +984,7 @@ export default function SpendAnalyticsView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="spend-analytics-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{

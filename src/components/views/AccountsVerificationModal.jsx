@@ -675,7 +675,7 @@ export default function AccountsVerificationModal({
               <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
                 Payment Date <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter date verified from slip</span>}
               </label>
-              <input
+              <input id="accounts-verification-slice-0-10" name="slice010" aria-label="Slice 0 10"
                 type="date"
                 disabled={isAlreadyCompleted}
                 value={currentPayDate ? currentPayDate.slice(0, 10) : ''}
@@ -696,14 +696,14 @@ export default function AccountsVerificationModal({
                   cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
             </div>
 
             <div>
               <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
                 Total Amount (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter amount verified from slip</span>}
               </label>
-              <input
+              <input id="accounts-verification-current-total-amount" name="currentTotalAmount" aria-label="Enter verified amount received ( 793800)"
                 type="number"
                 step="0.01"
                 placeholder="Enter verified amount received (e.g. 793800)"
@@ -726,7 +726,7 @@ export default function AccountsVerificationModal({
                   cursor: isAlreadyCompleted ? 'not-allowed' : 'text',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
             </div>
           </div>
 
@@ -736,7 +736,7 @@ export default function AccountsVerificationModal({
               <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '8px' }}>
                 Customer Payment Status {isAlreadyCompleted && <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700' }}>(Verified • Read Only)</span>}
               </label>
-              <select
+              <select id="accounts-verification-select-1" name="select1" aria-label="Select 1"
                 disabled={isAlreadyCompleted}
                 value={currentPayStatus || ''}
                 onChange={(e) => {

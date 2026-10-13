@@ -399,10 +399,10 @@ export default function ConfirmingBomModal({
         {/* Customer (Locked), Company Name (Editable) & Payment Type (Editable) */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
           <div>
-            <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
+            <label htmlFor="confirming-bom-customer-name" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
               CUSTOMER NAME
             </label>
-            <input
+            <input id="confirming-bom-customer-name" name="cUSTOMERNAME" aria-label="CUSTOMER NAME"
               type="text"
               value={confirmingBomModal.customerName}
               readOnly
@@ -410,7 +410,7 @@ export default function ConfirmingBomModal({
                 width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px',
                 fontSize: '13px', fontWeight: '700', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', boxSizing: 'border-box'
               }}
-            />
+             />
           </div>
 
           <div>
@@ -422,7 +422,7 @@ export default function ConfirmingBomModal({
                 {confirmingBomModal.companyName || confirmingBomModal.customerName || '—'}
               </div>
             ) : (
-              <input
+              <input id="confirming-bom-company-name" name="companyName" aria-label="Company Name"
                 type="text"
                 placeholder="Company Name..."
                 value={confirmingBomModal.companyName || ''}
@@ -431,7 +431,7 @@ export default function ConfirmingBomModal({
                   width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px',
                   fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box'
                 }}
-              />
+               />
             )}
           </div>
 
@@ -444,7 +444,7 @@ export default function ConfirmingBomModal({
                 {normalizePaymentTerm(confirmingBomModal.paymentType)}
               </div>
             ) : (
-              <select
+              <select id="confirming-bom-payment-type" name="paymentType" aria-label="PaymentType"
                 value={normalizePaymentTerm(confirmingBomModal.paymentType)}
                 onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                 style={{
@@ -471,7 +471,7 @@ export default function ConfirmingBomModal({
                 </span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <input
+                <input id="confirming-bom-advance-amount" name="advanceAmount" aria-label="Enter advance amount"
                   type="number"
                   min="0"
                   disabled={isAlreadyForwarded}
@@ -487,7 +487,7 @@ export default function ConfirmingBomModal({
                   }}
                   placeholder="Enter advance amount"
                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #5EEAD4', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: isAlreadyForwarded ? '#F1F5F9' : '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
-                />
+                 />
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #CCFBF1', padding: '0 12px', height: '38px' }}>
                   <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Remaining Balance</span>
                   <strong style={{ fontSize: '13px', color: '#0F766E' }}>
@@ -582,10 +582,10 @@ export default function ConfirmingBomModal({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
+                  <label htmlFor="confirming-bom-street-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
                     Address (Street / Building / Area)
                   </label>
-                  <input
+                  <input id="confirming-bom-street-address" name="streetAddress" aria-label="Address (Street / Building / Area)"
                     type="text"
                     placeholder="Street Address..."
                     value={bObj.address || ''}
@@ -598,13 +598,13 @@ export default function ConfirmingBomModal({
                       });
                     }}
                     style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                  />
+                   />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                    <input
+                    <label htmlFor="confirming-bom-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                    <input id="confirming-bom-city" name="city" aria-label="City"
                       type="text"
                       placeholder="City..."
                       value={bObj.city || ''}
@@ -617,11 +617,11 @@ export default function ConfirmingBomModal({
                         });
                       }}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                    <input
+                    <label htmlFor="confirming-bom-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                    <input id="confirming-bom-state" name="state" aria-label="State"
                       type="text"
                       placeholder="State..."
                       value={bObj.state || ''}
@@ -634,11 +634,11 @@ export default function ConfirmingBomModal({
                         });
                       }}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                    <input
+                    <label htmlFor="confirming-bom-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                    <input id="confirming-bom-pincode" name="pincode" aria-label="Pincode"
                       type="text"
                       placeholder="Pincode..."
                       value={bObj.pincode || ''}
@@ -651,7 +651,7 @@ export default function ConfirmingBomModal({
                         });
                       }}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                 </div>
               </div>
@@ -672,8 +672,8 @@ export default function ConfirmingBomModal({
                     </div>
                   </div>
 
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4F46E5', cursor: 'pointer', backgroundColor: '#EEF2FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
-                    <input
+                  <label htmlFor="confirming-bom-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4F46E5', cursor: 'pointer', backgroundColor: '#EEF2FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
+                    <input id="confirming-bom-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                       type="checkbox"
                       checked={Boolean(confirmingBomModal.sameAsBilling)}
                       onChange={(e) => {
@@ -692,16 +692,16 @@ export default function ConfirmingBomModal({
                         }
                       }}
                       style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                    />
+                     />
                     Same as Billing
                   </label>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
+                  <label htmlFor="confirming-bom-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
                     Address (Street / Building / Area)
                   </label>
-                  <input
+                  <input id="confirming-bom-address" name="address" aria-label="Address (Street / Building / Area)"
                     type="text"
                     placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
                     value={confirmingBomModal.sameAsBilling ? (bObj.address || '') : (dObj.address || '')}
@@ -720,13 +720,13 @@ export default function ConfirmingBomModal({
                       boxSizing: 'border-box', outline: 'none',
                       cursor: confirmingBomModal.sameAsBilling ? 'not-allowed' : 'text'
                     }}
-                  />
+                   />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                    <input
+                    <label htmlFor="confirming-bom-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                    <input id="confirming-bom-city" name="city" aria-label="City"
                       type="text"
                       placeholder="e.g. Chennai"
                       value={confirmingBomModal.sameAsBilling ? (bObj.city || '') : (dObj.city || '')}
@@ -745,11 +745,11 @@ export default function ConfirmingBomModal({
                         boxSizing: 'border-box', outline: 'none',
                         cursor: confirmingBomModal.sameAsBilling ? 'not-allowed' : 'text'
                       }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                    <input
+                    <label htmlFor="confirming-bom-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                    <input id="confirming-bom-state" name="state" aria-label="State"
                       type="text"
                       placeholder="e.g. Tamil Nadu"
                       value={confirmingBomModal.sameAsBilling ? (bObj.state || '') : (dObj.state || '')}
@@ -768,11 +768,11 @@ export default function ConfirmingBomModal({
                         boxSizing: 'border-box', outline: 'none',
                         cursor: confirmingBomModal.sameAsBilling ? 'not-allowed' : 'text'
                       }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                    <input
+                    <label htmlFor="confirming-bom-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                    <input id="confirming-bom-pincode" name="pincode" aria-label="Pincode"
                       type="text"
                       placeholder="e.g. 600058"
                       value={confirmingBomModal.sameAsBilling ? (bObj.pincode || '') : (dObj.pincode || '')}
@@ -791,7 +791,7 @@ export default function ConfirmingBomModal({
                         boxSizing: 'border-box', outline: 'none',
                         cursor: confirmingBomModal.sameAsBilling ? 'not-allowed' : 'text'
                       }}
-                    />
+                     />
                   </div>
                 </div>
 
@@ -872,7 +872,7 @@ export default function ConfirmingBomModal({
                         }}>
                           <Upload style={{ width: '13px', height: '13px' }} />
                           Upload Address Proof Document
-                          <input
+                          <input id="confirming-bom-input-1" name="input1" aria-label="Input 1"
                             type="file"
                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                             style={{ display: 'none' }}
@@ -892,7 +892,7 @@ export default function ConfirmingBomModal({
                                 });
                               }
                             }}
-                          />
+                           />
                         </label>
                       </div>
                     )}
@@ -1201,7 +1201,7 @@ export default function ConfirmingBomModal({
                 return (
                   <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: item.confirmed ? '#F0FDF4' : 'transparent' }}>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                      <input
+                      <input id={`confirming-bom-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={Boolean(item.confirmed)}
                         onChange={(e) => {
@@ -1210,11 +1210,11 @@ export default function ConfirmingBomModal({
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '16px', height: '16px', accentColor: '#166534', cursor: 'pointer' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`confirming-bom-product-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`productName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Product Name"
                         type="text"
                         placeholder="Product Name..."
                         value={item.name}
@@ -1224,10 +1224,10 @@ export default function ConfirmingBomModal({
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`confirming-bom-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
                         type="text"
                         placeholder="Description..."
                         value={item.category || item.specs || ''}
@@ -1237,10 +1237,10 @@ export default function ConfirmingBomModal({
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`confirming-bom-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
                         type="text"
                         placeholder="UOM"
                         value={item.uom || item.unit || 'NOS'}
@@ -1250,10 +1250,10 @@ export default function ConfirmingBomModal({
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', outline: 'none' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`confirming-bom-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
                         type="number"
                         min="1"
                         value={item.qty}
@@ -1263,10 +1263,10 @@ export default function ConfirmingBomModal({
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', outline: 'none' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`confirming-bom-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate"
                         type="number"
                         min="0"
                         value={item.rate}
@@ -1277,7 +1277,7 @@ export default function ConfirmingBomModal({
                           setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                         }}
                         style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '12px', textAlign: 'right', color: '#0F172A', outline: 'none' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
                       {itemTotal > 0 ? (

@@ -68,7 +68,7 @@ export default function DailyProductionTrendChart({ title = "DAILY PRODUCTION TR
         </div>
 
         {/* Top-Right Dropdown Filter with Monthly and Yearly */}
-        <select 
+        <select id="daily-production-trend-chart-filter" name="filter" aria-label="Filter" 
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           style={{ 

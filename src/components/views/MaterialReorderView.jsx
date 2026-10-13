@@ -984,7 +984,7 @@ export default function MaterialReorderView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="material-reorder-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -1980,33 +1980,33 @@ export default function MaterialReorderView(props) {
           <div className="section-card" style={{ padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr auto', gap: '16px', alignItems: 'flex-end' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Search Material</label>
+                <label htmlFor="material-reorder-search-material" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Search Material</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input type="text" placeholder="Search by Material / SKU / Code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
+                  <input id="material-reorder-search-material" name="searchMaterial" aria-label="Search Material" type="text" placeholder="Search by Material / SKU / Code" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}  />
                   <Search style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', left: '12px' }} />
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Warehouse</label>
-                <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
+                <label htmlFor="material-reorder-warehouse" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Warehouse</label>
+                <select id="material-reorder-warehouse" name="warehouse" aria-label="Warehouse" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
                   <option>All Warehouses</option>
                 </select>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Category</label>
-                <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
+                <label htmlFor="material-reorder-category" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Category</label>
+                <select id="material-reorder-category" name="category" aria-label="Category" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
                   <option>All Categories</option>
                 </select>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Criticality</label>
-                <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
+                <label htmlFor="material-reorder-criticality" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Criticality</label>
+                <select id="material-reorder-criticality" name="criticality" aria-label="Criticality" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
                   <option>All</option>
                 </select>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Supplier</label>
-                <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
+                <label htmlFor="material-reorder-supplier" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Supplier</label>
+                <select id="material-reorder-supplier" name="supplier" aria-label="Supplier" style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#64748B' }}>
                   <option>All Suppliers</option>
                 </select>
               </div>
@@ -2162,7 +2162,7 @@ export default function MaterialReorderView(props) {
                 <thead>
                   <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold' }}>
                     <th style={{ width: '48px', minWidth: '48px', padding: '12px 14px', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                      <input
+                      <input id="material-reorder-select-all" name="selectAll" aria-label="SelectAll"
                         type="checkbox"
                         style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                         checked={currentReorderRows.length > 0 && currentReorderRows.every(r => selectedReorders.includes(r.id))}
@@ -2173,7 +2173,7 @@ export default function MaterialReorderView(props) {
                             setSelectedReorders([]);
                           }
                         }}
-                      />
+                       />
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 'bold' }}>#</th>
                     <th style={{ padding: '12px 14px', fontWeight: 'bold' }}>Material / SKU</th>
@@ -2202,7 +2202,7 @@ export default function MaterialReorderView(props) {
                         className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
                       >
                         <td style={{ width: '48px', minWidth: '48px', padding: '12px 14px', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                          <input
+                          <input id="material-reorder-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                             type="checkbox"
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                             checked={isChecked}
@@ -2213,7 +2213,7 @@ export default function MaterialReorderView(props) {
                                 setSelectedReorders([...selectedReorders, row.id]);
                               }
                             }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', color: '#94A3B8', fontWeight: 'bold' }}>{(reorderPage - 1) * reorderRowsPerPage + idx + 1}</td>
                         <td style={{ padding: '12px 14px' }}>
@@ -2286,7 +2286,7 @@ export default function MaterialReorderView(props) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>Showing per page</span>
-                  <select
+                  <select id="material-reorder-reorder-rows-per-page" name="reorderRowsPerPage" aria-label="ReorderRowsPerPage"
                     value={reorderRowsPerPage}
                     onChange={(e) => { setReorderRowsPerPage(Number(e.target.value)); setReorderPage(1); }}
                     style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -2365,14 +2365,14 @@ export default function MaterialReorderView(props) {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                  <input
+                  <input name="input1" aria-label="Input 1"
                     type="number"
                     min="1"
                     max={Math.ceil(reorderAlerts.length / reorderRowsPerPage) || 1}
                     defaultValue={reorderPage}
                     id="reorder-goto-page-input"
                     style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                  />
+                   />
                   <button
                     onClick={() => {
                       const val = parseInt(document.getElementById('reorder-goto-page-input')?.value || '1', 10);
@@ -2617,42 +2617,42 @@ export default function MaterialReorderView(props) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>Material Name</label>
-                    <input
+                    <label htmlFor="material-reorder-material-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>Material Name</label>
+                    <input id="material-reorder-material-name" name="materialName" aria-label="Material Name"
                       type="text"
                       value={editingReorderItem.name || ''}
                       onChange={(e) => setEditingReorderItem({ ...editingReorderItem, name: e.target.value })}
                       style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>Est. Reorder Qty</label>
-                      <input
+                      <label htmlFor="material-reorder-est-reorder-qty" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>Est. Reorder Qty</label>
+                      <input id="material-reorder-est-reorder-qty" name="estReorderQty" aria-label="Est. Reorder Qty"
                         type="text"
                         value={editingReorderItem.reorderQty || ''}
                         onChange={(e) => setEditingReorderItem({ ...editingReorderItem, reorderQty: e.target.value })}
                         style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', boxSizing: 'border-box' }}
-                      />
+                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>UOM</label>
-                      <input
+                      <label htmlFor="material-reorder-uom" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>UOM</label>
+                      <input id="material-reorder-uom" name="uOM" aria-label="UOM"
                         type="text"
                         value={editingReorderItem.uom || ''}
                         onChange={(e) => setEditingReorderItem({ ...editingReorderItem, uom: e.target.value })}
                         style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', boxSizing: 'border-box' }}
-                      />
+                       />
                     </div>
                   </div>
                   <div>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>Est. Value (₹)</label>
-                    <input
+                    <label htmlFor="material-reorder-est-value" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'block', marginBottom: '4px' }}>Est. Value (₹)</label>
+                    <input id="material-reorder-est-value" name="estValue" aria-label="Est. Value (₹)"
                       type="text"
                       value={editingReorderItem.val || ''}
                       onChange={(e) => setEditingReorderItem({ ...editingReorderItem, val: e.target.value })}
                       style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                 </div>
 

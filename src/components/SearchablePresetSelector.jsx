@@ -174,7 +174,7 @@ export default function SearchablePresetSelector({
       >
         <Search size={14} style={{ color: '#94A3B8', marginRight: '8px', flexShrink: 0 }} />
         
-        <input
+        <input id="searchable-preset-selector-search-term" name="searchTerm" aria-label="SearchTerm"
           ref={inputRef}
           type="text"
           value={searchTerm}
@@ -196,7 +196,7 @@ export default function SearchablePresetSelector({
             backgroundColor: 'transparent',
             padding: 0
           }}
-        />
+         />
 
         {value && (
           <button

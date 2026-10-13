@@ -1007,30 +1007,30 @@ export default function CrmCustomersView({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Customer Code</label>
-              <input
+              <label htmlFor="crm-customers-customer-code" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Customer Code</label>
+              <input id="crm-customers-customer-code" name="customerCode" aria-label="Customer Code"
                 type="text"
                 value={nextCodePreview}
                 readOnly
                 disabled
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0E7490', fontWeight: '800', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Creation Date</label>
-              <input
+              <label htmlFor="crm-customers-creation-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Creation Date</label>
+              <input id="crm-customers-creation-date" name="creationDate" aria-label="Creation Date"
                 type="date"
                 value={new Date().toISOString().split('T')[0]}
                 disabled
                 readOnly
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Acquisition Source</label>
-              <select
+              <label htmlFor="crm-customers-acquisition-source" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Acquisition Source</label>
+              <select id="crm-customers-acquisition-source" name="acquisitionSource" aria-label="Acquisition Source"
                 value={formCust.source}
                 onChange={(e) => setFormCust({ ...formCust, source: e.target.value })}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
@@ -1059,10 +1059,10 @@ export default function CrmCustomersView({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-customer-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="crm-customers-customer-name" name="customerName" aria-label="Customer Name"
                 type="text"
                 required
                 placeholder="e.g. Vikram Solar"
@@ -1072,14 +1072,14 @@ export default function CrmCustomersView({
                   validateDuplicates('companyName', e.target.value, editingCustomer?.id);
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-vikram-solar-limited" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Company / Organization Legal Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="crm-customers-vikram-solar-limited" name="vikramSolarLimited" aria-label="Company / Organization Legal Name"
                 type="text"
                 required
                 placeholder="e.g. Vikram Solar Limited"
@@ -1089,16 +1089,16 @@ export default function CrmCustomersView({
                   validateDuplicates('companyName', e.target.value, editingCustomer?.id);
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-customer-account-type" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer Account Type
               </label>
-              <select
+              <select id="crm-customers-customer-account-type" name="customerAccountType" aria-label="Customer Account Type"
                 value={formCust.customerType}
                 onChange={(e) => setFormCust({ ...formCust, customerType: e.target.value })}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
@@ -1112,10 +1112,10 @@ export default function CrmCustomersView({
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-gstin-tax-id" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 GSTIN / Tax ID (15 Digits)
               </label>
-              <input
+              <input id="crm-customers-gstin-tax-id" name="gSTINTaxID" aria-label="GSTIN / Tax ID (15 Digits)"
                 type="text"
                 placeholder="e.g. 33AABCV1234F1Z5"
                 value={formCust.gstNumber}
@@ -1126,7 +1126,7 @@ export default function CrmCustomersView({
                   validateDuplicates('gstNumber', val, editingCustomer?.id);
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
         </div>
@@ -1144,24 +1144,24 @@ export default function CrmCustomersView({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-contact-person-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Contact Person Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="crm-customers-contact-person-name" name="contactPersonName" aria-label="Contact Person Name"
                 type="text"
                 required
                 placeholder="e.g. Rajesh Kannan"
                 value={formCust.primaryContact.name}
                 onChange={(e) => setFormCust({ ...formCust, primaryContact: { ...formCust.primaryContact, name: e.target.value } })}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-mobile-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Mobile / Phone <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="crm-customers-mobile-phone" name="mobilePhone" aria-label="Mobile / Phone"
                 type="text"
                 required
                 placeholder="+91 98765 43210"
@@ -1171,14 +1171,14 @@ export default function CrmCustomersView({
                   validateDuplicates('phone', e.target.value, editingCustomer?.id);
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-alt-number-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Alt Number / Phone
               </label>
-              <input
+              <input id="crm-customers-alt-number-phone" name="altNumberPhone" aria-label="Alt Number / Phone"
                 type="text"
                 placeholder="+91 98765 43211 / Landline"
                 value={formCust.primaryContact.altPhone || formCust.altPhone || ''}
@@ -1191,14 +1191,14 @@ export default function CrmCustomersView({
                   });
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-customers-email-address" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Email Address
               </label>
-              <input
+              <input id="crm-customers-email-address" name="emailAddress" aria-label="Email Address"
                 type="email"
                 placeholder="rajesh@vikramsolar.com"
                 value={formCust.primaryContact.email}
@@ -1207,7 +1207,7 @@ export default function CrmCustomersView({
                   validateDuplicates('email', e.target.value, editingCustomer?.id);
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
         </div>
@@ -1240,7 +1240,7 @@ export default function CrmCustomersView({
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Billing Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Building / Door / Flat / Street)</span>
                 </label>
-                <input
+                <input id="crm-customers-address1" name="address1" aria-label="No 1427, GNT Road, Nagappa Industrial Estate"
                   type="text"
                   placeholder="e.g. No 1427, GNT Road, Nagappa Industrial Estate"
                   value={formCust.address1}
@@ -1255,14 +1255,14 @@ export default function CrmCustomersView({
                     }));
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-customers-address2" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Billing Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Area / Landmark / Road)</span>
                 </label>
-                <input
+                <input id="crm-customers-address2" name="address2" aria-label="Billing Address 2 (Area / Landmark / Road)"
                   type="text"
                   placeholder="e.g. Near Puzhal Toll Plaza, Redhills Road"
                   value={formCust.address2}
@@ -1277,13 +1277,13 @@ export default function CrmCustomersView({
                     }));
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>City</label>
-                  <input
+                  <label htmlFor="crm-customers-city" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>City</label>
+                  <input id="crm-customers-city" name="city" aria-label="City"
                     type="text"
                     placeholder="Chennai"
                     value={formCust.city}
@@ -1296,11 +1296,11 @@ export default function CrmCustomersView({
                       }));
                     }}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>State</label>
-                  <input
+                  <label htmlFor="crm-customers-state" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>State</label>
+                  <input id="crm-customers-state" name="state" aria-label="State"
                     type="text"
                     placeholder="Tamil Nadu"
                     value={formCust.state}
@@ -1313,11 +1313,11 @@ export default function CrmCustomersView({
                       }));
                     }}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Pincode</label>
-                  <input
+                  <label htmlFor="crm-customers-pincode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Pincode</label>
+                  <input id="crm-customers-pincode" name="pincode" aria-label="Pincode"
                     type="text"
                     placeholder="600066"
                     value={formCust.pincode}
@@ -1330,7 +1330,7 @@ export default function CrmCustomersView({
                       }));
                     }}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-                  />
+                   />
                 </div>
               </div>
             </div>
@@ -1348,8 +1348,8 @@ export default function CrmCustomersView({
                   </div>
                 </div>
 
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
-                  <input
+                <label htmlFor="crm-customers-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
+                  <input id="crm-customers-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                     type="checkbox"
                     checked={formCust.sameAsBilling}
                     onChange={(e) => {
@@ -1366,16 +1366,16 @@ export default function CrmCustomersView({
                       }));
                     }}
                     style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                  />
+                   />
                   Same as Billing
                 </label>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-customers-dispatch-address1" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Shipping Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Warehouse / Site / Street)</span>
                 </label>
-                <input
+                <input id="crm-customers-dispatch-address1" name="dispatchAddress1" aria-label="Shipping Address 1 (Warehouse / Site / Street)"
                   type="text"
                   placeholder="e.g. Solar Project Site / Warehouse No 8, SIPCOT"
                   value={formCust.sameAsBilling ? formCust.address1 : formCust.dispatchAddress1}
@@ -1401,14 +1401,14 @@ export default function CrmCustomersView({
                     outline: 'none',
                     cursor: formCust.sameAsBilling ? 'not-allowed' : 'text'
                   }}
-                />
+                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Shipping Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Industrial Estate / Landmark / Road)</span>
                 </label>
-                <input
+                <input id="crm-customers-dispatch-address2" name="dispatchAddress2" aria-label="Near Substation, Sector 4 Industrial Corridor"
                   type="text"
                   placeholder="e.g. Near Substation, Sector 4 Industrial Corridor"
                   value={formCust.sameAsBilling ? formCust.address2 : formCust.dispatchAddress2}
@@ -1434,13 +1434,13 @@ export default function CrmCustomersView({
                     outline: 'none',
                     cursor: formCust.sameAsBilling ? 'not-allowed' : 'text'
                   }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>City</label>
-                  <input
+                  <label htmlFor="crm-customers-city" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>City</label>
+                  <input id="crm-customers-city" name="city" aria-label="City"
                     type="text"
                     placeholder="e.g. Chennai"
                     value={formCust.sameAsBilling ? formCust.city : formCust.dispatchCity}
@@ -1459,11 +1459,11 @@ export default function CrmCustomersView({
                       outline: 'none',
                       cursor: formCust.sameAsBilling ? 'not-allowed' : 'text'
                     }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>State</label>
-                  <input
+                  <label htmlFor="crm-customers-state" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>State</label>
+                  <input id="crm-customers-state" name="state" aria-label="State"
                     type="text"
                     placeholder="e.g. Tamil Nadu"
                     value={formCust.sameAsBilling ? formCust.state : formCust.dispatchState}
@@ -1482,11 +1482,11 @@ export default function CrmCustomersView({
                       outline: 'none',
                       cursor: formCust.sameAsBilling ? 'not-allowed' : 'text'
                     }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Pincode</label>
-                  <input
+                  <label htmlFor="crm-customers-pincode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Pincode</label>
+                  <input id="crm-customers-pincode" name="pincode" aria-label="Pincode"
                     type="text"
                     placeholder="e.g. 600066"
                     value={formCust.sameAsBilling ? formCust.pincode : formCust.dispatchPincode}
@@ -1505,7 +1505,7 @@ export default function CrmCustomersView({
                       outline: 'none',
                       cursor: formCust.sameAsBilling ? 'not-allowed' : 'text'
                     }}
-                  />
+                   />
                 </div>
               </div>
             </div>
@@ -1682,20 +1682,20 @@ export default function CrmCustomersView({
           width: '360px'
         }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-          <input
+          <input id="crm-customers-search-term" name="searchTerm" aria-label="Search Customers (Company Name, Code, GSTIN, Contact)"
             type="text"
             placeholder="Search Customers (Company Name, Code, GSTIN, Contact)..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-          />
+           />
           {searchTerm && <X size={15} color="#94A3B8" style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />}
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
             <Building2 style={{ width: '14px', height: '14px', color: '#64748b' }} />
-            <select
+            <select id="crm-customers-filter-customer-type" name="filterCustomerType" aria-label="FilterCustomerType"
               value={filterCustomerType}
               onChange={(e) => { setFilterCustomerType(e.target.value); setCurrentPage(1); }}
               style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent', cursor: 'pointer' }}
@@ -1772,7 +1772,7 @@ export default function CrmCustomersView({
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="crm-customers-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                     checked={filteredCustomers.length > 0 && filteredCustomers.every(r => selectedRows.includes(r.customerCode || r.id))}
@@ -1783,7 +1783,7 @@ export default function CrmCustomersView({
                         setSelectedRows([]);
                       }
                     }}
-                  />
+                   />
                 </th>
                 <th style={{ width: '140px', minWidth: '140px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Customer Code</th>
                 <th style={{ minWidth: '220px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Company Name</th>
@@ -1823,7 +1823,7 @@ export default function CrmCustomersView({
                   {Array.from({ length: 5 }).map((_, sIdx) => (
                     <tr key={`cust-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                        <input type="checkbox" disabled style={{ opacity: 0.3 }} />
+                        <input id="crm-customers-input-1" name="input1" aria-label="Input 1" type="checkbox" disabled style={{ opacity: 0.3 }}  />
                       </td>
                       {Array.from({ length: 5 }).map((_, hIdx) => (
                         <td key={`cust-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
@@ -1870,12 +1870,12 @@ export default function CrmCustomersView({
                         boxSizing: 'border-box',
                         borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                       }}>
-                        <input
+                        <input id="crm-customers-checkbox" name="checkbox" aria-label="Checkbox"
                           type="checkbox"
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                           checked={isChecked}
                           onChange={() => handleSelectRow(custCode)}
-                        />
+                         />
                       </td>
 
                       {/* Customer Code (Clickable blue like BOM Code) */}
@@ -1938,7 +1938,7 @@ export default function CrmCustomersView({
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Showing per page</span>
-                <select
+                <select id="crm-customers-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                   value={rowsPerPage}
                   onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                   style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -2012,14 +2012,14 @@ export default function CrmCustomersView({
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                <input
+                <input name="pageJump" aria-label="PageJump"
                   type="number"
                   min="1"
                   max={totalPages || 1}
                   defaultValue={currentPage}
                   id="crm-customers-goto-page-input"
                   style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                />
+                 />
                 <button
                   onClick={() => {
                     const val = parseInt(document.getElementById('crm-customers-goto-page-input')?.value || '1', 10);
@@ -2407,13 +2407,13 @@ export default function CrmCustomersView({
 
                   {/* Upload Drop Area */}
                   <div>
-                    <input
+                    <input id="crm-customers-input-2" name="input2" aria-label="Input 2"
                       type="file"
                       ref={bulkFileInputRef}
                       accept=".xlsx, .xls, .csv"
                       onChange={handleBulkFileChange}
                       style={{ display: 'none' }}
-                    />
+                     />
 
                     <div
                       onClick={() => {
@@ -2575,7 +2575,7 @@ export default function CrmCustomersView({
                             {/* Right: Dropdown of File Headers + Sample Value */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <select
+                                <select id="crm-customers-selected-header" name="selectedHeader" aria-label="SelectedHeader"
                                   value={selectedHeader}
                                   onChange={(e) => {
                                     const val = e.target.value;

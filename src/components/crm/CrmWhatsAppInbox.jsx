@@ -249,13 +249,13 @@ export default function CrmWhatsAppInbox({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1' }}>
             <Search size={14} color="#64748B" />
-            <input
+            <input id="crm-whats-app-inbox-search-chats" name="searchChats" aria-label="Search chats"
               type="text"
               placeholder="Search chats..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%' }}
-            />
+             />
           </div>
 
           <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
@@ -501,7 +501,7 @@ export default function CrmWhatsAppInbox({
           gap: '8px'
         }}>
           <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Templates:</span>
-          <select
+          <select id="crm-whats-app-inbox-selected-template" name="selectedTemplate" aria-label="SelectedTemplate"
             value={selectedTemplate}
             onChange={(e) => {
               setSelectedTemplate(e.target.value);
@@ -536,7 +536,7 @@ export default function CrmWhatsAppInbox({
             alignItems: 'center'
           }}
         >
-          <input
+          <input id="crm-whats-app-inbox-message-input" name="messageInput" aria-label="Type WhatsApp message or select a template"
             type="text"
             placeholder="Type WhatsApp message or select a template..."
             value={messageInput}
@@ -550,7 +550,7 @@ export default function CrmWhatsAppInbox({
               fontSize: '13px',
               outline: 'none'
             }}
-          />
+           />
           <button
             type="submit"
             disabled={isSending || !messageInput.trim()}
@@ -768,10 +768,10 @@ export default function CrmWhatsAppInbox({
 
             <form onSubmit={handleStartNewChat} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-whats-app-inbox-new-chat-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Customer Phone Number (with Country Code)
                 </label>
-                <input
+                <input id="crm-whats-app-inbox-new-chat-phone" name="newChatPhone" aria-label="Customer Phone Number (with Country Code)"
                   type="text"
                   placeholder="e.g. 919876543210 or 9876543210"
                   value={newChatPhone}
@@ -786,14 +786,14 @@ export default function CrmWhatsAppInbox({
                     fontSize: '13px',
                     boxSizing: 'border-box'
                   }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-whats-app-inbox-contact-name-optional" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Contact Name (Optional)
                 </label>
-                <input
+                <input id="crm-whats-app-inbox-contact-name-optional" name="contactNameOptional" aria-label="Contact Name (Optional)"
                   type="text"
                   placeholder="e.g. Ramesh Kumar"
                   value={newChatName}
@@ -806,7 +806,7 @@ export default function CrmWhatsAppInbox({
                     fontSize: '13px',
                     boxSizing: 'border-box'
                   }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>

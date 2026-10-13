@@ -411,12 +411,12 @@ export default function BackupVaultView({ userRole }) {
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: '700' }}>
                 <th style={{ padding: '12px 16px', width: '40px' }}>
-                  <input
+                  <input id="backup-vault-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                     checked={currentBackups.length > 0 && currentBackups.every(b => selectedRowFilenames.includes(b.filename))}
                     onChange={() => toggleSelectAllOnPage(currentBackups)}
-                  />
+                   />
                 </th>
                 <th style={{ padding: '12px 16px' }}>Snapshot Identifier</th>
                 <th style={{ padding: '12px 16px' }}>Created Timestamp</th>
@@ -456,12 +456,12 @@ export default function BackupVaultView({ userRole }) {
                       }}
                     >
                       <td style={{ padding: '12px 16px' }}>
-                        <input
+                        <input id={`backup-vault-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                           checked={isSelected}
                           onChange={() => toggleSelectRow(item.filename)}
-                        />
+                         />
                       </td>
                       <td style={{ padding: '12px 16px', fontWeight: '700', color: '#0F172A' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -552,7 +552,7 @@ export default function BackupVaultView({ userRole }) {
           {/* Left Side: Rows per page selector + Showing X to Y of Z */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span>Showing per page:</span>
-            <select
+            <select id="backup-vault-page-size" name="pageSize" aria-label="PageSize"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
@@ -660,7 +660,7 @@ export default function BackupVaultView({ userRole }) {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px' }}>
               <span>Go to page</span>
-              <input
+              <input id="backup-vault-input-1" name="input1" aria-label="#"
                 type="number"
                 value={goToPageInput}
                 onChange={(e) => setGoToPageInput(e.target.value)}
@@ -673,7 +673,7 @@ export default function BackupVaultView({ userRole }) {
                   textAlign: 'center',
                   fontSize: '12px'
                 }}
-              />
+               />
               <button
                 onClick={() => {
                   const target = parseInt(goToPageInput, 10);
@@ -838,10 +838,10 @@ export default function BackupVaultView({ userRole }) {
 
             {/* Option to choose custom JSON file */}
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="backup-vault-input-2" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Or Restore from Local Backup File (.json):
               </label>
-              <input
+              <input id="backup-vault-input-2" name="input2" aria-label="Or Restore from Local Backup File (.json)"
                 type="file"
                 accept=".json"
                 onChange={handleFileUploadForRestore}
@@ -853,7 +853,7 @@ export default function BackupVaultView({ userRole }) {
                   borderRadius: '6px',
                   border: '1px solid #CBD5E1'
                 }}
-              />
+               />
               {uploadedBackupFile && (
                 <div style={{ marginTop: '6px', fontSize: '11.5px', color: '#059669', fontWeight: '700' }}>
                   ✓ Loaded {uploadedBackupFile.name}
@@ -862,10 +862,10 @@ export default function BackupVaultView({ userRole }) {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="backup-vault-type-restore-to" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Type <span style={{ color: '#DC2626', fontFamily: 'monospace' }}>RESTORE</span> to confirm:
               </label>
-              <input
+              <input id="backup-vault-type-restore-to" name="typeRESTORETo" aria-label="Type RESTORE to confirm"
                 type="text"
                 value={restoreConfirmText}
                 onChange={(e) => setRestoreConfirmText(e.target.value)}
@@ -879,7 +879,7 @@ export default function BackupVaultView({ userRole }) {
                   fontWeight: '700',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

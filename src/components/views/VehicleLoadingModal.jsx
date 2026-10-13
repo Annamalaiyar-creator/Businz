@@ -800,175 +800,175 @@ return (
         {deliveryMode === 'transport' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-vehicle-lorry-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Vehicle / Lorry Number
               </label>
-              <input
+              <input id="vehicle-loading-vehicle-lorry-number" name="vehicleLorryNumber" aria-label="Vehicle / Lorry Number"
                 type="text"
                 disabled={isReadOnly}
                 value={vNo}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
                 placeholder="e.g. TN-09-CB-4821"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-logistics-fleet-carrier" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Logistics / Fleet Carrier
               </label>
-              <input
+              <input id="vehicle-loading-logistics-fleet-carrier" name="logisticsFleetCarrier" aria-label="Logistics / Fleet Carrier"
                 type="text"
                 disabled={isReadOnly}
                 value={transp}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, transporter: e.target.value })}
                 placeholder="e.g. VRL Logistics, ARC, ABT, Courier"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-lr-bilty-docket" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 LR / Bilty / Docket No
               </label>
-              <input
+              <input id="vehicle-loading-lr-bilty-docket" name="lRBiltyDocket" aria-label="LR / Bilty / Docket No"
                 type="text"
                 disabled={isReadOnly}
                 value={lr}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, lrNo: e.target.value })}
                 placeholder="e.g. LR-2026-8812 (or enter in final popup)"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-driver-full-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Driver Full Name
               </label>
-              <input
+              <input id="vehicle-loading-driver-full-name" name="driverFullName" aria-label="Driver Full Name"
                 type="text"
                 disabled={isReadOnly}
                 value={dName}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
                 placeholder="Driver Name"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-driver-phone-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Driver Phone Number
               </label>
-              <input
+              <input id="vehicle-loading-driver-phone-number" name="driverPhoneNumber" aria-label="Driver Phone Number"
                 type="text"
                 disabled={isReadOnly}
                 value={dPhone}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
                 placeholder="+91 98765 43210"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-container-seal-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Container / Seal Number
               </label>
-              <input
+              <input id="vehicle-loading-container-seal-number" name="containerSealNumber" aria-label="Container / Seal Number"
                 type="text"
                 disabled={isReadOnly}
                 value={seal}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, sealNo: e.target.value })}
                 placeholder="e.g. SEAL-99201"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
           </div>
         ) : deliveryMode === 'own_vehicle' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-vehicle-number-porter" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Vehicle Number / Porter Ref
               </label>
-              <input
+              <input id="vehicle-loading-vehicle-number-porter" name="vehicleNumberPorter" aria-label="Vehicle Number / Porter Ref"
                 type="text"
                 disabled={isReadOnly}
                 value={vNo}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
                 placeholder="e.g. TN-02-AZ-9999 / Porter"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-driver-delivery-person" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Driver / Delivery Person Name
               </label>
-              <input
+              <input id="vehicle-loading-driver-delivery-person" name="driverDeliveryPerson" aria-label="Driver / Delivery Person Name"
                 type="text"
                 disabled={isReadOnly}
                 value={dName}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
                 placeholder="e.g. In-house Driver / Porter Exec"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-91-98765-43210" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Driver / Delivery Contact Phone
               </label>
-              <input
+              <input id="vehicle-loading-91-98765-43210" name="919876543210" aria-label="Driver / Delivery Contact Phone"
                 type="text"
                 disabled={isReadOnly}
                 value={dPhone}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
                 placeholder="e.g. +91 98765 43210"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-v-no" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer Vehicle / Handover Ref
               </label>
-              <input
+              <input id="vehicle-loading-v-no" name="vNo" aria-label="Customer Vehicle / Handover Ref"
                 type="text"
                 disabled={isReadOnly}
                 value={vNo}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
                 placeholder="e.g. Customer Vehicle / Direct Handover"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-receiver-person-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Receiver Person Name
               </label>
-              <input
+              <input id="vehicle-loading-receiver-person-name" name="receiverPersonName" aria-label="Receiver Person Name"
                 type="text"
                 disabled={isReadOnly}
                 value={dName}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
                 placeholder="e.g. Customer Representative"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-receiver-contact-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Receiver Contact Phone
               </label>
-              <input
+              <input id="vehicle-loading-receiver-contact-phone" name="receiverContactPhone" aria-label="Receiver Contact Phone"
                 type="text"
                 disabled={isReadOnly}
                 value={dPhone}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
                 placeholder="e.g. +91 98765 43210"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-              />
+               />
             </div>
           </div>
         )}
@@ -1118,7 +1118,7 @@ return (
                     >
                       <UploadCloud size={16} style={{ color: '#0E7490' }} />
                       <span>Upload from Device</span>
-                      <input
+                      <input id="vehicle-loading-input-1" name="input1" aria-label="Input 1"
                         type="file"
                         multiple
                         accept="image/*"
@@ -1127,7 +1127,7 @@ return (
                           setShowAddPhotoMenu(false);
                           handleAddPhotoFiles(e.target.files);
                         }}
-                      />
+                       />
                     </label>
 
                     <button
@@ -1316,10 +1316,10 @@ return (
           <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* LR Docket Number input */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="vehicle-loading-lr-docket-bilty" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 LR / Docket / Bilty Number
               </label>
-              <input
+              <input id="vehicle-loading-lr-docket-bilty" name="lRDocketBilty" aria-label="LR / Docket / Bilty Number"
                 type="text"
                 value={popupLrNo}
                 onChange={(e) => {
@@ -1332,7 +1332,7 @@ return (
                   border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px',
                   fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box'
                 }}
-              />
+               />
             </div>
 
             {/* Upload Zone */}
@@ -1380,7 +1380,7 @@ return (
                       cursor: uploadingLr ? 'not-allowed' : 'pointer'
                     }}>
                       Replace
-                      <input
+                      <input id="vehicle-loading-input-2" name="input2" aria-label="Input 2"
                         type="file"
                         accept="image/*,application/pdf"
                         disabled={uploadingLr}
@@ -1390,7 +1390,7 @@ return (
                             handleUploadLrCopy(e.target.files[0]);
                           }
                         }}
-                      />
+                       />
                     </label>
                     <button
                       type="button"
@@ -1432,7 +1432,7 @@ return (
                   }}>
                     {uploadingLr ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
                     {uploadingLr ? 'Uploading LR Copy...' : 'Choose File to Upload'}
-                    <input
+                    <input id="vehicle-loading-input-3" name="input3" aria-label="Input 3"
                       type="file"
                       accept="image/*,application/pdf"
                       disabled={uploadingLr}
@@ -1442,7 +1442,7 @@ return (
                           handleUploadLrCopy(e.target.files[0]);
                         }
                       }}
-                    />
+                     />
                   </label>
                 </>
               )}

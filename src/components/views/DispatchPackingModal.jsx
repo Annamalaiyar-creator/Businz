@@ -976,7 +976,7 @@ export default function DispatchPackingModal({
                       >
                         <UploadCloud size={16} style={{ color: '#0E7490' }} />
                         <span>Upload from Device</span>
-                        <input
+                        <input id="dispatch-packing-input-1" name="input1" aria-label="Input 1"
                           type="file"
                           multiple
                           accept="image/*"
@@ -1024,7 +1024,7 @@ export default function DispatchPackingModal({
                               }
                             }
                           }}
-                        />
+                         />
                       </label>
 
                       <button

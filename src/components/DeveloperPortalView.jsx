@@ -496,13 +496,13 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
           <div style={{ padding: '12px 14px', borderBottom: '1px solid #1E293B' }}>
             <div style={{ position: 'relative' }}>
               <Search style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: '#64748B' }} />
-              <input
+              <input id="developer-portal-filter-dev-tools" name="filterDevTools" aria-label="Filter dev tools"
                 type="text"
                 placeholder="Filter dev tools..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ width: '100%', height: '32px', borderRadius: '6px', backgroundColor: '#1E293B', border: '1px solid #334155', paddingLeft: '30px', paddingRight: '10px', fontSize: '12px', color: '#F1F5F9', outline: 'none' }}
-              />
+               />
             </div>
           </div>
         )}
@@ -1502,8 +1502,8 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
             </p>
 
             <form onSubmit={handleVerifyOTP}>
-              <label style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '6px' }}>ENTER 6-DIGIT MFA OTP CODE</label>
-              <input
+              <label htmlFor="developer-portal-enter-6-digit" style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '6px' }}>ENTER 6-DIGIT MFA OTP CODE</label>
+              <input id="developer-portal-enter-6-digit" name="eNTER6DIGIT" aria-label="ENTER 6-DIGIT MFA OTP CODE"
                 type="text"
                 maxLength="6"
                 placeholder="e.g. 123456"
@@ -1511,7 +1511,7 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
                 onChange={(e) => setOtpInput(e.target.value)}
                 autoFocus
                 style={{ width: '100%', height: '40px', borderRadius: '6px', backgroundColor: '#1E293B', border: '1px solid #334155', textAlign: 'center', fontSize: '18px', letterSpacing: '4px', fontWeight: '900', color: '#38BDF8', outline: 'none' }}
-              />
+               />
               {otpError && <div style={{ color: '#EF4444', fontSize: '11.5px', marginTop: '6px', fontWeight: '700' }}>{otpError}</div>}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
@@ -1547,14 +1547,14 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
               <strong>WARNING:</strong> Restoring a database backup will OVERWRITE live production records with the snapshot from <strong>26 Aug 2026 02:00 AM</strong>.
             </div>
 
-            <label style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '6px' }}>TYPE "RESTORE PRODUCTION" TO CONFIRM:</label>
-            <input
+            <label htmlFor="developer-portal-restore-production" style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '6px' }}>TYPE "RESTORE PRODUCTION" TO CONFIRM:</label>
+            <input id="developer-portal-restore-production" name="rESTOREPRODUCTION" aria-label="TYPE RESTORE PRODUCTION TO CONFIRM"
               type="text"
               placeholder="RESTORE PRODUCTION"
               value={restoreConfirmText}
               onChange={(e) => setRestoreConfirmText(e.target.value)}
               style={{ width: '100%', height: '38px', borderRadius: '6px', backgroundColor: '#1E293B', border: '1px solid #334155', padding: '0 10px', fontSize: '13px', fontWeight: '800', color: '#F8FAFC', outline: 'none', marginBottom: '20px' }}
-            />
+             />
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
@@ -1586,8 +1586,8 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
             </div>
 
             <div style={{ marginBottom: '14px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '4px' }}>SELECT ROLLBACK TARGET VERSION</label>
-              <select
+              <label htmlFor="developer-portal-rollback-version" style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '4px' }}>SELECT ROLLBACK TARGET VERSION</label>
+              <select id="developer-portal-rollback-version" name="rollbackVersion" aria-label="SELECT ROLLBACK TARGET VERSION"
                 value={rollbackVersion}
                 onChange={(e) => setRollbackVersion(e.target.value)}
                 style={{ width: '100%', height: '36px', borderRadius: '6px', backgroundColor: '#1E293B', border: '1px solid #334155', color: '#F1F5F9', padding: '0 8px', fontSize: '13px' }}
@@ -1598,14 +1598,14 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
             </div>
 
             <div style={{ marginBottom: '18px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '4px' }}>REASON FOR ROLLBACK (LOGGED TO AUDIT TRAIL)</label>
-              <input
+              <label htmlFor="developer-portal-rollback-reason" style={{ fontSize: '11px', fontWeight: '800', color: '#CBD5E1', display: 'block', marginBottom: '4px' }}>REASON FOR ROLLBACK (LOGGED TO AUDIT TRAIL)</label>
+              <input id="developer-portal-rollback-reason" name="rollbackReason" aria-label="REASON FOR ROLLBACK (LOGGED TO AUDIT TRAIL)"
                 type="text"
                 placeholder="e.g. Critical API latency regression"
                 value={rollbackReason}
                 onChange={(e) => setRollbackReason(e.target.value)}
                 style={{ width: '100%', height: '36px', borderRadius: '6px', backgroundColor: '#1E293B', border: '1px solid #334155', color: '#F1F5F9', padding: '0 10px', fontSize: '12.5px' }}
-              />
+               />
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -1686,13 +1686,13 @@ export default function DeveloperPortalView({ userRole, onSignOut, showCustomAle
             <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '900', color: '#F8FAFC' }}>Rotate / Update Environment Secret</h3>
             <p style={{ fontSize: '12px', color: '#94A3B8', margin: '0 0 16px 0' }}>Updating variable <code style={{ color: '#38BDF8' }}>{selectedSecret.key}</code>. Values will be masked immediately upon saving.</p>
 
-            <input
+            <input id="developer-portal-new-secret-value" name="newSecretValue" aria-label="Enter new secret value"
               type="password"
               placeholder="Enter new secret value..."
               value={newSecretValue}
               onChange={(e) => setNewSecretValue(e.target.value)}
               style={{ width: '100%', height: '38px', borderRadius: '6px', backgroundColor: '#1E293B', border: '1px solid #334155', padding: '0 10px', fontSize: '13px', color: '#F8FAFC', outline: 'none', marginBottom: '20px' }}
-            />
+             />
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <button

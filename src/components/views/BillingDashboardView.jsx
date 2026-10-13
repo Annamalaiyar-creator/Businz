@@ -1068,7 +1068,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
               height: '34px'
             }}>
               <Search size={14} style={{ color: '#94A3B8', flexShrink: 0 }} />
-              <input
+              <input id="billing-dashboard-search-query" name="searchQuery" aria-label="SearchQuery"
                 type="text"
                 placeholder={activeTableTab === 'invoices' ? "Search Invoice No, Customer, BOM..." : "Search DC No, Customer..."}
                 value={searchQuery}
@@ -1082,7 +1082,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
                   width: '100%',
                   color: '#0F172A'
                 }}
-              />
+               />
               {searchQuery && (
                 <X size={13} style={{ color: '#94A3B8', cursor: 'pointer' }} onClick={() => setSearchQuery('')} />
               )}
@@ -1117,12 +1117,12 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
             <thead>
               <tr>
                 <th className="col-checkbox" style={{ width: '48px', minWidth: '48px', textAlign: 'center' }}>
-                  <input
+                  <input id="billing-dashboard-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     checked={allOnPageSelected}
                     onChange={handleSelectAll}
                     style={{ accentColor: '#0E7490', cursor: 'pointer', width: '15px', height: '15px' }}
-                  />
+                   />
                 </th>
                 <th>{activeTableTab === 'invoices' ? 'INVOICE NUMBER' : 'CHALLAN NUMBER'}</th>
                 <th>CUSTOMER / CLIENT</th>
@@ -1163,12 +1163,12 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
                           borderLeft: isSelected ? '4px solid #0E7490' : undefined
                         }}
                       >
-                        <input
+                        <input id="billing-dashboard-checkbox" name="checkbox" aria-label="Checkbox"
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleRowCheckbox(rowId)}
                           style={{ accentColor: '#0E7490', cursor: 'pointer', width: '15px', height: '15px' }}
-                        />
+                         />
                       </td>
                       <td style={{ fontWeight: '800', color: isInv ? '#0E7490' : '#7C3AED' }}>
                         {isInv ? row.invNo : (row.challanNo || row.dcNo || `DC-${row.id || rIdx + 1}`)}
@@ -1291,7 +1291,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>Showing per page:</span>
-              <select
+              <select id="billing-dashboard-page-size" name="pageSize" aria-label="PageSize"
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
@@ -1414,7 +1414,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
             {/* Go to page form */}
             <form onSubmit={handleGoToPage} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span>Go to:</span>
-              <input
+              <input id="billing-dashboard-go-to-page-input" name="goToPageInput" aria-label="GoToPageInput"
                 type="number"
                 min={1}
                 max={totalPages}
@@ -1429,7 +1429,7 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
                   textAlign: 'center',
                   outline: 'none'
                 }}
-              />
+               />
               <button
                 type="submit"
                 style={{

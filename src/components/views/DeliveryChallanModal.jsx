@@ -742,29 +742,29 @@ export default function DeliveryChallanModal({
           {/* 4-column Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-dc-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 DC Number
               </label>
-              <input
+              <input id="delivery-challan-dc-number" name="dCNumber" aria-label="DC Number"
                 type="text"
                 value={generatedDcNo}
                 readOnly
                 disabled
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CFFAFE', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0E7490', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-challan-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Challan Date
               </label>
-              <input
+              <input id="delivery-challan-challan-date" name="challanDate" aria-label="Challan Date"
                 type="text"
                 value={initialInv.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                 readOnly
                 disabled
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#475569', backgroundColor: '#F8FAFC', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
@@ -772,16 +772,16 @@ export default function DeliveryChallanModal({
                 Originating Invoice Ref {dcMode === 'against_invoice' && <span style={{ color: '#EF4444' }}>*</span>}
               </label>
               {isExistingDc ? (
-                <input
+                <input id="delivery-challan-inv-no-n-a" name="invNoNA" aria-label="InvNo N A"
                   type="text"
                   value={initialInv.invNo || 'N/A (Direct DC)'}
                   readOnly
                   disabled
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#475569', backgroundColor: '#F8FAFC', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-                />
+                 />
               ) : dcMode === 'against_invoice' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <select
+                  <select id="delivery-challan-selected-inv-no" name="selectedInvNo" aria-label="SelectedInvNo"
                     value={selectedInvNo}
                     onChange={(e) => handleSelectInvoice(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #0E7490', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
@@ -798,13 +798,13 @@ export default function DeliveryChallanModal({
                     })}
                   </select>
                   {!selectedInvNo && (
-                    <input
+                    <input id="delivery-challan-custom-inv-no" name="customInvNo" aria-label="Or enter custom Invoice Ref ( INV-0042)"
                       type="text"
                       value={customInvNo}
                       onChange={(e) => setCustomInvNo(e.target.value)}
                       placeholder="Or enter custom Invoice Ref (e.g. INV-0042)..."
                       style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#334155', outline: 'none', boxSizing: 'border-box' }}
-                    />
+                     />
                   )}
                 </div>
               ) : (
@@ -826,27 +826,27 @@ export default function DeliveryChallanModal({
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-bom-order-ref" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 BOM Order Ref
               </label>
-              <input
+              <input id="delivery-challan-bom-order-ref" name="bOMOrderRef" aria-label="BOM Order Ref"
                 type="text"
                 disabled={isExistingDc}
                 value={bomRef}
                 onChange={(e) => setBomRef(e.target.value)}
                 placeholder="Enter BOM Ref (e.g. BOM-101)..."
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
 
           {/* Customer & Address Details */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-customer-consignee-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer / Consignee Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="delivery-challan-customer-consignee-name" name="customerConsigneeName" aria-label="Customer / Consignee Name"
                 type="text"
                 list="dc-customer-suggestions"
                 disabled={isExistingDc}
@@ -854,21 +854,21 @@ export default function DeliveryChallanModal({
                 onChange={(e) => handleCustomerChange(e.target.value)}
                 placeholder="Type or select customer name..."
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-delivery-addr" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Delivery Destination / Consignee Address <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="delivery-challan-delivery-addr" name="deliveryAddr" aria-label="Delivery Destination / Consignee Address"
                 type="text"
                 disabled={isExistingDc}
                 value={deliveryAddr}
                 onChange={(e) => setDeliveryAddr(e.target.value)}
                 placeholder="Enter client delivery destination address..."
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
         </div>
@@ -906,52 +906,52 @@ export default function DeliveryChallanModal({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-transporter-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Transporter Name
               </label>
-              <input
+              <input id="delivery-challan-transporter-name" name="transporterName" aria-label="Transporter Name"
                 type="text"
                 disabled={isExistingDc}
                 value={transporter}
                 onChange={(e) => setTransporter(e.target.value)}
                 placeholder="e.g. VRL Logistics / Company Fleet..."
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-vehicle-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Vehicle Number <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="delivery-challan-vehicle-number" name="vehicleNumber" aria-label="Vehicle Number"
                 type="text"
                 disabled={isExistingDc}
                 value={vehicleNo}
                 onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
                 placeholder="e.g. TN-09-AB-1234"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-lorry-receipt-lr" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Lorry Receipt (LR) No.
               </label>
-              <input
+              <input id="delivery-challan-lorry-receipt-lr" name="lorryReceiptLR" aria-label="Lorry Receipt (LR) No."
                 type="text"
                 disabled={isExistingDc}
                 value={lrNo}
                 onChange={(e) => setLrNo(e.target.value)}
                 placeholder="e.g. LR-2026-1001 (optional)"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: isExistingDc ? '#F8FAFC' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="delivery-challan-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Mode of Transport
               </label>
-              <select
+              <select id="delivery-challan-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
                 disabled={isExistingDc}
                 value={transportMode}
                 onChange={(e) => setTransportMode(e.target.value)}
@@ -1130,12 +1130,12 @@ export default function DeliveryChallanModal({
                       >
                         {!isExistingDc && (
                           <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <input
+                            <input id="delivery-challan-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => toggleItemSelection(idx)}
                               style={{ accentColor: '#0E7490', width: '16px', height: '16px', cursor: 'pointer' }}
-                            />
+                             />
                           </td>
                         )}
                         <td style={{ padding: '10px 12px' }}>
@@ -1144,7 +1144,7 @@ export default function DeliveryChallanModal({
                               {it.code || '—'}
                             </span>
                           ) : (
-                            <input
+                            <input id="delivery-challan-code" name={`code_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Code"
                               type="text"
                               value={it.code || ''}
                               onChange={(e) => handleItemFieldChange(idx, 'code', e.target.value)}
@@ -1162,7 +1162,7 @@ export default function DeliveryChallanModal({
                                 outline: 'none',
                                 boxSizing: 'border-box'
                               }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
@@ -1171,7 +1171,7 @@ export default function DeliveryChallanModal({
                               {it.name}
                             </span>
                           ) : (
-                            <input
+                            <input id="delivery-challan-name" name={`name_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Select or enter product name"
                               type="text"
                               list="vrm-product-catalog"
                               value={it.name || ''}
@@ -1189,14 +1189,14 @@ export default function DeliveryChallanModal({
                                 outline: 'none',
                                 boxSizing: 'border-box'
                               }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                           {isExistingDc ? (
                             <span style={{ color: '#64748B' }}>{it.uom || 'Nos'}</span>
                           ) : (
-                            <select
+                            <select id="delivery-challan-uom-nos" name={`uomNos_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom Nos"
                               value={it.uom || 'Nos'}
                               onChange={(e) => handleItemFieldChange(idx, 'uom', e.target.value)}
                               style={{
@@ -1236,7 +1236,7 @@ export default function DeliveryChallanModal({
                               {dcQty} {it.uom || 'Nos'}
                             </span>
                           ) : (
-                            <input
+                            <input id="delivery-challan-dc-qty" name={`dcQty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="DcQty"
                               type="number"
                               min="1"
                               value={dcQty}
@@ -1253,7 +1253,7 @@ export default function DeliveryChallanModal({
                                 backgroundColor: '#F0FDFA',
                                 outline: 'none'
                               }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -1278,7 +1278,7 @@ export default function DeliveryChallanModal({
                               ₹ {rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </span>
                           ) : (
-                            <input
+                            <input id={`delivery-challan-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
                               type="number"
                               min="0"
                               step="0.01"
@@ -1297,7 +1297,7 @@ export default function DeliveryChallanModal({
                                 color: '#0F172A',
                                 outline: 'none'
                               }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>

@@ -888,7 +888,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
               height: '34px'
             }}>
               <Search size={14} style={{ color: '#94A3B8', flexShrink: 0 }} />
-              <input
+              <input id="tech-support-dashboard-search-query" name="searchQuery" aria-label="SearchQuery"
                 type="text"
                 placeholder={
                   activeTableTab === 'presets' ? "Search Presets by model..." : "Search Raw Material SKUs..."
@@ -904,7 +904,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
                   width: '100%',
                   color: '#0F172A'
                 }}
-              />
+               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
@@ -936,12 +936,12 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
                 fontWeight: '700'
               }}>
                 <th style={{ width: '40px', padding: '10px 14px', textAlign: 'center' }}>
-                  <input
+                  <input id="tech-support-dashboard-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     checked={allOnPageSelected}
                     onChange={handleSelectAll}
                     style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                  />
+                   />
                 </th>
                 {activeTableTab === 'presets' && (
                   <>
@@ -993,12 +993,12 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
                         textAlign: 'center',
                         borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent'
                       }}>
-                        <input
+                        <input id="tech-support-dashboard-checkbox" name="checkbox" aria-label="Checkbox"
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleRowCheckbox(rowId)}
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                        />
+                         />
                       </td>
 
                       {activeTableTab === 'presets' && (
@@ -1102,7 +1102,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
           {/* Left Side: Rows per page selector + Showing X to Y of Z */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#64748B' }}>
             <span>Showing per page</span>
-            <select
+            <select id="tech-support-dashboard-page-size" name="pageSize" aria-label="PageSize"
               value={pageSize}
               onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
               style={{
@@ -1205,7 +1205,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
 
             <form onSubmit={handleGoToPage} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
               <span style={{ fontSize: '11px', color: '#64748B' }}>Go to</span>
-              <input
+              <input id="tech-support-dashboard-go-to-page-input" name="goToPageInput" aria-label="GoToPageInput"
                 type="number"
                 min={1}
                 max={totalPages}
@@ -1219,7 +1219,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
                   fontSize: '11px',
                   textAlign: 'center'
                 }}
-              />
+               />
               <button
                 type="submit"
                 style={{

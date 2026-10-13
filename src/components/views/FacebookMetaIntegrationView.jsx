@@ -393,7 +393,7 @@ export default function FacebookMetaIntegrationView({ userRole = 'Tech Support',
                 height: '34px'
               }}>
                 <Search size={14} style={{ color: '#94A3B8' }} />
-                <input
+                <input id="facebook-meta-integration-search-customer-inquiry" name="searchCustomerInquiry" aria-label="Search customer, inquiry"
                   type="text"
                   placeholder="Search customer, inquiry..."
                   value={searchQuery}
@@ -407,7 +407,7 @@ export default function FacebookMetaIntegrationView({ userRole = 'Tech Support',
                     width: '100%',
                     color: '#0F172A'
                   }}
-                />
+                 />
               </div>
             </div>
 
@@ -560,7 +560,7 @@ export default function FacebookMetaIntegrationView({ userRole = 'Tech Support',
 
                 {/* Reply Input Bar */}
                 <div style={{ padding: '14px 20px', borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC', display: 'flex', gap: '10px' }}>
-                  <input
+                  <input id="facebook-meta-integration-reply-input" name="replyInput" aria-label="ReplyInput"
                     type="text"
                     placeholder={`Reply to ${activeThread.customerName} on Messenger...`}
                     value={replyInput}
@@ -575,7 +575,7 @@ export default function FacebookMetaIntegrationView({ userRole = 'Tech Support',
                       outline: 'none',
                       backgroundColor: '#FFFFFF'
                     }}
-                  />
+                   />
                   <button
                     onClick={handleSendReply}
                     disabled={!replyInput.trim()}
@@ -758,63 +758,63 @@ export default function FacebookMetaIntegrationView({ userRole = 'Tech Support',
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+              <label htmlFor="facebook-meta-integration-facebook-page-name" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                 FACEBOOK PAGE NAME
               </label>
-              <input
+              <input id="facebook-meta-integration-facebook-page-name" name="fACEBOOKPAGENAME" aria-label="FACEBOOK PAGE NAME"
                 type="text"
                 value={metaConfig.pageName}
                 onChange={(e) => setMetaConfig({ ...metaConfig, pageName: e.target.value })}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-              />
+               />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="facebook-meta-integration-page-id" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   PAGE ID
                 </label>
-                <input
+                <input id="facebook-meta-integration-page-id" name="pAGEID" aria-label="PAGE ID"
                   type="text"
                   value={metaConfig.pageId}
                   onChange={(e) => setMetaConfig({ ...metaConfig, pageId: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="facebook-meta-integration-meta-app-id" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   META APP ID
                 </label>
-                <input
+                <input id="facebook-meta-integration-meta-app-id" name="mETAAPPID" aria-label="META APP ID"
                   type="text"
                   value={metaConfig.appId}
                   onChange={(e) => setMetaConfig({ ...metaConfig, appId: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-                />
+                 />
               </div>
             </div>
 
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+              <label htmlFor="facebook-meta-integration-webhook-callback-url" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                 WEBHOOK CALLBACK URL
               </label>
-              <input
+              <input id="facebook-meta-integration-webhook-callback-url" name="wEBHOOKCALLBACKURL" aria-label="WEBHOOK CALLBACK URL"
                 type="text"
                 readOnly
                 value="https://businz.com/api/webhooks/facebook"
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12.5px', boxSizing: 'border-box', color: '#64748B' }}
-              />
+               />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
-              <input
+              <input name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 id="autoLead"
                 checked={metaConfig.autoLeadSync}
                 onChange={(e) => setMetaConfig({ ...metaConfig, autoLeadSync: e.target.checked })}
                 style={{ accentColor: '#1877F2', cursor: 'pointer' }}
-              />
+               />
               <label htmlFor="autoLead" style={{ fontSize: '12px', color: '#334155', fontWeight: '600', cursor: 'pointer' }}>
                 Automatically sync Facebook Lead Ads directly into CRM Lead pipeline
               </label>

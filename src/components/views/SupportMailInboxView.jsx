@@ -482,7 +482,7 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
               height: '34px'
             }}>
               <Search size={14} style={{ color: '#94A3B8' }} />
-              <input
+              <input id="support-mail-inbox-search-query" name="searchQuery" aria-label="Search sender, subject, query"
                 type="text"
                 placeholder="Search sender, subject, query..."
                 value={searchQuery}
@@ -496,7 +496,7 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
                   width: '100%',
                   color: '#0F172A'
                 }}
-              />
+               />
             </div>
           </div>
 
@@ -652,7 +652,7 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
                 <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
                   REPLY TO CLIENT INQUIRY
                 </span>
-                <textarea
+                <textarea id="support-mail-inbox-reply-text" name="replyText" aria-label="ReplyText"
                   rows={3}
                   placeholder={`Draft technical reply to ${activeEmail.fromEmail}...`}
                   value={replyText}
@@ -669,7 +669,7 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
                     backgroundColor: '#FFFFFF',
                     resize: 'vertical'
                   }}
-                />
+                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                   <button
                     onClick={() => {
@@ -753,39 +753,39 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
 
             <form onSubmit={handleSendComposed} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="support-mail-inbox-recipient-email-to" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   RECIPIENT EMAIL (TO)
                 </label>
-                <input
+                <input id="support-mail-inbox-recipient-email-to" name="rECIPIENTEMAILTO" aria-label="RECIPIENT EMAIL (TO)"
                   type="email"
                   required
                   placeholder="client@company.com"
                   value={composeForm.to}
                   onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="support-mail-inbox-subject" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   SUBJECT
                 </label>
-                <input
+                <input id="support-mail-inbox-subject" name="sUBJECT" aria-label="SUBJECT"
                   type="text"
                   required
                   placeholder="e.g. Technical Clarification: Mini Rail Specification"
                   value={composeForm.subject}
                   onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                  <label htmlFor="support-mail-inbox-category" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                     CATEGORY
                   </label>
-                  <select
+                  <select id="support-mail-inbox-category" name="cATEGORY" aria-label="CATEGORY"
                     value={composeForm.category}
                     onChange={(e) => setComposeForm({ ...composeForm, category: e.target.value })}
                     style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12px', backgroundColor: '#FFFFFF' }}
@@ -797,10 +797,10 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                  <label htmlFor="support-mail-inbox-priority" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                     PRIORITY
                   </label>
-                  <select
+                  <select id="support-mail-inbox-priority" name="pRIORITY" aria-label="PRIORITY"
                     value={composeForm.priority}
                     onChange={(e) => setComposeForm({ ...composeForm, priority: e.target.value })}
                     style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12px', backgroundColor: '#FFFFFF' }}
@@ -813,17 +813,17 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="support-mail-inbox-message-body" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   MESSAGE BODY
                 </label>
-                <textarea
+                <textarea id="support-mail-inbox-message-body" name="mESSAGEBODY" aria-label="MESSAGE BODY"
                   required
                   rows={5}
                   placeholder="Type your technical response and guidelines here..."
                   value={composeForm.body}
                   onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
@@ -878,10 +878,10 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
 
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="support-mail-inbox-email-provider" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   EMAIL PROVIDER
                 </label>
-                <select
+                <select id="support-mail-inbox-email-provider" name="eMAILPROVIDER" aria-label="EMAIL PROVIDER"
                   value={serverConfig.provider}
                   onChange={(e) => setServerConfig({ ...serverConfig, provider: e.target.value })}
                   style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12px', backgroundColor: '#FFFFFF' }}
@@ -893,39 +893,39 @@ export default function SupportMailInboxView({ userRole = 'Tech Support', onNavi
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                <label htmlFor="support-mail-inbox-support-email-address" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                   SUPPORT EMAIL ADDRESS
                 </label>
-                <input
+                <input id="support-mail-inbox-support-email-address" name="sUPPORTEMAILADDRESS" aria-label="SUPPORT EMAIL ADDRESS"
                   type="email"
                   value={serverConfig.email}
                   onChange={(e) => setServerConfig({ ...serverConfig, email: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', boxSizing: 'border-box' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                  <label htmlFor="support-mail-inbox-smtp-host-port" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                     SMTP HOST & PORT
                   </label>
-                  <input
+                  <input id="support-mail-inbox-smtp-host-port" name="sMTPHOSTPORT" aria-label="SMTP HOST & PORT"
                     type="text"
                     value={`${serverConfig.smtpHost}:${serverConfig.smtpPort}`}
                     readOnly
                     style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px' }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                  <label htmlFor="support-mail-inbox-imap-host-port" style={{ fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                     IMAP HOST & PORT
                   </label>
-                  <input
+                  <input id="support-mail-inbox-imap-host-port" name="iMAPHOSTPORT" aria-label="IMAP HOST & PORT"
                     type="text"
                     value={`${serverConfig.imapHost}:${serverConfig.imapPort}`}
                     readOnly
                     style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px' }}
-                  />
+                   />
                 </div>
               </div>
 

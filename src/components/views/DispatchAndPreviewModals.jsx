@@ -763,10 +763,10 @@ export function BomCancelPromptModal({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#334155', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <label htmlFor="dispatch-and-preview-modals-cancellation-reason-input" style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#334155', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Cancellation Reason <span style={{ color: '#DC2626' }}>* (Required)</span>
             </label>
-            <textarea
+            <textarea id="dispatch-and-preview-modals-cancellation-reason-input" name="cancellationReasonInput" aria-label="Cancellation Reason  (Required)"
               value={cancellationReasonInput}
               onChange={(e) => setCancellationReasonInput(e.target.value)}
               placeholder="Explain why this BOM is being cancelled (e.g. Customer cancelled the project, drawing mismatch...)"
@@ -786,7 +786,7 @@ export function BomCancelPromptModal({
               }}
               onFocus={(e) => e.target.style.borderColor = '#DC2626'}
               onBlur={(e) => e.target.style.borderColor = '#CBD5E1'}
-            />
+             />
           </div>
         </div>
 

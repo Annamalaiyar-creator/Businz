@@ -2028,13 +2028,13 @@ function TemplateCustomizerDrawer({
                 <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Image size={14} style={{ color: '#0E7490' }} /> Company Logo
                 </span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748B', cursor: 'pointer' }}>
-                  <input
+                <label htmlFor="vrmproforma-invoice-print-template-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748B', cursor: 'pointer' }}>
+                  <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                     type="checkbox"
                     checked={settings.showLogo}
                     onChange={(e) => onUpdateSettings({ showLogo: e.target.checked })}
                     style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-                  />
+                   />
                   <span>Show</span>
                 </label>
               </div>
@@ -2065,13 +2065,13 @@ function TemplateCustomizerDrawer({
 
                   {/* Logo Actions */}
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
+                    <input id="vrmproforma-invoice-print-template-input-1" name="input1" aria-label="Input 1"
                       ref={logoInputRef}
                       type="file"
                       accept="image/*"
                       style={{ display: 'none' }}
                       onChange={handleLogoUpload}
-                    />
+                     />
                     <button
                       onClick={() => logoInputRef.current?.click()}
                       disabled={isUploadingLogo}
@@ -2174,10 +2174,10 @@ function TemplateCustomizerDrawer({
 
             {/* DOCUMENT TITLE */}
             <div>
-              <label style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', display: 'block', marginBottom: '6px' }}>
+              <label htmlFor="vrmproforma-invoice-print-template-document-title" style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A', display: 'block', marginBottom: '6px' }}>
                 Document Title
               </label>
-              <input
+              <input id="vrmproforma-invoice-print-template-document-title" name="documentTitle" aria-label="Document Title"
                 type="text"
                 value={settings.documentTitle}
                 onChange={(e) => onUpdateSettings({ documentTitle: e.target.value })}
@@ -2191,7 +2191,7 @@ function TemplateCustomizerDrawer({
                   color: '#0F172A',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
                 {TITLE_PRESETS.map(preset => (
                   <button
@@ -2218,24 +2218,24 @@ function TemplateCustomizerDrawer({
             <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <label style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A' }}>Header Display Options</label>
 
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '11.5px', color: '#334155' }}>
+              <label htmlFor="vrmproforma-invoice-print-template-show-gstin-cin" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '11.5px', color: '#334155' }}>
                 <span>Show GSTIN & CIN Numbers</span>
-                <input
+                <input id="vrmproforma-invoice-print-template-show-gstin-cin" name="showGSTINCIN" aria-label="Show GSTIN & CIN Numbers"
                   type="checkbox"
                   checked={settings.showCinGst}
                   onChange={(e) => onUpdateSettings({ showCinGst: e.target.checked })}
                   style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-                />
+                 />
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '11.5px', color: '#334155' }}>
+              <label htmlFor="vrmproforma-invoice-print-template-checkbox" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontSize: '11.5px', color: '#334155' }}>
                 <span>Show Company Address & Contact</span>
-                <input
+                <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Show Company Address & Contact"
                   type="checkbox"
                   checked={settings.showContactInfo}
                   onChange={(e) => onUpdateSettings({ showContactInfo: e.target.checked })}
                   style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-                />
+                 />
               </label>
             </div>
           </div>
@@ -2251,13 +2251,13 @@ function TemplateCustomizerDrawer({
                 <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Stamp size={15} style={{ color: '#0E7490' }} /> Company Stamp / Seal
                 </span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748B', cursor: 'pointer' }}>
-                  <input
+                <label htmlFor="vrmproforma-invoice-print-template-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748B', cursor: 'pointer' }}>
+                  <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                     type="checkbox"
                     checked={settings.showSignatoryStamp}
                     onChange={(e) => onUpdateSettings({ showSignatoryStamp: e.target.checked })}
                     style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-                  />
+                   />
                   <span>Show</span>
                 </label>
               </div>
@@ -2297,22 +2297,22 @@ function TemplateCustomizerDrawer({
                   {settings.stampMode === 'vector' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
                       <div>
-                        <label style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Seal Header Text</label>
-                        <input
+                        <label htmlFor="vrmproforma-invoice-print-template-seal-header-text" style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Seal Header Text</label>
+                        <input id="vrmproforma-invoice-print-template-seal-header-text" name="sealHeaderText" aria-label="Seal Header Text"
                           type="text"
                           value={settings.stampText}
                           onChange={(e) => onUpdateSettings({ stampText: e.target.value })}
                           style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Seal Location Subtitle</label>
-                        <input
+                        <label htmlFor="vrmproforma-invoice-print-template-seal-location-subtitle" style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Seal Location Subtitle</label>
+                        <input id="vrmproforma-invoice-print-template-seal-location-subtitle" name="sealLocationSubtitle" aria-label="Seal Location Subtitle"
                           type="text"
                           value={settings.stampLocation}
                           onChange={(e) => onUpdateSettings({ stampLocation: e.target.value })}
                           style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                        />
+                         />
                       </div>
                     </div>
                   )}
@@ -2343,13 +2343,13 @@ function TemplateCustomizerDrawer({
                       </div>
 
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <input
+                        <input id="vrmproforma-invoice-print-template-input-2" name="input2" aria-label="Input 2"
                           ref={stampInputRef}
                           type="file"
                           accept="image/*"
                           style={{ display: 'none' }}
                           onChange={handleStampUpload}
-                        />
+                         />
                         <button
                           onClick={() => stampInputRef.current?.click()}
                           disabled={isUploadingStamp}
@@ -2505,13 +2505,13 @@ function TemplateCustomizerDrawer({
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
+                      <input id="vrmproforma-invoice-print-template-input-3" name="input3" aria-label="Input 3"
                         ref={signatureInputRef}
                         type="file"
                         accept="image/*"
                         style={{ display: 'none' }}
                         onChange={handleSignatureUpload}
-                      />
+                       />
                       <button
                         onClick={() => signatureInputRef.current?.click()}
                         disabled={isUploadingSignature}
@@ -2559,23 +2559,23 @@ function TemplateCustomizerDrawer({
                 {/* Signatory Title and Name */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
                   <div>
-                    <label style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Signatory Name (optional)</label>
-                    <input
+                    <label htmlFor="vrmproforma-invoice-print-template-signatory-name-optional" style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Signatory Name (optional)</label>
+                    <input id="vrmproforma-invoice-print-template-signatory-name-optional" name="signatoryNameOptional" aria-label="Signatory Name (optional)"
                       type="text"
                       placeholder="e.g. M. Annamalaiyar"
                       value={settings.signatoryName || ''}
                       onChange={(e) => onUpdateSettings({ signatoryName: e.target.value })}
                       style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Designation Title</label>
-                    <input
+                    <label htmlFor="vrmproforma-invoice-print-template-designation-title" style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Designation Title</label>
+                    <input id="vrmproforma-invoice-print-template-designation-title" name="designationTitle" aria-label="Designation Title"
                       type="text"
                       value={settings.signatoryTitle || 'Authorized Signatory'}
                       onChange={(e) => onUpdateSettings({ signatoryTitle: e.target.value })}
                       style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                 </div>
               </div>
@@ -2584,12 +2584,12 @@ function TemplateCustomizerDrawer({
             {/* 3. CUSTOMER ACCEPTANCE */}
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', cursor: 'pointer', fontSize: '11.5px', color: '#0F172A', fontWeight: '700' }}>
               <span>Show Customer Acceptance & Signature Box</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showCustomerAcceptance}
                 onChange={(e) => onUpdateSettings({ showCustomerAcceptance: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
           </div>
@@ -2602,104 +2602,104 @@ function TemplateCustomizerDrawer({
               Select which columns and data fields appear in the itemized table:
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+            <label htmlFor="vrmproforma-invoice-print-template-rate-column" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Rate (₹) Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-rate-column" name="rateColumn" aria-label="Rate (₹) Column"
                 type="checkbox"
                 checked={settings.showRateCol !== false}
                 onChange={(e) => onUpdateSettings({ showRateCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+            <label htmlFor="vrmproforma-invoice-print-template-hsn-sac-code" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>HSN / SAC Code Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-hsn-sac-code" name="hSNSACCode" aria-label="HSN / SAC Code Column"
                 type="checkbox"
                 checked={settings.showHsn}
                 onChange={(e) => onUpdateSettings({ showHsn: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Taxable Value (₹) Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showTaxableCol !== false}
                 onChange={(e) => onUpdateSettings({ showTaxableCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+            <label htmlFor="vrmproforma-invoice-print-template-quantity-column" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Quantity Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-quantity-column" name="quantityColumn" aria-label="Quantity Column"
                 type="checkbox"
                 checked={settings.showQty !== false}
                 onChange={(e) => onUpdateSettings({ showQty: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Unit of Measure (UOM) Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showUom}
                 onChange={(e) => onUpdateSettings({ showUom: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Total / Amount (₹) Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showTotalCol !== false}
                 onChange={(e) => onUpdateSettings({ showTotalCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+            <label htmlFor="vrmproforma-invoice-print-template-discount-column" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Discount Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-discount-column" name="discountColumn" aria-label="Discount Column"
                 type="checkbox"
                 checked={settings.showDiscountCol}
                 onChange={(e) => onUpdateSettings({ showDiscountCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+            <label htmlFor="vrmproforma-invoice-print-template-line-item-gst" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Line Item GST% Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-line-item-gst" name="lineItemGST" aria-label="Line Item GST% Column"
                 type="checkbox"
                 checked={settings.showGstCol}
                 onChange={(e) => onUpdateSettings({ showGstCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
+            <label htmlFor="vrmproforma-invoice-print-template-s-no-column" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>S.No Column</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-s-no-column" name="sNoColumn" aria-label="S.No Column"
                 type="checkbox"
                 checked={settings.showSnoCol !== false}
                 onChange={(e) => onUpdateSettings({ showSnoCol: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Item Technical Descriptions</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showItemDescription}
                 onChange={(e) => onUpdateSettings({ showItemDescription: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
           </div>
         )}
@@ -2711,32 +2711,32 @@ function TemplateCustomizerDrawer({
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Show Ship To / Delivery Address</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showShipTo}
                 onChange={(e) => onUpdateSettings({ showShipTo: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Show Dispatch & Vehicle Details</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showTransportDetails}
                 onChange={(e) => onUpdateSettings({ showTransportDetails: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Show Sales Executive Name</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showSalesExecutive}
                 onChange={(e) => onUpdateSettings({ showSalesExecutive: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
           </div>
         )}
@@ -2746,52 +2746,52 @@ function TemplateCustomizerDrawer({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}>
               <span>Show Company Bank Account</span>
-              <input
+              <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                 type="checkbox"
                 checked={settings.showBankDetails}
                 onChange={(e) => onUpdateSettings({ showBankDetails: e.target.checked })}
                 style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-              />
+               />
             </label>
 
             {settings.showBankDetails && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                 <div>
-                  <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>Beneficiary Name</label>
-                  <input
+                  <label htmlFor="vrmproforma-invoice-print-template-beneficiary-name" style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>Beneficiary Name</label>
+                  <input id="vrmproforma-invoice-print-template-beneficiary-name" name="beneficiaryName" aria-label="Beneficiary Name"
                     type="text"
                     value={settings.bankBeneficiary}
                     onChange={(e) => onUpdateSettings({ bankBeneficiary: e.target.value })}
                     style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>Bank Name</label>
-                  <input
+                  <label htmlFor="vrmproforma-invoice-print-template-bank-name" style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>Bank Name</label>
+                  <input id="vrmproforma-invoice-print-template-bank-name" name="bankName" aria-label="Bank Name"
                     type="text"
                     value={settings.bankName}
                     onChange={(e) => onUpdateSettings({ bankName: e.target.value })}
                     style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <div>
-                    <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>Account No.</label>
-                    <input
+                    <label htmlFor="vrmproforma-invoice-print-template-account-no" style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>Account No.</label>
+                    <input id="vrmproforma-invoice-print-template-account-no" name="accountNo" aria-label="Account No."
                       type="text"
                       value={settings.bankAccountNo}
                       onChange={(e) => onUpdateSettings({ bankAccountNo: e.target.value })}
                       style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>IFSC Code</label>
-                    <input
+                    <label htmlFor="vrmproforma-invoice-print-template-ifsc-code" style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>IFSC Code</label>
+                    <input id="vrmproforma-invoice-print-template-ifsc-code" name="iFSCCode" aria-label="IFSC Code"
                       type="text"
                       value={settings.bankIfsc}
                       onChange={(e) => onUpdateSettings({ bankIfsc: e.target.value })}
                       style={{ width: '100%', padding: '6px', fontSize: '11px', borderRadius: '4px', border: '1px solid #CBD5E1', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                 </div>
               </div>
@@ -2800,20 +2800,20 @@ function TemplateCustomizerDrawer({
             <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0F172A', fontWeight: '600', marginBottom: '8px' }}>
                 <span>Show Terms & Conditions</span>
-                <input
+                <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                   type="checkbox"
                   checked={settings.showTerms}
                   onChange={(e) => onUpdateSettings({ showTerms: e.target.checked })}
                   style={{ accentColor: settings.accentColor, cursor: 'pointer' }}
-                />
+                 />
               </label>
 
               {settings.showTerms && (
                 <div>
-                  <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                  <label htmlFor="vrmproforma-invoice-print-template-edit-terms-1" style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B', display: 'block', marginBottom: '4px' }}>
                     Edit Terms (1 per line)
                   </label>
-                  <textarea
+                  <textarea id="vrmproforma-invoice-print-template-edit-terms-1" name="editTerms1" aria-label="Edit Terms (1 per line)"
                     rows={6}
                     value={settings.termsText}
                     onChange={(e) => onUpdateSettings({ termsText: e.target.value })}
@@ -2827,7 +2827,7 @@ function TemplateCustomizerDrawer({
                       boxSizing: 'border-box',
                       resize: 'vertical'
                     }}
-                  />
+                   />
                 </div>
               )}
             </div>
@@ -3579,10 +3579,10 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
 
                 {/* Recipient Phone */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="vrmproforma-invoice-print-template-919876543210" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Recipient Phone Number (Client)
                   </label>
-                  <input
+                  <input id="vrmproforma-invoice-print-template-919876543210" name="919876543210" aria-label="Recipient Phone Number (Client)"
                     type="text"
                     placeholder="e.g. 919876543210"
                     value={waRecipientPhone}
@@ -3595,26 +3595,26 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
                       fontSize: '13px',
                       boxSizing: 'border-box'
                     }}
-                  />
+                   />
                 </div>
 
                 {/* PDF Document Attachment Toggle */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: '#0F172A', fontWeight: '600' }}>
-                  <input
+                <label htmlFor="vrmproforma-invoice-print-template-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: '#0F172A', fontWeight: '600' }}>
+                  <input id="vrmproforma-invoice-print-template-checkbox" name="checkbox" aria-label="Checkbox"
                     type="checkbox"
                     checked={waAttachPdf}
                     onChange={(e) => setWaAttachPdf(e.target.checked)}
                     style={{ accentColor: '#16A34A', width: '16px', height: '16px' }}
-                  />
+                   />
                   <span>Attach Official Proforma Invoice PDF Document</span>
                 </label>
 
                 {/* Message Content */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="vrmproforma-invoice-print-template-wa-message" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     WhatsApp Message Text (Editable)
                   </label>
-                  <textarea
+                  <textarea id="vrmproforma-invoice-print-template-wa-message" name="waMessage" aria-label="WhatsApp Message Text (Editable)"
                     rows={6}
                     value={waMessage}
                     onChange={(e) => setWaMessage(e.target.value)}
@@ -3628,7 +3628,7 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
                       boxSizing: 'border-box',
                       fontFamily: 'inherit'
                     }}
-                  />
+                   />
                 </div>
 
                 {/* Buttons */}

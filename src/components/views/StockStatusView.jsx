@@ -1107,7 +1107,7 @@ export default function StockStatusView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="stock-status-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2907,7 +2907,7 @@ export default function StockStatusView(props) {
                 {/* Integrated Search & Dropdown Filters Strip */}
                 <div style={{ padding: '14px 24px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '220px' }}>
-                    <input
+                    <input id="stock-status-stock-status-search-query" name="stockStatusSearchQuery" aria-label="Search by Material / SKU / Code / Type"
                       type="text"
                       value={stockStatusSearchQuery}
                       onChange={(e) => {
@@ -2916,12 +2916,12 @@ export default function StockStatusView(props) {
                       }}
                       placeholder="Search by Material / SKU / Code / Type..."
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}
-                    />
+                     />
                     <Search style={{ width: '14px', height: '14px', color: '#94A3B8', position: 'absolute', left: '12px', top: '12px' }} />
                   </div>
 
                   <div style={{ minWidth: '160px' }}>
-                    <select
+                    <select id="stock-status-stock-status-warehouse" name="stockStatusWarehouse" aria-label="StockStatusWarehouse"
                       value={stockStatusWarehouse}
                       onChange={(e) => {
                         setStockStatusWarehouse(e.target.value);
@@ -2936,7 +2936,7 @@ export default function StockStatusView(props) {
                   </div>
 
                   <div style={{ minWidth: '170px' }}>
-                    <select
+                    <select id="stock-status-stock-status-category" name="stockStatusCategory" aria-label="StockStatusCategory"
                       value={stockStatusCategory}
                       onChange={(e) => {
                         setStockStatusCategory(e.target.value);
@@ -2999,7 +2999,7 @@ export default function StockStatusView(props) {
                     <thead>
                       <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                         <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                          <input
+                          <input id="stock-status-checkbox" name="checkbox" aria-label="Checkbox"
                             type="checkbox"
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                             checked={isAllDisplayedSelected}
@@ -3012,7 +3012,7 @@ export default function StockStatusView(props) {
                                 setSelectedStockRows(prev => prev.filter(id => !idsToRemove.includes(id)));
                               }
                             }}
-                          />
+                           />
                         </th>
                         <th style={{ padding: '12px 14px', width: '50px', minWidth: '50px' }}>#</th>
                         <th style={{ padding: '12px 14px', minWidth: '220px' }}>Material / SKU</th>
@@ -3087,7 +3087,7 @@ export default function StockStatusView(props) {
                                   boxSizing: 'border-box'
                                 }}
                               >
-                                <input
+                                <input id="stock-status-checkbox" name="checkbox" aria-label="Checkbox"
                                   type="checkbox"
                                   style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                                   checked={isChecked}
@@ -3096,7 +3096,7 @@ export default function StockStatusView(props) {
                                       prev.includes(rowKey) ? prev.filter(k => k !== rowKey) : [...prev, rowKey]
                                     );
                                   }}
-                                />
+                                 />
                               </td>
                               <td style={{ padding: '12px 14px', color: '#94A3B8', fontSize: '12px' }}>
                                 {startIndex + idx + 1}
@@ -3199,7 +3199,7 @@ export default function StockStatusView(props) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '12px', color: '#64748B' }}>Showing per page</span>
-                      <select
+                      <select id="stock-status-stock-status-rows-per-page" name="stockStatusRowsPerPage" aria-label="StockStatusRowsPerPage"
                         value={stockStatusRowsPerPage}
                         onChange={(e) => {
                           setStockStatusRowsPerPage(Number(e.target.value));
@@ -3278,7 +3278,7 @@ export default function StockStatusView(props) {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                      <input
+                      <input id="stock-status-string-safe-page" name="stringSafePage" aria-label="String safePage"
                         type="number"
                         min="1"
                         max={totalPages || 1}
@@ -3295,7 +3295,7 @@ export default function StockStatusView(props) {
                         }}
                         placeholder={String(safePage)}
                         style={{ width: '44px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                      />
+                       />
                       <button
                         onClick={() => {
                           const val = parseInt(stockStatusGoToInput, 10);
@@ -3693,8 +3693,8 @@ export default function StockStatusView(props) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Entry Type <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select
+                    <label htmlFor="stock-status-entry-type" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Entry Type <span style={{ color: '#EF4444' }}>*</span></label>
+                    <select id="stock-status-entry-type" name="entryType" aria-label="Entry Type"
                       value={stockEntry.entryType}
                       onChange={(e) => setStockEntry({ ...stockEntry, entryType: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -3705,8 +3705,8 @@ export default function StockStatusView(props) {
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Warehouse <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select
+                    <label htmlFor="stock-status-warehouse" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Warehouse <span style={{ color: '#EF4444' }}>*</span></label>
+                    <select id="stock-status-warehouse" name="warehouse" aria-label="Warehouse"
                       value={stockEntry.warehouse}
                       onChange={(e) => setStockEntry({ ...stockEntry, warehouse: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -3716,14 +3716,14 @@ export default function StockStatusView(props) {
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Entry Date <span style={{ color: '#EF4444' }}>*</span></label>
+                    <label htmlFor="stock-status-entry-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Entry Date <span style={{ color: '#EF4444' }}>*</span></label>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <input
+                      <input id="stock-status-entry-date" name="entryDate" aria-label="Entry Date"
                         type="text"
                         value={stockEntry.entryDate}
                         onChange={(e) => setStockEntry({ ...stockEntry, entryDate: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                      />
+                       />
                       <Calendar style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', right: '12px' }} />
                     </div>
                   </div>
@@ -3731,8 +3731,8 @@ export default function StockStatusView(props) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Reason <span style={{ color: '#EF4444' }}>*</span></label>
-                    <select
+                    <label htmlFor="stock-status-reason" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Reason <span style={{ color: '#EF4444' }}>*</span></label>
+                    <select id="stock-status-reason" name="reason" aria-label="Reason"
                       value={stockEntry.reason}
                       onChange={(e) => setStockEntry({ ...stockEntry, reason: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -3743,22 +3743,22 @@ export default function StockStatusView(props) {
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Reference No.</label>
-                    <input
+                    <label htmlFor="stock-status-reference-no" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Reference No.</label>
+                    <input id="stock-status-reference-no" name="referenceNo" aria-label="Reference No."
                       type="text"
                       value={stockEntry.refNo}
                       onChange={(e) => setStockEntry({ ...stockEntry, refNo: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Added By</label>
-                    <input
+                    <label htmlFor="stock-status-added-by" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Added By</label>
+                    <input id="stock-status-added-by" name="addedBy" aria-label="Added By"
                       type="text"
                       value={stockEntry.addedBy}
                       disabled
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#64748B', width: '100%', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                 </div>
               </div>
@@ -3772,11 +3772,11 @@ export default function StockStatusView(props) {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
-                    <input
+                    <input id="stock-status-input-1" name="input1" aria-label="Search Material / SKU / Barcode"
                       type="text"
                       placeholder="Search Material / SKU / Barcode"
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                    />
+                     />
                     <Search style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', left: '12px' }} />
                   </div>
                   <button style={{
@@ -3828,7 +3828,7 @@ export default function StockStatusView(props) {
                             <div style={{ fontSize: '10px', color: '#64748B' }}>{item.currentStock.split(' ')[1]}</div>
                           </td>
                           <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                            <input
+                            <input id={`stock-status-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
                               type="number"
                               value={item.qty}
                               onChange={(e) => {
@@ -3837,7 +3837,7 @@ export default function StockStatusView(props) {
                                 setAddStockItems(newItems);
                               }}
                               style={{ width: '80px', height: '32px', textAlign: 'center', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '13px' }}
-                            />
+                             />
                           </td>
                           <td style={{ padding: '12px 10px', textAlign: 'center', color: '#64748B' }}>{item.uom}</td>
                           <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '500', color: '#475569' }}>{item.rate.toFixed(2)}</td>
@@ -3896,32 +3896,32 @@ export default function StockStatusView(props) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Batch / Lot No.</label>
-                    <input
+                    <label htmlFor="stock-status-batch-lot-no" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Batch / Lot No.</label>
+                    <input id="stock-status-batch-lot-no" name="batchLotNo" aria-label="Batch / Lot No."
                       type="text"
                       value={stockDetails.batchNo}
                       onChange={(e) => setStockDetails({ ...stockDetails, batchNo: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Supplier</label>
-                    <input
+                    <label htmlFor="stock-status-supplier" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Supplier</label>
+                    <input id="stock-status-supplier" name="supplier" aria-label="Supplier"
                       type="text"
                       value={stockDetails.supplier}
                       onChange={(e) => setStockDetails({ ...stockDetails, supplier: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Manufacturing Date</label>
+                    <label htmlFor="stock-status-manufacturing-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Manufacturing Date</label>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <input
+                      <input id="stock-status-manufacturing-date" name="manufacturingDate" aria-label="Manufacturing Date"
                         type="text"
                         value={stockDetails.mfgDate}
                         onChange={(e) => setStockDetails({ ...stockDetails, mfgDate: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                      />
+                       />
                       <Calendar style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', right: '12px' }} />
                     </div>
                   </div>
@@ -3929,21 +3929,21 @@ export default function StockStatusView(props) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Expiry Date</label>
+                    <label htmlFor="stock-status-expiry-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Expiry Date</label>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <input
+                      <input id="stock-status-expiry-date" name="expiryDate" aria-label="Expiry Date"
                         type="text"
                         placeholder="Select date"
                         value={stockDetails.expiryDate}
                         onChange={(e) => setStockDetails({ ...stockDetails, expiryDate: e.target.value })}
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                      />
+                       />
                       <Calendar style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', right: '12px' }} />
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Storage Location</label>
-                    <select
+                    <label htmlFor="stock-status-storage-location" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Storage Location</label>
+                    <select id="stock-status-storage-location" name="storageLocation" aria-label="Storage Location"
                       value={stockDetails.storageLocation}
                       onChange={(e) => setStockDetails({ ...stockDetails, storageLocation: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -3954,13 +3954,13 @@ export default function StockStatusView(props) {
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Remarks / Notes</label>
-                    <input
+                    <label htmlFor="stock-status-remarks-notes" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Remarks / Notes</label>
+                    <input id="stock-status-remarks-notes" name="remarksNotes" aria-label="Remarks / Notes"
                       type="text"
                       value={stockDetails.remarks}
                       onChange={(e) => setStockDetails({ ...stockDetails, remarks: e.target.value })}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                    />
+                     />
                   </div>
                 </div>
               </div>

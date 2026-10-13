@@ -421,13 +421,13 @@ export default function ZohoStyleBulkImportModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {/* Upload Drop Zone */}
               <div>
-                <input
+                <input id="zoho-style-bulk-import-input-1" name="input1" aria-label="Input 1"
                   type="file"
                   ref={fileInputRef}
                   accept=".xlsx, .xls, .csv"
                   onChange={handleFileChange}
                   style={{ display: 'none' }}
-                />
+                 />
 
                 <div
                   onClick={() => {
@@ -591,7 +591,7 @@ export default function ZohoStyleBulkImportModal({
                         {/* Right: Dropdown + Unique Selection Enforced */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <select
+                            <select id="zoho-style-bulk-import-selected-header" name="selectedHeader" aria-label="SelectedHeader"
                               value={selectedHeader}
                               onChange={(e) => {
                                 const val = e.target.value;
