@@ -599,6 +599,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const handleConvertToBom = (pi) => {
     if (!pi || isConvertingToBom) return;
 
+    if (pi.status === 'Draft') {
+      showTopToast('⚠️ Draft Proforma Invoices cannot be converted to BOM. Please review and Release/Issue the PI first.', 'warning', 4000);
+      return;
+    }
+
     // Strict 1-to-1 Safeguard: If this PI is already converted or linked to an active BOM, navigate directly to it!
     const existingBoms = getConvertedBomsForPi(pi);
     let targetExistingBom = existingBoms && existingBoms.length > 0 ? existingBoms[0] : null;
@@ -1403,6 +1408,40 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   const handleAddMaterialRow = () => {
     setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%' }]);
+  };
+
+  const handleAddPresetItem = (groupId) => {
+    const grp = (groupId && presetGroups[groupId]) || Object.values(presetGroups)[0];
+    if (!grp) return;
+    const mult = Math.max(1, parseInt(grp.setCount) || 1);
+    const targetGid = grp.groupId || groupId;
+    const newItem = {
+      name: '',
+      category: '',
+      uom: 'NOS',
+      qty: String(1 * mult),
+      baseQty: 1,
+      rate: '0',
+      gstRate: grp.gstRate || '18%',
+      isPresetItem: true,
+      presetGroupId: targetGid,
+      presetName: grp.presetName
+    };
+    setPiItems(prev => {
+      const items = [...(prev || [])];
+      let lastGroupIdx = -1;
+      for (let idx = items.length - 1; idx >= 0; idx--) {
+        if (items[idx]?.presetGroupId === targetGid) {
+          lastGroupIdx = idx;
+          break;
+        }
+      }
+      if (lastGroupIdx >= 0) {
+        items.splice(lastGroupIdx + 1, 0, newItem);
+        return items;
+      }
+      return [...items, newItem];
+    });
   };
 
   const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -2984,7 +3023,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 {/* Convert to BOM / View BOM button */}
                 {(() => {
                   const target = selectedPIs.length === 1 ? piList.find(p => p.piNo === selectedPIs[0]) : null;
-                  if (!target || target.status === 'Cancelled') return null;
+                  if (!target || target.status === 'Cancelled' || target.status === 'Draft') return null;
                   const matchedBoms = getConvertedBomsForPi(target);
                   const hasSavedBom = matchedBoms.length > 0;
                   const isConverted = hasSavedBom;
@@ -3889,6 +3928,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
                       <button
                         type="button"
+                        onClick={() => handleAddPresetItem(grp.groupId)}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#0E7490',
+                          color: '#FFFFFF',
+                          borderRadius: '4px',
+                          fontSize: '10.5px',
+                          fontWeight: '700',
+                          padding: '1px 6px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                          marginLeft: '2px'
+                        }}
+                        title={`Add extra item bundled into ${grp.presetName}`}
+                      >
+                        <Plus size={11} /> Add Item
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleRemovePresetGroup(grp.groupId)}
                         style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0 0 0 2px', display: 'flex', alignItems: 'center', color: '#0891B2' }}
                         title={`Remove ${grp.presetName}`}
@@ -4083,7 +4143,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   placeholder="0"
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
+                                    setPiItems(prev => prev.map((mat, idx) => {
+                                      if (idx !== i) return mat;
+                                      const mult = Math.max(1, parseInt(currentGroup?.setCount) || 1);
+                                      const parsedVal = parseFloat(val) || 0;
+                                      return {
+                                        ...mat,
+                                        qty: val,
+                                        baseQty: isPresetItem ? (parsedVal / mult) : mat.baseQty
+                                      };
+                                    }));
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
                                 />
@@ -4345,15 +4414,44 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </table>
               </div>
 
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={handleAddMaterialRow}
                   style={{ border: '1px solid #A5F3FC', background: '#ECFEFF', color: '#0E7490', padding: '9px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Plus style={{ width: '15px', height: '15px' }} />
-                  Add Product / Item
+                  {hasAnyPreset ? 'Add Standalone Item' : 'Add Product / Item'}
                 </button>
+
+                {Object.values(presetGroups).map(grp => (
+                  <button
+                    key={grp.groupId}
+                    type="button"
+                    onClick={() => handleAddPresetItem(grp.groupId)}
+                    style={{
+                      border: '1px solid #C7D2FE',
+                      background: '#EEF2FF',
+                      color: '#4338CA',
+                      padding: '9px 18px',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 3px rgba(79, 70, 229, 0.1)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E0E7FF'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#EEF2FF'; }}
+                    title={`Add extra item bundled into ${grp.presetName} (₹0 unit rate, included in single kit price)`}
+                  >
+                    <Layers style={{ width: '15px', height: '15px', color: '#4F46E5' }} />
+                    + Add Extra Item into {grp.presetName}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -5359,7 +5457,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </button>
                     </div>
                   ) : (
-                    selectedPi.status !== 'Cancelled' && (
+                    selectedPi.status !== 'Cancelled' && selectedPi.status !== 'Draft' && (
                       <button
                         type="button"
                         onClick={() => {

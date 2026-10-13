@@ -691,12 +691,13 @@ export function VRMProformaInvoicePrintSheet({
 
   // Extract preset groups or detect preset items
   const presetGroups = pi.presetGroups || {};
-  const hasExplicitPresets = Object.keys(presetGroups).length > 0 || rawItems.some(it => it.isPresetItem);
-  const allZeroRate = rawItems.length > 0 && rawItems.every(it => (parseFloat(it.rate) || 0) === 0) && (Number(pi.unitValue) || 0) > 0;
+  const hasConfiguredGroups = Object.keys(presetGroups).length > 0;
+  const anyPresetItem = rawItems.some(it => it.isPresetItem || it.presetGroupId);
+  const allZeroRate = rawItems.length > 0 && rawItems.every(it => (parseFloat(it.rate) || 0) === 0) && (Number(pi.unitValue) || Number(pi.orderValue) || 0) > 0;
 
   // Pre-calculate group prices and GSTs
   const groupMetaMap = {};
-  if (hasExplicitPresets) {
+  if (hasConfiguredGroups) {
     Object.keys(presetGroups).forEach(grpId => {
       const grp = presetGroups[grpId];
       const uPrice = parseFloat(grp.kitPrice) || 0;
@@ -725,8 +726,12 @@ export function VRMProformaInvoicePrintSheet({
         gstRateStr: grp.gstRate || '18%'
       };
     });
-  } else if (allZeroRate) {
-    const uPrice = Number(pi.unitValue) || 0;
+  }
+
+  // Fallback for implicit preset / zero-rate items or when presetGroups is empty but items are preset
+  if (Object.keys(groupMetaMap).length === 0 && (anyPresetItem || allZeroRate)) {
+    const rawVal = Number(pi.unitValue) || (Number(pi.orderValue) ? Math.round(Number(pi.orderValue) / 1.18) : 0);
+    const uPrice = Math.round(rawVal);
     const sCount = 1;
     const grpSub = uPrice;
     const tQty = rawItems.reduce((s, it) => s + (parseFloat(it.qty) || 1), 0);
@@ -737,7 +742,7 @@ export function VRMProformaInvoicePrintSheet({
       grpGst += itShare * (itRate / 100);
     });
     groupMetaMap['implicit_preset_1'] = {
-      name: pi.productName || 'Solar MMS Preset Kit',
+      name: pi.productName || pi.presetName || 'Solar MMS Preset Kit',
       kitPrice: uPrice,
       setCount: sCount,
       groupSubtotal: grpSub,
@@ -751,23 +756,38 @@ export function VRMProformaInvoicePrintSheet({
   const items = rawItems.map((it, idx) => {
     const q = parseFloat(it.qty) || 1;
     const r = parseFloat(it.rate) || 0;
-    const isPreset = Boolean(it.isPresetItem || (allZeroRate && !it.rate));
-    const grpId = it.presetGroupId || (allZeroRate ? 'implicit_preset_1' : null);
+    const hasPresetGroups = Object.keys(groupMetaMap).length > 0;
+    const isPreset = Boolean(it.isPresetItem || it.presetGroupId || (hasPresetGroups && !it.rate));
+    let grpId = it.presetGroupId;
+    if (isPreset && (!grpId || !groupMetaMap[grpId])) {
+      grpId = Object.keys(groupMetaMap)[0] || 'implicit_preset_1';
+    }
     const grpMeta = grpId ? groupMetaMap[grpId] : null;
 
     let isFirstInGroup = false;
     let groupCount = 1;
     if (isPreset && grpId) {
-      const firstIdx = rawItems.findIndex(x => (x.presetGroupId || (allZeroRate ? 'implicit_preset_1' : null)) === grpId);
-      isFirstInGroup = (firstIdx === idx);
-      groupCount = rawItems.filter(x => (x.presetGroupId || (allZeroRate ? 'implicit_preset_1' : null)) === grpId).length;
+      const groupItemsIndices = rawItems
+        .map((x, i) => ({ x, i }))
+        .filter(({ x }) => {
+          const xIsPreset = Boolean(x.isPresetItem || x.presetGroupId || (hasPresetGroups && !x.rate));
+          let xGrpId = x.presetGroupId;
+          if (xIsPreset && (!xGrpId || !groupMetaMap[xGrpId])) {
+            xGrpId = Object.keys(groupMetaMap)[0] || 'implicit_preset_1';
+          }
+          return xIsPreset && xGrpId === grpId;
+        })
+        .map(o => o.i);
+
+      isFirstInGroup = (groupItemsIndices[0] === idx);
+      groupCount = groupItemsIndices.length;
     }
 
     const gross = q * r;
     const discPct = parseFloat(it.discountPct || it.discount) || 0;
     const discAmt = gross * (discPct / 100);
     const taxable = isPreset ? 0 : (gross - discAmt);
-    const gRate = parseFloat(String(it.gstRate || '18%').replace('%', '')) || 18;
+    const gRate = parseFloat(String(it.gstRate || grpMeta?.gstRateStr || '18%').replace('%', '')) || 18;
     const gstAmt = isPreset ? 0 : (taxable * (gRate / 100));
     const lineTotal = taxable + gstAmt;
 
@@ -792,6 +812,7 @@ export function VRMProformaInvoicePrintSheet({
       setCount: grpMeta?.setCount || 1,
       groupPrice: grpMeta?.kitPrice || 0,
       groupTaxable: grpMeta?.groupSubtotal || 0,
+      groupGst: grpMeta?.groupGst || 0,
       groupGstRateStr: grpMeta?.gstRateStr || `${gRate}%`,
       groupLineTotal: grpMeta?.groupTotal || 0
     };
@@ -1443,59 +1464,160 @@ export function VRMProformaInvoicePrintSheet({
             </thead>
             <tbody>
               {items.map((it, idx) => (
-                <tr key={idx} style={{ verticalAlign: 'top' }}>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', color: '#334155' }}>
-                    {it.sNo}
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px' }}>
-                    <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '11px' }}>
-                      {it.name}
-                    </div>
-                    {it.description && (
-                      <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px', whiteSpace: 'pre-line', lineHeight: '1.3' }}>
-                        {it.description}
+                <React.Fragment key={idx}>
+                  <tr style={{ verticalAlign: 'top' }}>
+                    <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', color: '#334155' }}>
+                      {it.sNo}
+                    </td>
+                    <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px' }}>
+                      <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '11px' }}>
+                        {it.name}
                       </div>
+                      {it.description && (
+                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px', whiteSpace: 'pre-line', lineHeight: '1.3' }}>
+                          {it.description}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontFamily: 'monospace', fontSize: '10px' }}>
+                      {it.hsn || '—'}
+                    </td>
+                    <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                      <div>{typeof it.qty === 'number' ? it.qty.toFixed(2) : it.qty}</div>
+                      <div style={{ fontSize: '9px', color: '#64748B' }}>{it.uom || "no's"}</div>
+                    </td>
+
+                    {/* RATE COLUMN: Merged for Preset Kit, or normal for custom line items */}
+                    {it.isPresetItem ? (
+                      it.isFirstInGroup ? (
+                        <td
+                          rowSpan={it.groupCount}
+                          style={{
+                            border: '1px solid #CBD5E1',
+                            padding: '8px 8px',
+                            textAlign: 'right',
+                            fontSize: '10.5px',
+                            verticalAlign: 'middle',
+                            backgroundColor: '#F8FAFC'
+                          }}
+                        >
+                          <div style={{ fontWeight: '800', color: '#0F172A' }}>
+                            {Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div style={{ fontSize: '9px', color: '#0E7490', fontWeight: '700', marginTop: '2px' }}>
+                            ({it.setCount || 1} Set)
+                          </div>
+                        </td>
+                      ) : null
+                    ) : (
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px', textAlign: 'right', fontSize: '10.5px' }}>
+                        {Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
                     )}
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontFamily: 'monospace', fontSize: '10px' }}>
-                    {it.hsn || '—'}
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
-                    <div>{typeof it.qty === 'number' ? it.qty.toFixed(2) : it.qty}</div>
-                    <div style={{ fontSize: '9px', color: '#64748B' }}>{it.uom || "no's"}</div>
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px', textAlign: 'right', fontSize: '10.5px' }}>
-                    {Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  {isIntra ? (
-                    <>
-                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
-                        {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
+
+                    {/* TAX COLUMNS: Merged for Preset Kit, or normal for custom line items */}
+                    {isIntra ? (
+                      it.isPresetItem ? (
+                        it.isFirstInGroup ? (
+                          <>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
+                            >
+                              {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
+                            </td>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                            >
+                              {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
+                            >
+                              {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
+                            </td>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                            >
+                              {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </>
+                        ) : null
+                      ) : (
+                        <>
+                          <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                            {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
+                          </td>
+                          <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
+                            {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                            {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
+                          </td>
+                          <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
+                            {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </>
+                      )
+                    ) : (
+                      it.isPresetItem ? (
+                        it.isFirstInGroup ? (
+                          <>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
+                            >
+                              {it.gRate ? `${it.gRate}%` : '18%'}
+                            </td>
+                            <td
+                              rowSpan={it.groupCount}
+                              style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                            >
+                              {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </>
+                        ) : null
+                      ) : (
+                        <>
+                          <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
+                            {it.gRate ? `${it.gRate}%` : '5%'}
+                          </td>
+                          <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
+                            {(it.gstAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </>
+                      )
+                    )}
+
+                    {/* AMOUNT COLUMN: Merged for Preset Kit, or normal for custom line items */}
+                    {it.isPresetItem ? (
+                      it.isFirstInGroup ? (
+                        <td
+                          rowSpan={it.groupCount}
+                          style={{
+                            border: '1px solid #CBD5E1',
+                            padding: '8px 8px',
+                            textAlign: 'right',
+                            fontWeight: '700',
+                            color: '#0F172A',
+                            fontSize: '10.5px',
+                            verticalAlign: 'middle',
+                            backgroundColor: '#F8FAFC'
+                          }}
+                        >
+                          {Number(it.groupTaxable || it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      ) : null
+                    ) : (
+                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '10.5px' }}>
+                        {Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
-                        {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
-                        {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
-                      </td>
-                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
-                        {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 4px', textAlign: 'center', fontSize: '10px' }}>
-                        {it.gRate ? `${it.gRate}%` : '5%'}
-                      </td>
-                      <td style={{ border: '1px solid #CBD5E1', padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>
-                        {(it.gstAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </>
-                  )}
-                  <td style={{ border: '1px solid #CBD5E1', padding: '8px 8px', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '10.5px' }}>
-                    {Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
+                    )}
+                  </tr>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
