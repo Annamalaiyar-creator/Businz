@@ -125,13 +125,11 @@ export default function TypeableProductSelect({
     };
     window.addEventListener('controlroom_items_update', handleCatalogUpdate);
     window.addEventListener('central_inventory_updated', handleCatalogUpdate);
-    window.addEventListener('controlroom_store_update', handleCatalogUpdate);
     window.addEventListener('controlroom_storage_update', handleCatalogUpdate);
     window.addEventListener('storage', handleCatalogUpdate);
     return () => {
       window.removeEventListener('controlroom_items_update', handleCatalogUpdate);
       window.removeEventListener('central_inventory_updated', handleCatalogUpdate);
-      window.removeEventListener('controlroom_store_update', handleCatalogUpdate);
       window.removeEventListener('controlroom_storage_update', handleCatalogUpdate);
       window.removeEventListener('storage', handleCatalogUpdate);
     };

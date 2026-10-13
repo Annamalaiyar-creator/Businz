@@ -49,16 +49,21 @@ class CentralInventoryStore {
 
     if (typeof window !== 'undefined') {
       const handleExternalItemUpdate = (e) => {
-        const item = e?.detail?.item;
-        const items = e?.detail?.items || (e?.detail?.storeKey === 'item_store' ? e?.detail?.data : null);
-        if (item) {
-          this.registerItem(item);
-        } else if (Array.isArray(items) && items.length > 0) {
-          items.forEach(it => this.registerItem(it));
+        if (this._isHandlingExternalUpdate) return;
+        this._isHandlingExternalUpdate = true;
+        try {
+          const item = e?.detail?.item;
+          const items = e?.detail?.items;
+          if (item) {
+            this.registerItem(item, false);
+          } else if (Array.isArray(items) && items.length > 0) {
+            items.forEach(it => this.registerItem(it, false));
+          }
+        } finally {
+          this._isHandlingExternalUpdate = false;
         }
       };
       window.addEventListener('controlroom_items_update', handleExternalItemUpdate);
-      window.addEventListener('controlroom_store_update', handleExternalItemUpdate);
     }
   }
 
@@ -354,7 +359,7 @@ class CentralInventoryStore {
     window.dispatchEvent(new Event('central_inventory_updated'));
   }
 
-  registerItem(item) {
+  registerItem(item, shouldPersistCloud = true) {
     if (!item || !item.name) return null;
     const cleanCode = String(item.code || item.sku || item.itemId || item.name).trim();
     if (!cleanCode || /^\d{10,}$/.test(cleanCode)) return null;
@@ -405,7 +410,11 @@ class CentralInventoryStore {
       this.items = [normalizedItem, ...this.items];
     }
 
-    this.saveItems();
+    if (shouldPersistCloud) {
+      this.saveItems();
+    } else {
+      try { localStorage.setItem(this.storageKeyItems, JSON.stringify(this.items)); } catch (_) {}
+    }
     this.notifyChange();
     return normalizedItem;
   }

@@ -514,11 +514,9 @@ function App() {
 
     window.addEventListener('controlroom_raw_materials_update', handleRawUpdate);
     window.addEventListener('controlroom_items_update', handleRawUpdate);
-    window.addEventListener('controlroom_store_update', handleRawUpdate);
     return () => {
       window.removeEventListener('controlroom_raw_materials_update', handleRawUpdate);
       window.removeEventListener('controlroom_items_update', handleRawUpdate);
-      window.removeEventListener('controlroom_store_update', handleRawUpdate);
     };
   }, []);
 
