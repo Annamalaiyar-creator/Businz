@@ -1011,8 +1011,35 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (isMounted && unified.length > 0) {
           setCustomerList(unified);
           try {
-            localStorage.setItem('controlroom_customer_store', JSON.stringify(unified));
-            localStorage.setItem('businz_crm_customers', JSON.stringify(unified));
+            const lightweight = unified.slice(0, 500).map(c => ({
+              id: c.id,
+              customerCode: c.customerCode || c.code || '',
+              companyName: c.companyName || c.name || c.c2 || '',
+              name: c.companyName || c.name || '',
+              customerName: c.customerName || c.name || '',
+              contactPerson: c.contactPerson || c.contact || '',
+              contact: c.contact || c.contactPerson || '',
+              phone: c.phone || c.mobile || '',
+              mobile: c.mobile || c.phone || '',
+              email: c.email || '',
+              gstNo: c.gstNo || c.gstNumber || c.gst || '',
+              gst: c.gst || c.gstNumber || c.gstNo || '',
+              gstNumber: c.gstNumber || c.gstNo || c.gst || '',
+              billingAddress: c.billingAddress || c.address1 || c.address || '',
+              address1: c.address1 || c.billingAddress || c.address || '',
+              address: c.address || c.billingAddress || c.address1 || '',
+              city: c.city || '',
+              state: c.state || '',
+              pincode: c.pincode || '',
+              dispatchAddress: c.dispatchAddress || c.deliveryAddress || '',
+              deliveryAddress: c.deliveryAddress || c.dispatchAddress || '',
+              dispatchCity: c.dispatchCity || '',
+              dispatchState: c.dispatchState || '',
+              dispatchPincode: c.dispatchPincode || '',
+              paymentTerms: c.paymentTerms || ''
+            }));
+            localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+            localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
           } catch (_) {}
         }
       } catch (err) {

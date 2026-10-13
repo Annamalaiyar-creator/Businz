@@ -1087,60 +1087,81 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
   // Real Customer Outstanding & Credit Status (Strictly Customers with Outstanding Balance > 0)
   const realOutstandingData = useMemo(() => {
+    if (!Array.isArray(invoices) || invoices.length === 0) return [];
     const today = new Date();
-    const list = [];
 
-    customers.forEach(c => {
-      const name = c.customerName || c.companyName;
-      if (!name) return;
+    // 1. Pre-build customer lookup map for O(1) credit limit lookup
+    const custMap = new Map();
+    (customers || []).forEach(c => {
+      if (!c) return;
+      const name = (c.customerName || c.companyName || '').trim();
+      const code = (c.customerCode || c.code || c.id || '').trim();
+      if (name) custMap.set(name.toLowerCase(), c);
+      if (code) custMap.set(code.toLowerCase(), c);
+    });
 
-      // Invoices matching this customer
-      const matchingInvoices = invoices.filter(inv => {
-        const invCust = (inv.customerName || inv.vendor || '').toLowerCase();
-        return invCust.includes(name.toLowerCase()) || name.toLowerCase().includes(invCust);
-      });
+    // 2. Aggregate outstanding balances strictly from invoices in O(N)
+    const custTotals = new Map();
+    invoices.forEach(inv => {
+      const custName = (inv.customerName || inv.vendor || '').trim();
+      if (!custName) return;
+      const k = custName.toLowerCase();
 
-      const invoicedAmt = matchingInvoices.reduce((s, inv) => s + parseAmt(inv.total || inv.invAmt), 0);
-      const outstandingAmt = matchingInvoices.reduce((s, inv) => {
-        if (inv.status === 'Paid' || inv.paymentStatus === 'Paid') return s;
-        const bal = inv.balance !== undefined ? parseAmt(inv.balance) : parseAmt(inv.total || inv.invAmt);
-        return s + Math.max(0, bal);
-      }, 0);
-
-      // Overdue invoices (past due date)
-      const overdueAmt = matchingInvoices
-        .filter(inv => inv.status !== 'Paid' && inv.paymentStatus !== 'Paid' && inv.dueDate && new Date(inv.dueDate) < today)
-        .reduce((s, inv) => {
-          const bal = inv.balance !== undefined ? parseAmt(inv.balance) : parseAmt(inv.total || inv.invAmt);
-          return s + Math.max(0, bal);
-        }, 0);
-
-      const limitNum = parseAmt(c.creditLimit) || 2500000;
-
-      let status = 'Within limit';
-      if (outstandingAmt > limitNum) {
-        status = 'Limit exceeded';
-      } else if (outstandingAmt > limitNum * 0.7) {
-        status = `${Math.round((outstandingAmt / limitNum) * 100)}% used`;
+      let entry = custTotals.get(k);
+      if (!entry) {
+        const c = custMap.get(k) || {};
+        const limitNum = parseAmt(c.creditLimit) || 2500000;
+        entry = {
+          id: c.customerCode || c.id || custName,
+          customer: c.customerName || c.companyName || custName,
+          invoicedNum: 0,
+          outstandingNum: 0,
+          overdueNum: 0,
+          limitNum
+        };
+        custTotals.set(k, entry);
       }
 
-      // STRICT MANDATE: Only display customers who have an actual pending outstanding balance > 0
-      if (outstandingAmt > 0) {
-        list.push({
-          id: c.customerCode || c.id || name,
-          customer: name,
-          invoicedNum: invoicedAmt,
-          invoiced: formatLakhsCr(invoicedAmt),
-          outstandingNum: outstandingAmt,
-          outstanding: formatLakhsCr(outstandingAmt),
-          overdue: overdueAmt > 0 ? formatLakhsCr(overdueAmt) : '—',
-          creditLimit: formatLakhsCr(limitNum),
-          creditStatus: status
-        });
+      const totalAmt = parseAmt(inv.total || inv.invAmt);
+      entry.invoicedNum += totalAmt;
+
+      const isPaid = inv.status === 'Paid' || inv.paymentStatus === 'Paid';
+      if (!isPaid) {
+        const bal = inv.balance !== undefined ? parseAmt(inv.balance) : totalAmt;
+        const pendingBal = Math.max(0, bal);
+        entry.outstandingNum += pendingBal;
+
+        if (inv.dueDate && new Date(inv.dueDate) < today) {
+          entry.overdueNum += pendingBal;
+        }
       }
     });
 
-    // Sort by outstanding descending
+    // 3. Format strictly customers with outstanding balance > 0
+    const list = [];
+    for (const entry of custTotals.values()) {
+      if (entry.outstandingNum > 0) {
+        let status = 'Within limit';
+        if (entry.outstandingNum > entry.limitNum) {
+          status = 'Limit exceeded';
+        } else if (entry.outstandingNum > entry.limitNum * 0.7) {
+          status = `${Math.round((entry.outstandingNum / entry.limitNum) * 100)}% used`;
+        }
+
+        list.push({
+          id: entry.id,
+          customer: entry.customer,
+          invoicedNum: entry.invoicedNum,
+          invoiced: formatLakhsCr(entry.invoicedNum),
+          outstandingNum: entry.outstandingNum,
+          outstanding: formatLakhsCr(entry.outstandingNum),
+          overdue: entry.overdueNum > 0 ? formatLakhsCr(entry.overdueNum) : '—',
+          creditLimit: formatLakhsCr(entry.limitNum),
+          creditStatus: status
+        });
+      }
+    }
+
     return list.sort((a, b) => b.outstandingNum - a.outstandingNum);
   }, [customers, invoices]);
 

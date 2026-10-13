@@ -206,9 +206,11 @@ export default function BomOrdersView(props) {
             if (Array.isArray(custs) && custs.length > 0) {
               setCustomerList(prev => {
                 if (Array.isArray(prev) && prev.length === custs.length) {
-                  try {
-                    if (JSON.stringify(prev) === JSON.stringify(custs)) return prev;
-                  } catch (_) {}
+                  const idPrev0 = prev[0]?.customerCode || prev[0]?.id;
+                  const idCust0 = custs[0]?.customerCode || custs[0]?.id;
+                  const idPrevEnd = prev[prev.length - 1]?.customerCode || prev[prev.length - 1]?.id;
+                  const idCustEnd = custs[custs.length - 1]?.customerCode || custs[custs.length - 1]?.id;
+                  if (idPrev0 === idCust0 && idPrevEnd === idCustEnd) return prev;
                 }
                 return custs;
               });
@@ -3025,7 +3027,7 @@ export default function BomOrdersView(props) {
                 </span>
               )}
               <datalist id="bom-customer-name-suggestions">
-                {customerList.map((c, idx) => {
+                {(customerList || []).slice(0, 60).map((c, idx) => {
                   const val = c.code || c.customerName || c.companyName;
                   const label = c.c2 || c.companyName;
                   return (
