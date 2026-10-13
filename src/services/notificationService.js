@@ -13,11 +13,13 @@ import { fetchCloudStore, saveCloudStore } from "../utils/supabaseDataSync";
 
 let audioCtx = null;
 
+let hasUserGesture = false;
+
 /**
  * Returns or initializes a Web Audio Context, handling browser autoplay resumption.
  */
 export function getAudioContext() {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined' || !hasUserGesture) return null;
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
@@ -29,7 +31,6 @@ export function getAudioContext() {
     }
     return audioCtx;
   } catch (e) {
-    console.warn('Web Audio Context not available:', e);
     return null;
   }
 }
@@ -37,10 +38,16 @@ export function getAudioContext() {
 // Automatically unlock audio context on initial user click/keypress in the window
 if (typeof window !== 'undefined') {
   const unlockAudio = () => {
-    const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
+    hasUserGesture = true;
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass && !audioCtx) {
+        audioCtx = new AudioContextClass();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+    } catch (_) {}
     window.removeEventListener('click', unlockAudio);
     window.removeEventListener('keydown', unlockAudio);
     window.removeEventListener('touchstart', unlockAudio);
