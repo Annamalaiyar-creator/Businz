@@ -15,9 +15,7 @@ async function restoreAllPreservedCustomers() {
 
   const possiblePaths = [
     path.resolve(__dirname, '../server/customer_store.json'),
-    path.resolve(__dirname, '../server/crm_customers.json'),
-    path.resolve(__dirname, '../server/backups/IMMUTABLE_PRESERVED_CUSTOMERS_20261007/crm_customers.json'),
-    path.resolve(__dirname, '../server/backups/IMMUTABLE_PRESERVED_CUSTOMERS_20261007/customer_store.json')
+    path.resolve(__dirname, '../server/crm_customers.json')
   ];
 
   let backupPath = possiblePaths.find(p => fs.existsSync(p));
