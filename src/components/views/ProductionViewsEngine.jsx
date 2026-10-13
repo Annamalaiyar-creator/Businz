@@ -180,6 +180,7 @@ export default function ProductionViewsEngine(props) {
 
   const hasInitialSyncedRef = useRef(false);
   const isSyncingCloudRef = useRef(false);
+  const hasFetchedCustomersRef = useRef(false);
 
   // Keep local convenience cache updated without cloud egress
   useEffect(() => {
@@ -298,29 +299,32 @@ export default function ProductionViewsEngine(props) {
           }
         }
 
-        // Sync Customers directly from Supabase & backend
-        try {
-          let custs = await fetchCloudStore('customer_store', []);
-          if (!Array.isArray(custs) || custs.length === 0) {
-            const custRes = await fetch('/api/customers');
-            if (custRes.ok) {
-              const fetchedCusts = await custRes.json();
-              if (Array.isArray(fetchedCusts) && fetchedCusts.length > 0) custs = fetchedCusts;
-            }
-          }
-          if (Array.isArray(custs) && custs.length > 0) {
-            setCustomerList(prev => {
-              if (Array.isArray(prev) && prev.length === custs.length) {
-                const idPrev0 = prev[0]?.customerCode || prev[0]?.id;
-                const idCust0 = custs[0]?.customerCode || custs[0]?.id;
-                const idPrevEnd = prev[prev.length - 1]?.customerCode || prev[prev.length - 1]?.id;
-                const idCustEnd = custs[custs.length - 1]?.customerCode || custs[custs.length - 1]?.id;
-                if (idPrev0 === idCust0 && idPrevEnd === idCustEnd) return prev;
+        // Sync Customers directly from Supabase & backend (loaded once and re-fetched only on customer updates)
+        if (!hasFetchedCustomersRef.current) {
+          try {
+            let custs = await fetchCloudStore('customer_store', []);
+            if (!Array.isArray(custs) || custs.length === 0) {
+              const custRes = await fetch('/api/customers');
+              if (custRes.ok) {
+                const fetchedCusts = await custRes.json();
+                if (Array.isArray(fetchedCusts) && fetchedCusts.length > 0) custs = fetchedCusts;
               }
-              return custs;
-            });
-          }
-        } catch (_) {}
+            }
+            if (Array.isArray(custs) && custs.length > 0) {
+              hasFetchedCustomersRef.current = true;
+              setCustomerList(prev => {
+                if (Array.isArray(prev) && prev.length === custs.length) {
+                  const idPrev0 = prev[0]?.customerCode || prev[0]?.id;
+                  const idCust0 = custs[0]?.customerCode || custs[0]?.id;
+                  const idPrevEnd = prev[prev.length - 1]?.customerCode || prev[prev.length - 1]?.id;
+                  const idCustEnd = custs[custs.length - 1]?.customerCode || custs[custs.length - 1]?.id;
+                  if (idPrev0 === idCust0 && idPrevEnd === idCustEnd) return prev;
+                }
+                return custs;
+              });
+            }
+          } catch (_) {}
+        }
       } catch (err) {
         console.error('Error syncing BOMs in ProductionViewsEngine:', err);
       } finally {
@@ -363,7 +367,13 @@ export default function ProductionViewsEngine(props) {
       }, 800);
     };
 
+    const handleCustomerUpdate = () => {
+      hasFetchedCustomersRef.current = false;
+      debouncedSyncFromCloud();
+    };
+
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
+    window.addEventListener('controlroom_customer_update', handleCustomerUpdate);
     window.addEventListener('controlroom_storage_update', debouncedSyncFromCloud);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
@@ -372,6 +382,7 @@ export default function ProductionViewsEngine(props) {
       clearInterval(fallbackInterval);
       if (debounceCloudTimer) clearTimeout(debounceCloudTimer);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
+      window.removeEventListener('controlroom_customer_update', handleCustomerUpdate);
       window.removeEventListener('controlroom_storage_update', debouncedSyncFromCloud);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
