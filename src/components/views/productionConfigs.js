@@ -30,9 +30,11 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             .filter(isInvoiceEligibleBom)
             .map(b => {
               const bCode = b.bomCode || b.code || 'BOM-2026';
-              const cleanNum = (bCode.match(/(\d+)$/)?.[1] || '01');
+              const matchSeq = bCode.match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || bCode.match(/BOM-(\d+)/i);
+              const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-${(bCode.match(/(\d+)$/)?.[1] || '01')}`;
+              const hasExplicitInv = b.invoiceNo && b.invoiceNo !== 'Pending Confirmation' && !b.invoiceNo.toLowerCase().includes('pending');
+              const invNo = hasExplicitInv ? b.invoiceNo : derivedInvNo;
               const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
-              const invNo = (b.invoiceNo && b.invoiceNo !== 'Pending Confirmation') ? b.invoiceNo : (isConf ? (b.invoiceNo || `VRM-INV-2026-${cleanNum}`) : 'Pending Confirmation');
               const s = String(b.status || '').toLowerCase();
               const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
 
@@ -164,11 +166,20 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             const existingAmt = cleanAmtNum(inv.invAmt) || cleanAmtNum(inv.total) || cleanAmtNum(inv.amount) || cleanAmtNum(inv.rawTotal);
             const resolvedAmount = existingAmt > 0 ? existingAmt : (bomTotal > 0 ? bomTotal : 0);
 
+            const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
+            const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : '';
+            const rawInv = inv.invNo || inv.invoiceNo || inv.code || '';
+            const hasExplicitInv = rawInv && rawInv !== 'Pending Confirmation' && !rawInv.toLowerCase().includes('pending');
+            const matchingBomInv = matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' && !matchingBom.invoiceNo.toLowerCase().includes('pending');
+            const resolvedInvNo = hasExplicitInv ? rawInv : (matchingBomInv ? matchingBom.invoiceNo : (derivedInvNo || rawInv || 'VRM-INV-2026-01'));
+
             return {
               ...inv,
               poNo: resolvedBomCode,
               bomCode: resolvedBomCode,
-              invNo: (inv.invNo && inv.invNo !== 'Pending Confirmation') ? inv.invNo : (matchingBom?.invoiceNo || inv.invNo || 'Pending Confirmation'),
+              invNo: resolvedInvNo,
+              code: resolvedInvNo,
+              invoiceNo: resolvedInvNo,
               vendor: resolvedCustomer,
               customerName: resolvedCustomer,
               billingAddress: inv.billingAddress || matchingBom?.billingAddress,
@@ -197,17 +208,24 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
             if (!a || !b) return false;
             if (a.id && b.id && a.id === b.id) return true;
 
-            const aInv = (a.invNo || a.invoiceNo || a.code || '').toUpperCase().trim();
-            const bInv = (b.invNo || b.invoiceNo || b.code || '').toUpperCase().trim();
+            const aInv = (a.invNo || a.invoiceNo || a.code || a.invoice_number || '').toUpperCase().trim();
+            const bInv = (b.invNo || b.invoiceNo || b.code || b.invoice_number || '').toUpperCase().trim();
             const aHasRealInv = aInv && aInv !== 'PENDING CONFIRMATION' && !aInv.includes('PENDING');
             const bHasRealInv = bInv && bInv !== 'PENDING CONFIRMATION' && !bInv.includes('PENDING');
             if (aHasRealInv && bHasRealInv && (aInv === bInv || aInv.replace(/[^A-Z0-9]/g, '') === bInv.replace(/[^A-Z0-9]/g, ''))) {
               return true;
             }
 
-            const aBom = (a.bomCode || a.poNo || '').toUpperCase().trim();
-            const bBom = (b.bomCode || b.poNo || '').toUpperCase().trim();
+            const aBom = (a.bomCode || a.poNo || a.bom_code || a.bomRef || '').toUpperCase().trim();
+            const bBom = (b.bomCode || b.poNo || b.bom_code || b.bomRef || '').toUpperCase().trim();
             if (aBom && bBom && (aBom === bBom || aBom.replace(/[^A-Z0-9]/g, '') === bBom.replace(/[^A-Z0-9]/g, ''))) {
+              return true;
+            }
+
+            // Sequence-level matching (e.g. 2026-04 or 665)
+            const seqA = extractOrderSeq(aBom) || extractOrderSeq(aInv);
+            const seqB = extractOrderSeq(bBom) || extractOrderSeq(bInv);
+            if (seqA && seqB && seqA === seqB) {
               return true;
             }
 
@@ -245,11 +263,16 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 master = item; secondary = existing;
               }
 
+              const bestInvNo = (master.invNo && master.invNo !== 'Pending Confirmation' && !master.invNo.toLowerCase().includes('pending'))
+                ? master.invNo
+                : ((secondary.invNo && secondary.invNo !== 'Pending Confirmation' && !secondary.invNo.toLowerCase().includes('pending')) ? secondary.invNo : master.invNo);
+
               canonicalInvoices[existingIdx] = {
                 ...secondary,
                 ...master,
-                invNo: (master.invNo && master.invNo !== 'Pending Confirmation') ? master.invNo : (secondary.invNo || master.invNo),
-                code: (master.code && master.code !== 'Pending Confirmation') ? master.code : (secondary.code || master.code),
+                invNo: bestInvNo,
+                code: bestInvNo,
+                invoiceNo: bestInvNo,
                 bomCode: master.bomCode || secondary.bomCode,
                 poNo: master.poNo || secondary.poNo,
                 items: (master.items && master.items.length > 0) ? master.items : (secondary.items || []),
@@ -269,25 +292,29 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
           // 2. Process verified BOM invoices from bomStore
           verifiedBomInvoices.forEach(upsertCanonicalInvoice);
 
-          // 3. Strict elimination of duplicate "Pending Confirmation" rows for any BOM that already has an invoice entry
-          const knownBomRefsWithInvoice = new Set();
-          canonicalInvoices.forEach(item => {
-            const num = (item.invNo || item.invoiceNo || item.code || '').trim();
-            const hasRealNo = num && num !== 'Pending Confirmation' && !num.toLowerCase().includes('pending');
-            const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            if (hasRealNo && bRef) {
-              knownBomRefsWithInvoice.add(bRef);
-            }
-          });
+          // 3. Strict 1-BOM = 1-Invoice guarantee
+          const seenBoms = new Set();
+          const seenInvs = new Set();
+          const dedupedInvoices = [];
 
-          const dedupedInvoices = canonicalInvoices.filter(item => {
-            const num = (item.invNo || item.invoiceNo || item.code || '').trim();
-            const isPending = !num || num === 'Pending Confirmation' || num.toLowerCase().includes('pending');
+          canonicalInvoices.forEach(item => {
             const bRef = (item.bomCode || item.poNo || '').toUpperCase().trim();
-            if (isPending && bRef && knownBomRefsWithInvoice.has(bRef)) {
-              return false;
+            const invNum = (item.invNo || item.invoiceNo || item.code || '').toUpperCase().trim();
+            const seq = extractOrderSeq(bRef) || extractOrderSeq(invNum);
+
+            // If we have already seen this BOM or Invoice sequence, don't duplicate
+            if (bRef && seenBoms.has(bRef)) return;
+            if (invNum && seenInvs.has(invNum)) return;
+            if (seq && (seenBoms.has(`SEQ_${seq}`) || seenInvs.has(`SEQ_${seq}`))) return;
+
+            if (bRef) seenBoms.add(bRef);
+            if (invNum) seenInvs.add(invNum);
+            if (seq) {
+              seenBoms.add(`SEQ_${seq}`);
+              seenInvs.add(`SEQ_${seq}`);
             }
-            return true;
+
+            dedupedInvoices.push(item);
           });
 
           const allInvoicesUnified = dedupedInvoices.sort((a, b) => {
@@ -317,10 +344,15 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 const matchingBom = findMatchingBom(i);
                 const resolvedBomCode = i.poNo || i.bomCode || matchingBom?.bomCode || matchingBom?.code || 'BOM-001';
                 const resolvedAmt = cleanAmtNum(i.invAmt) || cleanAmtNum(i.total) || cleanAmtNum(i.amount) || cleanAmtNum(matchingBom?.grandTotal) || cleanAmtNum(matchingBom?.subTotal) || cleanAmtNum(matchingBom?.totalAmount) || 0;
+                const matchSeq = (resolvedBomCode || '').match(/(?:VRM-BOM-)?(\d{4})-(\d+)/i) || (resolvedBomCode || '').match(/BOM-(\d+)/i);
+                const fallbackInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-01`;
+                const finalCode = (i.invNo && i.invNo !== 'Pending Confirmation' && !i.invNo.toLowerCase().includes('pending')) ? i.invNo : (matchingBom?.invoiceNo || fallbackInvNo);
 
                 return {
                   ...i,
-                  code: i.invNo,
+                  code: finalCode,
+                  invNo: finalCode,
+                  invoiceNo: finalCode,
                   c2: i.vendor || i.customerName || matchingBom?.customerName || 'Customer',
                   c3: resolvedBomCode,
                   c4: cleanDateStr(i.date),

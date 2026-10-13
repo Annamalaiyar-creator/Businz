@@ -589,11 +589,13 @@ async function validateTargetDatabase(client, customAllowedDb = null) {
   const dbRes = await client.query('SELECT current_database() AS db_name');
   const currentDb = dbRes?.rows?.[0]?.db_name;
 
-  const isDev = process.env.NODE_ENV === 'development' || 
-                process.env.APP_ENV === 'development' || 
-                process.env.PORT === '5002' ||
-                process.env.PORT === '5001' ||
-                process.env.VITE_APP_ENV === 'development';
+  const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
+  const isDev = !isProd && (
+    process.env.NODE_ENV === 'development' || 
+    process.env.APP_ENV === 'development' || 
+    process.env.PORT === '5002' ||
+    process.env.VITE_APP_ENV === 'development'
+  );
 
   // Strict isolation: Never allow writing to production businz DB when running dev/staging server
   if (isDev && currentDb === 'businz') {
