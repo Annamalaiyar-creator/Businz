@@ -13,14 +13,21 @@ async function restoreAllPreservedCustomers() {
 
   await initPostgresDatabase();
 
-  const backupPath = path.resolve(__dirname, '../server/backups/IMMUTABLE_PRESERVED_CUSTOMERS_20261007/crm_customers.json');
-  if (!fs.existsSync(backupPath)) {
-    console.error('❌ Immutable customer backup file not found at:', backupPath);
+  const possiblePaths = [
+    path.resolve(__dirname, '../server/customer_store.json'),
+    path.resolve(__dirname, '../server/crm_customers.json'),
+    path.resolve(__dirname, '../server/backups/IMMUTABLE_PRESERVED_CUSTOMERS_20261007/crm_customers.json'),
+    path.resolve(__dirname, '../server/backups/IMMUTABLE_PRESERVED_CUSTOMERS_20261007/customer_store.json')
+  ];
+
+  let backupPath = possiblePaths.find(p => fs.existsSync(p));
+  if (!backupPath) {
+    console.error('❌ Customer source data file not found in any standard server locations.');
     process.exit(1);
   }
 
   const backupData = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
-  console.log(`📦 Loaded ${backupData.length} total customer records from immutable backup archive.`);
+  console.log(`📦 Loaded ${backupData.length} total customer records from: ${backupPath}`);
 
   const client = await pool.connect();
   try {
