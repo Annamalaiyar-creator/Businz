@@ -867,6 +867,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Sync Customers directly from Zoho Books, CRM Customers & Supabase
   const isSyncingCustRef = useRef(false);
+  const searchCustTimerRef = useRef(null);
   useEffect(() => {
     let isMounted = true;
 
@@ -3714,8 +3715,35 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       placeholder="Type or select company..."
                       value={vendorName}
                       onChange={(e) => {
-                        setVendorName(e.target.value);
+                        const val = e.target.value;
+                        setVendorName(val);
                         setIsCustomerDropdownOpen(true);
+                        const q = val.trim();
+                        if (q.length >= 2) {
+                          if (searchCustTimerRef.current) clearTimeout(searchCustTimerRef.current);
+                          searchCustTimerRef.current = setTimeout(async () => {
+                            try {
+                              const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`);
+                              if (res.ok) {
+                                const matches = await res.json();
+                                if (Array.isArray(matches) && matches.length > 0) {
+                                  setCustomerList(prev => {
+                                    const map = new Map();
+                                    (prev || []).forEach(p => {
+                                      const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
+                                      if (k) map.set(k, p);
+                                    });
+                                    matches.forEach(m => {
+                                      const k = (m.customerCode || m.id || m.companyName || m.name || '').toLowerCase().trim();
+                                      if (k && !map.has(k)) map.set(k, m);
+                                    });
+                                    return Array.from(map.values());
+                                  });
+                                }
+                              }
+                            } catch (_) {}
+                          }, 250);
+                        }
                       }}
                       onFocus={() => setIsCustomerDropdownOpen(true)}
                       onBlur={() => {
