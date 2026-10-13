@@ -1383,8 +1383,6 @@ export default function ItemsDirectoryView(props) {
       // 5. Broadcast events so all product dropdowns, preset management, and inventory views update live
       try {
         window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: { item: createdItem } }));
-        window.dispatchEvent(new CustomEvent('central_inventory_updated', { detail: { item: createdItem } }));
-        window.dispatchEvent(new CustomEvent('controlroom_store_update', { detail: { storeKey: 'item_store', data: [createdItem] } }));
         window.dispatchEvent(new Event('central_inventory_updated'));
         window.dispatchEvent(new Event('controlroom_storage_update'));
       } catch (_) {}
@@ -1455,8 +1453,6 @@ export default function ItemsDirectoryView(props) {
 
       try {
         window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: { item: fallback } }));
-        window.dispatchEvent(new CustomEvent('central_inventory_updated', { detail: { item: fallback } }));
-        window.dispatchEvent(new CustomEvent('controlroom_store_update', { detail: { storeKey: 'item_store', data: [fallback] } }));
         window.dispatchEvent(new Event('central_inventory_updated'));
         window.dispatchEvent(new Event('controlroom_storage_update'));
       } catch (_) {}

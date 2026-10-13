@@ -2184,11 +2184,19 @@ export function subscribeToCloudStore(storeKey, onUpdateCallback) {
             const list = await fetchCloudStore('employees_store', []);
             safeEmit(list);
           } else if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
-            const list = await fetchCloudStore('customer_store', []);
-            safeEmit(list);
+            if (payload && payload.new) {
+              const singleCustomer = toConsumerCustomer(payload.new);
+              if (singleCustomer) safeEmit(singleCustomer);
+            } else if (payload && payload.eventType === 'DELETE' && payload.old) {
+              safeEmit({ id: payload.old.id, _deleted: true });
+            }
           } else if (storeKey === 'crm_opportunities' || storeKey === 'opportunities') {
-            const list = await fetchCloudStore('crm_opportunities', []);
-            safeEmit(list);
+            if (payload && payload.new) {
+              const singleOpp = toConsumerOpportunity(payload.new);
+              if (singleOpp) safeEmit(singleOpp);
+            } else if (payload && payload.eventType === 'DELETE' && payload.old) {
+              safeEmit({ id: payload.old.id, _deleted: true });
+            }
           } else if (isBomStore) {
             // NEVER download the entire table on a Realtime row event!
             if (payload && payload.new) {

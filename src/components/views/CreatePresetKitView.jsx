@@ -21,11 +21,9 @@ export default function CreatePresetKitView({
     const refresh = () => setCatalogTick(t => t + 1);
     window.addEventListener('controlroom_items_update', refresh);
     window.addEventListener('central_inventory_updated', refresh);
-    window.addEventListener('controlroom_store_update', refresh);
     return () => {
       window.removeEventListener('controlroom_items_update', refresh);
       window.removeEventListener('central_inventory_updated', refresh);
-      window.removeEventListener('controlroom_store_update', refresh);
     };
   }, []);
 
