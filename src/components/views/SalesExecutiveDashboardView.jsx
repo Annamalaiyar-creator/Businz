@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowUpRight, ArrowDownRight, Clock, Sparkles, RefreshCw,
-  Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, CheckCircle2, Flame, ArrowRight, Target
+  Edit3, X, Check, Eye, ArrowUpDown, Plus, CheckCircle, CheckCircle2, Flame, ArrowRight, Target,
+  TrendingUp, MapPin, Users
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
@@ -628,6 +629,175 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
   const remainingWorkingDays = Math.max(1, lastDayOfMonth - now.getDate());
   const requiredDailySales = targetBalanceVal > 0 ? targetBalanceVal / remainingWorkingDays : 0;
 
+  // Month-End Forecast Calculations
+  const monthEndForecastVal = useMemo(() => {
+    const base = targetAchievedVal;
+    const pipeExpected = filteredOpportunities
+      .filter(o => o.stage !== 'Won' && o.stage !== 'Lost')
+      .reduce((sum, o) => {
+        const val = parseAmt(o.dealValue);
+        const prob = o.stage === 'Negotiation' ? 0.6 : (o.stage === 'PI issued' || o.stage === 'Quotation Sent') ? 0.75 : 0.35;
+        return sum + (val * prob);
+      }, 0);
+
+    const day = Math.max(1, now.getDate());
+    const runRateProjection = (base / day) * lastDayOfMonth;
+    const projected = Math.max(base + pipeExpected, runRateProjection, base * 1.05);
+    return Math.round(projected);
+  }, [targetAchievedVal, filteredOpportunities, now, lastDayOfMonth]);
+
+  const forecastPctOfTarget = useMemo(() => {
+    if (monthlyTargetNum <= 0) return 100;
+    return Math.round((monthEndForecastVal / monthlyTargetNum) * 100);
+  }, [monthEndForecastVal, monthlyTargetNum]);
+
+  const forecastExpectedAddl = useMemo(() => {
+    return Math.max(0, monthEndForecastVal - targetAchievedVal);
+  }, [monthEndForecastVal, targetAchievedVal]);
+
+  // Region-Wise Sales Calculations
+  const regionWiseSales = useMemo(() => {
+    const regions = [
+      { key: 'Tamil Nadu', label: 'Tamil Nadu', customers: new Set(), invoices: 0, sales: 0 },
+      { key: 'Andhra Pradesh', label: 'Andhra Pradesh', customers: new Set(), invoices: 0, sales: 0 },
+      { key: 'Telangana', label: 'Telangana', customers: new Set(), invoices: 0, sales: 0 },
+      { key: 'Kerala', label: 'Kerala', customers: new Set(), invoices: 0, sales: 0 },
+      { key: 'Karnataka', label: 'Karnataka', customers: new Set(), invoices: 0, sales: 0 },
+      { key: 'Other States', label: 'Other States', customers: new Set(), invoices: 0, sales: 0 }
+    ];
+
+    const normalizeReg = (raw) => {
+      const s = String(raw || '').toLowerCase();
+      if (s.includes('tamil') || s.includes('tn') || s.includes('chennai') || s.includes('coimbatore') || s.includes('madurai') || s.includes('salem') || s.includes('trichy') || s.includes('hosur')) return 'Tamil Nadu';
+      if (s.includes('andhra') || s.includes('ap') || s.includes('visakhapatnam') || s.includes('vijayawada') || s.includes('tirupati')) return 'Andhra Pradesh';
+      if (s.includes('telangana') || s.includes('hyderabad') || s.includes('warangal') || s.includes('secunderabad')) return 'Telangana';
+      if (s.includes('kerala') || s.includes('kochi') || s.includes('thiruvananthapuram') || s.includes('calicut') || s.includes('cochin')) return 'Kerala';
+      if (s.includes('karnataka') || s.includes('bangalore') || s.includes('bengaluru') || s.includes('mysore') || s.includes('hubli')) return 'Karnataka';
+      return 'Other States';
+    };
+
+    const custStateMap = new Map();
+    customers.forEach(c => {
+      const name = (c.customerName || c.companyName || '').toLowerCase().trim();
+      const st = c.state || c.billing_address?.state || c.shipping_address?.state || c.city || '';
+      if (name && st) custStateMap.set(name, st);
+    });
+
+    filteredInvoices.forEach(inv => {
+      const custName = (inv.customerName || inv.vendor || '').trim();
+      const amt = parseAmt(inv.total || inv.invAmt || inv.amount);
+      const rawState = inv.placeOfSupply || inv.state || inv.billingAddress?.state || custStateMap.get(custName.toLowerCase()) || '';
+      const regKey = normalizeReg(rawState);
+
+      const targetReg = regions.find(r => r.key === regKey) || regions[regions.length - 1];
+      if (custName) targetReg.customers.add(custName);
+      targetReg.invoices += 1;
+      targetReg.sales += amt;
+    });
+
+    if (filteredInvoices.length === 0 && filteredPis.length > 0) {
+      filteredPis.forEach(pi => {
+        const custName = (pi.customerName || pi.customer || '').trim();
+        const amt = parseAmt(pi.total || pi.grandTotal);
+        const rawState = pi.placeOfSupply || pi.billingAddress?.state || custStateMap.get(custName.toLowerCase()) || '';
+        const regKey = normalizeReg(rawState);
+
+        const targetReg = regions.find(r => r.key === regKey) || regions[regions.length - 1];
+        if (custName) targetReg.customers.add(custName);
+        targetReg.invoices += 1;
+        targetReg.sales += amt;
+      });
+    }
+
+    const rows = regions.map(r => ({
+      region: r.label,
+      customers: r.customers.size,
+      invoices: r.invoices,
+      salesLakhs: (r.sales / 100000).toFixed(1),
+      salesRaw: r.sales
+    }));
+
+    const totalUniqueCustomers = new Set();
+    regions.forEach(r => r.customers.forEach(c => totalUniqueCustomers.add(c)));
+    const totalInvoicesCount = regions.reduce((s, r) => s + r.invoices, 0);
+    const totalSalesRaw = regions.reduce((s, r) => s + r.sales, 0);
+
+    return {
+      rows,
+      total: {
+        customers: totalUniqueCustomers.size,
+        invoices: totalInvoicesCount,
+        salesLakhs: (totalSalesRaw / 100000).toFixed(1)
+      }
+    };
+  }, [filteredInvoices, filteredPis, customers]);
+
+  // Customer Sales Mix Calculations (New vs Existing)
+  const customerSalesMix = useMemo(() => {
+    const customerInvCount = new Map();
+    invoices.forEach(inv => {
+      const name = (inv.customerName || inv.vendor || '').trim().toLowerCase();
+      if (name) {
+        customerInvCount.set(name, (customerInvCount.get(name) || 0) + 1);
+      }
+    });
+
+    let newCustSales = 0;
+    let existCustSales = 0;
+    const currentPeriodCustSet = new Set();
+    const currentPeriodNewSet = new Set();
+    const currentPeriodExistSet = new Set();
+
+    filteredInvoices.forEach(inv => {
+      const name = (inv.customerName || inv.vendor || '').trim().toLowerCase();
+      const amt = parseAmt(inv.total || inv.invAmt || inv.amount);
+      if (!name) return;
+
+      const lifetimeCount = customerInvCount.get(name) || 1;
+      if (lifetimeCount <= 1) {
+        currentPeriodNewSet.add(name);
+        newCustSales += amt;
+      } else {
+        currentPeriodExistSet.add(name);
+        existCustSales += amt;
+      }
+      currentPeriodCustSet.add(name);
+    });
+
+    if (filteredInvoices.length === 0 && filteredPis.length > 0) {
+      filteredPis.forEach(pi => {
+        const name = (pi.customerName || pi.customer || '').trim().toLowerCase();
+        const amt = parseAmt(pi.total || pi.grandTotal);
+        if (!name) return;
+        currentPeriodNewSet.add(name);
+        newCustSales += amt;
+        currentPeriodCustSet.add(name);
+      });
+    }
+
+    const totalSales = newCustSales + existCustSales;
+    const newPct = totalSales > 0 ? Math.round((newCustSales / totalSales) * 100) : 0;
+    const existPct = totalSales > 0 ? (100 - newPct) : 0;
+
+    return {
+      newCustomers: {
+        count: currentPeriodNewSet.size,
+        salesLakhs: (newCustSales / 100000).toFixed(1),
+        pct: `${newPct}%`
+      },
+      existingCustomers: {
+        count: currentPeriodExistSet.size,
+        salesLakhs: (existCustSales / 100000).toFixed(1),
+        pct: `${existPct}%`
+      },
+      total: {
+        count: currentPeriodCustSet.size,
+        salesLakhs: (totalSales / 100000).toFixed(1),
+        pct: '100%'
+      }
+    };
+  }, [invoices, filteredInvoices, filteredPis]);
+
   // Real Sales Funnel 4-Tier Breakdown
   const funnelData = useMemo(() => {
     const offersCount = filteredQuotations.length;
@@ -915,7 +1085,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     return list;
   }, [filteredOpportunities, followups, filteredQuotations]);
 
-  // Real Customer Outstanding & Credit Status
+  // Real Customer Outstanding & Credit Status (Strictly Customers with Outstanding Balance > 0)
   const realOutstandingData = useMemo(() => {
     const today = new Date();
     const list = [];
@@ -931,12 +1101,19 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
       });
 
       const invoicedAmt = matchingInvoices.reduce((s, inv) => s + parseAmt(inv.total || inv.invAmt), 0);
-      const outstandingAmt = matchingInvoices.reduce((s, inv) => s + parseAmt(inv.balance !== undefined ? inv.balance : inv.total), 0);
+      const outstandingAmt = matchingInvoices.reduce((s, inv) => {
+        if (inv.status === 'Paid' || inv.paymentStatus === 'Paid') return s;
+        const bal = inv.balance !== undefined ? parseAmt(inv.balance) : parseAmt(inv.total || inv.invAmt);
+        return s + Math.max(0, bal);
+      }, 0);
 
       // Overdue invoices (past due date)
       const overdueAmt = matchingInvoices
-        .filter(inv => inv.dueDate && new Date(inv.dueDate) < today)
-        .reduce((s, inv) => s + parseAmt(inv.balance !== undefined ? inv.balance : inv.total), 0);
+        .filter(inv => inv.status !== 'Paid' && inv.paymentStatus !== 'Paid' && inv.dueDate && new Date(inv.dueDate) < today)
+        .reduce((s, inv) => {
+          const bal = inv.balance !== undefined ? parseAmt(inv.balance) : parseAmt(inv.total || inv.invAmt);
+          return s + Math.max(0, bal);
+        }, 0);
 
       const limitNum = parseAmt(c.creditLimit) || 2500000;
 
@@ -947,7 +1124,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         status = `${Math.round((outstandingAmt / limitNum) * 100)}% used`;
       }
 
-      if (invoicedAmt > 0 || outstandingAmt > 0 || c.creditLimit) {
+      // STRICT MANDATE: Only display customers who have an actual pending outstanding balance > 0
+      if (outstandingAmt > 0) {
         list.push({
           id: c.customerCode || c.id || name,
           customer: name,
@@ -992,12 +1170,10 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     return realFollowupsData.slice(start, start + followupRowsPerPage);
   }, [realFollowupsData, followupPage, followupRowsPerPage]);
 
-  // Outstanding Table Pagination
-  const totalOutstandingPages = Math.ceil(realOutstandingData.length / outstandingRowsPerPage) || 1;
+  // Display Top 5 Outstanding Customers
   const currentOutstandingRows = useMemo(() => {
-    const start = (outstandingPage - 1) * outstandingRowsPerPage;
-    return realOutstandingData.slice(start, start + outstandingRowsPerPage);
-  }, [realOutstandingData, outstandingPage, outstandingRowsPerPage]);
+    return realOutstandingData.slice(0, 5);
+  }, [realOutstandingData]);
 
   // Opportunity Risk & Expiry Alerts
   const inactiveOpportunities = useMemo(() => {
@@ -1295,75 +1471,102 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         ))}
       </div>
 
-      {/* ─── ROW 2: MONTH TARGET RUN RATE & SALES FUNNEL (50/50 SPLIT) ─── */}
-      <div className="sales-dashboard-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
-        {/* Card A: Target Progress & Run Rate */}
-        <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  MONTH TARGET PROGRESS AND REQUIRED RUN RATE
-                </span>
-                {isCeoOrMd && (
-                  <button
-                    onClick={() => {
-                      setTargetModalRep(selectedExecutive);
-                      const currentVal = selectedExecutive === 'All'
-                        ? (ceoTargetStore?.repTargets?.['All'] || ceoTargetStore?.monthlyCompanyTarget || 18000000)
-                        : (ceoTargetStore?.repTargets?.[selectedExecutive] || ceoTargetStore?.monthlyCompanyTarget || 18000000);
-                      setTargetModalValue(String(currentVal));
-                      setShowTargetModal(true);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '2px 8px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      color: '#0E7490',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #0E7490',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      boxShadow: '0 1px 3px rgba(14, 116, 144, 0.1)'
-                    }}
-                    title="Change target as CEO / MD"
-                  >
-                    <Edit3 size={11} /> Edit Target
-                  </button>
-                )}
+      {/* ─── ROW 2A: MONTH TARGET PROGRESS, RUN RATE & MONTH-END FORECAST (FULL WIDTH) ─── */}
+      <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)', width: '100%', boxSizing: 'border-box' }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                MONTH TARGET PROGRESS, RUN RATE & FORECAST
+              </span>
+              {isCeoOrMd && (
+                <button
+                  onClick={() => {
+                    setTargetModalRep(selectedExecutive);
+                    const currentVal = selectedExecutive === 'All'
+                      ? (ceoTargetStore?.repTargets?.['All'] || ceoTargetStore?.monthlyCompanyTarget || 18000000)
+                      : (ceoTargetStore?.repTargets?.[selectedExecutive] || ceoTargetStore?.monthlyCompanyTarget || 18000000);
+                    setTargetModalValue(String(currentVal));
+                    setShowTargetModal(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: '#0E7490',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #0E7490',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(14, 116, 144, 0.1)'
+                  }}
+                  title="Change target as CEO / MD"
+                >
+                  <Edit3 size={11} /> Edit Target
+                </button>
+              )}
+            </div>
+            <span style={{
+              fontSize: '10.5px',
+              fontWeight: '700',
+              color: targetAchievedPct >= 80 ? '#166534' : targetAchievedPct >= 50 ? '#92400E' : '#1E40AF',
+              backgroundColor: targetAchievedPct >= 80 ? '#DCFCE7' : targetAchievedPct >= 50 ? '#FEF3C7' : '#EFF6FF',
+              border: `1px solid ${targetAchievedPct >= 80 ? '#BBF7D0' : targetAchievedPct >= 50 ? '#FDE68A' : '#DBEAFE'}`,
+              padding: '2px 8px',
+              borderRadius: '10px'
+            }}>
+              PACING: {targetAchievedPct}% ON TRACK
+            </span>
+          </div>
+
+          {/* 4-Column KPI Metric Cards (Month Target, Achieved, Balance, Month-End Forecast) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', textAlign: 'center', marginBottom: '14px' }}>
+            <div style={{ backgroundColor: '#F8FAFC', padding: '12px 10px', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <Target size={14} style={{ color: '#64748B' }} />
+                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase' }}>Month Target</span>
               </div>
-              <span style={{
-                fontSize: '10.5px',
-                fontWeight: '700',
-                color: targetAchievedPct >= 80 ? '#166534' : targetAchievedPct >= 50 ? '#92400E' : '#1E40AF',
-                backgroundColor: targetAchievedPct >= 80 ? '#DCFCE7' : targetAchievedPct >= 50 ? '#FEF3C7' : '#EFF6FF',
-                border: `1px solid ${targetAchievedPct >= 80 ? '#BBF7D0' : targetAchievedPct >= 50 ? '#FDE68A' : '#DBEAFE'}`,
-                padding: '2px 8px',
-                borderRadius: '10px'
-              }}>
-                PACING: {targetAchievedPct}% ON TRACK
+              <strong style={{ fontSize: '19px', color: '#0F172A', fontWeight: '900' }}>{formatLakhsCr(monthlyTargetNum)}</strong>
+            </div>
+
+            <div style={{ backgroundColor: '#F0FDF4', padding: '12px 10px', borderRadius: '12px', border: '1px solid #BBF7D0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#16A34A' }} />
+                <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700', textTransform: 'uppercase' }}>Achieved / Invoiced</span>
+              </div>
+              <strong style={{ fontSize: '19px', color: '#16A34A', fontWeight: '900' }}>{formatLakhsCr(targetAchievedVal)}</strong>
+              <span style={{ fontSize: '10.5px', color: '#15803D', fontWeight: '700' }}>{targetAchievedPct}% achieved</span>
+            </div>
+
+            <div style={{ backgroundColor: '#FFFBEB', padding: '12px 10px', borderRadius: '12px', border: '1px solid #FDE68A', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#D97706' }} />
+                <span style={{ fontSize: '11px', color: '#92400E', fontWeight: '700', textTransform: 'uppercase' }}>Balance to Target</span>
+              </div>
+              <strong style={{ fontSize: '19px', color: '#D97706', fontWeight: '900' }}>{formatLakhsCr(targetBalanceVal)}</strong>
+            </div>
+
+            <div style={{ backgroundColor: '#F0F9FF', padding: '12px 10px', borderRadius: '12px', border: '1px solid #BAE6FD', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <TrendingUp size={14} style={{ color: '#0284C7' }} />
+                <span style={{ fontSize: '11px', color: '#0369A1', fontWeight: '700', textTransform: 'uppercase' }}>Month-End Forecast</span>
+              </div>
+              <strong style={{ fontSize: '19px', color: '#0284C7', fontWeight: '900' }}>{formatLakhsCr(monthEndForecastVal)}</strong>
+              <span style={{ fontSize: '10.5px', color: '#0369A1', fontWeight: '700' }}>
+                {forecastPctOfTarget}% of target • +{formatLakhsCr(forecastExpectedAddl)} expected
               </span>
             </div>
+          </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', marginBottom: '14px' }}>
-              <div style={{ backgroundColor: '#F8FAFC', padding: '10px 8px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '600', display: 'block' }}>Monthly Target</span>
-                <strong style={{ fontSize: '17px', color: '#0F172A', fontWeight: '900' }}>{formatLakhsCr(monthlyTargetNum)}</strong>
-              </div>
-              <div style={{ backgroundColor: '#F0FDF4', padding: '10px 8px', borderRadius: '10px', border: '1px solid #BBF7D0' }}>
-                <span style={{ fontSize: '10.5px', color: '#166534', fontWeight: '600', display: 'block' }}>Achieved</span>
-                <strong style={{ fontSize: '17px', color: '#16A34A', fontWeight: '900' }}>{formatLakhsCr(targetAchievedVal)}</strong>
-              </div>
-              <div style={{ backgroundColor: '#FFFBEB', padding: '10px 8px', borderRadius: '10px', border: '1px solid #FDE68A' }}>
-                <span style={{ fontSize: '10.5px', color: '#92400E', fontWeight: '600', display: 'block' }}>Balance</span>
-                <strong style={{ fontSize: '17px', color: '#D97706', fontWeight: '900' }}>{formatLakhsCr(targetBalanceVal)}</strong>
-              </div>
+          {/* Visual Progress Bar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+              <span>Target achievement</span>
+              <span style={{ color: targetAchievedPct >= 80 ? '#16A34A' : '#0E7490', fontWeight: '800' }}>{targetAchievedPct}%</span>
             </div>
-
-            {/* Visual Progress Bar */}
             <div
               title={`${targetAchievedPct}% Achieved (${formatLakhsCr(targetAchievedVal)} of ${formatLakhsCr(monthlyTargetNum)})`}
               style={{
@@ -1395,9 +1598,9 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                   flexShrink: 0
                 }}
               >
-                {targetAchievedPct >= 25 && `${targetAchievedPct}% Achieved`}
+                {targetAchievedPct >= 20 && `${targetAchievedPct}% Achieved`}
               </div>
-              {targetAchievedPct < 25 && (
+              {targetAchievedPct < 20 && (
                 <span
                   style={{
                     fontSize: '11px',
@@ -1414,8 +1617,10 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               )}
             </div>
           </div>
+        </div>
 
-          <div style={{ marginTop: '12px', padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '11.5px', color: '#334155', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px', boxSizing: 'border-box' }}>
+        <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '11.5px', color: '#334155', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sparkles size={14} style={{ color: '#0E7490' }} />
             <span>
               {targetBalanceVal > 0 ? (
@@ -1427,9 +1632,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               )}
             </span>
           </div>
+          <span style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: '500' }}>All sales values exclude GST</span>
         </div>
+      </div>
 
-        {/* Card B: Sales Funnel */}
+      {/* ─── ROW 2B: SALES FUNNEL & REGION-WISE SALES (50/50 SPLIT) ─── */}
+      <div className="sales-dashboard-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '16px', width: '100%', alignItems: 'stretch' }}>
+        {/* Card A: Sales Funnel */}
         <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
@@ -1499,6 +1708,50 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             <span>Offer-to-Invoice conversion: <strong style={{ color: '#0E7490' }}>{conversionRate}%</strong></span>
             <span>•</span>
             <span>Average invoice value: <strong style={{ color: '#0E7490' }}>{filteredInvoices.length > 0 ? formatLakhsCr(totalInvoicedValue / filteredInvoices.length) : '₹ 0.00'}</strong></span>
+          </div>
+        </div>
+
+        {/* Card B: Region-Wise Sales */}
+        <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <MapPin size={13} style={{ color: '#0E7490' }} />
+                <span>REGION-WISE SALES — {selectedPeriod.toUpperCase()}</span>
+              </div>
+              <span style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', padding: '2px 8px', borderRadius: '12px' }}>
+                BY STATE
+              </span>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700' }}>
+                  <th style={{ padding: '6px 4px' }}>Region</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'center' }}>Customers</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'center' }}>Invoices</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>Sales (₹ Lakh)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {regionWiseSales.rows.map((row, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                    <td style={{ padding: '6px 4px', color: '#1E293B', fontWeight: '600' }}>{row.region}</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'center', color: '#475569' }}>{row.customers}</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'center', color: '#475569' }}>{row.invoices}</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>{row.salesLakhs}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid #E2E8F0', fontWeight: '800', color: '#1E3A8A' }}>
+                  <td style={{ padding: '8px 4px' }}>TOTAL</td>
+                  <td style={{ padding: '8px 4px', textAlign: 'center' }}>{regionWiseSales.total.customers}</td>
+                  <td style={{ padding: '8px 4px', textAlign: 'center' }}>{regionWiseSales.total.invoices}</td>
+                  <td style={{ padding: '8px 4px', textAlign: 'right', color: '#0E7490' }}>{regionWiseSales.total.salesLakhs}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       </div>
@@ -2227,40 +2480,6 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               </div>
             </div>
           </div>
-
-          {/* Outstanding Table Pagination */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#64748B', paddingTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Showing per page</span>
-              <select
-                value={outstandingRowsPerPage}
-                onChange={(e) => { setOutstandingRowsPerPage(parseInt(e.target.value)); setOutstandingPage(1); }}
-                style={{ height: '24px', borderRadius: '4px', border: '1px solid #CBD5E1', padding: '0 4px', fontSize: '11px', color: '#334155' }}
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-              </select>
-              <span>
-                Showing {realOutstandingData.length > 0 ? (outstandingPage - 1) * outstandingRowsPerPage + 1 : 0} to {Math.min(outstandingPage * outstandingRowsPerPage, realOutstandingData.length)} of {realOutstandingData.length}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <button
-                disabled={outstandingPage === 1}
-                onClick={() => setOutstandingPage(p => p - 1)}
-                style={{ padding: '2px 8px', borderRadius: '4px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', cursor: outstandingPage === 1 ? 'not-allowed' : 'pointer' }}
-              >
-                Prev
-              </button>
-              <button
-                disabled={outstandingPage === totalOutstandingPages}
-                onClick={() => setOutstandingPage(p => p + 1)}
-                style={{ padding: '2px 8px', borderRadius: '4px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', cursor: outstandingPage === totalOutstandingPages ? 'not-allowed' : 'pointer' }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Table B: Lost and Cancelled Opportunities */}
@@ -2423,10 +2642,11 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           </div>
         </div>
 
-        {/* Card: Opportunity Risk & Expiry Alerts */}
-        <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', gap: '12px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '10px' }}>
+        {/* Right Column: Two distinct stacked section cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
+          {/* Card A: Opportunity Risk & Expiry Alerts */}
+          <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '4px' }}>
               <span style={{ fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 OPPORTUNITY RISK AND EXPIRY ALERTS
               </span>
@@ -2445,7 +2665,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
 
             {/* Inactive Alert Sub-block */}
-            <div style={{ marginBottom: '14px' }}>
+            <div>
               <div style={{ fontSize: '11px', fontWeight: '800', color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Clock size={12} /> Inactive Above 10 Days
               </div>
@@ -2516,6 +2736,56 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                   ))
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Card B: SEPARATE SECTION CARD — CUSTOMER SALES MIX */}
+          <div className="section-card" style={{ padding: '16px 20px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '800', color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <Users size={13} style={{ color: '#0E7490' }} />
+                <span>CUSTOMER SALES MIX</span>
+              </div>
+              <span style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', padding: '2px 8px', borderRadius: '12px' }}>
+                BY CUSTOMER TYPE
+              </span>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700' }}>
+                  <th style={{ padding: '6px 4px' }}>Type</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'center' }}>Customers</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>Sales (₹ Lakh)</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>% of sales</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid #F8FAFC' }}>
+                  <td style={{ padding: '6px 4px', color: '#1E293B', fontWeight: '600' }}>New customers</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: '#475569' }}>{customerSalesMix.newCustomers.count}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>{customerSalesMix.newCustomers.salesLakhs}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'right', color: '#64748B', fontWeight: '600' }}>{customerSalesMix.newCustomers.pct}</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid #F8FAFC' }}>
+                  <td style={{ padding: '6px 4px', color: '#1E293B', fontWeight: '600' }}>Existing customers</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: '#475569' }}>{customerSalesMix.existingCustomers.count}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>{customerSalesMix.existingCustomers.salesLakhs}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'right', color: '#64748B', fontWeight: '600' }}>{customerSalesMix.existingCustomers.pct}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '1.5px solid #E2E8F0', fontWeight: '800', color: '#1E3A8A' }}>
+                  <td style={{ padding: '7px 4px' }}>Total</td>
+                  <td style={{ padding: '7px 4px', textAlign: 'center' }}>{customerSalesMix.total.count}</td>
+                  <td style={{ padding: '7px 4px', textAlign: 'right', color: '#0E7490' }}>{customerSalesMix.total.salesLakhs}</td>
+                  <td style={{ padding: '7px 4px', textAlign: 'right' }}>100%</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <div style={{ fontSize: '10.5px', color: '#94A3B8', fontStyle: 'italic', textAlign: 'right', marginTop: '2px' }}>
+              Ratio of first-time vs repeat customer revenue in this period.
             </div>
           </div>
         </div>

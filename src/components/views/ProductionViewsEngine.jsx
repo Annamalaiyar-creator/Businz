@@ -886,6 +886,7 @@ export default function ProductionViewsEngine(props) {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
+  const [printBomModal, setPrintBomModal] = useState(null);
 
     // Invoice State
   const [viewingInvoiceModal, setViewingInvoiceModal] = useState(null);
@@ -1570,6 +1571,7 @@ export default function ProductionViewsEngine(props) {
               activeTab={activeTab}
               userRole={userRole}
               onPrintTaxInvoice={(row) => setPrintTaxInvoiceModal(row)}
+              onPrintBom={(row) => setPrintBomModal(row)}
               filteredRows={filteredRows}
               selectedRows={selectedRows}
               setSelectedRows={setSelectedRows}
@@ -1918,6 +1920,14 @@ export default function ProductionViewsEngine(props) {
         <VRMTaxInvoicePrintTemplate
           invoiceData={printTaxInvoiceModal}
           onClose={() => setPrintTaxInvoiceModal(null)}
+        />
+      )}
+
+      {/* VRM BOM PRINT MODAL TEMPLATE */}
+      {printBomModal && (
+        <VRMBomPrintTemplate
+          bomData={printBomModal}
+          onClose={() => setPrintBomModal(null)}
         />
       )}
 

@@ -11,6 +11,7 @@ export default function ProductionTableView({
   activeTab,
   userRole,
   onPrintTaxInvoice,
+  onPrintBom,
   filteredRows,
   selectedRows,
   setSelectedRows,
@@ -739,8 +740,19 @@ export default function ProductionTableView({
                   window.print();
                 }
               } else {
+                const targetCode = selectedRows[0];
+                const fullBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.piNo === targetCode));
+                const rowRec = (filteredRows || []).find(r => r && (r.code === targetCode || r.id === targetCode || r.bomCode === targetCode));
+                const targetRow = { ...(rowRec || {}), ...(fullBom || {}) };
+                if (!targetRow.customerName && rowRec?.customerName) targetRow.customerName = rowRec.customerName;
+                if (!targetRow.salesPerson && rowRec?.salesPerson) targetRow.salesPerson = rowRec.salesPerson;
+
                 setSelectedRows([]);
-                window.print();
+                if (onPrintBom) {
+                  onPrintBom(targetRow);
+                } else {
+                  window.print();
+                }
               }
             }}
             style={{
