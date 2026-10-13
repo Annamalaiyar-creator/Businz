@@ -90,13 +90,13 @@ export default function CrmProductCatalog({ onNavigateTab }) {
           minWidth: '240px'
         }}>
           <Search size={16} color="#64748B" />
-          <input
+          <input id="crm-product-catalog-search-term" name="searchTerm" aria-label="Search solar profile name, dimensions, SKU"
             type="text"
             placeholder="Search solar profile name, dimensions, SKU..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '13px', width: '100%' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', gap: '6px' }}>

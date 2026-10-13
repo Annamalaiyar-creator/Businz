@@ -617,10 +617,10 @@ export default function LoginScreen({ onLoginSuccess }) {
               {/* Full Name field in Sign Up Mode */}
               {isSignUpMode && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                  <label htmlFor="login-full-name" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
                     Full Name
                   </label>
-                  <input 
+                  <input id="login-full-name" name="fullName" aria-label="Full Name" 
                     type="text"
                     value={signUpFullName}
                     onChange={(e) => setSignUpFullName(e.target.value)}
@@ -636,17 +636,17 @@ export default function LoginScreen({ onLoginSuccess }) {
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
-                  />
+                   />
                 </div>
               )}
 
               {/* Employee Code Input + Verify Button */}
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                <label htmlFor="login-employee-code" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
                   Employee Code
                 </label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <input 
+                  <input id="login-employee-code" name="employeeCode" aria-label="Employee Code" 
                     type="text"
                     required
                     value={empIdInput}
@@ -670,7 +670,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
-                  />
+                   />
                   {isSignUpMode && (
                     <button
                       type="button"
@@ -697,10 +697,10 @@ export default function LoginScreen({ onLoginSuccess }) {
               {/* Read-Only Employee Type Field (shown when code verified in Sign Up Mode) */}
               {isSignUpMode && detectedRole && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                  <label htmlFor="login-employee-type" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
                     Employee Type
                   </label>
-                  <input 
+                  <input id="login-employee-type" name="employeeType" aria-label="Employee Type" 
                     type="text"
                     readOnly
                     value={detectedRole.role}
@@ -718,16 +718,16 @@ export default function LoginScreen({ onLoginSuccess }) {
                       boxSizing: 'border-box',
                       cursor: 'not-allowed'
                     }}
-                  />
+                   />
                 </div>
               )}
 
               {/* Email */}
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                <label htmlFor="user-email-input" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
                   Email
                 </label>
-                <input 
+                <input aria-label="Email" 
                   type="email"
                   name="username"
                   id="user-email-input"
@@ -746,16 +746,16 @@ export default function LoginScreen({ onLoginSuccess }) {
                     outline: 'none',
                     boxSizing: 'border-box'
                   }}
-                />
+                 />
               </div>
 
               {/* Password */}
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                <label htmlFor="user-password-input" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
                   Password
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <input 
+                  <input aria-label="Password" 
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     id="user-password-input"
@@ -774,7 +774,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
-                  />
+                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -799,10 +799,10 @@ export default function LoginScreen({ onLoginSuccess }) {
               {/* Confirm Password (Sign Up Mode) */}
               {isSignUpMode && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
+                  <label htmlFor="user-confirm-password-input" style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0F172A', marginBottom: '4px' }}>
                     Confirm Password
                   </label>
-                  <input 
+                  <input aria-label="Confirm Password" 
                     type={showPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     id="user-confirm-password-input"
@@ -821,7 +821,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
-                  />
+                   />
                 </div>
               )}
 
@@ -1101,10 +1101,10 @@ export default function LoginScreen({ onLoginSuccess }) {
                   </div>
                 )}
 
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#0F172A', marginBottom: '6px', textAlign: 'center' }}>
+                <label htmlFor="login-enter-6-digit" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#0F172A', marginBottom: '6px', textAlign: 'center' }}>
                   ENTER 6-DIGIT OTP CODE
                 </label>
-                <input 
+                <input id="login-enter-6-digit" name="eNTER6DIGIT" aria-label="ENTER 6-DIGIT OTP CODE" 
                   type="text"
                   maxLength="6"
                   value={otpInput}
@@ -1125,7 +1125,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                     backgroundColor: '#EEF2FF',
                     boxSizing: 'border-box'
                   }}
-                />
+                 />
 
                 {errorMsg && (
                   <div style={{ color: '#DC2626', fontSize: '12px', marginTop: '8px', fontWeight: '700', textAlign: 'center' }}>

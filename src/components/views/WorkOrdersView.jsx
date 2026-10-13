@@ -320,7 +320,7 @@ export default function WorkOrdersView({
         {/* Search bar */}
         <div style={{ position: 'relative', width: '340px' }}>
           <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '15px', height: '15px', color: '#94A3B8' }} />
-          <input
+          <input id="work-orders-prod-search-query-text" name="prodSearchQueryText" aria-label="Search Work Orders (WO No, Product, Customer)"
             type="text"
             placeholder="Search Work Orders (WO No, Product, Customer)..."
             value={prodSearchQueryText}
@@ -337,12 +337,12 @@ export default function WorkOrdersView({
               backgroundColor: '#FFFFFF',
               outline: 'none'
             }}
-          />
+           />
         </div>
 
         {/* Filter dropdowns */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <select
+          <select id="work-orders-prod-filter-status-select" name="prodFilterStatusSelect" aria-label="ProdFilterStatusSelect"
             value={prodFilterStatusSelect}
             onChange={(e) => setProdFilterStatusSelect(e.target.value)}
             style={{
@@ -417,12 +417,12 @@ export default function WorkOrdersView({
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="work-orders-checkbox" name="checkbox" aria-label="Checkbox"
                     type="checkbox"
                     checked={isAllSelected}
                     onChange={() => toggleSelectAll(visibleWoIds)}
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                  />
+                   />
                 </th>
                 <th style={{ width: '150px', minWidth: '150px', padding: '12px 14px', boxSizing: 'border-box' }}>WO No.</th>
                 <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Product</th>
@@ -457,12 +457,12 @@ export default function WorkOrdersView({
                       boxSizing: 'border-box',
                       borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent'
                     }}>
-                      <input
+                      <input id="work-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectRow(row.woNo)}
                         style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                      />
+                       />
                     </td>
                     <td
                       onClick={() => setSelectedWoForAcceptanceModal(row.rawWO || row)}
@@ -541,8 +541,8 @@ export default function WorkOrdersView({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>SELECT NEW WORK STATUS</label>
-                <select
+                <label htmlFor="work-orders-select-new-work" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>SELECT NEW WORK STATUS</label>
+                <select id="work-orders-select-new-work" name="sELECTNEWWORK" aria-label="SELECT NEW WORK STATUS"
                   value={updateStatusChoice}
                   onChange={(e) => setUpdateStatusChoice(e.target.value)}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}
@@ -573,21 +573,21 @@ export default function WorkOrdersView({
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             <div>
                               <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: '#166534', marginBottom: '4px' }}>GOOD QTY (PCS)</label>
-                              <input
+                              <input name={`gOODQTYPCS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GOOD QTY (PCS)"
                                 type="number"
                                 defaultValue={it.targetQty || 1}
                                 id={`good_qty_item_${i}`}
                                 style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', fontWeight: '800', color: '#166534', backgroundColor: '#FFFFFF' }}
-                              />
+                               />
                             </div>
                             <div>
                               <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: '#DC2626', marginBottom: '4px' }}>REJECTED (PCS)</label>
-                              <input
+                              <input name={`rEJECTEDPCS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="REJECTED (PCS)"
                                 type="number"
                                 defaultValue={0}
                                 id={`rej_qty_item_${i}`}
                                 style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', fontWeight: '800', color: '#DC2626', backgroundColor: '#FFFFFF' }}
-                              />
+                               />
                             </div>
                           </div>
                         </div>
@@ -597,22 +597,22 @@ export default function WorkOrdersView({
                     return (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#166534', marginBottom: '4px' }}>ACTUAL GOOD QTY</label>
-                          <input
+                          <label htmlFor="work-orders-actual-good-qty" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#166534', marginBottom: '4px' }}>ACTUAL GOOD QTY</label>
+                          <input id="work-orders-actual-good-qty" name="aCTUALGOODQTY" aria-label="ACTUAL GOOD QTY"
                             type="number"
                             value={actualGoodOutputVal}
                             onChange={(e) => setActualGoodOutputVal(e.target.value)}
                             style={{ width: '100%', height: '38px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: '800', color: '#166534' }}
-                          />
+                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#DC2626', marginBottom: '4px' }}>REJECTED QTY</label>
-                          <input
+                          <label htmlFor="work-orders-rejected-qty" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#DC2626', marginBottom: '4px' }}>REJECTED QTY</label>
+                          <input id="work-orders-rejected-qty" name="rEJECTEDQTY" aria-label="REJECTED QTY"
                             type="number"
                             value={actualRejectedOutputVal}
                             onChange={(e) => setActualRejectedOutputVal(e.target.value)}
                             style={{ width: '100%', height: '38px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', fontWeight: '800', color: '#DC2626' }}
-                          />
+                           />
                         </div>
                       </div>
                     );
@@ -621,8 +621,8 @@ export default function WorkOrdersView({
               )}
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>OPERATOR REMARKS / NOTES</label>
-                <textarea
+                <label htmlFor="work-orders-operator-remarks-notes" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>OPERATOR REMARKS / NOTES</label>
+                <textarea id="work-orders-operator-remarks-notes" name="oPERATORREMARKSNOTES" aria-label="OPERATOR REMARKS / NOTES"
                   rows="2"
                   value={operatorRemarksVal}
                   onChange={(e) => setOperatorRemarksVal(e.target.value)}

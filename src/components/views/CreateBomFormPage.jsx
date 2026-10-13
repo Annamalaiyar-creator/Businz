@@ -252,23 +252,23 @@ export default function CreateBomFormPage(props) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Date</label>
+            <label htmlFor="create-bom-form-order-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Date</label>
             <div style={{ position: 'relative' }}>
-              <input
+              <input id="create-bom-form-order-date" name="orderDate" aria-label="Order Date"
                 type="date"
                 value={new Date().toISOString().split('T')[0]}
                 disabled
                 readOnly
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+            <label htmlFor="prod-field-newBomDeliveryDate" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Delivery Date <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <input
+            <input name="deliveryDate" aria-label="Delivery Date"
               id="prod-field-newBomDeliveryDate"
               type="date"
               min={new Date().toISOString().split('T')[0]}
@@ -285,7 +285,7 @@ export default function CreateBomFormPage(props) {
                 backgroundColor: bomFormErrors.deliveryDate ? '#FEF2F2' : 'white',
                 padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none'
               }}
-            />
+             />
             {bomFormErrors.deliveryDate && (
               <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
                 ⚠️ {bomFormErrors.deliveryDate}
@@ -294,14 +294,14 @@ export default function CreateBomFormPage(props) {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Number</label>
-            <input
+            <label htmlFor="create-bom-form-order-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Number</label>
+            <input id="create-bom-form-order-number" name="orderNumber" aria-label="Order Number"
               type="text"
               value="Auto-Assigned"
               readOnly
               disabled
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CFFAFE', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0E7490', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
         </div>
       </div>
@@ -319,11 +319,11 @@ export default function CreateBomFormPage(props) {
 
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
           <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+            <label htmlFor="prod-field-newBomProductName" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Customer Name <span style={{ color: '#EF4444' }}>*</span>
             </label>
             <div style={{ width: '100%' }}>
-              <input
+              <input name="customerName" aria-label="Customer Name"
                 type="text"
                 list="bom-customer-name-suggestions"
                 placeholder="Type or select customer from list..."
@@ -385,7 +385,7 @@ export default function CreateBomFormPage(props) {
                   backgroundColor: bomFormErrors.customerName ? '#FEF2F2' : 'white',
                   padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none'
                 }}
-              />
+               />
               {bomFormErrors.customerName && (
                 <div style={{ color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
                   ⚠️ {bomFormErrors.customerName}
@@ -449,16 +449,16 @@ export default function CreateBomFormPage(props) {
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Company Name</label>
-                  <input type="text" value={companyName} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }} />
+                  <label htmlFor="create-bom-form-company-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Company Name</label>
+                  <input id="create-bom-form-company-name" name="companyName" aria-label="Company Name" type="text" value={companyName} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }}  />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mobile Number</label>
-                  <input type="text" value={mobileNo} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }} />
+                  <label htmlFor="create-bom-form-mobile-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mobile Number</label>
+                  <input id="create-bom-form-mobile-number" name="mobileNumber" aria-label="Mobile Number" type="text" value={mobileNo} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }}  />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Email</label>
-                  <input type="text" value={emailAddr} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }} />
+                  <label htmlFor="create-bom-form-email" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Email</label>
+                  <input id="create-bom-form-email" name="email" aria-label="Email" type="text" value={emailAddr} readOnly style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F8FAFC', boxSizing: 'border-box', outline: 'none' }}  />
                 </div>
               </div>
 
@@ -481,10 +481,10 @@ export default function CreateBomFormPage(props) {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
+                    <label htmlFor="create-bom-form-input-1" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
                       Address (Street / Building / Area)
                     </label>
-                    <input
+                    <input id="create-bom-form-input-1" name="input1" aria-label="Address (Street / Building / Area)"
                       type="text"
                       placeholder="e.g. Plot No 42, SIDCO Industrial Estate, Ambattur"
                       value={newBomBillingStreet || billingStreet}
@@ -494,13 +494,13 @@ export default function CreateBomFormPage(props) {
                         if (sameAsBilling) setNewBomDeliveryStreet(val);
                       }}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                      <input
+                      <label htmlFor="create-bom-form-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                      <input id="create-bom-form-city" name="city" aria-label="City"
                         type="text"
                         placeholder="City"
                         value={newBomBillingCity || billingCity}
@@ -510,11 +510,11 @@ export default function CreateBomFormPage(props) {
                           if (sameAsBilling) setNewBomDeliveryCity(val);
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                      <input
+                      <label htmlFor="create-bom-form-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                      <input id="create-bom-form-state" name="state" aria-label="State"
                         type="text"
                         placeholder="State"
                         value={newBomBillingState || billingState}
@@ -524,11 +524,11 @@ export default function CreateBomFormPage(props) {
                           if (sameAsBilling) setNewBomDeliveryState(val);
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                      <input
+                      <label htmlFor="create-bom-form-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                      <input id="create-bom-form-pincode" name="pincode" aria-label="Pincode"
                         type="text"
                         placeholder="6-digit Pincode"
                         value={newBomBillingPincode || billingPincode}
@@ -538,7 +538,7 @@ export default function CreateBomFormPage(props) {
                           if (sameAsBilling) setNewBomDeliveryPincode(val);
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                      />
+                       />
                     </div>
                   </div>
                 </div>
@@ -559,8 +559,8 @@ export default function CreateBomFormPage(props) {
                       </div>
                     </div>
 
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4F46E5', cursor: 'pointer', backgroundColor: '#EEF2FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
-                      <input
+                    <label htmlFor="create-bom-form-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4F46E5', cursor: 'pointer', backgroundColor: '#EEF2FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
+                      <input id="create-bom-form-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                         type="checkbox"
                         checked={sameAsBilling}
                         onChange={(e) => {
@@ -584,16 +584,16 @@ export default function CreateBomFormPage(props) {
                           }
                         }}
                         style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                      />
+                       />
                       Same as Billing
                     </label>
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
+                    <label htmlFor="create-bom-form-input-2" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>
                       Address (Street / Building / Area)
                     </label>
-                    <input
+                    <input id="create-bom-form-input-2" name="input2" aria-label="Address (Street / Building / Area)"
                       type="text"
                       placeholder="e.g. Plot No 42, SIDCO Industrial Estate, Ambattur"
                       value={sameAsBilling ? (newBomBillingStreet || (billingStreet !== '—' ? billingStreet : '')) : newBomDeliveryStreet}
@@ -606,13 +606,13 @@ export default function CreateBomFormPage(props) {
                         boxSizing: 'border-box', outline: 'none',
                         cursor: sameAsBilling ? 'not-allowed' : 'text'
                       }}
-                    />
+                     />
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                      <input
+                      <label htmlFor="create-bom-form-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                      <input id="create-bom-form-city" name="city" aria-label="City"
                         type="text"
                         placeholder="e.g. Chennai"
                         value={sameAsBilling ? (newBomBillingCity || (billingCity !== '—' ? billingCity : '')) : newBomDeliveryCity}
@@ -625,11 +625,11 @@ export default function CreateBomFormPage(props) {
                           boxSizing: 'border-box', outline: 'none',
                           cursor: sameAsBilling ? 'not-allowed' : 'text'
                         }}
-                      />
+                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                      <input
+                      <label htmlFor="create-bom-form-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                      <input id="create-bom-form-state" name="state" aria-label="State"
                         type="text"
                         placeholder="e.g. Tamil Nadu"
                         value={sameAsBilling ? (newBomBillingState || (billingState !== '—' ? billingState : '')) : newBomDeliveryState}
@@ -642,11 +642,11 @@ export default function CreateBomFormPage(props) {
                           boxSizing: 'border-box', outline: 'none',
                           cursor: sameAsBilling ? 'not-allowed' : 'text'
                         }}
-                      />
+                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                      <input
+                      <label htmlFor="create-bom-form-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                      <input id="create-bom-form-pincode" name="pincode" aria-label="Pincode"
                         type="text"
                         placeholder="e.g. 600058"
                         value={sameAsBilling ? (newBomBillingPincode || (billingPincode !== '—' ? billingPincode : '')) : newBomDeliveryPincode}
@@ -659,7 +659,7 @@ export default function CreateBomFormPage(props) {
                           boxSizing: 'border-box', outline: 'none',
                           cursor: sameAsBilling ? 'not-allowed' : 'text'
                         }}
-                      />
+                       />
                     </div>
                   </div>
 
@@ -758,7 +758,7 @@ export default function CreateBomFormPage(props) {
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
                               <Upload style={{ width: '13px', height: '13px' }} />
                               Browse Files
-                              <input
+                              <input id="create-bom-form-input-3" name="input3" aria-label="Input 3"
                                 type="file"
                                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                 style={{ display: 'none' }}
@@ -785,7 +785,7 @@ export default function CreateBomFormPage(props) {
                                     }
                                   }
                                 }}
-                              />
+                               />
                             </label>
                           </div>
                           <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 5 MB)</span>
@@ -906,7 +906,7 @@ export default function CreateBomFormPage(props) {
             {/* SET COUNT / MULTIPLIER INPUT */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', padding: '0 8px', borderRadius: '8px', height: '36px' }}>
               <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>No. of Sets:</span>
-              <input
+              <input id="create-bom-form-preset-set-count" name="presetSetCount" aria-label="PresetSetCount"
                 type="number"
                 min="1"
                 max="999"
@@ -954,21 +954,21 @@ export default function CreateBomFormPage(props) {
                   outline: 'none',
                   backgroundColor: 'white'
                 }}
-              />
+               />
             </div>
 
             {/* Dedicated Preset Full Package Price Input */}
             {selectedPreset && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', padding: '0 10px', borderRadius: '8px', height: '36px' }}>
                 <span style={{ fontSize: '12px', fontWeight: '800', color: '#4338CA', whiteSpace: 'nowrap' }}>Preset Full Price (₹):</span>
-                <input
+                <input id="create-bom-form-25000" name="25000" aria-label="25000"
                   type="number"
                   min="0"
                   placeholder="e.g. 25000"
                   value={presetKitPrice}
                   onChange={(e) => setPresetKitPrice(e.target.value)}
                   style={{ width: '100px', height: '26px', borderRadius: '6px', border: '1px solid #818CF8', padding: '0 8px', fontSize: '13px', fontWeight: '800', color: '#1E1B4B', textAlign: 'right', outline: 'none', backgroundColor: 'white' }}
-                />
+                 />
                 {presetSetCount > 1 && presetKitPrice && (
                   <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '700' }}>
                     (Total: ₹{((parseFloat(presetKitPrice) || 0) * (parseInt(presetSetCount) || 1)).toLocaleString('en-IN')})
@@ -1053,7 +1053,7 @@ export default function CreateBomFormPage(props) {
             <thead>
               <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                 <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
-                  <input
+                  <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                     type="checkbox"
                     checked={bomMaterialsList.length > 0 && selectedBomItemIndexes.length === bomMaterialsList.length}
                     onChange={(e) => {
@@ -1064,7 +1064,7 @@ export default function CreateBomFormPage(props) {
                       }
                     }}
                     style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                  />
+                   />
                 </th>
                 <th style={{ padding: '12px 10px', fontWeight: '700', width: '25%' }}>
                   Product / Item <span style={{ color: '#EF4444' }}>*</span>
@@ -1093,7 +1093,7 @@ export default function CreateBomFormPage(props) {
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#EEF2FF' : 'transparent' }}>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                      <input
+                      <input id="create-bom-form-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={isChecked}
                         onChange={(e) => {
@@ -1104,7 +1104,7 @@ export default function CreateBomFormPage(props) {
                           }
                         }}
                         style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                      />
+                       />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       <TypeableProductSelect
@@ -1135,7 +1135,7 @@ export default function CreateBomFormPage(props) {
                       />
                     </td>
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`create-bom-form-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
                         type="text"
                         placeholder="Description"
                         value={item.category || ''}
@@ -1144,11 +1144,11 @@ export default function CreateBomFormPage(props) {
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, category: val } : mat));
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
-                      />
+                       />
                     </td>
                     {/* UOM Heading Input (Both Dropdown & Typeable) */}
                     <td style={{ padding: '12px 10px' }}>
-                      <input
+                      <input id={`create-bom-form-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
                         type="text"
                         list={`uom-list-${i}`}
                         placeholder="UOM"
@@ -1158,7 +1158,7 @@ export default function CreateBomFormPage(props) {
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                      />
+                       />
                       <datalist id={`uom-list-${i}`}>
                         <option value="NOS" />
                         <option value="SET" />
@@ -1171,7 +1171,7 @@ export default function CreateBomFormPage(props) {
                       </datalist>
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                      <input
+                      <input id={`create-bom-form-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                         type="number"
                         value={item.qty}
                         placeholder="0"
@@ -1180,7 +1180,7 @@ export default function CreateBomFormPage(props) {
                           setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                         }}
                         style={{ width: '100%', height: '34px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box' }}
-                      />
+                       />
                       {(() => {
                         const avail = getItemStock(item.name, item.code);
                         if (avail === null || avail === undefined) return null;
@@ -1213,7 +1213,7 @@ export default function CreateBomFormPage(props) {
                           <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534' }}>Included in Preset</span>
                         </div>
                       ) : (
-                        <input
+                        <input id={`create-bom-form-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
                           type="number"
                           value={item.rate}
                           placeholder="0.00"
@@ -1222,11 +1222,11 @@ export default function CreateBomFormPage(props) {
                             setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                        />
+                         />
                       )}
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                      <select
+                      <select id={`create-bom-form-gst-rate-new-bom-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRateNewBomGstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate newBomGstRate 18"
                         value={item.gstRate || newBomGstRate || '18%'}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -1296,17 +1296,17 @@ export default function CreateBomFormPage(props) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+            <label htmlFor="create-bom-form-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Mode of Transport <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <input
+            <input id="create-bom-form-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
               type="text"
               list="transport-mode-suggestions"
               value={newBomTransportMode}
               onChange={(e) => setNewBomTransportMode(e.target.value)}
               placeholder="Type/Select (Transport, Lorry, Courier...)"
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
             <datalist id="transport-mode-suggestions">
               <option value="Transport" />
               <option value="Lorry" />
@@ -1320,16 +1320,16 @@ export default function CreateBomFormPage(props) {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+            <label htmlFor="create-bom-form-transport-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Transport Name
             </label>
-            <input
+            <input id="create-bom-form-transport-name" name="transportName" aria-label="Transport Name"
               type="text"
               value={newBomTransporterName}
               onChange={(e) => setNewBomTransporterName(e.target.value)}
               placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
         </div>
       </div>
@@ -1348,8 +1348,8 @@ export default function CreateBomFormPage(props) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
-              <select
+              <label htmlFor="create-bom-form-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
+              <select id="create-bom-form-payment-terms" name="paymentTerms" aria-label="Payment Terms"
                 value={newBomPaymentType}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -1379,7 +1379,7 @@ export default function CreateBomFormPage(props) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <input
+                    <input id="create-bom-form-50000" name="50000" aria-label="50000"
                       type="number"
                       min="0"
                       max={totals.grand || 9999999}
@@ -1387,7 +1387,7 @@ export default function CreateBomFormPage(props) {
                       onChange={(e) => setNewBomPartialAmount(e.target.value)}
                       placeholder="e.g. 50000"
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #5EEAD4', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', fontWeight: '700' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #CCFBF1', padding: '0 14px', height: '42px' }}>
                     <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Remaining Balance</span>
@@ -1412,7 +1412,7 @@ export default function CreateBomFormPage(props) {
                     Default: 7 Days
                   </span>
                 </div>
-                <input
+                <input id="create-bom-form-7" name="7" aria-label="7"
                   type="number"
                   min="1"
                   max="365"
@@ -1420,7 +1420,7 @@ export default function CreateBomFormPage(props) {
                   onChange={(e) => setNewBomCreditDays(Math.max(1, parseInt(e.target.value) || 1))}
                   placeholder="7"
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #C7D2FE', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#F5F3FF', boxSizing: 'border-box', outline: 'none', fontWeight: '700' }}
-                />
+                 />
                 <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>
                   Sales follow-up notifications will trigger across the {newBomCreditDays}-day credit cycle.
                 </span>
@@ -1428,14 +1428,14 @@ export default function CreateBomFormPage(props) {
             )}
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Remarks / Notes</label>
-              <textarea
+              <label htmlFor="create-bom-form-remarks-notes" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Remarks / Notes</label>
+              <textarea id="create-bom-form-remarks-notes" name="remarksNotes" aria-label="Remarks / Notes"
                 rows={3}
                 value={newBomRemarks}
                 onChange={(e) => setNewBomRemarks(e.target.value)}
                 placeholder="Enter remarks, consignee references, or invoice notes..."
                 style={{ width: '100%', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '12px 14px', fontSize: '13px', color: '#0F172A', outline: 'none', resize: 'vertical' }}
-              />
+               />
             </div>
           </div>
 
@@ -1583,7 +1583,7 @@ export default function CreateBomFormPage(props) {
                       }}>
                         <Upload style={{ width: '13px', height: '13px' }} />
                         Browse Files
-                        <input
+                        <input id="create-bom-form-input-4" name="input4" aria-label="Input 4"
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                           style={{ display: "none" }}
@@ -1610,7 +1610,7 @@ export default function CreateBomFormPage(props) {
                               }
                             }
                           }}
-                        />
+                         />
                       </label>
                     </div>
 

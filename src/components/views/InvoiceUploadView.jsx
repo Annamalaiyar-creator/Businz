@@ -984,7 +984,7 @@ export default function InvoiceUploadView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="invoice-upload-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2047,30 +2047,30 @@ export default function InvoiceUploadView(props) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Invoice Number *</label>
-                    <input type="text" defaultValue="INV-1042" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }} />
+                    <label htmlFor="invoice-upload-invoice-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Invoice Number *</label>
+                    <input id="invoice-upload-invoice-number" name="invoiceNumber" aria-label="Invoice Number" type="text" defaultValue="INV-1042" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Invoice Date *</label>
-                    <input type="text" defaultValue="03 Aug 2026" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }} />
+                    <label htmlFor="invoice-upload-invoice-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Invoice Date *</label>
+                    <input id="invoice-upload-invoice-date" name="invoiceDate" aria-label="Invoice Date" type="text" defaultValue="03 Aug 2026" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Vendor *</label>
-                    <select style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px', backgroundColor: '#FFFFFF' }}>
+                    <label htmlFor="invoice-upload-vendor" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Vendor *</label>
+                    <select id="invoice-upload-vendor" name="vendor" aria-label="Vendor" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px', backgroundColor: '#FFFFFF' }}>
                       <option>ABC Metals Pvt Ltd</option>
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Invoice Amount *</label>
-                    <input type="text" defaultValue="₹ 4,85,000.00" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }} />
+                    <label htmlFor="invoice-upload-invoice-amount" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Invoice Amount *</label>
+                    <input id="invoice-upload-invoice-amount" name="invoiceAmount" aria-label="Invoice Amount" type="text" defaultValue="₹ 4,85,000.00" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>GSTIN</label>
-                    <input type="text" defaultValue="37AABCA1234B1Z5" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }} />
+                    <label htmlFor="invoice-upload-gstin" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>GSTIN</label>
+                    <input id="invoice-upload-gstin" name="gSTIN" aria-label="GSTIN" type="text" defaultValue="37AABCA1234B1Z5" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Due Date</label>
-                    <input type="text" defaultValue="17 Aug 2026" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }} />
+                    <label htmlFor="invoice-upload-due-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Due Date</label>
+                    <input id="invoice-upload-due-date" name="dueDate" aria-label="Due Date" type="text" defaultValue="17 Aug 2026" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px' }}  />
                   </div>
                 </div>
               </div>
@@ -2081,8 +2081,8 @@ export default function InvoiceUploadView(props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', alignItems: 'stretch' }}>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Purchase Order *</label>
-                    <select style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px', backgroundColor: '#FFFFFF' }}>
+                    <label htmlFor="invoice-upload-purchase-order" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Purchase Order *</label>
+                    <select id="invoice-upload-purchase-order" name="purchaseOrder" aria-label="Purchase Order" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px', backgroundColor: '#FFFFFF' }}>
                       <option>PO-2451</option>
                     </select>
                     <span style={{ fontSize: '10px', color: '#64748B' }}>PO Date: 28 Jul 2026 | PO Value: ₹ 4,85,000.00</span>
@@ -2092,8 +2092,8 @@ export default function InvoiceUploadView(props) {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Goods Receipt Note *</label>
-                    <select style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px', backgroundColor: '#FFFFFF' }}>
+                    <label htmlFor="invoice-upload-goods-receipt-note" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Goods Receipt Note *</label>
+                    <select id="invoice-upload-goods-receipt-note" name="goodsReceiptNote" aria-label="Goods Receipt Note" style={{ height: '36px', padding: '0 10px', border: '1px solid #E2E8F0', borderRadius: '6px', fontSize: '12px', backgroundColor: '#FFFFFF' }}>
                       <option>GRN-1820</option>
                     </select>
                     <span style={{ fontSize: '10px', color: '#64748B' }}>GRN Date: 31 Jul 2026 | GRN Value: ₹ 4,85,000.00</span>
@@ -2185,7 +2185,7 @@ export default function InvoiceUploadView(props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 <div className="section-card" style={{ padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <strong style={{ fontSize: '11px', color: '#475569' }}>Notes</strong>
-                  <textarea
+                  <textarea id="invoice-upload-textarea-1" name="textarea1" aria-label="Textarea 1"
                     defaultValue="Payment terms as per agreement."
                     style={{
                       height: '60px',
@@ -2196,7 +2196,7 @@ export default function InvoiceUploadView(props) {
                       boxSizing: 'border-box',
                       resize: 'none'
                     }}
-                  />
+                   />
                 </div>
                 <div className="section-card" style={{ padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <strong style={{ fontSize: '11px', color: '#475569' }}>Attachments (Optional)</strong>

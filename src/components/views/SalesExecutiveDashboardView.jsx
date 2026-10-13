@@ -1271,7 +1271,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 SALES REP
               </span>
-              <select
+              <select id="sales-executive-dashboard-selected-executive" name="selectedExecutive" aria-label="SelectedExecutive"
                 value={selectedExecutive}
                 onChange={(e) => setSelectedExecutive(e.target.value)}
                 style={{
@@ -1298,7 +1298,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               TIME PERIOD
             </span>
-            <select
+            <select id="sales-executive-dashboard-selected-period" name="selectedPeriod" aria-label="SelectedPeriod"
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
               style={{
@@ -2240,7 +2240,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
               <thead>
                 <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
                   <th style={{ width: '36px', padding: '12px 14px', textAlign: 'center' }}>
-                    <input
+                    <input id="sales-executive-dashboard-select-all" name="selectAll" aria-label="SelectAll"
                       type="checkbox"
                       checked={currentFollowupRows.length > 0 && currentFollowupRows.every(r => selectedFollowups.includes(r.id))}
                       onChange={() => {
@@ -2251,7 +2251,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                         }
                       }}
                       style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                    />
+                     />
                   </th>
                   <th style={{ padding: '12px 14px', fontWeight: '700', color: '#64748B', fontSize: '11px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2290,7 +2290,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                           textAlign: 'center',
                           borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent'
                         }}>
-                          <input
+                          <input id="sales-executive-dashboard-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => {
@@ -2298,7 +2298,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                               else setSelectedFollowups([...selectedFollowups, row.id]);
                             }}
                             style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: '700', color: '#1E293B' }}>{row.customer}</td>
                         <td style={{ padding: '12px 14px', fontWeight: '700', color: '#1E293B' }}>{row.offerValue}</td>
@@ -2335,7 +2335,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', backgroundColor: '#FFFFFF', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>Showing per page</span>
-            <select
+            <select id="sales-executive-dashboard-followup-rows-per-page" name="followupRowsPerPage" aria-label="FollowupRowsPerPage"
               value={followupRowsPerPage}
               onChange={(e) => { setFollowupRowsPerPage(parseInt(e.target.value)); setFollowupPage(1); }}
               style={{ height: '30px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', fontWeight: '600', color: '#334155' }}
@@ -2399,13 +2399,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
               <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-              <input
+              <input id="sales-executive-dashboard-1" name="1" aria-label="1"
                 type="number"
                 value={followupGoTo}
                 onChange={(e) => setFollowupGoTo(e.target.value)}
                 placeholder="1"
                 style={{ width: '40px', height: '28px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px' }}
-              />
+               />
               <button
                 onClick={() => {
                   const p = parseInt(followupGoTo);
@@ -3033,10 +3033,10 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             {/* Modal Body */}
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                <label htmlFor="sales-executive-dashboard-target-modal-rep" style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
                   Target Scope / Sales Representative
                 </label>
-                <select
+                <select id="sales-executive-dashboard-target-modal-rep" name="targetModalRep" aria-label="Target Scope / Sales Representative"
                   value={targetModalRep}
                   onChange={(e) => {
                     const newRep = e.target.value;
@@ -3074,7 +3074,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                     {formatLakhsCr(parseAmt(targetModalValue))}
                   </span>
                 </div>
-                <input
+                <input id="sales-executive-dashboard-target-modal-value" name="targetModalValue" aria-label="Enter amount in ₹ ( 18000000)"
                   type="number"
                   value={targetModalValue}
                   onChange={(e) => setTargetModalValue(e.target.value)}
@@ -3090,7 +3090,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
                     color: '#0F172A',
                     boxSizing: 'border-box'
                   }}
-                />
+                 />
               </div>
 
               {/* Quick Presets */}

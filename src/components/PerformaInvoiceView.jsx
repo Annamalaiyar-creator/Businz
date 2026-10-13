@@ -2755,13 +2755,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', flex: '1 1 240px', maxWidth: '380px', minWidth: '200px' }}>
                 <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
-                <input
+                <input id="performa-invoice-search-query" name="searchQuery" aria-label="Search Performa Invoices (PI No, Customer Name, GST No)"
                   type="text"
                   placeholder="Search Performa Invoices (PI No, Customer Name, GST No)..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                   style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', minWidth: 0, color: '#334155' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -2776,7 +2776,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   }}
                 />
 
-                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
+                <select id="performa-invoice-status-filter" name="statusFilter" aria-label="StatusFilter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
                   {uniqueStatuses.map(s => (
                     <option key={s} value={s}>
                       {s === 'All' ? 'Status: All' : s}
@@ -2865,12 +2865,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <thead>
                     <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                       <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                        <input
+                        <input id="performa-invoice-select-all" name="selectAll" aria-label="SelectAll"
                           type="checkbox"
                           onChange={(e) => handleSelectAll(e, filteredPIList)}
                           checked={filteredPIList.length > 0 && filteredPIList.every(pi => selectedPIs.includes(pi.piNo))}
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                        />
+                         />
                       </th>
                       <th style={{ width: '150px', minWidth: '140px', padding: '12px 14px', boxSizing: 'border-box' }}>PI No.</th>
                       <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
@@ -2908,7 +2908,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <tr key={`pi-skeleton-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                              <input type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }} />
+                              <input id="performa-invoice-input-1" name="input1" aria-label="Input 1" type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }}  />
                             </td>
                             <td style={{ padding: '12px 14px' }}>
                               <div className="skeleton-shimmer skeleton-text" style={{ width: '90px', height: '14px' }} />
@@ -3011,12 +3011,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               boxSizing: 'border-box',
                               borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                             }}>
-                              <input
+                              <input id="performa-invoice-checkbox" name="checkbox" aria-label="Checkbox"
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => handleSelectRow(pi.piNo)}
                                 style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                              />
+                               />
                             </td>
                             <td
                               onClick={() => setSelectedPi(pi)}
@@ -3132,7 +3132,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>Showing per page</span>
-                        <select
+                        <select id="performa-invoice-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                           value={rowsPerPage}
                           onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                           style={{ height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -3206,14 +3206,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                        <input
+                        <input name="pageJump" aria-label="PageJump"
                           type="number"
                           min="1"
                           max={totalPages || 1}
                           defaultValue={currentPage}
                           id="pi-goto-page-input"
                           style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                        />
+                         />
                         <button
                           onClick={() => {
                             const val = parseInt(document.getElementById('pi-goto-page-input')?.value || '1', 10);
@@ -3538,10 +3538,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-pi-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     PI Date
                   </label>
-                  <input
+                  <input id="performa-invoice-pi-date" name="pIDate" aria-label="PI Date"
                     type="date"
                     readOnly
                     disabled
@@ -3559,14 +3559,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       boxSizing: 'border-box',
                       cursor: 'not-allowed'
                     }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="pi-field-validUntil" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Payment Due / Valid Until Date
                   </label>
-                  <input
+                  <input name="validUntilDate" aria-label="Payment Due / Valid Until Date"
                     id="pi-field-validUntil"
                     type="date"
                     value={validUntilDate}
@@ -3581,15 +3581,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       }
                     }}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-pi-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     PI Number
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <input
+                    <input id="performa-invoice-pi-number" name="pINumber" aria-label="PI Number"
                       type="text"
                       readOnly
                       disabled
@@ -3608,22 +3608,22 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         boxSizing: 'border-box',
                         cursor: 'not-allowed'
                       }}
-                    />
+                     />
                   </div>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-sales-executive" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Sales Executive
                   </label>
                   <div style={{ position: 'relative' }}>
-                    <input
+                    <input id="performa-invoice-sales-executive" name="salesExecutive" aria-label="Sales Executive"
                       type="text"
                       readOnly
                       disabled
                       value={salesPerson || getActiveUserName()}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', boxSizing: 'border-box', cursor: 'not-allowed' }}
-                    />
+                     />
                   </div>
                 </div>
               </div>
@@ -3631,10 +3631,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
               {/* Row 2: Payment Terms & Logistics */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Payment Terms
                   </label>
-                  <select
+                  <select id="performa-invoice-payment-terms" name="paymentTerms" aria-label="Payment Terms"
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
@@ -3647,10 +3647,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-transport-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Transport Scope
                   </label>
-                  <select
+                  <select id="performa-invoice-transport-scope" name="transportScope" aria-label="Transport Scope"
                     value={transportScope}
                     onChange={(e) => setTransportScope(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
@@ -3661,10 +3661,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-transport-mode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Transport Mode
                   </label>
-                  <select
+                  <select id="performa-invoice-transport-mode" name="transportMode" aria-label="Transport Mode"
                     value={transportMode}
                     onChange={(e) => setTransportMode(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer' }}
@@ -3676,16 +3676,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-transporter-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Transporter Name
                   </label>
-                  <input
+                  <input id="performa-invoice-transporter-name" name="transporterName" aria-label="Transporter Name"
                     type="text"
                     value={transporterName}
                     placeholder="e.g. VRL Logistics, SafeXpress..."
                     onChange={(e) => setTransporterName(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
               </div>
             </div>
@@ -3708,7 +3708,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     Company Name <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <input
+                    <input name="orCompany" aria-label="Type or select company"
                       id="pi-field-vendorName"
                       type="text"
                       autoComplete="off"
@@ -3772,7 +3772,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         backgroundColor: '#FFFFFF',
                         boxShadow: isCustomerDropdownOpen ? '0 0 0 3px rgba(14, 116, 144, 0.1)' : 'none'
                       }}
-                    />
+                     />
                     <button
                       type="button"
                       onClick={() => setIsCustomerDropdownOpen(prev => !prev)}
@@ -3905,43 +3905,43 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-customer-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Customer Name
                   </label>
-                  <input
+                  <input id="performa-invoice-customer-name" name="customerName" aria-label="Customer Name"
                     type="text"
                     placeholder="e.g. Rajesh Kannan"
                     value={contactPerson}
                     onChange={(e) => setContactPerson(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="pi-field-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Phone Number
                   </label>
-                  <input
+                  <input name="phoneNumber" aria-label="Phone Number"
                     id="pi-field-phone"
                     type="text"
                     placeholder="+91 98765 43210"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="performa-invoice-email-address" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Email Address
                   </label>
-                  <input
+                  <input id="performa-invoice-email-address" name="emailAddress" aria-label="Email Address"
                     type="email"
                     placeholder="accounts@solarclient.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                  />
+                   />
                 </div>
 
                 <div>
@@ -3955,7 +3955,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </span>
                     )}
                   </div>
-                  <input
+                  <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
                     type="text"
                     placeholder="e.g. 33AABCV1234F1Z5"
                     value={gstNo}
@@ -3983,7 +3983,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       outline: 'none',
                       boxSizing: 'border-box'
                     }}
-                  />
+                   />
                   {Boolean(
                     gstNo && gstNo.trim().length >= 2 &&
                     GST_STATE_MAP[gstNo.trim().substring(0, 2)] &&
@@ -4023,8 +4023,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Street / Premises Address</label>
-                      <input
+                      <label htmlFor="pi-field-billingStreet" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Street / Premises Address</label>
+                      <input name="streetPremisesAddress" aria-label="Street / Premises Address"
                         id="pi-field-billingStreet"
                         type="text"
                         placeholder="Plot No, Industrial Estate, Landmark..."
@@ -4034,12 +4034,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           if (sameAsBilling) setDeliveryStreet(e.target.value);
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '10px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                        <input
+                        <label htmlFor="pi-field-billingCity" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                        <input name="city" aria-label="City"
                           id="pi-field-billingCity"
                           type="text"
                           placeholder="City"
@@ -4049,11 +4049,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             if (sameAsBilling) setDeliveryCity(e.target.value);
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                        <input
+                        <label htmlFor="pi-field-billingState" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                        <input name="state" aria-label="State"
                           id="pi-field-billingState"
                           type="text"
                           placeholder="State"
@@ -4063,11 +4063,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             if (sameAsBilling) setDeliveryState(e.target.value);
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>PIN Code</label>
-                        <input
+                        <label htmlFor="pi-field-billingPincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>PIN Code</label>
+                        <input name="pINCode" aria-label="PIN Code"
                           id="pi-field-billingPincode"
                           type="text"
                           placeholder="600001"
@@ -4077,7 +4077,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             if (sameAsBilling) setDeliveryPincode(e.target.value);
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                        />
+                         />
                       </div>
                     </div>
                   </div>
@@ -4095,8 +4095,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         <span style={{ fontSize: '11px', color: '#64748B' }}>Site dispatch location</span>
                       </div>
                     </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #A5F3FC' }}>
-                      <input
+                    <label htmlFor="performa-invoice-same-as-billing" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #A5F3FC' }}>
+                      <input id="performa-invoice-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                         type="checkbox"
                         checked={sameAsBilling}
                         onChange={(e) => {
@@ -4110,15 +4110,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           }
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                      />
+                       />
                       Same as Billing Address
                     </label>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Site / Dispatch Location Address</label>
-                      <input
+                      <label htmlFor="pi-field-deliveryStreet" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Site / Dispatch Location Address</label>
+                      <input name="input2" aria-label="Site / Dispatch Location Address"
                         id="pi-field-deliveryStreet"
                         type="text"
                         disabled={sameAsBilling}
@@ -4126,12 +4126,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         value={sameAsBilling ? billingStreet : deliveryStreet}
                         onChange={(e) => setDeliveryStreet(e.target.value)}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : 'white', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '10px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City / District</label>
-                        <input
+                        <label htmlFor="pi-field-deliveryCity" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City / District</label>
+                        <input name="cityDistrict" aria-label="City / District"
                           id="pi-field-deliveryCity"
                           type="text"
                           disabled={sameAsBilling}
@@ -4139,29 +4139,29 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           value={sameAsBilling ? billingCity : deliveryCity}
                           onChange={(e) => setDeliveryCity(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : 'white', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                        <input
+                        <label htmlFor="performa-invoice-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                        <input id="performa-invoice-state" name="state" aria-label="State"
                           type="text"
                           disabled={sameAsBilling}
                           placeholder="State"
                           value={sameAsBilling ? billingState : deliveryState}
                           onChange={(e) => setDeliveryState(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : 'white', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>PIN Code</label>
-                        <input
+                        <label htmlFor="performa-invoice-pin-code" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>PIN Code</label>
+                        <input id="performa-invoice-pin-code" name="pINCode" aria-label="PIN Code"
                           type="text"
                           disabled={sameAsBilling}
                           placeholder="600001"
                           value={sameAsBilling ? billingPincode : deliveryPincode}
                           onChange={(e) => setDeliveryPincode(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box', backgroundColor: sameAsBilling ? '#F1F5F9' : 'white', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                        />
+                         />
                       </div>
                     </div>
                   </div>
@@ -4285,7 +4285,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <thead>
                     <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                       <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
-                        <input
+                        <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           checked={piItems.length > 0 && selectedItemIndexes.length === piItems.length}
                           onChange={(e) => {
@@ -4296,7 +4296,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             }
                           }}
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                        />
+                         />
                       </th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
@@ -4355,7 +4355,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               textAlign: 'center',
                               borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                             }}>
-                              <input
+                              <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={(e) => {
@@ -4363,7 +4363,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   else setSelectedItemIndexes(prev => prev.filter(idx => idx !== i));
                                 }}
                                 style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                              />
+                               />
                             </td>
                             <td style={{ padding: '12px 10px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -4399,7 +4399,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     } : mat));
                                   }}
                                 />
-                                <input
+                                <input id={`performa-invoice-category-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`category_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description / Technical specs"
                                   type="text"
                                   placeholder="Description / Technical specs..."
                                   value={item.category || ''}
@@ -4416,11 +4416,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     }));
                                   }}
                                   style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
-                                />
+                                 />
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px' }}>
-                              <select
+                              <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
                                 value={item.uom || 'NOS'}
                                 onChange={(e) => {
                                   const val = e.target.value;
@@ -4453,7 +4453,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             </td>
                             <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
                               <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <input
+                                <input id={`performa-invoice-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                                   type="number"
                                   value={item.qty}
                                   placeholder="0"
@@ -4471,14 +4471,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     }));
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
-                                />
+                                 />
                               </div>
                             </td>
                             <td style={{ padding: '12px 10px' }}>
                               {isPresetItem ? (
                                 <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
                               ) : (
-                                <input
+                                <input id={`performa-invoice-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
                                   type="number"
                                   value={item.rate}
                                   placeholder="0.00"
@@ -4487,11 +4487,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                                />
+                                 />
                               )}
                             </td>
                             <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                              <select
+                              <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
                                 value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
                                 onChange={(e) => {
                                   const val = e.target.value;
@@ -4539,7 +4539,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                                         <div style={{ position: 'relative', width: '100%' }}>
                                           <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: '#6366F1', pointerEvents: 'none' }}>₹</span>
-                                          <input
+                                          <input id="performa-invoice-0-00" name="000" aria-label="0.00"
                                             type="number"
                                             value={currentGroup?.kitPrice || ''}
                                             placeholder="0.00"
@@ -4560,14 +4560,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                               textAlign: 'right', outline: 'none', boxSizing: 'border-box',
                                               backgroundColor: 'white'
                                             }}
-                                          />
+                                           />
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                           <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
                                             {groupCount} items ×
                                           </span>
-                                          <input
+                                          <input id="performa-invoice-set-count" name="setCount" aria-label="SetCount"
                                             type="number"
                                             min="0"
                                             max="999"
@@ -4607,14 +4607,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                               padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
                                             }}
                                             title="Sets multiplier for this preset"
-                                          />
+                                           />
                                           <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
                                             set{(parseInt(currentGroup?.setCount) || 1) !== 1 ? 's' : ''}
                                           </span>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                                            <span style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700' }}>GST:</span>
-                                           <select
+                                           <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
                                              value={currentGroup?.gstRate || item.gstRate || '18%'}
                                              onChange={(e) => {
                                                const val = e.target.value;

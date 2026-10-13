@@ -765,7 +765,7 @@ export default function CrmReportsView({
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>Showing per page</span>
-            <select
+            <select id="crm-reports-rpp" name="rpp" aria-label="Rpp"
               value={rpp}
               onChange={(e) => {
                 setRpp(Number(e.target.value));
@@ -885,7 +885,7 @@ export default function CrmReportsView({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-            <input
+            <input id="crm-reports-go-to-val" name="goToVal" aria-label="GoToVal"
               type="number"
               min="1"
               max={totalPages}
@@ -909,7 +909,7 @@ export default function CrmReportsView({
                 fontSize: '12px',
                 outline: 'none'
               }}
-            />
+             />
             <button
               onClick={() => {
                 const p = parseInt(goToVal, 10);
@@ -956,7 +956,7 @@ export default function CrmReportsView({
           {/* Period Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Period:</span>
-            <select
+            <select id="crm-reports-selected-month" name="selectedMonth" aria-label="SelectedMonth"
               value={selectedMonth}
               onChange={(e) => {
                 setSelectedMonth(e.target.value);
@@ -1190,7 +1190,7 @@ export default function CrmReportsView({
           maxWidth: '100%'
         }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748B' }} />
-          <input
+          <input id="crm-reports-search-query" name="searchQuery" aria-label="Search by customer, salesperson, PI, BOM, or invoice"
             type="text"
             placeholder="Search by customer, salesperson, PI, BOM, or invoice..."
             value={searchQuery}
@@ -1203,7 +1203,7 @@ export default function CrmReportsView({
               setOppPage(1);
             }}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-          />
+           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
@@ -1619,7 +1619,7 @@ export default function CrmReportsView({
               <thead>
                 <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                   <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                    <input
+                    <input id="crm-reports-checkbox" name="checkbox" aria-label="Checkbox"
                       type="checkbox"
                       checked={repStats.length > 0 && selectedLeaderboardRows.length === repStats.length}
                       onChange={(e) => {
@@ -1627,7 +1627,7 @@ export default function CrmReportsView({
                         else setSelectedLeaderboardRows([]);
                       }}
                       style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    />
+                     />
                   </th>
                   <th style={{ padding: '12px 14px' }}>#</th>
                   <th style={{ padding: '12px 14px' }}>Sales Representative</th>
@@ -1676,7 +1676,7 @@ export default function CrmReportsView({
                           boxSizing: 'border-box',
                           borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                         }}>
-                          <input
+                          <input id="crm-reports-checkbox" name="checkbox" aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
@@ -1684,7 +1684,7 @@ export default function CrmReportsView({
                               else setSelectedLeaderboardRows(prev => [...prev, r.name]);
                             }}
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', color: '#64748B', fontWeight: '700' }}>
                           {pagedLeaderboard.startIdx + idx + 1}
@@ -1882,7 +1882,7 @@ export default function CrmReportsView({
             {/* Document Source Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '700' }}>Source:</span>
-              <select
+              <select id="crm-reports-selected-product-doc-type" name="selectedProductDocType" aria-label="SelectedProductDocType"
                 value={selectedProductDocType}
                 onChange={(e) => {
                   setSelectedProductDocType(e.target.value);
@@ -1916,7 +1916,7 @@ export default function CrmReportsView({
                 <thead>
                   <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                     <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                      <input
+                      <input id="crm-reports-checkbox" name="checkbox" aria-label="Checkbox"
                         type="checkbox"
                         checked={filteredProductItems.length > 0 && selectedProductRows.length === filteredProductItems.length}
                         onChange={(e) => {
@@ -1924,7 +1924,7 @@ export default function CrmReportsView({
                           else setSelectedProductRows([]);
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                      />
+                       />
                     </th>
                     <th style={{ padding: '12px 14px' }}>#</th>
                     <th style={{ padding: '12px 14px' }}>Product / Module Name</th>
@@ -1973,7 +1973,7 @@ export default function CrmReportsView({
                             boxSizing: 'border-box',
                             borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                           }}>
-                            <input
+                            <input id={`crm-reports-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => {
@@ -1981,7 +1981,7 @@ export default function CrmReportsView({
                                 else setSelectedProductRows(prev => [...prev, item.id]);
                               }}
                               style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                            />
+                             />
                           </td>
                           <td style={{ padding: '12px 14px', color: '#64748B', fontWeight: '700' }}>
                             {pagedProducts.startIdx + idx + 1}
@@ -2074,7 +2074,7 @@ export default function CrmReportsView({
               <thead>
                 <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                   <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                    <input
+                    <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                       type="checkbox"
                       checked={filteredPis.length > 0 && selectedPiRows.length === filteredPis.length}
                       onChange={(e) => {
@@ -2082,7 +2082,7 @@ export default function CrmReportsView({
                         else setSelectedPiRows([]);
                       }}
                       style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    />
+                     />
                   </th>
                   <th style={{ padding: '12px 14px' }}>PI Number</th>
                   <th style={{ padding: '12px 14px' }}>Date</th>
@@ -2129,7 +2129,7 @@ export default function CrmReportsView({
                           boxSizing: 'border-box',
                           borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                         }}>
-                          <input
+                          <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
@@ -2137,7 +2137,7 @@ export default function CrmReportsView({
                               else setSelectedPiRows(prev => [...prev, globalIdx]);
                             }}
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: '800', color: '#2563EB' }}>
                           {pi.piNo || pi.code || `PI-${globalIdx + 1}`}
@@ -2194,7 +2194,7 @@ export default function CrmReportsView({
               <thead>
                 <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                   <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                    <input
+                    <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                       type="checkbox"
                       checked={filteredBoms.length > 0 && selectedBomRows.length === filteredBoms.length}
                       onChange={(e) => {
@@ -2202,7 +2202,7 @@ export default function CrmReportsView({
                         else setSelectedBomRows([]);
                       }}
                       style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    />
+                     />
                   </th>
                   <th style={{ padding: '12px 14px' }}>BOM Number</th>
                   <th style={{ padding: '12px 14px' }}>Date</th>
@@ -2249,7 +2249,7 @@ export default function CrmReportsView({
                           boxSizing: 'border-box',
                           borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                         }}>
-                          <input
+                          <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
@@ -2257,7 +2257,7 @@ export default function CrmReportsView({
                               else setSelectedBomRows(prev => [...prev, globalIdx]);
                             }}
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: '800', color: '#2563EB' }}>
                           {b.bomCode || b.code || `BOM-${globalIdx + 1}`}
@@ -2314,7 +2314,7 @@ export default function CrmReportsView({
               <thead>
                 <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                   <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                    <input
+                    <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                       type="checkbox"
                       checked={filteredInvoices.length > 0 && selectedInvoiceRows.length === filteredInvoices.length}
                       onChange={(e) => {
@@ -2322,7 +2322,7 @@ export default function CrmReportsView({
                         else setSelectedInvoiceRows([]);
                       }}
                       style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    />
+                     />
                   </th>
                   <th style={{ padding: '12px 14px' }}>Invoice No</th>
                   <th style={{ padding: '12px 14px' }}>Date</th>
@@ -2370,7 +2370,7 @@ export default function CrmReportsView({
                           boxSizing: 'border-box',
                           borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                         }}>
-                          <input
+                          <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
@@ -2378,7 +2378,7 @@ export default function CrmReportsView({
                               else setSelectedInvoiceRows(prev => [...prev, globalIdx]);
                             }}
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: '800', color: '#2563EB' }}>
                           {inv.invNo || inv.invoiceNumber || `INV-${globalIdx + 1}`}
@@ -2435,7 +2435,7 @@ export default function CrmReportsView({
               <thead>
                 <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                   <th style={{ width: '48px', minWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                    <input
+                    <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                       type="checkbox"
                       checked={filteredOpportunities.length > 0 && selectedOppRows.length === filteredOpportunities.length}
                       onChange={(e) => {
@@ -2443,7 +2443,7 @@ export default function CrmReportsView({
                         else setSelectedOppRows([]);
                       }}
                       style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    />
+                     />
                   </th>
                   <th style={{ padding: '12px 14px' }}>Opportunity</th>
                   <th style={{ padding: '12px 14px' }}>Company / Client</th>
@@ -2487,7 +2487,7 @@ export default function CrmReportsView({
                           boxSizing: 'border-box',
                           borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                         }}>
-                          <input
+                          <input id="crm-reports-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
@@ -2495,7 +2495,7 @@ export default function CrmReportsView({
                               else setSelectedOppRows(prev => [...prev, globalIdx]);
                             }}
                             style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                          />
+                           />
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: '800', color: '#2563EB' }}>
                           {opp.title || opp.name || `Deal #${globalIdx + 1}`}

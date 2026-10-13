@@ -984,7 +984,7 @@ export default function PriceComparisonView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="price-comparison-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2310,23 +2310,23 @@ export default function PriceComparisonView(props) {
               
               {/* Material Search */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Material / SKU</label>
+                <label htmlFor="price-comparison-material-sku" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Material / SKU</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input
+                  <input id="price-comparison-material-sku" name="materialSKU" aria-label="Material / SKU"
                     type="text"
                     value={priceSearchQuery}
                     onChange={(e) => { setPriceSearchQuery(e.target.value); setPriceCurrentPage(1); }}
                     placeholder="Search material / SKU / code"
                     style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
-                  />
+                   />
                   <Search style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', left: '12px' }} />
                 </div>
               </div>
 
               {/* Category Filter */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Category</label>
-                <select
+                <label htmlFor="price-comparison-category" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Category</label>
+                <select id="price-comparison-category" name="category" aria-label="Category"
                   value={priceCategoryFilter}
                   onChange={(e) => { setPriceCategoryFilter(e.target.value); setPriceCurrentPage(1); }}
                   style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#334155' }}
@@ -2339,8 +2339,8 @@ export default function PriceComparisonView(props) {
 
               {/* Supplier Filter */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Supplier</label>
-                <select
+                <label htmlFor="price-comparison-supplier" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Supplier</label>
+                <select id="price-comparison-supplier" name="supplier" aria-label="Supplier"
                   value={priceSupplierFilter}
                   onChange={(e) => { setPriceSupplierFilter(e.target.value); setPriceCurrentPage(1); }}
                   style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#334155' }}
@@ -2353,22 +2353,22 @@ export default function PriceComparisonView(props) {
 
               {/* Date Range / Baseline Window */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Active Time Range</label>
+                <label htmlFor="price-comparison-active-time-range" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Active Time Range</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input
+                  <input id="price-comparison-active-time-range" name="activeTimeRange" aria-label="Active Time Range"
                     type="text"
                     readOnly
                     value="Past 12 Months"
                     style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box', backgroundColor: '#F8FAFC', color: '#475569' }}
-                  />
+                   />
                   <Calendar style={{ width: '14px', height: '14px', color: '#64748B', position: 'absolute', left: '12px' }} />
                 </div>
               </div>
 
               {/* Compare With */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Compare Baseline</label>
-                <select
+                <label htmlFor="price-comparison-compare-baseline" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>Compare Baseline</label>
+                <select id="price-comparison-compare-baseline" name="compareBaseline" aria-label="Compare Baseline"
                   value={priceComparePeriod}
                   onChange={(e) => setPriceComparePeriod(e.target.value)}
                   style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#334155' }}
@@ -2595,7 +2595,7 @@ export default function PriceComparisonView(props) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '12px', color: '#64748B' }}>Group by:</span>
-                <select
+                <select id="price-comparison-price-group-by" name="priceGroupBy" aria-label="PriceGroupBy"
                   value={priceGroupBy}
                   onChange={(e) => setPriceGroupBy(e.target.value)}
                   style={{ height: '32px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569' }}
@@ -2707,7 +2707,7 @@ export default function PriceComparisonView(props) {
                     <ChevronRight style={{ width: '14px', height: '14px' }} />
                   </button>
                 </div>
-                <select
+                <select id="price-comparison-price-rows-per-page" name="priceRowsPerPage" aria-label="PriceRowsPerPage"
                   value={priceRowsPerPage}
                   onChange={(e) => { setPriceRowsPerPage(Number(e.target.value)); setPriceCurrentPage(1); }}
                   style={{ height: '32px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569' }}

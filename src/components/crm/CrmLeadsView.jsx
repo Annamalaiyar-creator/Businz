@@ -606,13 +606,13 @@ export default function CrmLeadsView({
           minWidth: '200px'
         }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
-          <input
+          <input id="crm-leads-search-query" name="searchQuery" aria-label="Search Leads (Lead No, Company, Contact, Phone)"
             type="text"
             placeholder="Search Leads (Lead No, Company, Contact, Phone)..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', minWidth: 0, color: '#334155' }}
-          />
+           />
           {searchQuery && (
             <X size={14} color="#94A3B8" style={{ cursor: 'pointer' }} onClick={() => setSearchQuery('')} />
           )}
@@ -625,7 +625,7 @@ export default function CrmLeadsView({
             <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
           </div>
 
-          <select
+          <select id="crm-leads-source-filter" name="sourceFilter" aria-label="SourceFilter"
             value={sourceFilter}
             onChange={(e) => { setSourceFilter(e.target.value); setCurrentPage(1); }}
             style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}
@@ -754,12 +754,12 @@ export default function CrmLeadsView({
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="crm-leads-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                     checked={filteredLeads.length > 0 && filteredLeads.every(l => selectedLeads.includes(l.id))}
                     onChange={(e) => handleSelectAll(e, filteredLeads)}
-                  />
+                   />
                 </th>
                 <th style={{ width: '140px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>Lead No.</th>
                 <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
@@ -801,7 +801,7 @@ export default function CrmLeadsView({
                   {Array.from({ length: 5 }).map((_, sIdx) => (
                     <tr key={`lead-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                        <input type="checkbox" disabled style={{ opacity: 0.3 }} />
+                        <input id="crm-leads-input-1" name="input1" aria-label="Input 1" type="checkbox" disabled style={{ opacity: 0.3 }}  />
                       </td>
                       {Array.from({ length: 7 }).map((_, hIdx) => (
                         <td key={`lead-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
@@ -892,12 +892,12 @@ export default function CrmLeadsView({
                         boxSizing: 'border-box',
                         borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                       }}>
-                        <input
+                        <input id="crm-leads-checkbox" name="checkbox" aria-label="Checkbox"
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => handleSelectRow(lead.id)}
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                        />
+                         />
                       </td>
 
                       {/* Lead No. with Source Indicator */}
@@ -993,7 +993,7 @@ export default function CrmLeadsView({
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>Showing per page</span>
-                  <select
+                  <select id="crm-leads-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                     value={rowsPerPage}
                     onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                     style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -1067,7 +1067,7 @@ export default function CrmLeadsView({
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                  <input
+                  <input id="crm-leads-go-to-page-input" name="goToPageInput" aria-label="GoToPageInput"
                     type="number"
                     min="1"
                     max={totalPages || 1}
@@ -1083,7 +1083,7 @@ export default function CrmLeadsView({
                       }
                     }}
                     style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                  />
+                   />
                   <button
                     onClick={() => {
                       const p = parseInt(goToPageInput);
@@ -1331,10 +1331,10 @@ export default function CrmLeadsView({
               Select a sales representative to take ownership of these leads.
             </p>
 
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+            <label htmlFor="crm-leads-sales-representative" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Sales Representative
             </label>
-            <select
+            <select id="crm-leads-sales-representative" name="salesRepresentative" aria-label="Sales Representative"
               value={selectedRepToAssign}
               onChange={(e) => setSelectedRepToAssign(e.target.value)}
               style={{
@@ -1481,7 +1481,7 @@ export default function CrmLeadsView({
                   <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Sparkles size={15} /> Paste Raw Customer Message (WhatsApp, Email, RFQ)
                   </div>
-                  <textarea
+                  <textarea id="crm-leads-textarea-2" name={`textarea2_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Textarea 2"
                     rows={3}
                     placeholder="e.g. 'Hi VRM, I am Rajesh from Vikram Solar Chennai. We need quote for 250 kW Tin Shed Mini Rails. Call me on 9876543210.'"
                     value={aiPasteText}
@@ -1494,7 +1494,7 @@ export default function CrmLeadsView({
                       fontSize: '13px',
                       resize: 'vertical'
                     }}
-                  />
+                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '11px', color: '#64748B' }}>
                       AI automatically extracts Company, Contact, Phone, kW Capacity & Structure Type.
@@ -1546,82 +1546,82 @@ export default function CrmLeadsView({
               {/* Form Fields */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-company-epc-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Company / EPC Name *
                   </label>
-                  <input
+                  <input id="crm-leads-company-epc-name" name="companyEPCName" aria-label="Company / EPC Name"
                     type="text"
                     required
                     placeholder="e.g. Vikram Solar Ltd"
                     value={newLeadForm.companyName}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, companyName: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-contact-person-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Contact Person Name *
                   </label>
-                  <input
+                  <input id="crm-leads-contact-person-name" name="contactPersonName" aria-label="Contact Person Name"
                     type="text"
                     required
                     placeholder="e.g. Rajesh Kannan"
                     value={newLeadForm.contactPerson}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, contactPerson: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-phone-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Phone Number *
                   </label>
-                  <input
+                  <input id="crm-leads-phone-number" name="phoneNumber" aria-label="Phone Number"
                     type="text"
                     required
                     placeholder="+91 98765 43210"
                     value={newLeadForm.phone}
                     onChange={(e) => handlePhoneOrEmailChange('phone', e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-whats-app-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     WhatsApp Number
                   </label>
-                  <input
+                  <input id="crm-leads-whats-app-number" name="whatsAppNumber" aria-label="WhatsApp Number"
                     type="text"
                     placeholder="Same as phone if blank"
                     value={newLeadForm.whatsapp}
                     onChange={(e) => handlePhoneOrEmailChange('whatsapp', e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-email-address" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Email Address
                   </label>
-                  <input
+                  <input id="crm-leads-email-address" name="emailAddress" aria-label="Email Address"
                     type="email"
                     placeholder="rajesh@company.com"
                     value={newLeadForm.email}
                     onChange={(e) => handlePhoneOrEmailChange('email', e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-lead-source" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Lead Source
                   </label>
-                  <select
+                  <select id="crm-leads-lead-source" name="leadSource" aria-label="Lead Source"
                     value={newLeadForm.source}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, source: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -1635,10 +1635,10 @@ export default function CrmLeadsView({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-structure-category" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Structure Category
                   </label>
-                  <select
+                  <select id="crm-leads-structure-category" name="structureCategory" aria-label="Structure Category"
                     value={newLeadForm.category}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, category: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -1650,30 +1650,30 @@ export default function CrmLeadsView({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-leads-estimated-k-w-capacity" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Estimated kW Capacity
                   </label>
-                  <input
+                  <input id="crm-leads-estimated-k-w-capacity" name="estimatedKWCapacity" aria-label="Estimated kW Capacity"
                     type="number"
                     placeholder="e.g. 100"
                     value={newLeadForm.estimatedKw}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, estimatedKw: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-leads-project-site-location" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Project Site Location & Notes
                 </label>
-                <textarea
+                <textarea id="crm-leads-project-site-location" name="projectSiteLocation" aria-label="Project Site Location & Notes"
                   rows={2}
                   placeholder="e.g. Oragadam industrial rooftop, 140 km/h wind speed requirement, delivery before month end."
                   value={newLeadForm.notes}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, notes: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', resize: 'vertical' }}
-                />
+                 />
               </div>
 
               {/* Modal Footer */}
@@ -1923,7 +1923,7 @@ export default function CrmLeadsView({
                 Add Interaction Note
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input
+                <input id="crm-leads-new-timeline-note" name="newTimelineNote" aria-label="Called client; sent catalog via WhatsApp"
                   type="text"
                   placeholder="e.g. Called client; sent catalog via WhatsApp..."
                   value={newTimelineNote}
@@ -1936,7 +1936,7 @@ export default function CrmLeadsView({
                     border: '1px solid #CBD5E1',
                     fontSize: '12px'
                   }}
-                />
+                 />
                 <button
                   onClick={handleAddTimelineNote}
                   style={{

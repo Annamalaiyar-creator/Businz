@@ -228,13 +228,13 @@ export default function CrmFollowupsView({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F8FAFC', padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', width: '240px' }}>
           <Search size={14} color="#64748B" />
-          <input
+          <input id="crm-followups-search-follow-ups" name="searchFollowUps" aria-label="Search follow-ups"
             type="text"
             placeholder="Search follow-ups..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '12px', width: '100%' }}
-          />
+           />
         </div>
       </div>
 
@@ -380,21 +380,21 @@ export default function CrmFollowupsView({
 
             <form onSubmit={handleCreateSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Customer / Lead Name *</label>
-                <input
+                <label htmlFor="crm-followups-customer-lead-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Customer / Lead Name *</label>
+                <input id="crm-followups-customer-lead-name" name="customerLeadName" aria-label="Customer / Lead Name"
                   type="text"
                   required
                   placeholder="e.g. Vikram Solar Ltd"
                   value={newFollowup.customerName}
                   onChange={(e) => setNewFollowup({ ...newFollowup, customerName: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Follow-up Channel</label>
-                  <select
+                  <label htmlFor="crm-followups-follow-up-channel" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Follow-up Channel</label>
+                  <select id="crm-followups-follow-up-channel" name="followUpChannel" aria-label="Follow-up Channel"
                     value={newFollowup.type}
                     onChange={(e) => setNewFollowup({ ...newFollowup, type: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -407,26 +407,26 @@ export default function CrmFollowupsView({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Date *</label>
-                  <input
+                  <label htmlFor="crm-followups-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Date *</label>
+                  <input id="crm-followups-date" name="date" aria-label="Date"
                     type="date"
                     required
                     value={newFollowup.date}
                     onChange={(e) => setNewFollowup({ ...newFollowup, date: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Agenda / Notes</label>
-                <textarea
+                <label htmlFor="crm-followups-agenda-notes" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>Agenda / Notes</label>
+                <textarea id="crm-followups-agenda-notes" name="agendaNotes" aria-label="Agenda / Notes"
                   rows={3}
                   placeholder="Confirm payment proof, negotiate rail pricing, schedule dispatch..."
                   value={newFollowup.notes}
                   onChange={(e) => setNewFollowup({ ...newFollowup, notes: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>

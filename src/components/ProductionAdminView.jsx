@@ -1671,8 +1671,8 @@ export default function ProductionAdminView({ activeTab, userRole }) {
 
             <form onSubmit={handleCreateWorkOrder} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Product / Profile</label>
-                <select
+                <label htmlFor="production-admin-product-profile" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Product / Profile</label>
+                <select id="production-admin-product-profile" name="productProfile" aria-label="Product / Profile"
                   value={newWO.productName}
                   onChange={(e) => setNewWO({ ...newWO, productName: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', fontWeight: '600', backgroundColor: '#F8FAFC' }}
@@ -1687,48 +1687,48 @@ export default function ProductionAdminView({ activeTab, userRole }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Planned Qty (Nos)</label>
-                  <input
+                  <label htmlFor="production-admin-planned-qty-nos" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Planned Qty (Nos)</label>
+                  <input id="production-admin-planned-qty-nos" name="plannedQtyNos" aria-label="Planned Qty (Nos)"
                     type="number"
                     value={newWO.plannedQty}
                     onChange={(e) => setNewWO({ ...newWO, plannedQty: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', fontWeight: '600', boxSizing: 'border-box' }}
                     required
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Target Date</label>
-                  <input
+                  <label htmlFor="production-admin-target-date" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Target Date</label>
+                  <input id="production-admin-target-date" name="targetDate" aria-label="Target Date"
                     type="date"
                     value={newWO.targetDate}
                     onChange={(e) => setNewWO({ ...newWO, targetDate: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', fontWeight: '600', boxSizing: 'border-box' }}
                     required
-                  />
+                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Raw Material Requirement</label>
-                <input
+                <label htmlFor="production-admin-raw-material-requirement" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Raw Material Requirement</label>
+                <input id="production-admin-raw-material-requirement" name="rawMaterialRequirement" aria-label="Raw Material Requirement"
                   type="text"
                   value={newWO.rawMaterial}
                   onChange={(e) => setNewWO({ ...newWO, rawMaterial: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', fontWeight: '600', boxSizing: 'border-box' }}
                   required
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Customer / Client Name</label>
-                <input
+                <label htmlFor="production-admin-customer-client-name" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px', textTransform: 'uppercase' }}>Customer / Client Name</label>
+                <input id="production-admin-customer-client-name" name="customerClientName" aria-label="Customer / Client Name"
                   type="text"
                   value={newWO.customer}
                   onChange={(e) => setNewWO({ ...newWO, customer: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', color: '#0F172A', fontWeight: '600', boxSizing: 'border-box' }}
                   required
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>

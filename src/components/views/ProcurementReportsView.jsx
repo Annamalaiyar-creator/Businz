@@ -985,7 +985,7 @@ export default function ProcurementReportsView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="procurement-reports-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -1954,16 +1954,16 @@ export default function ProcurementReportsView(props) {
             <strong style={{ fontSize: '14px' }}>Configure Export Parameters</strong>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '4px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Start Date</label>
-                <input type="date" defaultValue="2026-07-01" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                <label htmlFor="procurement-reports-start-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Start Date</label>
+                <input id="procurement-reports-start-date" name="startDate" aria-label="Start Date" type="date" defaultValue="2026-07-01" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>End Date</label>
-                <input type="date" defaultValue="2026-07-31" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                <label htmlFor="procurement-reports-end-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>End Date</label>
+                <input id="procurement-reports-end-date" name="endDate" aria-label="End Date" type="date" defaultValue="2026-07-31" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Export Format</label>
-                <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
+                <label htmlFor="procurement-reports-export-format" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Export Format</label>
+                <select id="procurement-reports-export-format" name="exportFormat" aria-label="Export Format" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
                   <option>Excel Spreadsheet (.xlsx)</option>
                   <option>CSV Format (.csv)</option>
                   <option>Acrobat Document (.pdf)</option>

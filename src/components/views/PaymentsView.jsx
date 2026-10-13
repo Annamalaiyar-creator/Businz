@@ -984,7 +984,7 @@ export default function PaymentsView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="payments-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2094,16 +2094,16 @@ export default function PaymentsView(props) {
                   <div className="section-card" style={{ padding: '16px 20px', borderRadius: '12px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', width: '100%', boxSizing: 'border-box' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#FFFFFF', flex: 1, minWidth: '220px' }}>
                       <Search style={{ width: '14px', height: '14px', color: '#64748b' }} />
-                      <input
+                      <input id="payments-pay-search-query" name="paySearchQuery" aria-label="Search by vendor / payment no / ref no"
                         placeholder="Search by vendor / payment no / ref no..."
                         value={paySearchQuery}
                         onChange={(e) => setPaySearchQuery(e.target.value)}
                         style={{ border: 'none', background: 'none', outline: 'none', fontSize: '12px', width: '100%', color: '#334155' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569', minWidth: '120px' }}>
+                      <select id="payments-select-1" name="select1" aria-label="Select 1" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569', minWidth: '120px' }}>
                         <option>All Status</option>
                         <option>Paid</option>
                         <option>Pending</option>
@@ -2112,7 +2112,7 @@ export default function PaymentsView(props) {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569', minWidth: '120px' }}>
+                      <select id="payments-select-2" name="select2" aria-label="Select 2" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569', minWidth: '120px' }}>
                         <option>All Modes</option>
                         <option>NEFT</option>
                         <option>RTGS</option>
@@ -2123,7 +2123,7 @@ export default function PaymentsView(props) {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <select style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569', minWidth: '120px' }}>
+                      <select id="payments-select-3" name="select3" aria-label="Select 3" style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF', color: '#475569', minWidth: '120px' }}>
                         <option>All Vendors</option>
                         <option>ABC Metals Pvt Ltd</option>
                         <option>XYZ Solar Pvt Ltd</option>
@@ -2242,7 +2242,7 @@ export default function PaymentsView(props) {
                             <ChevronRight style={{ width: '12px', height: '12px' }} />
                           </button>
                         </div>
-                        <select style={{ height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 6px', fontSize: '11px', backgroundColor: '#FFFFFF', color: '#475569' }}>
+                        <select id="payments-select-4" name="select4" aria-label="Select 4" style={{ height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 6px', fontSize: '11px', backgroundColor: '#FFFFFF', color: '#475569' }}>
                           <option>10 / page</option>
                         </select>
                       </div>

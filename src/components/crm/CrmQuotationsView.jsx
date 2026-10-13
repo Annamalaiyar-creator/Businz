@@ -1378,10 +1378,10 @@ export default function CrmQuotationsView({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>
+              <label htmlFor="crm-quotations-quote-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>
                 Quote Date
               </label>
-              <input
+              <input id="crm-quotations-quote-date" name="quoteDate" aria-label="Quote Date"
                 type="date"
                 value={quoteDate}
                 readOnly
@@ -1401,13 +1401,13 @@ export default function CrmQuotationsView({
                   boxSizing: 'border-box',
                   outline: 'none'
                 }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="quote-field-validUntil" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Valid Until <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input name="validUntil" aria-label="Valid Until"
                 id="quote-field-validUntil"
                 type="date"
                 value={validUntilDate}
@@ -1422,29 +1422,29 @@ export default function CrmQuotationsView({
                   }
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Quote Reference No.</label>
-              <input
+              <label htmlFor="crm-quotations-quote-reference-no" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Quote Reference No.</label>
+              <input id="crm-quotations-quote-reference-no" name="quoteReferenceNo" aria-label="Quote Reference No."
                 type="text"
                 value={quoteCode}
                 readOnly
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0E7490', backgroundColor: '#F0FDFA', fontWeight: '800', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>
+              <label htmlFor="crm-quotations-sales-representative" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>
                 Sales Representative <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="crm-quotations-sales-representative" name="salesRepresentative" aria-label="Sales Representative"
                 type="text"
                 readOnly
                 disabled
                 value={salesPerson || getActiveUserName()}
                 title="Sales representative is tied to the logged-in account and cannot be modified"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#475569', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
         </div>
@@ -1462,10 +1462,10 @@ export default function CrmQuotationsView({
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="quote-field-customerName" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input name="customerName" aria-label="Customer Name"
                 id="quote-field-customerName"
                 type="text"
                 list="quotation-customer-suggestions"
@@ -1473,7 +1473,7 @@ export default function CrmQuotationsView({
                 value={customerName}
                 onChange={(e) => handleSelectCustomer(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', fontWeight: '600' }}
-              />
+               />
               <datalist id="quotation-customer-suggestions">
                 {customerList.map((c, idx) => {
                   const val = c.code || c.companyName || c.customerName;
@@ -1490,45 +1490,45 @@ export default function CrmQuotationsView({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Contact Person</label>
-              <input
+              <label htmlFor="crm-quotations-contact-person" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Contact Person</label>
+              <input id="crm-quotations-contact-person" name="contactPerson" aria-label="Contact Person"
                 type="text"
                 placeholder="e.g. Rajesh Kumar"
                 value={contactPerson}
                 onChange={(e) => setContactPerson(e.target.value)}
                 style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Phone / WhatsApp</label>
-              <input
+              <label htmlFor="quote-field-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Phone / WhatsApp</label>
+              <input name="phoneWhatsApp" aria-label="Phone / WhatsApp"
                 id="quote-field-phone"
                 type="text"
                 placeholder="+91 98765 43210"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Customer GST Number</label>
-              <input
+              <label htmlFor="crm-quotations-customer-gst-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Customer GST Number</label>
+              <input id="crm-quotations-customer-gst-number" name="customerGSTNumber" aria-label="Customer GST Number"
                 type="text"
                 placeholder="33AAAAA0000A1Z5"
                 value={gstNumber}
                 onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
                 style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', textTransform: 'uppercase', fontFamily: 'monospace', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Plant Capacity (kW)</label>
-              <input
+              <label htmlFor="crm-quotations-plant-capacity-k-w" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Plant Capacity (kW)</label>
+              <input id="crm-quotations-plant-capacity-k-w" name="plantCapacityKW" aria-label="Plant Capacity (kW)"
                 type="number"
                 placeholder="100"
                 value={capacityKw}
                 onChange={(e) => setCapacityKw(e.target.value)}
                 style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
           </div>
 
@@ -1542,8 +1542,8 @@ export default function CrmQuotationsView({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                <input
+                <label htmlFor="quote-field-billingStreet" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                <input name="address" aria-label="Address"
                   id="quote-field-billingStreet"
                   type="text"
                   placeholder="e.g. Plot No 42, SIDCO Industrial Estate, Ambattur"
@@ -1553,13 +1553,13 @@ export default function CrmQuotationsView({
                     if (sameAsBilling) setDeliveryStreet(e.target.value);
                   }}
                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                  <input
+                  <label htmlFor="quote-field-billingCity" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                  <input name="city" aria-label="City"
                     id="quote-field-billingCity"
                     type="text"
                     placeholder="e.g. Chennai"
@@ -1569,11 +1569,11 @@ export default function CrmQuotationsView({
                       if (sameAsBilling) setDeliveryCity(e.target.value);
                     }}
                     style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                  <input
+                  <label htmlFor="quote-field-billingState" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                  <input name="state" aria-label="State"
                     id="quote-field-billingState"
                     type="text"
                     placeholder="e.g. Tamil Nadu"
@@ -1583,11 +1583,11 @@ export default function CrmQuotationsView({
                       if (sameAsBilling) setDeliveryState(e.target.value);
                     }}
                     style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                  />
+                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                  <input
+                  <label htmlFor="quote-field-billingPincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                  <input name="pincode" aria-label="Pincode"
                     id="quote-field-billingPincode"
                     type="text"
                     placeholder="e.g. 600058"
@@ -1597,7 +1597,7 @@ export default function CrmQuotationsView({
                       if (sameAsBilling) setDeliveryPincode(e.target.value);
                     }}
                     style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                  />
+                   />
                 </div>
               </div>
             </div>
@@ -1609,8 +1609,8 @@ export default function CrmQuotationsView({
                   <Truck style={{ width: '16px', height: '16px', color: '#0E7490' }} />
                   <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>Site Delivery Address</h4>
                 </div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer' }}>
-                  <input
+                <label htmlFor="crm-quotations-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer' }}>
+                  <input id="crm-quotations-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                     type="checkbox"
                     checked={sameAsBilling}
                     onChange={(e) => {
@@ -1624,14 +1624,14 @@ export default function CrmQuotationsView({
                       }
                     }}
                     style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                  />
+                   />
                   Same as Billing
                 </label>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                <input
+                <label htmlFor="quote-field-deliveryStreet" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                <input name="address" aria-label="Address"
                   id="quote-field-deliveryStreet"
                   type="text"
                   placeholder="e.g. Solar Site Project Location, Plot 10"
@@ -1639,21 +1639,21 @@ export default function CrmQuotationsView({
                   disabled={sameAsBilling}
                   onChange={(e) => setDeliveryStreet(e.target.value)}
                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                  <input id="quote-field-deliveryCity" type="text" placeholder="e.g. Chennai" value={sameAsBilling ? billingCity : deliveryCity} disabled={sameAsBilling} onChange={(e) => setDeliveryCity(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }} />
+                  <label htmlFor="quote-field-deliveryCity" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                  <input name="city" aria-label="City" id="quote-field-deliveryCity" type="text" placeholder="e.g. Chennai" value={sameAsBilling ? billingCity : deliveryCity} disabled={sameAsBilling} onChange={(e) => setDeliveryCity(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}  />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                  <input id="quote-field-deliveryState" type="text" placeholder="e.g. Tamil Nadu" value={sameAsBilling ? billingState : deliveryState} disabled={sameAsBilling} onChange={(e) => setDeliveryState(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }} />
+                  <label htmlFor="quote-field-deliveryState" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                  <input name="state" aria-label="State" id="quote-field-deliveryState" type="text" placeholder="e.g. Tamil Nadu" value={sameAsBilling ? billingState : deliveryState} disabled={sameAsBilling} onChange={(e) => setDeliveryState(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}  />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                  <input id="quote-field-deliveryPincode" type="text" placeholder="e.g. 600058" value={sameAsBilling ? billingPincode : deliveryPincode} disabled={sameAsBilling} onChange={(e) => setDeliveryPincode(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }} />
+                  <label htmlFor="quote-field-deliveryPincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                  <input name="pincode" aria-label="Pincode" id="quote-field-deliveryPincode" type="text" placeholder="e.g. 600058" value={sameAsBilling ? billingPincode : deliveryPincode} disabled={sameAsBilling} onChange={(e) => setDeliveryPincode(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}  />
                 </div>
               </div>
             </div>
@@ -1774,7 +1774,7 @@ export default function CrmQuotationsView({
                 <thead>
                   <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                     <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
-                      <input
+                      <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={quoteItems.length > 0 && selectedItemIndexes.length === quoteItems.length}
                         onChange={(e) => {
@@ -1785,7 +1785,7 @@ export default function CrmQuotationsView({
                           }
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                      />
+                       />
                     </th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
@@ -1832,7 +1832,7 @@ export default function CrmQuotationsView({
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#ECFEFF' : (i % 2 === 1 ? '#FAFBFC' : 'white') }}>
                           <td style={{ padding: '12px 10px', textAlign: 'center', borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent' }}>
-                            <input
+                            <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                               type="checkbox"
                               checked={isChecked}
                               onChange={(e) => {
@@ -1840,7 +1840,7 @@ export default function CrmQuotationsView({
                                 else setSelectedItemIndexes(prev => prev.filter(idx => idx !== i));
                               }}
                               style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                            />
+                             />
                           </td>
                           <td style={{ padding: '10px 10px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1865,7 +1865,7 @@ export default function CrmQuotationsView({
                                 }}
                               />
                                {/* Line 2: Description */}
-                               <input
+                               <input id={`crm-quotations-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
                                  type="text"
                                  placeholder="Description..."
                                  value={item.category || ''}
@@ -1882,11 +1882,11 @@ export default function CrmQuotationsView({
                                    }));
                                  }}
                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', cursor: 'text' }}
-                               />
+                                />
                              </div>
                            </td>
                            <td style={{ padding: '12px 10px' }}>
-                             <input
+                             <input id={`crm-quotations-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
                                type="text"
                                list={`uom-list-${i}`}
                                placeholder="UOM"
@@ -1896,7 +1896,7 @@ export default function CrmQuotationsView({
                                  setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                }}
                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600', cursor: 'text' }}
-                             />
+                              />
                              <datalist id={`uom-list-${i}`}>
                                <option value="NOS" />
                                <option value="SET" />
@@ -1910,7 +1910,7 @@ export default function CrmQuotationsView({
                            </td>
                            <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                                              <input
+                                                              <input id={`crm-quotations-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                                  type="number"
                                  value={item.qty}
                                  placeholder="0"
@@ -1919,14 +1919,14 @@ export default function CrmQuotationsView({
                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                                  }}
                                  style={{ width: '100%', height: '34px', borderRadius: '7px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text', fontWeight: '600' }}
-                               />
+                                />
                              </div>
                            </td>
                           <td style={{ padding: '12px 10px' }}>
                             {isPresetItem ? (
                               <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
                             ) : (
-                              <input
+                              <input id={`crm-quotations-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
                                 type="number"
                                 value={item.rate}
                                 placeholder="0.00"
@@ -1935,11 +1935,11 @@ export default function CrmQuotationsView({
                                   setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
                                 }}
                                 style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white', cursor: 'text' }}
-                              />
+                               />
                             )}
                           </td>
                           <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                            <select
+                            <select id={`crm-quotations-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
                               value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -1987,7 +1987,7 @@ export default function CrmQuotationsView({
 
                                       <div style={{ position: 'relative', width: '100%' }}>
                                         <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: '#6366F1', pointerEvents: 'none' }}>₹</span>
-                                        <input
+                                        <input id="crm-quotations-0-00" name="000" aria-label="0.00"
                                           type="number"
                                           value={currentGroup.kitPrice}
                                           placeholder="0.00"
@@ -2008,14 +2008,14 @@ export default function CrmQuotationsView({
                                             textAlign: 'right', outline: 'none', boxSizing: 'border-box',
                                             backgroundColor: 'white', cursor: 'text'
                                           }}
-                                        />
+                                         />
                                       </div>
 
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                         <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
                                           {groupCount} items ×
                                         </span>
-                                        <input
+                                        <input id="crm-quotations-set-count" name="setCount" aria-label="SetCount"
                                           type="number"
                                           min="0"
                                           max="999"
@@ -2071,7 +2071,7 @@ export default function CrmQuotationsView({
                                             padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box', cursor: 'text'
                                           }}
                                           title="Sets multiplier for this preset"
-                                        />
+                                         />
                                         <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
                                           set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
                                         </span>
@@ -2079,7 +2079,7 @@ export default function CrmQuotationsView({
 
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                                         <span style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700' }}>GST:</span>
-                                        <select
+                                        <select id={`crm-quotations-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
                                           value={currentGroup.gstRate || item.gstRate || '18%'}
                                           onChange={(e) => {
                                             const val = e.target.value;
@@ -2200,8 +2200,8 @@ export default function CrmQuotationsView({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mode of Transport</label>
-              <select
+              <label htmlFor="crm-quotations-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mode of Transport</label>
+              <select id="crm-quotations-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
                 value={transportMode}
                 onChange={(e) => setTransportMode(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
@@ -2213,28 +2213,28 @@ export default function CrmQuotationsView({
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Transporter Name</label>
-              <input
+              <label htmlFor="crm-quotations-transporter-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Transporter Name</label>
+              <input id="crm-quotations-transporter-name" name="transporterName" aria-label="Transporter Name"
                 type="text"
                 value={transporterName}
                 onChange={(e) => setTransporterName(e.target.value)}
                 placeholder="e.g. VRL Logistics / TCI Freight"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Vehicle Number</label>
-              <input
+              <label htmlFor="crm-quotations-vehicle-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Vehicle Number</label>
+              <input id="crm-quotations-vehicle-number" name="vehicleNumber" aria-label="Vehicle Number"
                 type="text"
                 value={vehicleNo}
                 onChange={(e) => setVehicleNo(e.target.value)}
                 placeholder="e.g. TN 01 AB 1234"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Logistics Scope</label>
-              <select
+              <label htmlFor="crm-quotations-logistics-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Logistics Scope</label>
+              <select id="crm-quotations-logistics-scope" name="logisticsScope" aria-label="Logistics Scope"
                 value={transportScope}
                 onChange={(e) => setTransportScope(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
@@ -2302,7 +2302,7 @@ export default function CrmQuotationsView({
               })}
             </div>
 
-            <textarea
+            <textarea id="crm-quotations-terms" name="terms" aria-label="Select a preset above or freely type custom quotation Terms & Conditions"
               value={terms}
               onChange={(e) => {
                 setTerms(e.target.value);
@@ -2323,7 +2323,7 @@ export default function CrmQuotationsView({
                 resize: 'vertical',
                 backgroundColor: '#FAFBFC'
               }}
-            />
+             />
 
           </div>
         </div>
@@ -2684,24 +2684,24 @@ export default function CrmQuotationsView({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '380px' }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-          <input
+          <input id="crm-quotations-page-config-search-placeholder" name="pageConfigSearchPlaceholder" aria-label="PageConfig searchPlaceholder"
             type="text"
             placeholder={pageConfig.searchPlaceholder}
             value={searchQueryText}
             onChange={(e) => { setSearchQueryText(e.target.value); setCurrentPage(1); }}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: 'white' }}>
             <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
-            <input
+            <input id="crm-quotations-filter-date-val" name="filterDateVal" aria-label="FilterDateVal"
               type="date"
               value={filterDateVal}
               onChange={(e) => { setFilterDateVal(e.target.value); setCurrentPage(1); }}
               style={{ border: 'none', outline: 'none', fontSize: '13px', color: '#334155', backgroundColor: 'transparent' }}
-            />
+             />
           </div>
 
           <button
@@ -2767,12 +2767,12 @@ export default function CrmQuotationsView({
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="crm-quotations-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                     checked={filteredRows.length > 0 && filteredRows.every(r => selectedRows.includes(r.code))}
                     onChange={handleSelectAll}
-                  />
+                   />
                 </th>
                 <th style={{ width: '140px', minWidth: '140px', padding: '12px 14px', fontWeight: 'bold' }}>Quote #</th>
                 <th style={{ width: '120px', minWidth: '120px', padding: '12px 14px', fontWeight: 'bold' }}>Date</th>
@@ -2814,7 +2814,7 @@ export default function CrmQuotationsView({
                   {Array.from({ length: 5 }).map((_, sIdx) => (
                     <tr key={`quote-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                        <input type="checkbox" disabled style={{ opacity: 0.3 }} />
+                        <input id="crm-quotations-input-1" name="input1" aria-label="Input 1" type="checkbox" disabled style={{ opacity: 0.3 }}  />
                       </td>
                       {Array.from({ length: 7 }).map((_, hIdx) => (
                         <td key={`quote-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
@@ -2862,12 +2862,12 @@ export default function CrmQuotationsView({
                           borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                         }}
                       >
-                        <input
+                        <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                           checked={isChecked}
                           onChange={() => handleSelectRow(row.code)}
-                        />
+                         />
                       </td>
                       <td
                         onClick={() => setSelectedQuote(row)}
@@ -2981,7 +2981,7 @@ export default function CrmQuotationsView({
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Showing per page</span>
-                <select
+                <select id="crm-quotations-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                   value={rowsPerPage}
                   onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                   style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -3054,14 +3054,14 @@ export default function CrmQuotationsView({
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                <input
+                <input name="pageJump" aria-label="PageJump"
                   type="number"
                   min="1"
                   max={totalPages || 1}
                   defaultValue={currentPage}
                   id="crm-quotations-goto-page-input"
                   style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                />
+                 />
                 <button
                   onClick={() => {
                     const val = parseInt(document.getElementById('crm-quotations-goto-page-input')?.value || '1', 10);
@@ -3908,10 +3908,10 @@ export default function CrmQuotationsView({
 
             {/* Recipient Input */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="crm-quotations-recipient-contact" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 {sendChannel === 'WhatsApp' ? 'WhatsApp Phone Number' : 'Recipient Email Address'}
               </label>
-              <input
+              <input id="crm-quotations-recipient-contact" name="recipientContact" aria-label="{sendChannel === WhatsApp ? WhatsApp Phone Number  Recipient Email Address}"
                 type="text"
                 value={recipientContact}
                 onChange={(e) => setRecipientContact(e.target.value)}
@@ -3928,16 +3928,16 @@ export default function CrmQuotationsView({
                   boxSizing: 'border-box',
                   outline: 'none'
                 }}
-              />
+               />
             </div>
 
             {/* If Email, show editable Subject */}
             {sendChannel === 'Email' && (
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-quotations-email-subject-line" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Email Subject Line
                 </label>
-                <input
+                <input id="crm-quotations-email-subject-line" name="emailSubjectLine" aria-label="Email Subject Line"
                   type="text"
                   value={editableEmailSubject}
                   onChange={(e) => setEditableEmailSubject(e.target.value)}
@@ -3953,7 +3953,7 @@ export default function CrmQuotationsView({
                     boxSizing: 'border-box',
                     outline: 'none'
                   }}
-                />
+                 />
               </div>
             )}
 
@@ -3967,7 +3967,7 @@ export default function CrmQuotationsView({
                   Feel free to edit or add custom remarks before sending
                 </span>
               </div>
-              <textarea
+              <textarea id="crm-quotations-editable-message-body" name="editableMessageBody" aria-label="EditableMessageBody"
                 rows={10}
                 value={editableMessageBody}
                 onChange={(e) => setEditableMessageBody(e.target.value)}
@@ -3986,7 +3986,7 @@ export default function CrmQuotationsView({
                   minHeight: '180px',
                   backgroundColor: '#FAFBFC'
                 }}
-              />
+               />
             </div>
 
             {/* Action Buttons */}

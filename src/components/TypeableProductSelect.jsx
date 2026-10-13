@@ -259,7 +259,7 @@ export default function TypeableProductSelect({
           boxShadow: isOpen ? `0 0 0 2px ${accentColor}1A` : 'none'
         }}
       >
-        <input
+        <input id="typeable-product-select-placeholder" name="placeholder" aria-label="Placeholder"
           ref={inputRef}
           type="text"
           disabled={disabled}
@@ -286,7 +286,7 @@ export default function TypeableProductSelect({
             cursor: disabled ? 'not-allowed' : 'text',
             ...inputStyle
           }}
-        />
+         />
 
         {/* Dropdown Chevron Toggle Button */}
         <button

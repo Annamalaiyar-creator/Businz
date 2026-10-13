@@ -2821,20 +2821,20 @@ export default function BomOrdersView(props) {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Date</label>
-              <input
+              <label htmlFor="bom-orders-order-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Date</label>
+              <input id="bom-orders-order-date" name="orderDate" aria-label="Order Date"
                 type="date"
                 value={new Date().toISOString().split('T')[0]}
                 disabled
                 readOnly
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#64748B', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="field-newBomDeliveryDate" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Delivery Date <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input name="deliveryDate" aria-label="Delivery Date"
                 id="field-newBomDeliveryDate"
                 type="date"
                 min={new Date().toISOString().split('T')[0]}
@@ -2857,7 +2857,7 @@ export default function BomOrdersView(props) {
                   boxSizing: 'border-box',
                   outline: 'none'
                 }}
-              />
+               />
               {formErrors.deliveryDate && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
                   <AlertCircle size={12} /> {formErrors.deliveryDate}
@@ -2865,20 +2865,20 @@ export default function BomOrdersView(props) {
               )}
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Number</label>
-              <input
+              <label htmlFor="bom-orders-order-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Order Number</label>
+              <input id="bom-orders-order-number" name="orderNumber" aria-label="Order Number"
                 type="text"
                 value="Auto-Assigned"
                 readOnly
                 disabled
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CFFAFE', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0E7490', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>
+              <label htmlFor="bom-orders-sales-person-creator" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#64748B', marginBottom: '6px' }}>
                 Sales Person / Creator <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input id="bom-orders-sales-person-creator" name="salesPersonCreator" aria-label="Sales Person / Creator"
                 type="text"
                 readOnly
                 disabled
@@ -2898,7 +2898,7 @@ export default function BomOrdersView(props) {
                   boxSizing: 'border-box',
                   outline: 'none'
                 }}
-              />
+               />
             </div>
           </div>
         </div>
@@ -2916,10 +2916,10 @@ export default function BomOrdersView(props) {
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="field-newBomProductName" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Customer Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <input
+              <input name="customerName" aria-label="Customer Name"
                 id="field-newBomProductName"
                 type="text"
                 list="bom-customer-name-suggestions"
@@ -2999,7 +2999,7 @@ export default function BomOrdersView(props) {
                   boxSizing: 'border-box',
                   outline: 'none'
                 }}
-              />
+               />
               {formErrors.customerName && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>
                   <AlertCircle size={12} /> {formErrors.customerName}
@@ -3022,57 +3022,57 @@ export default function BomOrdersView(props) {
           <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Company Name</label>
-                    <input
+                    <label htmlFor="bom-orders-company-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Company Name</label>
+                    <input id="bom-orders-company-name" name="companyName" aria-label="Company Name"
                       type="text"
                       placeholder="Company Name..."
                       value={newBomCompanyName}
                       onChange={(e) => setNewBomCompanyName(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Contact Person</label>
-                    <input
+                    <label htmlFor="bom-orders-contact-person" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Contact Person</label>
+                    <input id="bom-orders-contact-person" name="contactPerson" aria-label="Contact Person"
                       type="text"
                       placeholder="Contact Person..."
                       value={newBomContactPerson}
                       onChange={(e) => setNewBomContactPerson(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>GST Number</label>
-                    <input
+                    <label htmlFor="bom-orders-gst-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>GST Number</label>
+                    <input id="bom-orders-gst-number" name="gSTNumber" aria-label="GST Number"
                       type="text"
                       placeholder="GSTIN (e.g. 33AAAAA0000A1Z5)..."
                       value={newBomGstNo}
                       onChange={(e) => setNewBomGstNo(e.target.value.toUpperCase())}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mobile Number</label>
-                    <input
+                    <label htmlFor="bom-orders-mobile-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Mobile Number</label>
+                    <input id="bom-orders-mobile-number" name="mobileNumber" aria-label="Mobile Number"
                       type="text"
                       placeholder="Mobile / Phone..."
                       value={newBomPhone}
                       onChange={(e) => setNewBomPhone(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Email</label>
-                    <input
+                    <label htmlFor="bom-orders-email" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Email</label>
+                    <input id="bom-orders-email" name="email" aria-label="Email"
                       type="email"
                       placeholder="Email Address..."
                       value={newBomEmail}
                       onChange={(e) => setNewBomEmail(e.target.value)}
                       style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                 </div>
 
@@ -3089,8 +3089,8 @@ export default function BomOrdersView(props) {
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                      <input
+                      <label htmlFor="bom-orders-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                      <input id="bom-orders-address" name="address" aria-label="Address"
                         type="text"
                         value={newBomBillingStreet}
                         placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
@@ -3100,12 +3100,12 @@ export default function BomOrdersView(props) {
                           if (sameAsBilling) setNewBomDeliveryStreet(val);
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                      />
+                       />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                        <input
+                        <label htmlFor="bom-orders-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                        <input id="bom-orders-city" name="city" aria-label="City"
                           type="text"
                           value={newBomBillingCity}
                           placeholder="e.g. Chennai"
@@ -3115,11 +3115,11 @@ export default function BomOrdersView(props) {
                             if (sameAsBilling) setNewBomDeliveryCity(val);
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                        <input
+                        <label htmlFor="bom-orders-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                        <input id="bom-orders-state" name="state" aria-label="State"
                           type="text"
                           value={newBomBillingState}
                           placeholder="e.g. Tamil Nadu"
@@ -3129,11 +3129,11 @@ export default function BomOrdersView(props) {
                             if (sameAsBilling) setNewBomDeliveryState(val);
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                        <input
+                        <label htmlFor="bom-orders-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                        <input id="bom-orders-pincode" name="pincode" aria-label="Pincode"
                           type="text"
                           value={newBomBillingPincode}
                           placeholder="e.g. 600058"
@@ -3143,7 +3143,7 @@ export default function BomOrdersView(props) {
                             if (sameAsBilling) setNewBomDeliveryPincode(val);
                           }}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                        />
+                         />
                       </div>
                     </div>
                   </div>
@@ -3161,8 +3161,8 @@ export default function BomOrdersView(props) {
                         </div>
                       </div>
 
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
-                        <input
+                      <label htmlFor="bom-orders-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
+                        <input id="bom-orders-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                           type="checkbox"
                           checked={sameAsBilling}
                           onChange={(e) => {
@@ -3182,14 +3182,14 @@ export default function BomOrdersView(props) {
                             }
                           }}
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                        />
+                         />
                         Same as Billing
                       </label>
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                      <input
+                      <label htmlFor="field-newBomDeliveryStreet" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                      <input name="address" aria-label="Address"
                         id="field-newBomDeliveryStreet"
                         type="text"
                         placeholder="e.g. Plot No 42, SIDCO Industrial Estate, Ambattur"
@@ -3213,13 +3213,13 @@ export default function BomOrdersView(props) {
                           outline: 'none',
                           cursor: sameAsBilling ? 'not-allowed' : 'text'
                         }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                        <input
+                        <label htmlFor="bom-orders-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                        <input id="bom-orders-city" name="city" aria-label="City"
                           type="text"
                           placeholder="e.g. Chennai"
                           value={sameAsBilling ? newBomBillingCity : newBomDeliveryCity}
@@ -3241,29 +3241,29 @@ export default function BomOrdersView(props) {
                             outline: 'none',
                             cursor: sameAsBilling ? 'not-allowed' : 'text'
                           }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                        <input
+                        <label htmlFor="bom-orders-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                        <input id="bom-orders-state" name="state" aria-label="State"
                           type="text"
                           placeholder="e.g. Tamil Nadu"
                           value={sameAsBilling ? newBomBillingState : newBomDeliveryState}
                           disabled={sameAsBilling}
                           onChange={(e) => setNewBomDeliveryState(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                        />
+                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                        <input
+                        <label htmlFor="bom-orders-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                        <input id="bom-orders-pincode" name="pincode" aria-label="Pincode"
                           type="text"
                           placeholder="e.g. 600058"
                           value={sameAsBilling ? newBomBillingPincode : newBomDeliveryPincode}
                           disabled={sameAsBilling}
                           onChange={(e) => setNewBomDeliveryPincode(e.target.value)}
                           style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: sameAsBilling ? 'not-allowed' : 'text' }}
-                        />
+                         />
                       </div>
                     </div>
                     {formErrors.deliveryAddress && (
@@ -3374,7 +3374,7 @@ export default function BomOrdersView(props) {
                                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
                                   <Upload style={{ width: '13px', height: '13px' }} />
                                   Browse Files
-                                  <input
+                                  <input id="bom-orders-input-1" name="input1" aria-label="Input 1"
                                     type="file"
                                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                     style={{ display: 'none' }}
@@ -3396,7 +3396,7 @@ export default function BomOrdersView(props) {
                                         }
                                       }
                                     }}
-                                  />
+                                   />
                                 </label>
                               </div>
                               <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported: PDF, JPG, PNG (Max 5 MB)</span>
@@ -3555,7 +3555,7 @@ export default function BomOrdersView(props) {
                     {newBomSourcePiNo ? (
                       <span style={{ color: '#64748B', fontWeight: '700' }}>#</span>
                     ) : (
-                      <input
+                      <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
                         checked={bomMaterialsList.length > 0 && selectedBomItemIndexes.length === bomMaterialsList.length}
                         onChange={(e) => {
@@ -3566,7 +3566,7 @@ export default function BomOrdersView(props) {
                           }
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                      />
+                       />
                     )}
                   </th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
@@ -3618,7 +3618,7 @@ export default function BomOrdersView(props) {
                           {isPiLocked ? (
                             <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>{i + 1}</span>
                           ) : (
-                            <input
+                            <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                               type="checkbox"
                               checked={isChecked}
                               onChange={(e) => {
@@ -3626,7 +3626,7 @@ export default function BomOrdersView(props) {
                                 else setSelectedBomItemIndexes(prev => prev.filter(idx => idx !== i));
                               }}
                               style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '10px 10px' }}>
@@ -3663,7 +3663,7 @@ export default function BomOrdersView(props) {
                                 }}
                               />
                               {/* Line 2: Description */}
-                              <input
+                              <input id={`bom-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
                                 type="text"
                                 placeholder="Description..."
                                 value={item.category || ''}
@@ -3672,7 +3672,7 @@ export default function BomOrdersView(props) {
                                   setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, category: val } : mat));
                                 }}
                                 style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
-                              />
+                               />
                             </div>
                           )}
                         </td>
@@ -3683,7 +3683,7 @@ export default function BomOrdersView(props) {
                             </div>
                           ) : (
                             <>
-                              <input
+                              <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
                                 type="text"
                                 list={`uom-list-${i}`}
                                 placeholder="UOM"
@@ -3693,7 +3693,7 @@ export default function BomOrdersView(props) {
                                   setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                 }}
                                 style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '12px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                              />
+                               />
                               <datalist id={`uom-list-${i}`}>
                                 <option value="NOS" />
                                 <option value="SET" />
@@ -3713,7 +3713,7 @@ export default function BomOrdersView(props) {
                               {item.qty || 0}
                             </div>
                           ) : (
-                            <input
+                            <input id={`bom-orders-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
                               type="number"
                               value={item.qty}
                               placeholder="0"
@@ -3722,7 +3722,7 @@ export default function BomOrdersView(props) {
                                 setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, qty: val } : mat));
                               }}
                               style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '12px 10px' }}>
@@ -3733,7 +3733,7 @@ export default function BomOrdersView(props) {
                               ₹{parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           ) : (
-                            <input
+                            <input id={`bom-orders-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
                               type="number"
                               value={item.rate}
                               placeholder="0.00"
@@ -3742,7 +3742,7 @@ export default function BomOrdersView(props) {
                                 setBomMaterialsList(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
                               }}
                               style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }}
-                            />
+                             />
                           )}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'center' }}>
@@ -3751,7 +3751,7 @@ export default function BomOrdersView(props) {
                               {item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'} GST
                             </span>
                           ) : (
-                            <select
+                            <select id={`bom-orders-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
                               value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -3814,7 +3814,7 @@ export default function BomOrdersView(props) {
                                       <>
                                         <div style={{ position: 'relative', width: '100%' }}>
                                           <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: '#6366F1', pointerEvents: 'none' }}>₹</span>
-                                          <input
+                                          <input id="bom-orders-0-00" name="000" aria-label="0.00"
                                             type="number"
                                             value={currentGroup.kitPrice}
                                             placeholder="0.00"
@@ -3836,14 +3836,14 @@ export default function BomOrdersView(props) {
                                               textAlign: 'right', outline: 'none', boxSizing: 'border-box',
                                               backgroundColor: 'white', cursor: 'text'
                                             }}
-                                          />
+                                           />
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                           <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
                                             {groupCount} items ×
                                           </span>
-                                          <input
+                                          <input id="bom-orders-set-count" name="setCount" aria-label="SetCount"
                                             type="number"
                                             min="0"
                                             max="999"
@@ -3899,7 +3899,7 @@ export default function BomOrdersView(props) {
                                               padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box', cursor: 'text'
                                             }}
                                             title="Sets multiplier for this preset"
-                                          />
+                                           />
                                           <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
                                             set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
                                           </span>
@@ -3907,7 +3907,7 @@ export default function BomOrdersView(props) {
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                                           <span style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700' }}>GST:</span>
-                                          <select
+                                          <select id={`bom-orders-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
                                             value={currentGroup.gstRate || item.gstRate || '18%'}
                                             onChange={(e) => {
                                               const val = e.target.value;
@@ -4040,10 +4040,10 @@ export default function BomOrdersView(props) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="bom-orders-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Mode of Transport <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <select
+              <select id="bom-orders-mode-of-transport" name="modeOfTransport" aria-label="Mode of Transport"
                 value={newBomTransportMode}
                 onChange={(e) => setNewBomTransportMode(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
@@ -4054,28 +4054,28 @@ export default function BomOrdersView(props) {
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Transport Name</label>
-              <input
+              <label htmlFor="bom-orders-transport-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Transport Name</label>
+              <input id="bom-orders-transport-name" name="transportName" aria-label="Transport Name"
                 type="text"
                 value={newBomTransporterName}
                 onChange={(e) => setNewBomTransporterName(e.target.value)}
                 placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Vehicle Number</label>
-              <input
+              <label htmlFor="bom-orders-vehicle-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Vehicle Number</label>
+              <input id="bom-orders-vehicle-number" name="vehicleNumber" aria-label="Vehicle Number"
                 type="text"
                 value={newBomVehicleNo}
                 onChange={(e) => setNewBomVehicleNo(e.target.value)}
                 placeholder="e.g. TN 01 AB 1234 / KA 04 C 5678"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
-              />
+               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Scope</label>
-              <select
+              <label htmlFor="bom-orders-scope" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Scope</label>
+              <select id="bom-orders-scope" name="scope" aria-label="Scope"
                 value={newBomTransportScope}
                 onChange={(e) => setNewBomTransportScope(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
@@ -4101,8 +4101,8 @@ export default function BomOrdersView(props) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
-                <select
+                <label htmlFor="bom-orders-payment-terms" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Payment Terms</label>
+                <select id="bom-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms"
                   value={newBomPaymentType}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -4130,7 +4130,7 @@ export default function BomOrdersView(props) {
                       Total: ₹{Number(totals.grand || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <input
+                  <input name="advanceAmountPaid" aria-label="Enter advance amount paid"
                     id="field-newBomPartialAmount"
                     type="number"
                     min="0"
@@ -4139,7 +4139,7 @@ export default function BomOrdersView(props) {
                     value={newBomPartialAmount}
                     onChange={(e) => setNewBomPartialAmount(e.target.value)}
                     style={{ width: '100%', height: '40px', borderRadius: '8px', border: formErrors.partialAmount ? '1.5px solid #EF4444' : '1px solid #5EEAD4', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', fontWeight: '700' }}
-                  />
+                   />
                   {formErrors.partialAmount && (
                     <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: '600' }}>{formErrors.partialAmount}</span>
                   )}
@@ -4158,29 +4158,30 @@ export default function BomOrdersView(props) {
               {newBomPaymentType === 'Credit Payment' && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155' }}>Credit Timeline (Days)</label>
+                    <label htmlFor="bom-orders-new-bom-credit-days" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155' }}>Credit Timeline (Days)</label>
                     <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700' }}>Default: 7 Days</span>
                   </div>
-                  <input
+                  <input id="bom-orders-new-bom-credit-days" name="newBomCreditDays" aria-label="Credit Timeline (Days)
+                    Default 7 Days"
                     type="number"
                     min="1"
                     max="365"
                     value={newBomCreditDays}
                     onChange={(e) => setNewBomCreditDays(Math.max(1, parseInt(e.target.value) || 1))}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #A5F3FC', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#F0FDFA', boxSizing: 'border-box', outline: 'none', fontWeight: '700' }}
-                  />
+                   />
                 </div>
               )}
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Remarks / Notes</label>
-                <textarea
+                <label htmlFor="bom-orders-remarks-notes" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Remarks / Notes</label>
+                <textarea id="bom-orders-remarks-notes" name="remarksNotes" aria-label="Remarks / Notes"
                   rows={3}
                   value={newBomRemarks}
                   onChange={(e) => setNewBomRemarks(e.target.value)}
                   placeholder="Enter remarks, consignee references, or invoice notes..."
                   style={{ width: '100%', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '12px 14px', fontSize: '13px', color: '#0F172A', outline: 'none', resize: 'vertical' }}
-                />
+                 />
               </div>
             </div>
 
@@ -4308,7 +4309,7 @@ export default function BomOrdersView(props) {
                         <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', color: '#0E7490', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
                           <Upload style={{ width: '13px', height: '13px' }} />
                           Browse Files
-                          <input
+                          <input id="bom-orders-input-2" name="input2" aria-label="Input 2"
                             type="file"
                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                             style={{ display: 'none' }}
@@ -4331,7 +4332,7 @@ export default function BomOrdersView(props) {
                                 }
                               }
                             }}
-                          />
+                           />
                         </label>
                       </div>
                       <span style={{ fontSize: '11px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG (Max 5 MB)</span>
@@ -5477,15 +5478,15 @@ export default function BomOrdersView(props) {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
+              <label htmlFor="bom-orders-customer-name" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
                 CUSTOMER NAME
               </label>
-              <input
+              <input id="bom-orders-customer-name" name="cUSTOMERNAME" aria-label="CUSTOMER NAME"
                 type="text"
                 value={confirmingBomModal.customerName}
                 readOnly
                 style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#475569', backgroundColor: '#F8FAFC', outline: 'none', cursor: 'not-allowed', boxSizing: 'border-box' }}
-              />
+               />
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
@@ -5496,13 +5497,13 @@ export default function BomOrdersView(props) {
                   {confirmingBomModal.companyName || confirmingBomModal.customerName || '—'}
                 </div>
               ) : (
-                <input
+                <input id="bom-orders-company-name" name="companyName" aria-label="Company Name"
                   type="text"
                   placeholder="Company Name..."
                   value={confirmingBomModal.companyName || ''}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, companyName: e.target.value })}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
-                />
+                 />
               )}
             </div>
             <div>
@@ -5514,7 +5515,7 @@ export default function BomOrdersView(props) {
                   {confirmingBomModal.paymentType || '100% Paid'}
                 </div>
               ) : (
-                <select
+                <select id="bom-orders-payment-type-50-advance" name="paymentType50Advance" aria-label="PaymentType 50 Advance"
                   value={confirmingBomModal.paymentType || '50% Advance + 50% Dispatch'}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, paymentType: e.target.value })}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#2563EB', backgroundColor: '#FFFFFF', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
@@ -5559,11 +5560,13 @@ export default function BomOrdersView(props) {
           {(confirmingBomModal.paymentType === 'Partial Paid' || confirmingBomModal.paymentType === 'Partial Payment') && (
             <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                <label style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', whiteSpace: 'nowrap' }}>
+                <label htmlFor="bom-orders-partial-amount" style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', whiteSpace: 'nowrap' }}>
                   Advance Amount (₹):
                 </label>
                 {confirmingBomModal.isEditMode ? (
-                  <input
+                  <input id="bom-orders-partial-amount" name="partialAmount" aria-label="Advance Amount (₹)
+                
+                {confirmingBomModal.isEditMode ? ("
                     type="number"
                     min="0"
                     step="any"
@@ -5578,7 +5581,7 @@ export default function BomOrdersView(props) {
                       });
                     }}
                     style={{ height: '36px', width: '160px', borderRadius: '6px', border: '1px solid #5EEAD4', padding: '0 10px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none' }}
-                  />
+                   />
                 ) : (
                   <strong style={{ fontSize: '13px', color: '#0F766E' }}>
                     ₹{Number(confirmingBomModal.partialAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -5679,8 +5682,8 @@ export default function BomOrdersView(props) {
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                    <input
+                    <label htmlFor="bom-orders-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                    <input id="bom-orders-address" name="address" aria-label="Address"
                       type="text"
                       placeholder="Street Address..."
                       value={bObj.address || ''}
@@ -5693,20 +5696,20 @@ export default function BomOrdersView(props) {
                         });
                       }}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                      <input type="text" placeholder="City..." value={bObj.city || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, city: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
+                      <label htmlFor="bom-orders-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                      <input id="bom-orders-city" name="city" aria-label="City" type="text" placeholder="City..." value={bObj.city || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, city: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                      <input type="text" placeholder="State..." value={bObj.state || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, state: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
+                      <label htmlFor="bom-orders-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                      <input id="bom-orders-state" name="state" aria-label="State" type="text" placeholder="State..." value={bObj.state || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, state: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                      <input type="text" placeholder="Pincode..." value={bObj.pincode || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, pincode: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
+                      <label htmlFor="bom-orders-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                      <input id="bom-orders-pincode" name="pincode" aria-label="Pincode" type="text" placeholder="Pincode..." value={bObj.pincode || ''} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, billingAddressObj: { ...bObj, pincode: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
                     </div>
                   </div>
                 </div>
@@ -5723,8 +5726,8 @@ export default function BomOrdersView(props) {
                         <span style={{ fontSize: '11px', color: '#64748B' }}>Destination for physical dispatch</span>
                       </div>
                     </div>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
-                      <input
+                    <label htmlFor="bom-orders-same-as-billing" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', backgroundColor: '#ECFEFF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #A5F3FC' }}>
+                      <input id="bom-orders-same-as-billing" name="sameAsBilling" aria-label="SameAsBilling"
                         type="checkbox"
                         checked={Boolean(confirmingBomModal.sameAsBilling)}
                         onChange={(e) => {
@@ -5736,35 +5739,35 @@ export default function BomOrdersView(props) {
                           });
                         }}
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                      />
+                       />
                       Same as Billing
                     </label>
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
-                    <input
+                    <label htmlFor="bom-orders-address" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Address</label>
+                    <input id="bom-orders-address" name="address" aria-label="Address"
                       type="text"
                       placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
                       value={confirmingBomModal.sameAsBilling ? (bObj.address || '') : (dObj.address || '')}
                       disabled={confirmingBomModal.sameAsBilling}
                       onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, address: e.target.value } })}
                       style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: confirmingBomModal.sameAsBilling ? 'not-allowed' : 'text' }}
-                    />
+                     />
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
-                      <input type="text" placeholder="e.g. Chennai" value={confirmingBomModal.sameAsBilling ? (bObj.city || '') : (dObj.city || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, city: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
+                      <label htmlFor="bom-orders-city" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>City</label>
+                      <input id="bom-orders-city" name="city" aria-label="City" type="text" placeholder="e.g. Chennai" value={confirmingBomModal.sameAsBilling ? (bObj.city || '') : (dObj.city || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, city: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
-                      <input type="text" placeholder="e.g. Tamil Nadu" value={confirmingBomModal.sameAsBilling ? (bObj.state || '') : (dObj.state || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, state: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
+                      <label htmlFor="bom-orders-state" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>State</label>
+                      <input id="bom-orders-state" name="state" aria-label="State" type="text" placeholder="e.g. Tamil Nadu" value={confirmingBomModal.sameAsBilling ? (bObj.state || '') : (dObj.state || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, state: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
-                      <input type="text" placeholder="e.g. 600058" value={confirmingBomModal.sameAsBilling ? (bObj.pincode || '') : (dObj.pincode || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, pincode: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }} />
+                      <label htmlFor="bom-orders-pincode" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '4px' }}>Pincode</label>
+                      <input id="bom-orders-pincode" name="pincode" aria-label="Pincode" type="text" placeholder="e.g. 600058" value={confirmingBomModal.sameAsBilling ? (bObj.pincode || '') : (dObj.pincode || '')} disabled={confirmingBomModal.sameAsBilling} onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressObj: { ...dObj, pincode: e.target.value } })} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '12px', color: confirmingBomModal.sameAsBilling ? '#64748B' : '#0F172A', backgroundColor: confirmingBomModal.sameAsBilling ? '#F1F5F9' : '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}  />
                     </div>
                   </div>
 
@@ -5822,7 +5825,7 @@ export default function BomOrdersView(props) {
                               </button>
                               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
                                 <Upload style={{ width: '11px', height: '11px' }} /> Upload New Version
-                                <input
+                                <input id="bom-orders-input-3" name="input3" aria-label="Input 3"
                                   type="file"
                                   accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                   style={{ display: 'none' }}
@@ -5861,7 +5864,7 @@ export default function BomOrdersView(props) {
                                       }
                                     }
                                   }}
-                                />
+                                 />
                               </label>
                             </div>
                           </div>
@@ -5888,7 +5891,7 @@ export default function BomOrdersView(props) {
                           <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
                             <Upload style={{ width: '13px', height: '13px' }} />
                             Upload Address Proof Document
-                            <input
+                            <input id="bom-orders-input-4" name="input4" aria-label="Input 4"
                               type="file"
                               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                               style={{ display: 'none' }}
@@ -5918,7 +5921,7 @@ export default function BomOrdersView(props) {
                                   }
                                 }
                               }}
-                            />
+                             />
                           </label>
                         </div>
                       )}
@@ -6130,7 +6133,7 @@ export default function BomOrdersView(props) {
                 <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
                   {!isAlreadyForwarded && (
                     <th style={{ padding: '12px 10px', width: '40px', textAlign: 'center' }}>
-                      <input
+                      <input id="bom-orders-select-all" name="selectAll" aria-label="SelectAll"
                         type="checkbox"
                         title="Select and confirm all products"
                         checked={(confirmingBomModal.items || []).length > 0 && (confirmingBomModal.items || []).every(it => it.confirmed)}
@@ -6140,7 +6143,7 @@ export default function BomOrdersView(props) {
                           setConfirmingBomModal({ ...confirmingBomModal, items: updated });
                         }}
                         style={{ width: '16px', height: '16px', accentColor: '#166534', cursor: 'pointer' }}
-                      />
+                       />
                     </th>
                   )}
                   <th style={{ padding: '12px 10px', width: '40px', textAlign: 'center' }}>#</th>
@@ -6266,7 +6269,7 @@ export default function BomOrdersView(props) {
                   return (
                     <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: item.confirmed ? '#F0FDF4' : 'transparent' }}>
                       <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                        <input
+                        <input id={`bom-orders-checkbox-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           checked={Boolean(item.confirmed)}
                           onChange={(e) => {
@@ -6275,7 +6278,7 @@ export default function BomOrdersView(props) {
                             setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                           }}
                           style={{ width: '16px', height: '16px', accentColor: '#166534', cursor: 'pointer' }}
-                        />
+                         />
                       </td>
                       <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                       <td style={{ padding: '12px 10px' }}>
@@ -6318,7 +6321,7 @@ export default function BomOrdersView(props) {
                             {item.category || item.specs || '—'}
                           </div>
                         ) : (
-                          <input
+                          <input id={`bom-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description"
                             type="text"
                             placeholder="Description..."
                             value={item.category || item.specs || ''}
@@ -6328,7 +6331,7 @@ export default function BomOrdersView(props) {
                               setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                             }}
                             style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                          />
+                           />
                         )}
                       </td>
                       <td style={{ padding: '12px 10px' }}>
@@ -6337,7 +6340,7 @@ export default function BomOrdersView(props) {
                             {item.uom || item.unit || 'NOS'}
                           </div>
                         ) : (
-                          <input
+                          <input id={`bom-orders-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
                             type="text"
                             placeholder="UOM"
                             value={item.uom || item.unit || 'NOS'}
@@ -6347,7 +6350,7 @@ export default function BomOrdersView(props) {
                               setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                             }}
                             style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                          />
+                           />
                         )}
                       </td>
                       <td style={{ padding: '12px 10px' }}>
@@ -6356,7 +6359,7 @@ export default function BomOrdersView(props) {
                             {item.qty || 0}
                           </div>
                         ) : (
-                          <input
+                          <input id={`bom-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty"
                             type="number"
                             min="1"
                             value={item.qty}
@@ -6366,7 +6369,7 @@ export default function BomOrdersView(props) {
                               setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                             }}
                             style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '12px', textAlign: 'center', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                          />
+                           />
                         )}
                       </td>
                         {/* Rate Column for Editing / Verification */}
@@ -6400,7 +6403,7 @@ export default function BomOrdersView(props) {
                                 ₹ {parseFloat(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </div>
                             ) : (
-                              <input
+                              <input id={`bom-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate"
                                 type="number"
                                 min="0"
                                 value={item.rate}
@@ -6411,7 +6414,7 @@ export default function BomOrdersView(props) {
                                   setConfirmingBomModal({ ...confirmingBomModal, items: updatedItems });
                                 }}
                                 style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '12px', textAlign: 'right', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'text' }}
-                              />
+                               />
                             )}
                           </td>
                         )}
@@ -6648,13 +6651,13 @@ export default function BomOrdersView(props) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '340px' }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-          <input
+          <input id="bom-orders-page-config-search-placeholder" name="pageConfigSearchPlaceholder" aria-label="PageConfig searchPlaceholder"
             type="text"
             placeholder={pageConfig.searchPlaceholder}
             value={searchQueryText}
             onChange={(e) => setSearchQueryText(e.target.value)}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
@@ -6731,7 +6734,7 @@ export default function BomOrdersView(props) {
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="bom-orders-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                     checked={filteredRows.length > 0 && filteredRows.every(r => selectedRows.includes(r.code))}
@@ -6742,7 +6745,7 @@ export default function BomOrdersView(props) {
                         setSelectedRows([]);
                       }
                     }}
-                  />
+                   />
                 </th>
                 {pageConfig.headers.filter(h => h !== 'Action' && h !== 'Actions').map((h, i) => {
                   const isRight = h.includes('Total') || h.includes('Value') || h.includes('Rate');
@@ -6804,7 +6807,7 @@ export default function BomOrdersView(props) {
                     return (
                       <tr key={`bom-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                          <input type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }} />
+                          <input id="bom-orders-input-5" name="input5" aria-label="Input 5" type="checkbox" defaultChecked={false} disabled style={{ opacity: 0.3 }}  />
                         </td>
                         {totalHeaders.map((_, hIdx) => (
                           <td key={`bom-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
@@ -6874,12 +6877,12 @@ export default function BomOrdersView(props) {
                         boxSizing: 'border-box',
                         borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                       }}>
-                        <input
+                        <input id="bom-orders-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                           checked={isChecked}
                           onChange={() => handleSelectRowGeneric(row.code)}
-                        />
+                         />
                       </td>
                       <td
                         onClick={() => {
@@ -6962,7 +6965,7 @@ export default function BomOrdersView(props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Showing per page</span>
-                <select
+                <select id="bom-orders-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                   value={rowsPerPage}
                   onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                   style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -7036,14 +7039,14 @@ export default function BomOrdersView(props) {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                <input
+                <input name="pageJump" aria-label="PageJump"
                   type="number"
                   min="1"
                   max={totalPages || 1}
                   defaultValue={currentPage}
                   id="bom-orders-goto-page-input"
                   style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                />
+                 />
                 <button
                   onClick={() => {
                     const val = parseInt(document.getElementById('bom-orders-goto-page-input')?.value || '1', 10);
@@ -7849,10 +7852,10 @@ export default function BomOrdersView(props) {
 
                       {(uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment') && (
                         <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                          <label htmlFor="bom-orders-balance-amount-paid" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
                             Balance Amount Paid (₹)
                           </label>
-                          <input
+                          <input id="bom-orders-balance-amount-paid" name="balanceAmountPaid" aria-label="Balance Amount Paid (₹)"
                             type="number"
                             min="0"
                             step="any"
@@ -7860,15 +7863,15 @@ export default function BomOrdersView(props) {
                             value={modalBalanceAmount}
                             onChange={(e) => setModalBalanceAmount(e.target.value)}
                             style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '12px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                          />
+                           />
                         </div>
                       )}
 
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                        <label htmlFor="bom-orders-input-6" style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
                           Select Payment Proof Attachment (PDF, JPG, PNG)
                         </label>
-                        <input
+                        <input id="bom-orders-input-6" name="input6" aria-label="Select Payment Proof Attachment (PDF, JPG, PNG)"
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                           onChange={(e) => {
@@ -7885,7 +7888,7 @@ export default function BomOrdersView(props) {
                             }
                           }}
                           style={{ width: '100%', padding: '10px', border: '1px dashed #0E7490', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '12px', boxSizing: 'border-box' }}
-                        />
+                         />
                       </div>
                     </div>
                   )}
@@ -8186,10 +8189,10 @@ export default function BomOrdersView(props) {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#334155', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <label htmlFor="bom-orders-cancellation-reason-input" style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#334155', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Cancellation Reason <span style={{ color: '#DC2626' }}>* (Required)</span>
                 </label>
-                <textarea
+                <textarea id="bom-orders-cancellation-reason-input" name="cancellationReasonInput" aria-label="Cancellation Reason  (Required)"
                   value={cancellationReasonInput}
                   onChange={(e) => setCancellationReasonInput(e.target.value)}
                   placeholder="Explain why this BOM is being cancelled (e.g. Customer cancelled the project, drawing mismatch...)"
@@ -8209,7 +8212,7 @@ export default function BomOrdersView(props) {
                   }}
                   onFocus={(e) => e.target.style.borderColor = '#DC2626'}
                   onBlur={(e) => e.target.style.borderColor = '#CBD5E1'}
-                />
+                 />
               </div>
             </div>
 

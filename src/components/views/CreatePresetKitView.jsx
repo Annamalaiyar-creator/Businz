@@ -289,10 +289,10 @@ export default function CreatePresetKitView({
 
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+            <label htmlFor="create-preset-kit-preset-label-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Preset Label / Name <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <input
+            <input id="create-preset-kit-preset-label-name" name="presetLabelName" aria-label="Preset Label / Name"
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -310,7 +310,7 @@ export default function CreatePresetKitView({
                 boxSizing: 'border-box',
                 outline: 'none'
               }}
-            />
+             />
           </div>
 
           <div>
@@ -340,7 +340,7 @@ export default function CreatePresetKitView({
             </div>
 
             {isCreatingNewCategory ? (
-              <input
+              <input id="create-preset-kit-new-category-name" name="newCategoryName" aria-label="Type new category name"
                 type="text"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
@@ -359,9 +359,9 @@ export default function CreatePresetKitView({
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
             ) : (
-              <select
+              <select id="create-preset-kit-category" name="category" aria-label="Category"
                 value={category}
                 onChange={(e) => {
                   if (e.target.value === '__CREATE_NEW__') {
@@ -437,7 +437,7 @@ export default function CreatePresetKitView({
           {/* Search & Add Standardized Components from Catalog */}
           <div style={{ position: 'relative', width: '380px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-            <input
+            <input id="create-preset-kit-item-search-term" name="itemSearchTerm" aria-label="Search & add standard components"
               type="text"
               value={itemSearchTerm}
               onChange={(e) => setItemSearchTerm(e.target.value)}
@@ -453,7 +453,7 @@ export default function CreatePresetKitView({
                 outline: 'none',
                 backgroundColor: '#F8FAFC'
               }}
-            />
+             />
 
             {/* Dropdown Suggestions */}
             {suggestedProducts.length > 0 && (
@@ -526,7 +526,7 @@ export default function CreatePresetKitView({
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <div style={{ position: 'relative' }}>
-                      <input
+                      <input id={`create-preset-kit-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`name_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Type or pick product / component"
                         type="text"
                         list={`preset-product-datalist-${i}`}
                         placeholder="Type or pick product / component..."
@@ -561,7 +561,7 @@ export default function CreatePresetKitView({
                           boxSizing: 'border-box',
                           fontWeight: '600'
                         }}
-                      />
+                       />
                       <datalist id={`preset-product-datalist-${i}`}>
                         {(catalogProducts || []).map((prod, pidx) => (
                           <option key={pidx} value={prod.name}>
@@ -572,7 +572,7 @@ export default function CreatePresetKitView({
                     </div>
                   </td>
                   <td style={{ padding: '12px 14px' }}>
-                    <input
+                    <input id={`create-preset-kit-1-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`1_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="1"
                       type="number"
                       min="1"
                       placeholder="1"
@@ -591,10 +591,10 @@ export default function CreatePresetKitView({
                         outline: 'none',
                         boxSizing: 'border-box'
                       }}
-                    />
+                     />
                   </td>
                   <td style={{ padding: '12px 14px' }}>
-                    <select
+                    <select id={`create-preset-kit-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
                       value={item.uom || 'NOS'}
                       onChange={(e) => handleUpdateItem(i, 'uom', e.target.value)}
                       style={{
@@ -620,7 +620,7 @@ export default function CreatePresetKitView({
                     </select>
                   </td>
                   <td style={{ padding: '12px 14px' }}>
-                    <input
+                    <input id={`create-preset-kit-hdg-gal-6063t6-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hDGGAL6063T6_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HDG, GAL, 6063T6"
                       type="text"
                       placeholder="e.g. HDG, GAL, 6063T6"
                       value={item.category || ''}
@@ -635,7 +635,7 @@ export default function CreatePresetKitView({
                         outline: 'none',
                         boxSizing: 'border-box'
                       }}
-                    />
+                     />
                   </td>
                   <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                     <button

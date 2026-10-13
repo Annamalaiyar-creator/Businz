@@ -141,10 +141,10 @@ export default function InventoryAutoConversion() {
             
             {/* Length Field */}
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'length' ? '#94a3b8' : '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-input-1" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'length' ? '#94a3b8' : '#475569', marginBottom: '6px' }}>
                 Length (m) {calcTarget === 'length' && '(Auto Solved)'}
               </label>
-              <input 
+              <input id="inventory-auto-conversion-input-1" name="input1" aria-label="Length (m) {calcTarget === length && (Auto Solved)}" 
                 type="number"
                 step="any"
                 disabled={calcTarget === 'length'}
@@ -164,15 +164,15 @@ export default function InventoryAutoConversion() {
                   outline: 'none',
                   boxSizing: 'border-box'
                 }} 
-              />
+               />
             </div>
 
             {/* Width Field */}
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'width' ? '#94a3b8' : '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-input-2" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'width' ? '#94a3b8' : '#475569', marginBottom: '6px' }}>
                 Width (m) {calcTarget === 'width' && '(Auto Solved)'}
               </label>
-              <input 
+              <input id="inventory-auto-conversion-input-2" name="input2" aria-label="Width (m) {calcTarget === width && (Auto Solved)}" 
                 type="number"
                 step="any"
                 disabled={calcTarget === 'width'}
@@ -192,15 +192,15 @@ export default function InventoryAutoConversion() {
                   outline: 'none',
                   boxSizing: 'border-box'
                 }} 
-              />
+               />
             </div>
 
             {/* Thickness Field */}
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'thickness' ? '#94a3b8' : '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-input-3" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'thickness' ? '#94a3b8' : '#475569', marginBottom: '6px' }}>
                 Thickness (mm) {calcTarget === 'thickness' && '(Auto Solved)'}
               </label>
-              <input 
+              <input id="inventory-auto-conversion-input-3" name="input3" aria-label="Thickness (mm) {calcTarget === thickness && (Auto Solved)}" 
                 type="number"
                 step="any"
                 disabled={calcTarget === 'thickness'}
@@ -220,15 +220,15 @@ export default function InventoryAutoConversion() {
                   outline: 'none',
                   boxSizing: 'border-box'
                 }} 
-              />
+               />
             </div>
 
             {/* Weight Field */}
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'weight' ? '#15803d' : '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-input-4" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: calcTarget === 'weight' ? '#15803d' : '#475569', marginBottom: '6px' }}>
                 Weight (Kg) {calcTarget === 'weight' && '(Auto Solved)'}
               </label>
-              <input 
+              <input id="inventory-auto-conversion-input-4" name="input4" aria-label="Weight (Kg) {calcTarget === weight && (Auto Solved)}" 
                 type="number"
                 step="any"
                 disabled={calcTarget === 'weight'}
@@ -248,7 +248,7 @@ export default function InventoryAutoConversion() {
                   outline: 'none',
                   boxSizing: 'border-box'
                 }} 
-              />
+               />
             </div>
 
           </div>
@@ -292,22 +292,22 @@ export default function InventoryAutoConversion() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-purchase-date" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Purchase Date
               </label>
-              <input 
+              <input id="inventory-auto-conversion-purchase-date" name="purchaseDate" aria-label="Purchase Date" 
                 type="date" 
                 value={purchaseDate} 
                 onChange={(e) => setPurchaseDate(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} 
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-product" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Product
               </label>
-              <select 
+              <select id="inventory-auto-conversion-product" name="product" aria-label="Product" 
                 value={product} 
                 onChange={(e) => setProduct(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
@@ -321,10 +321,10 @@ export default function InventoryAutoConversion() {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-product-type" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Product Type
               </label>
-              <select 
+              <select id="inventory-auto-conversion-product-type" name="productType" aria-label="Product Type" 
                 value={productType} 
                 onChange={(e) => setProductType(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
@@ -338,10 +338,10 @@ export default function InventoryAutoConversion() {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-coil-grade" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Coil Grade
               </label>
-              <select 
+              <select id="inventory-auto-conversion-coil-grade" name="coilGrade" aria-label="Coil Grade" 
                 value={coilGrade} 
                 onChange={(e) => setCoilGrade(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
@@ -357,42 +357,42 @@ export default function InventoryAutoConversion() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-rate-ton" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Rate (₹ / Ton)
               </label>
-              <input 
+              <input id="inventory-auto-conversion-rate-ton" name="rateTon" aria-label="Rate (₹ / Ton)" 
                 type="text" 
                 value={ratePerTon} 
                 placeholder="e.g. 72,000"
                 onChange={(e) => setRatePerTon(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '14px', fontWeight: 'bold', outline: 'none', boxSizing: 'border-box' }} 
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-total-amount" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Total Amount (₹)
               </label>
-              <input 
+              <input id="inventory-auto-conversion-total-amount" name="totalAmount" aria-label="Total Amount (₹)" 
                 type="text" 
                 readOnly
                 value={totalAmount ? totalAmount.toLocaleString('en-IN') : ''} 
                 placeholder="0"
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#f1f5f9', outline: 'none', boxSizing: 'border-box' }} 
-              />
+               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+              <label htmlFor="inventory-auto-conversion-remarks" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
                 Remarks
               </label>
-              <input 
+              <input id="inventory-auto-conversion-remarks" name="remarks" aria-label="Remarks" 
                 type="text" 
                 value={remarks} 
                 placeholder="Enter remarks..."
                 onChange={(e) => setRemarks(e.target.value)}
                 style={{ width: '100%', height: '42px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} 
-              />
+               />
             </div>
           </div>
         </div>

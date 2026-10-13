@@ -1056,7 +1056,7 @@ export default function DispatchDashboardView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="dispatch-dashboard-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{

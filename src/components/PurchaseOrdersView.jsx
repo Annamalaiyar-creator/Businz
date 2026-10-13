@@ -1814,13 +1814,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '320px', maxWidth: '100%', boxSizing: 'border-box' }}>
                 <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
-                <input
+                <input id="purchase-orders-search-query" name="searchQuery" aria-label="Search Purchase Orders (PO No, Company Name)"
                   type="text"
                   placeholder="Search Purchase Orders (PO No, Company Name)..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                   style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -1834,7 +1834,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   }}
                 />
 
-                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
+                <select id="purchase-orders-status-filter" name="statusFilter" aria-label="StatusFilter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}>
                   {allStatusOptions.map(s => (
                     <option key={s} value={s}>
                       {s === 'All' ? 'Status: All' : s}
@@ -1919,12 +1919,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   <thead>
                     <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#475569', height: '48px' }}>
                       <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', textAlign: 'center', padding: '12px 0', boxSizing: 'border-box' }}>
-                        <input
+                        <input id="purchase-orders-select-all" name="selectAll" aria-label="SelectAll"
                           type="checkbox"
                           onChange={(e) => handleSelectAll(e, filteredPOList)}
                           checked={filteredPOList.length > 0 && filteredPOList.every(po => selectedPOs.includes(po.poNo))}
                           style={{ cursor: 'pointer', borderRadius: '4px', accentColor: '#0E7490' }}
-                        />
+                         />
                       </th>
                       <th style={{ width: '16%', minWidth: '130px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>PO No.</th>
                       <th style={{ width: '28%', minWidth: '200px', fontWeight: '700', padding: '12px 14px', color: '#334155', textAlign: 'left', boxSizing: 'border-box' }}>Company Name</th>
@@ -1939,7 +1939,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       Array.from({ length: 6 }).map((_, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                            <input type="checkbox" defaultChecked={false} disabled />
+                            <input id="purchase-orders-input-1" name="input1" aria-label="Input 1" type="checkbox" defaultChecked={false} disabled  />
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <div className="skeleton-shimmer skeleton-text" style={{ width: '90px', height: '14px' }} />
@@ -1976,12 +1976,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                             className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
                           >
                             <td style={{ textAlign: 'center' }}>
-                              <input
+                              <input id="purchase-orders-checkbox" name="checkbox" aria-label="Checkbox"
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => handleSelectRow(po.poNo)}
                                 style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                              />
+                               />
                             </td>
                             <td style={{ fontWeight: '600', color: '#2563eb', textAlign: 'left' }}>
                               <a
@@ -2018,7 +2018,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>Rows per page:</span>
-                        <select
+                        <select id="purchase-orders-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                           value={rowsPerPage}
                           onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                           style={{ height: '30px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', padding: '0 4px', backgroundColor: 'white' }}
@@ -3768,10 +3768,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-company-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Company Name <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select
+                    <select id="purchase-orders-company-name" name="companyName" aria-label="Company Name"
                       value={vendorName}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -3796,66 +3796,66 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Branch</label>
-                    <input type="text" value={branch} onChange={(e) => setBranch(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                    <label htmlFor="purchase-orders-branch" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Branch</label>
+                    <input id="purchase-orders-branch" name="branch" aria-label="Branch" type="text" value={branch} onChange={(e) => setBranch(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Vendor Name</label>
-                    <input type="text" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                    <label htmlFor="purchase-orders-vendor-name" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Vendor Name</label>
+                    <input id="purchase-orders-vendor-name" name="vendorName" aria-label="Vendor Name" type="text" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Contact Number</label>
-                    <input type="text" value={contactNo} onChange={(e) => setContactNo(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                    <label htmlFor="purchase-orders-contact-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Contact Number</label>
+                    <input id="purchase-orders-contact-number" name="contactNumber" aria-label="Contact Number" type="text" value={contactNo} onChange={(e) => setContactNo(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Email ID</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                    <label htmlFor="purchase-orders-email-id" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Email ID</label>
+                    <input id="purchase-orders-email-id" name="emailID" aria-label="Email ID" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>GST Number</label>
-                    <input type="text" value={gstNo} onChange={(e) => setGstNo(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', textTransform: 'uppercase' }} />
+                    <label htmlFor="purchase-orders-gst-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>GST Number</label>
+                    <input id="purchase-orders-gst-number" name="gSTNumber" aria-label="GST Number" type="text" value={gstNo} onChange={(e) => setGstNo(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', textTransform: 'uppercase' }}  />
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>Delivery To:</span>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: '500', color: '#475569', fontSize: '12px' }}>
-                    <input type="radio" name="deliveryType" value="Organization" checked={deliveryType === 'Organization'} onChange={() => setDeliveryType('Organization')} /> Organization
+                  <label htmlFor="purchase-orders-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: '500', color: '#475569', fontSize: '12px' }}>
+                    <input id="purchase-orders-checkbox" aria-label="Checkbox" type="radio" name="deliveryType" value="Organization" checked={deliveryType === 'Organization'} onChange={() => setDeliveryType('Organization')}  /> Organization
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: '500', color: '#475569', fontSize: '12px' }}>
-                    <input type="radio" name="deliveryType" value="Customer" checked={deliveryType === 'Customer'} onChange={() => setDeliveryType('Customer')} /> Customer
+                  <label htmlFor="purchase-orders-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: '500', color: '#475569', fontSize: '12px' }}>
+                    <input id="purchase-orders-checkbox" aria-label="Checkbox" type="radio" name="deliveryType" value="Customer" checked={deliveryType === 'Customer'} onChange={() => setDeliveryType('Customer')}  /> Customer
                   </label>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-delivery-address" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Delivery Address <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <textarea
+                    <textarea id="purchase-orders-delivery-address" name="deliveryAddress" aria-label="Delivery Address"
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
                       rows="3"
                       required
                       placeholder="Enter destination delivery address..."
                       style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Billing Address</label>
                       <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>Auto-populated from Vendor</span>
                     </div>
-                    <textarea
+                    <textarea id="purchase-orders-billing-address" name="billingAddress" aria-label="Select vendor to auto-populate billing address"
                       value={billingAddress}
                       readOnly
                       rows="3"
                       placeholder="Select vendor to auto-populate billing address..."
                       style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', backgroundColor: '#f8fafc', color: '#334155', fontWeight: '500' }}
-                    />
+                     />
                   </div>
                 </div>
 
@@ -3867,15 +3867,15 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>PO Number</label>
-                    <input type="text" value={poNumber} disabled style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#f8fafc', color: '#64748b' }} />
+                    <label htmlFor="purchase-orders-po-number" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>PO Number</label>
+                    <input id="purchase-orders-po-number" name="pONumber" aria-label="PO Number" type="text" value={poNumber} disabled style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#f8fafc', color: '#64748b' }}  />
                     <span style={{ fontSize: '10px', color: '#94a3b8' }}>(Auto Generated)</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-po-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       PO Date
                     </label>
-                    <input 
+                    <input id="purchase-orders-po-date" name="pODate" aria-label="PO Date" 
                       type="date" 
                       value={poDate} 
                       disabled 
@@ -3890,23 +3890,23 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                         color: '#64748b', 
                         cursor: 'not-allowed' 
                       }} 
-                    />
+                     />
                     <span style={{ fontSize: '10px', color: '#94a3b8' }}>(Fixed to PO Creation Date)</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-expected-delivery-date" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Expected Delivery Date <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <input type="date" min={new Date().toISOString().split('T')[0]} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }} />
+                    <input id="purchase-orders-expected-delivery-date" name="expectedDeliveryDate" aria-label="Expected Delivery Date" type="date" min={new Date().toISOString().split('T')[0]} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} required style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}  />
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-payment-terms" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Payment Terms <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
+                    <select id="purchase-orders-payment-terms" name="paymentTerms" aria-label="Payment Terms" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}>
                       <option value="" disabled>Select Payment Terms</option>
                       <option value="Net 30 Days">Net 30 Days</option>
                       <option value="Net 45 Days">Net 45 Days</option>
@@ -3917,21 +3917,21 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-po-issued-by" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       PO Issued By <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <input
+                    <input id="purchase-orders-po-issued-by" name="pOIssuedBy" aria-label="PO Issued By"
                       type="text"
                       readOnly
                       value={purchaser || loggedInUserName}
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#334155', fontWeight: '600' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-shipment-preference" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Shipment Preference <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select value={shipmentPref} onChange={(e) => setShipmentPref(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}>
+                    <select id="purchase-orders-shipment-preference" name="shipmentPreference" aria-label="Shipment Preference" value={shipmentPref} onChange={(e) => setShipmentPref(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}>
                       <option value="" disabled>Select Shipment Preference</option>
                       <option value="Transport">Transport</option>
                       <option value="Dedicated Vehicle">Dedicated Vehicle</option>
@@ -3942,10 +3942,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                 <div style={{ display: 'grid', gridTemplateColumns: shipmentPref === 'Transport' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-scope" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Scope <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select value={scope} onChange={(e) => setScope(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}>
+                    <select id="purchase-orders-scope" name="scope" aria-label="Scope" value={scope} onChange={(e) => setScope(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}>
                       <option value="Vendor Scope">Vendor Scope</option>
                       <option value="VRM Structure Scope">VRM Structure Scope</option>
                     </select>
@@ -3953,35 +3953,35 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                   {shipmentPref === 'Transport' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                      <label htmlFor="purchase-orders-transport-name-carrier" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                         Transport Name / Carrier <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                       </label>
-                      <input
+                      <input id="purchase-orders-transport-name-carrier" name="transportNameCarrier" aria-label="Transport Name / Carrier"
                         type="text"
                         value={transportName}
                         onChange={(e) => setTransportName(e.target.value)}
                         placeholder="e.g. A2B transport, Blackbird..."
                         style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}
-                      />
+                       />
                     </div>
                   )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-currency" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Currency <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <input
+                    <input id="purchase-orders-currency" name="currency" aria-label="Currency"
                       type="text"
                       readOnly
                       value="INR - Indian Rupee"
                       style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: '#F8FAFC', color: '#334155', fontWeight: '600' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
+                    <label htmlFor="purchase-orders-priority" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
                       Priority <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span>
                     </label>
-                    <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}>
+                    <select id="purchase-orders-priority" name="priority" aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white', color: '#334155' }}>
                       <option value="Critical">Critical</option>
                       <option value="High">High</option>
                       <option value="Medium">Medium</option>
@@ -4018,7 +4018,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                           <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '8px 12px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <input
+                                <input id={`purchase-orders-or-item-name-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`orItemName_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Type or select Item Name"
                                   type="text"
                                   list={`po-item-datalist-${idx}`}
                                   value={item.name || ''}
@@ -4037,32 +4037,32 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                                   placeholder="Type or select Item Name..."
                                   required
                                   style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white', color: '#334155', outline: 'none' }}
-                                />
+                                 />
                                 <datalist id={`po-item-datalist-${idx}`}>
                                   {zohoItems.map((zi, zidx) => (
                                     <option key={zidx} value={zi.name}>{zi.sku ? `[${zi.sku}] ${zi.name}` : zi.name}</option>
                                   ))}
                                 </datalist>
-                                <input
+                                <input id={`purchase-orders-description-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`description_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Enter item description / specifications"
                                   type="text"
                                   value={item.description || ''}
                                   onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
                                   placeholder="Enter item description / specifications..."
                                   style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '11px', backgroundColor: '#f8fafc', color: '#334155', outline: 'none' }}
-                                />
+                                 />
                               </div>
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <select value={item.account} onChange={(e) => handleItemChange(idx, 'account', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px' }}>
+                              <select id={`purchase-orders-account-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`account_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Account" value={item.account} onChange={(e) => handleItemChange(idx, 'account', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 6px', fontSize: '12px' }}>
                                 <option value="Raw Materials">Raw Materials</option>
                                 <option value="Finished Goods">Finished Goods</option>
                               </select>
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <input type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }} />
+                              <input id={`purchase-orders-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`qty_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Qty" type="number" value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px', textAlign: 'center' }}  />
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <select value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
+                              <select id={`purchase-orders-unit-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`unit_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Unit" value={item.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)} style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}>
                                 {item.unit && !['MT', 'NOS', 'KG', 'PCS', 'MTR'].includes(item.unit) && (
                                   <option value={item.unit}>{item.unit}</option>
                                 )}
@@ -4074,10 +4074,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                               </select>
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <input type="number" value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', textAlign: 'right' }} />
+                              <input id={`purchase-orders-rate-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`rate_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Rate" type="number" value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', e.target.value === '' ? '' : Number(e.target.value))} required style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', textAlign: 'right' }}  />
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <select
+                              <select id={`purchase-orders-tax-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`tax18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Tax 18"
                                 value={item.tax !== undefined && item.tax !== '' ? Number(item.tax) : 18}
                                 onChange={(e) => handleItemChange(idx, 'tax', Number(e.target.value))}
                                 style={{ width: '100%', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 4px', fontSize: '12px' }}
@@ -4120,8 +4120,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                   <strong style={{ fontSize: '14px', color: '#2563eb', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>Notes & Terms</strong>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes & Remarks</label>
-                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="3" placeholder="Add remarks for internal reference..." style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none' }} />
+                    <label htmlFor="purchase-orders-notes-remarks" style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>Notes & Remarks</label>
+                    <textarea id="purchase-orders-notes-remarks" name="notesRemarks" aria-label="Notes & Remarks" value={notes} onChange={(e) => setNotes(e.target.value)} rows="3" placeholder="Add remarks for internal reference..." style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none' }}  />
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -4177,13 +4177,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       ))}
                     </div>
 
-                    <textarea
+                    <textarea id="purchase-orders-terms" name="terms" aria-label="Select a preset above or type custom Terms & Conditions"
                       value={terms}
                       onChange={(e) => setTerms(e.target.value)}
                       rows="6"
                       placeholder="Select a preset above or type custom Terms & Conditions..."
                       style={{ borderRadius: '8px', border: '1px solid #cbd5e1', padding: '10px 12px', fontSize: '12px', fontFamily: 'inherit', resize: 'vertical', minHeight: '130px', backgroundColor: '#FFFFFF' }}
-                    />
+                     />
                   </div>
                 </div>
 
@@ -4198,7 +4198,7 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
                     <span style={{ color: '#64748b' }}>Discount (%)</span>
-                    <input type="number" value={discountPct} onChange={(e) => setDiscountPct(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '60px', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', textAlign: 'right', fontSize: '12px' }} />
+                    <input id="purchase-orders-discount-pct" name="discountPct" aria-label="DiscountPct" type="number" value={discountPct} onChange={(e) => setDiscountPct(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '60px', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', textAlign: 'right', fontSize: '12px' }}  />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
@@ -4213,12 +4213,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
                     <span style={{ color: '#64748b' }}>Shipping Charges (₹)</span>
-                    <input type="number" value={shippingCharges} onChange={(e) => setShippingCharges(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100px', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', textAlign: 'right', fontSize: '12px' }} />
+                    <input id="purchase-orders-shipping-charges" name="shippingCharges" aria-label="ShippingCharges" type="number" value={shippingCharges} onChange={(e) => setShippingCharges(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100px', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', textAlign: 'right', fontSize: '12px' }}  />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
                     <span style={{ color: '#64748b' }}>Other Charges (₹)</span>
-                    <input type="number" value={otherCharges} onChange={(e) => setOtherCharges(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100px', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', textAlign: 'right', fontSize: '12px' }} />
+                    <input id="purchase-orders-other-charges" name="otherCharges" aria-label="OtherCharges" type="number" value={otherCharges} onChange={(e) => setOtherCharges(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100px', height: '28px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', textAlign: 'right', fontSize: '12px' }}  />
                   </div>
 
                   <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '4px 0' }} />
@@ -4335,13 +4335,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               <span style={{ fontSize: '12px', color: '#64748b' }}>Vendor: <strong>{rejectingPo.vendor}</strong> | Amount: <strong>{rejectingPo.amount}</strong></span>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#dc2626' }}>Rejection Reason (Mandatory) *</label>
-                <textarea
+                <label htmlFor="purchase-orders-rejection-reason-mandatory" style={{ fontSize: '11px', fontWeight: 'bold', color: '#dc2626' }}>Rejection Reason (Mandatory) *</label>
+                <textarea id="purchase-orders-rejection-reason-mandatory" name="rejectionReasonMandatory" aria-label="Rejection Reason (Mandatory)"
                   value={rejectionReasonInput}
                   onChange={(e) => setRejectionReasonInput(e.target.value)}
                   placeholder="Enter detailed reason for rejecting this PO..."
                   style={{ height: '70px', borderRadius: '8px', border: '1.5px solid #fca5a5', padding: '8px 12px', fontSize: '12px', resize: 'none' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
@@ -4365,13 +4365,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               <span style={{ fontSize: '12px', color: '#64748b' }}>Vendor: <strong>{approvingPo.vendor}</strong> | Amount: <strong>{approvingPo.amount}</strong></span>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Approval Remarks / MD Notes</label>
-                <textarea
+                <label htmlFor="purchase-orders-approval-remarks-md" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Approval Remarks / MD Notes</label>
+                <textarea id="purchase-orders-approval-remarks-md" name="approvalRemarksMD" aria-label="Approval Remarks / MD Notes"
                   value={approvalRemarksInput}
                   onChange={(e) => setApprovalRemarksInput(e.target.value)}
                   placeholder="Enter MD remarks or instructions for Accounts..."
                   style={{ height: '60px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '12px', resize: 'none' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
@@ -4404,8 +4404,8 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
               {/* Mode Selection */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Payment / Settlement Mode <span style={{ color: '#EF4444' }}>*</span></label>
-                <select
+                <label htmlFor="purchase-orders-payment-settlement-mode" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Payment / Settlement Mode <span style={{ color: '#EF4444' }}>*</span></label>
+                <select id="purchase-orders-payment-settlement-mode" name="paymentSettlementMode" aria-label="Payment / Settlement Mode"
                   value={payModeInput}
                   onChange={(e) => setPayModeInput(e.target.value)}
                   style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px', backgroundColor: 'white' }}
@@ -4429,39 +4429,39 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                     This PO will be marked as Credit Verified by Accounts. MD has approved the PO, and once Accounts confirms the credit terms, you can Proceed PO for GRN (No payment receipt upload required for credit terms).
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#854D0E' }}>Agreed Credit Terms / Days</label>
-                    <input
+                    <label htmlFor="purchase-orders-agreed-credit-terms" style={{ fontSize: '11px', fontWeight: 'bold', color: '#854D0E' }}>Agreed Credit Terms / Days</label>
+                    <input id="purchase-orders-agreed-credit-terms" name="agreedCreditTerms" aria-label="Agreed Credit Terms / Days"
                       type="text"
                       value={payCreditTermsInput}
                       onChange={(e) => setPayCreditTermsInput(e.target.value)}
                       placeholder="e.g. Net 30 Days, PDC 45 Days..."
                       style={{ height: '34px', borderRadius: '6px', border: '1px solid #FDE047', padding: '0 10px', fontSize: '12px', backgroundColor: '#FFFFFF' }}
-                    />
+                     />
                   </div>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>
+                    <label htmlFor="purchase-orders-utr12345678" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>
                       Transaction / UTR Reference No.
                     </label>
-                    <input
+                    <input id="purchase-orders-utr12345678" name="uTR12345678" aria-label="Transaction / UTR Reference No."
                       type="text"
                       value={payRefInput}
                       onChange={(e) => setPayRefInput(e.target.value)}
                       placeholder="e.g. UTR12345678"
                       style={{ height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px' }}
-                    />
+                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Amount Recorded (₹)</label>
-                    <input
+                    <label htmlFor="purchase-orders-amount-recorded" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Amount Recorded (₹)</label>
+                    <input id="purchase-orders-amount-recorded" name="amountRecorded" aria-label="Amount Recorded (₹)"
                       type="text"
                       value={payAmountInput}
                       onChange={(e) => setPayAmountInput(e.target.value)}
                       placeholder="Amount"
                       style={{ height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px' }}
-                    />
+                     />
                   </div>
                 </div>
               )}
@@ -4504,12 +4504,12 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
                       <span style={{ fontSize: '11px', color: '#64748B' }}>
                         PNG, JPG, JPEG or WEBP (Max 5MB - Auto-compressed)
                       </span>
-                      <input
+                      <input id="purchase-orders-input-2" name="input2" aria-label="Input 2"
                         type="file"
                         accept="image/*"
                         onChange={handlePaymentImageUpload}
                         style={{ display: 'none' }}
-                      />
+                       />
                     </label>
                   ) : (
                     <div style={{
@@ -4560,13 +4560,13 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Accounts Verification Notes (Optional)</label>
-                <textarea
+                <label htmlFor="purchase-orders-pay-remarks-input" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Accounts Verification Notes (Optional)</label>
+                <textarea id="purchase-orders-pay-remarks-input" name="payRemarksInput" aria-label="Accounts Verification Notes (Optional)"
                   value={payRemarksInput}
                   onChange={(e) => setPayRemarksInput(e.target.value)}
                   placeholder="Enter remarks or voucher details..."
                   style={{ height: '50px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 10px', fontSize: '12px', resize: 'none' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
@@ -4617,29 +4617,29 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
 
               {/* Vendor Email Recipient Field */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <label htmlFor="purchase-orders-vendor-company-com" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Mail size={13} style={{ color: '#0E7490' }} /> Vendor Recipient Email (Auto Dispatched on Authorization)
                 </label>
-                <input
+                <input id="purchase-orders-vendor-company-com" name="vendorCompanyCom" aria-label="Vendor Recipient Email (Auto Dispatched on Authorization)"
                   type="email"
                   value={proceedEmailInput}
                   onChange={(e) => setProceedEmailInput(e.target.value)}
                   placeholder="vendor@company.com"
                   style={{ height: '36px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '12px', color: '#1E293B', backgroundColor: '#F8FAFC' }}
-                />
+                 />
                 <span style={{ fontSize: '10.5px', color: '#64748B' }}>
                   The PO schedule and line item specifications will be automatically delivered to this address.
                 </span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Proceed Authorization Remarks (Optional)</label>
-                <textarea
+                <label htmlFor="purchase-orders-proceed-remarks-input" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>Proceed Authorization Remarks (Optional)</label>
+                <textarea id="purchase-orders-proceed-remarks-input" name="proceedRemarksInput" aria-label="Proceed Authorization Remarks (Optional)"
                   value={proceedRemarksInput}
                   onChange={(e) => setProceedRemarksInput(e.target.value)}
                   placeholder="Enter dispatch notes, delivery gate instructions, etc..."
                   style={{ height: '50px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '8px 10px', fontSize: '12px', resize: 'none' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '6px' }}>

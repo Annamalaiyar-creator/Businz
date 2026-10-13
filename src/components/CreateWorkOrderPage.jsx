@@ -826,17 +826,17 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                       </td>
 
                       <td style={{ padding: '12px 14px' }}>
-                        <input
+                        <input id="create-work-order-op-name" name="opName" aria-label="Uncoiling & Cut to Length"
                           type="text"
                           value={step.opName}
                           placeholder="e.g. Uncoiling & Cut to Length"
                           onChange={(e) => handleUpdateWorkPlanStep(step.id, 'opName', e.target.value)}
                           style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 10px', fontSize: '13px', color: '#334155', fontWeight: '600', outline: 'none' }}
-                        />
+                         />
                       </td>
 
                       <td style={{ padding: '12px 14px' }}>
-                        <select
+                        <select id="create-work-order-machine" name="machine" aria-label="Machine"
                           value={step.machine}
                           onChange={(e) => handleUpdateWorkPlanStep(step.id, 'machine', e.target.value)}
                           style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', color: '#475569', outline: 'none', fontWeight: '600' }}
@@ -856,7 +856,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                       </td>
 
                       <td style={{ padding: '12px 14px' }}>
-                        <select
+                        <select id="create-work-order-operator" name="operator" aria-label="Operator"
                           value={step.operator}
                           onChange={(e) => handleUpdateWorkPlanStep(step.id, 'operator', e.target.value)}
                           style={{ width: '100%', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', color: '#475569', outline: 'none' }}
@@ -878,7 +878,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
 
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input
+                          <input id="create-work-order-0" name="0" aria-label="0"
                             type="number"
                             min="0"
                             placeholder="0"
@@ -893,10 +893,10 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                               handleUpdateWorkPlanStep(step.id, 'estTime', formatted);
                             }}
                             style={{ width: '48px', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '13px', textAlign: 'center', color: '#64748B', outline: 'none' }}
-                          />
+                           />
                           <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '700' }}>hr</span>
 
-                          <input
+                          <input id="create-work-order-15" name="15" aria-label="15"
                             type="number"
                             min="0"
                             max="59"
@@ -912,7 +912,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                               handleUpdateWorkPlanStep(step.id, 'estTime', formatted);
                             }}
                             style={{ width: '48px', height: '36px', borderRadius: '6px', border: '1px solid #CBD5E1', padding: '0 6px', fontSize: '13px', textAlign: 'center', color: '#64748B', outline: 'none' }}
-                          />
+                           />
                           <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '700' }}>min</span>
                         </div>
                       </td>
@@ -978,7 +978,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}>
-                <input
+                <input id="create-work-order-select-row" name="selectRow" aria-label="SelectRow"
                   type="checkbox"
                   checked={assignedHeads.includes('Floor Supervisor')}
                   onChange={(e) => {
@@ -991,7 +991,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                     }
                   }}
                   style={{ accentColor: '#0E7490', width: '17px', height: '17px' }}
-                />
+                 />
                 <div>
                   <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>{floorSupervisorName} (Floor Supervisor)</strong>
                   <span style={{ fontSize: '11.5px', color: '#64748B' }}>Floor line operations, machine stations & cutting jobs</span>
@@ -1009,7 +1009,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}>
-                <input
+                <input id="create-work-order-select-row" name="selectRow" aria-label="SelectRow"
                   type="checkbox"
                   checked={assignedHeads.includes('Dispatch Head')}
                   onChange={(e) => {
@@ -1022,7 +1022,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                     }
                   }}
                   style={{ accentColor: '#0E7490', width: '17px', height: '17px' }}
-                />
+                 />
                 <div>
                   <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block' }}>{dispatchHeadName} (Dispatch Head)</strong>
                   <span style={{ fontSize: '11.5px', color: '#64748B' }}>Packing verification, staging & dispatch readiness</span>
@@ -1089,23 +1089,23 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>WORK ORDER NUMBER</label>
-                <input type="text" value={woNumber} onChange={(e) => setWoNumber(e.target.value)} style={{ ...inputStyle, backgroundColor: '#F8FAFC', fontWeight: '700', color: '#64748B' }} />
+                <label htmlFor="create-work-order-work-order-number" style={labelStyle}>WORK ORDER NUMBER</label>
+                <input id="create-work-order-work-order-number" name="wORKORDERNUMBER" aria-label="WORK ORDER NUMBER" type="text" value={woNumber} onChange={(e) => setWoNumber(e.target.value)} style={{ ...inputStyle, backgroundColor: '#F8FAFC', fontWeight: '700', color: '#64748B' }}  />
               </div>
               <div>
-                <label style={labelStyle}>DATE</label>
-                <input type="date" value={woDate} readOnly style={{ ...inputStyle, backgroundColor: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' }} />
+                <label htmlFor="create-work-order-date" style={labelStyle}>DATE</label>
+                <input id="create-work-order-date" name="dATE" aria-label="DATE" type="date" value={woDate} readOnly style={{ ...inputStyle, backgroundColor: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' }}  />
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>CREATOR (PRODUCTION HEAD)</label>
-                <input type="text" value={creatorDisplay} readOnly style={{ ...inputStyle, backgroundColor: '#F8FAFC', fontWeight: '700', color: '#1E293B' }} />
+                <label htmlFor="create-work-order-creator-production-head" style={labelStyle}>CREATOR (PRODUCTION HEAD)</label>
+                <input id="create-work-order-creator-production-head" name="cREATORPRODUCTIONHEAD" aria-label="CREATOR (PRODUCTION HEAD)" type="text" value={creatorDisplay} readOnly style={{ ...inputStyle, backgroundColor: '#F8FAFC', fontWeight: '700', color: '#1E293B' }}  />
               </div>
               <div>
-                <label style={labelStyle}>PRIORITY</label>
-                <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ ...inputStyle, color: priority ? '#64748B' : '#94A3B8' }}>
+                <label htmlFor="create-work-order-priority" style={labelStyle}>PRIORITY</label>
+                <select id="create-work-order-priority" name="pRIORITY" aria-label="PRIORITY" value={priority} onChange={(e) => setPriority(e.target.value)} style={{ ...inputStyle, color: priority ? '#64748B' : '#94A3B8' }}>
                   <option value="" disabled style={{ color: '#94A3B8' }}>Select Priority</option>
                   <option value="High" style={{ color: '#64748B' }}>High Priority</option>
                   <option value="Normal" style={{ color: '#64748B' }}>Normal Priority</option>
@@ -1180,8 +1180,8 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
               {productItems.map((item, index) => (
                 <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 40px', gap: '12px', alignItems: 'flex-end', backgroundColor: index > 0 ? '#F8FAFC' : 'transparent', padding: index > 0 ? '10px' : '0px', borderRadius: '10px', border: (index > 0 ? '1px solid #E2E8F0' : 'none') }}>
                   <div>
-                    <label style={labelStyle}>FINISHED PRODUCT {productItems.length > 1 ? `#${index + 1}` : ''}</label>
-                    <select
+                    <label htmlFor="create-work-order-product-code" style={labelStyle}>FINISHED PRODUCT {productItems.length > 1 ? `#${index + 1}` : ''}</label>
+                    <select id={`create-work-order-product-code-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`productCode_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="FINISHED PRODUCT {productItems.length > 1 ? `#${index + 1}`  }"
                       value={item.productCode}
                       onChange={(e) => handleUpdateProductItem(item.id, 'productCode', e.target.value)}
                       style={{ ...inputStyle, fontWeight: '600', color: item.productCode ? '#64748B' : '#94A3B8' }}
@@ -1199,7 +1199,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
 
                     {item.productCode === 'custom_new' && (
                       <div style={{ marginTop: '8px' }}>
-                        <input
+                        <input id="create-work-order-new-product-name" name="newProductName" aria-label="Enter new product name"
                           type="text"
                           value={customProductName}
                           onChange={(e) => setCustomProductName(e.target.value)}
@@ -1212,7 +1212,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                             color: '#0E7490',
                             fontWeight: '700'
                           }}
-                        />
+                         />
                         <span style={{ fontSize: '10.5px', color: '#0E7490', fontWeight: '600', marginTop: '2px', display: 'block' }}>
                           ✨ Code will be auto-generated & registered into inventory
                         </span>
@@ -1231,7 +1231,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
 
                       return (
                         <>
-                          <input
+                          <input id={`create-work-order-cut-length-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`cutLength_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="CutLength"
                             type="text"
                             value={item.cutLength}
                             onChange={(e) => handleUpdateProductItem(item.id, 'cutLength', e.target.value)}
@@ -1244,7 +1244,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                               border: isTooLong ? '1.5px solid #EF4444' : '1px solid #CBD5E1',
                               backgroundColor: isTooLong ? '#FEF2F2' : '#FFFFFF'
                             }}
-                          />
+                           />
                           {isTooLong && (
                             <span style={{ fontSize: '10.5px', color: '#DC2626', fontWeight: '700', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
                               ⚠️ Cannot exceed raw bar ({rawLen} mm)
@@ -1256,15 +1256,15 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
                   </div>
 
                   <div>
-                    <label style={labelStyle}>TARGET OUTPUT QTY (PCS)</label>
-                    <input
+                    <label htmlFor="create-work-order-target-output-qty" style={labelStyle}>TARGET OUTPUT QTY (PCS)</label>
+                    <input id={`create-work-order-target-output-qty-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`tARGETOUTPUTQTY_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="TARGET OUTPUT QTY (PCS)"
                       type="number"
                       min="1"
                       value={item.targetQty}
                       onChange={(e) => handleUpdateProductItem(item.id, 'targetQty', e.target.value)}
                       placeholder="e.g. 1"
                       style={{ ...inputStyle, fontSize: '13px', fontWeight: '600', color: item.targetQty ? '#64748B' : '#94A3B8' }}
-                    />
+                     />
                   </div>
 
                   {productItems.length > 1 && (
@@ -1409,12 +1409,12 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>START DATE</label>
-                <input type="date" value={expectedStartDate} onChange={(e) => setExpectedStartDate(e.target.value)} style={inputStyle} />
+                <label htmlFor="create-work-order-start-date" style={labelStyle}>START DATE</label>
+                <input id="create-work-order-start-date" name="sTARTDATE" aria-label="START DATE" type="date" value={expectedStartDate} onChange={(e) => setExpectedStartDate(e.target.value)} style={inputStyle}  />
               </div>
               <div>
-                <label style={labelStyle}>TARGET COMPLETION DATE</label>
-                <input type="date" value={expectedCompletionDate} onChange={(e) => setExpectedCompletionDate(e.target.value)} style={inputStyle} />
+                <label htmlFor="create-work-order-target-completion-date" style={labelStyle}>TARGET COMPLETION DATE</label>
+                <input id="create-work-order-target-completion-date" name="tARGETCOMPLETIONDATE" aria-label="TARGET COMPLETION DATE" type="date" value={expectedCompletionDate} onChange={(e) => setExpectedCompletionDate(e.target.value)} style={inputStyle}  />
               </div>
             </div>
           </div>

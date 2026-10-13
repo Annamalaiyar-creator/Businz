@@ -293,74 +293,74 @@ export default function CustomerFormView({
         {/* ROW 1: DISPLAY NAME & COMPANY NAME */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
+            <label htmlFor="customer-form-customer-display-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
               Customer / Display Name <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <input
+            <input id="customer-form-customer-display-name" name="customerDisplayName" aria-label="Customer / Display Name"
               type="text"
               placeholder="e.g. Vikram Solar Pvt Ltd"
               value={custFormName}
               onChange={(e) => setCustFormName(e.target.value)}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Company Name</label>
-            <input
+            <label htmlFor="customer-form-company-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Company Name</label>
+            <input id="customer-form-company-name" name="companyName" aria-label="Company Name"
               type="text"
               placeholder="e.g. Vikram Solar Solutions Infrastructure Ltd"
               value={custFormCompany}
               onChange={(e) => setCustFormCompany(e.target.value)}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
         </div>
 
         {/* ROW 2: GST NUMBER, MOBILE, ALT NUMBER & EMAIL */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>GST Number (GSTIN)</label>
-            <input
+            <label htmlFor="customer-form-gst-number-gstin" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>GST Number (GSTIN)</label>
+            <input id="customer-form-gst-number-gstin" name="gSTNumberGSTIN" aria-label="GST Number (GSTIN)"
               type="text"
               placeholder="e.g. 33AABCU9603R1ZM"
               value={custFormGstNo}
               onChange={(e) => setCustFormGstNo(e.target.value.toUpperCase())}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', fontWeight: '700', letterSpacing: '0.5px' }}
-            />
+             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Mobile / Phone Number</label>
-            <input
+            <label htmlFor="customer-form-mobile-phone-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Mobile / Phone Number</label>
+            <input id="customer-form-mobile-phone-number" name="mobilePhoneNumber" aria-label="Mobile / Phone Number"
               type="text"
               placeholder="+91 98765 43210"
               value={custFormMobile}
               onChange={(e) => setCustFormMobile(e.target.value)}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Alt Number / Phone</label>
-            <input
+            <label htmlFor="customer-form-alt-number-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Alt Number / Phone</label>
+            <input id="customer-form-alt-number-phone" name="altNumberPhone" aria-label="Alt Number / Phone"
               type="text"
               placeholder="+91 98765 43211 / Landline"
               value={custFormAltPhone}
               onChange={(e) => setCustFormAltPhone && setCustFormAltPhone(e.target.value)}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Email Address</label>
-            <input
+            <label htmlFor="customer-form-email-address" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Email Address</label>
+            <input id="customer-form-email-address" name="emailAddress" aria-label="Email Address"
               type="email"
               placeholder="contact@company.com"
               value={custFormEmail}
               onChange={(e) => setCustFormEmail(e.target.value)}
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-            />
+             />
           </div>
         </div>
 
@@ -384,10 +384,10 @@ export default function CustomerFormView({
 
             {/* Street Address Line 1 */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="customer-form-cust-form-billing-address1" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Billing Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Building / Door / Flat / Street)</span>
               </label>
-              <input
+              <input id="customer-form-cust-form-billing-address1" name="custFormBillingAddress1" aria-label="Billing Address 1 (Building / Door / Flat / Street)"
                 type="text"
                 placeholder="e.g. No 1427, GNT Road, Nagappa Industrial Estate"
                 value={custFormBillingAddress1}
@@ -401,15 +401,15 @@ export default function CustomerFormView({
                   }
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-              />
+               />
             </div>
 
             {/* Street Address Line 2 */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="customer-form-cust-form-billing-address2" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Billing Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Area / Landmark / Road)</span>
               </label>
-              <input
+              <input id="customer-form-cust-form-billing-address2" name="custFormBillingAddress2" aria-label="Billing Address 2 (Area / Landmark / Road)"
                 type="text"
                 placeholder="e.g. Near Puzhal Toll Plaza, Redhills Road"
                 value={custFormBillingAddress2}
@@ -423,16 +423,16 @@ export default function CustomerFormView({
                   }
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-              />
+               />
             </div>
 
             {/* City, State, Pincode */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="customer-form-city" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   City
                 </label>
-                <input
+                <input id="customer-form-city" name="city" aria-label="City"
                   type="text"
                   placeholder="e.g. Chennai"
                   value={custFormBillingCity}
@@ -442,14 +442,14 @@ export default function CustomerFormView({
                     if (custFormSameAsBilling) setCustFormDeliveryCity(val);
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="customer-form-state" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   State
                 </label>
-                <input
+                <input id="customer-form-state" name="state" aria-label="State"
                   type="text"
                   placeholder="e.g. Tamil Nadu"
                   value={custFormBillingState}
@@ -459,14 +459,14 @@ export default function CustomerFormView({
                     if (custFormSameAsBilling) setCustFormDeliveryState(val);
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="customer-form-pincode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Pincode
                 </label>
-                <input
+                <input id="customer-form-pincode" name="pincode" aria-label="Pincode"
                   type="text"
                   placeholder="e.g. 600028"
                   value={custFormBillingPincode}
@@ -476,7 +476,7 @@ export default function CustomerFormView({
                     if (custFormSameAsBilling) setCustFormDeliveryPincode(val);
                   }}
                   style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', backgroundColor: '#FFFFFF' }}
-                />
+                 />
               </div>
             </div>
           </div>
@@ -497,8 +497,8 @@ export default function CustomerFormView({
                 </div>
               </div>
 
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4F46E5', cursor: 'pointer', backgroundColor: '#EEF2FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
-                <input
+              <label htmlFor="customer-form-checkbox" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4F46E5', cursor: 'pointer', backgroundColor: '#EEF2FF', padding: '4px 10px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
+                <input id="customer-form-checkbox" name="checkbox" aria-label="Checkbox"
                   type="checkbox"
                   checked={custFormSameAsBilling}
                   onChange={(e) => {
@@ -514,17 +514,17 @@ export default function CustomerFormView({
                     }
                   }}
                   style={{ accentColor: '#4F46E5', cursor: 'pointer' }}
-                />
+                 />
                 Same as Billing
               </label>
             </div>
 
             {/* Street Address Line 1 */}
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              <label htmlFor="customer-form-input-1" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Shipping Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Warehouse / Site / Street)</span>
               </label>
-              <input
+              <input id="customer-form-input-1" name="input1" aria-label="Shipping Address 1 (Warehouse / Site / Street)"
                 type="text"
                 placeholder="e.g. Plot No 42, SIDCO Industrial Estate"
                 value={custFormSameAsBilling ? custFormBillingAddress1 : custFormDeliveryAddress1}
@@ -541,7 +541,7 @@ export default function CustomerFormView({
                   boxSizing: 'border-box', outline: 'none',
                   cursor: custFormSameAsBilling ? 'not-allowed' : 'text'
                 }}
-              />
+               />
             </div>
 
             {/* Street Address Line 2 */}
@@ -549,7 +549,7 @@ export default function CustomerFormView({
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Shipping Address 2 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Industrial Estate / Landmark / Road)</span>
               </label>
-              <input
+              <input id="customer-form-input-2" name="input2" aria-label="Near Ambattur Railway Station"
                 type="text"
                 placeholder="e.g. Near Ambattur Railway Station"
                 value={custFormSameAsBilling ? custFormBillingAddress2 : custFormDeliveryAddress2}
@@ -566,16 +566,16 @@ export default function CustomerFormView({
                   boxSizing: 'border-box', outline: 'none',
                   cursor: custFormSameAsBilling ? 'not-allowed' : 'text'
                 }}
-              />
+               />
             </div>
 
             {/* City, State, Pincode */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="customer-form-city" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   City
                 </label>
-                <input
+                <input id="customer-form-city" name="city" aria-label="City"
                   type="text"
                   placeholder="e.g. Chennai"
                   value={custFormSameAsBilling ? custFormBillingCity : custFormDeliveryCity}
@@ -588,14 +588,14 @@ export default function CustomerFormView({
                     boxSizing: 'border-box', outline: 'none',
                     cursor: custFormSameAsBilling ? 'not-allowed' : 'text'
                   }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="customer-form-state" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   State
                 </label>
-                <input
+                <input id="customer-form-state" name="state" aria-label="State"
                   type="text"
                   placeholder="e.g. Tamil Nadu"
                   value={custFormSameAsBilling ? custFormBillingState : custFormDeliveryState}
@@ -608,14 +608,14 @@ export default function CustomerFormView({
                     boxSizing: 'border-box', outline: 'none',
                     cursor: custFormSameAsBilling ? 'not-allowed' : 'text'
                   }}
-                />
+                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="customer-form-pincode" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Pincode
                 </label>
-                <input
+                <input id="customer-form-pincode" name="pincode" aria-label="Pincode"
                   type="text"
                   placeholder="e.g. 600058"
                   value={custFormSameAsBilling ? custFormBillingPincode : custFormDeliveryPincode}
@@ -628,7 +628,7 @@ export default function CustomerFormView({
                     boxSizing: 'border-box', outline: 'none',
                     cursor: custFormSameAsBilling ? 'not-allowed' : 'text'
                   }}
-                />
+                 />
               </div>
             </div>
           </div>

@@ -997,7 +997,7 @@ export default function VendorPerformanceView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="vendor-performance-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2945,7 +2945,7 @@ export default function VendorPerformanceView(props) {
                 <div style={{ padding: '16px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ position: 'relative', flex: 1 }}>
                     <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-                    <input
+                    <input id="vendor-performance-vendor-directory-search" name="vendorDirectorySearch" aria-label="Search vendor by name, supplier, or category"
                       type="text"
                       placeholder="Search vendor by name, supplier, or category..."
                       value={vendorDirectorySearch}
@@ -2959,7 +2959,7 @@ export default function VendorPerformanceView(props) {
                         outline: 'none',
                         boxSizing: 'border-box'
                       }}
-                    />
+                     />
                   </div>
                   <button
                     onClick={exportPerformanceCSV}

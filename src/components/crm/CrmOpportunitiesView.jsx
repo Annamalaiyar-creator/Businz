@@ -213,18 +213,18 @@ export default function CrmOpportunitiesView({
           minWidth: '240px'
         }}>
           <Search size={16} color="#64748B" />
-          <input
+          <input id="crm-opportunities-search-term" name="searchTerm" aria-label="Search opportunities by title, customer, or Opp ID"
             type="text"
             placeholder="Search opportunities by title, customer, or Opp ID..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '13px', width: '100%' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748B' }}>Stage:</span>
-          <select
+          <select id="crm-opportunities-selected-stage-filter" name="selectedStageFilter" aria-label="SelectedStageFilter"
             value={selectedStageFilter}
             onChange={(e) => { setSelectedStageFilter(e.target.value); setCurrentPage(1); }}
             style={{
@@ -271,7 +271,7 @@ export default function CrmOpportunitiesView({
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="crm-opportunities-select-all" name="selectAll" aria-label="SelectAll"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                     checked={currentRows.length > 0 && currentRows.every(r => selectedRows.includes(r.id))}
@@ -284,7 +284,7 @@ export default function CrmOpportunitiesView({
                         setSelectedRows(selectedRows.filter(id => !pageIds.includes(id)));
                       }
                     }}
-                  />
+                   />
                 </th>
                 <th style={{ width: '140px', minWidth: '140px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Opp ID</th>
                 <th style={{ minWidth: '240px', padding: '12px 14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>Title & Scope</th>
@@ -325,7 +325,7 @@ export default function CrmOpportunitiesView({
                   {Array.from({ length: 5 }).map((_, sIdx) => (
                     <tr key={`opp-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                        <input type="checkbox" disabled style={{ opacity: 0.3 }} />
+                        <input id="crm-opportunities-input-1" name="input1" aria-label="Input 1" type="checkbox" disabled style={{ opacity: 0.3 }}  />
                       </td>
                       {Array.from({ length: 6 }).map((_, hIdx) => (
                         <td key={`opp-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
@@ -397,12 +397,12 @@ export default function CrmOpportunitiesView({
                         boxSizing: 'border-box',
                         borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                       }}>
-                        <input
+                        <input id="crm-opportunities-checkbox" name="checkbox" aria-label="Checkbox"
                           type="checkbox"
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                           checked={isChecked}
                           onChange={() => handleSelectRowGeneric(opp.id)}
-                        />
+                         />
                       </td>
 
                       <td
@@ -430,7 +430,7 @@ export default function CrmOpportunitiesView({
 
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <select
+                          <select id="crm-opportunities-stage" name="stage" aria-label="Stage"
                             value={opp.stage}
                             onChange={(e) => handleStageChange(opp, e.target.value)}
                             style={{
@@ -472,7 +472,7 @@ export default function CrmOpportunitiesView({
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Showing per page</span>
-                <select
+                <select id="crm-opportunities-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                   value={rowsPerPage}
                   onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                   style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -546,14 +546,14 @@ export default function CrmOpportunitiesView({
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                <input
+                <input name="pageJump" aria-label="PageJump"
                   type="number"
                   min="1"
                   max={totalPages || 1}
                   defaultValue={safeCurrentPage}
                   id="crm-opps-goto-page-input"
                   style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                />
+                 />
                 <button
                   onClick={() => {
                     const val = parseInt(document.getElementById('crm-opps-goto-page-input')?.value || '1', 10);
@@ -912,55 +912,55 @@ export default function CrmOpportunitiesView({
 
             <form onSubmit={handleCreateSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                <label htmlFor="crm-opportunities-opportunity-title" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                   Opportunity Title *
                 </label>
-                <input
+                <input id="crm-opportunities-opportunity-title" name="opportunityTitle" aria-label="Opportunity Title"
                   type="text"
                   required
                   placeholder="e.g. 500 kW Aluminium Rooftop Structure"
                   value={newOpp.title}
                   onChange={(e) => setNewOpp({ ...newOpp, title: e.target.value })}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-opportunities-customer-epc-account" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Customer / EPC Account *
                   </label>
-                  <input
+                  <input id="crm-opportunities-customer-epc-account" name="customerEPCAccount" aria-label="Customer / EPC Account"
                     type="text"
                     required
                     placeholder="Company Name"
                     value={newOpp.companyName}
                     onChange={(e) => setNewOpp({ ...newOpp, companyName: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-opportunities-commercial-deal-value" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Commercial Deal Value (₹) *
                   </label>
-                  <input
+                  <input id="crm-opportunities-commercial-deal-value" name="commercialDealValue" aria-label="Commercial Deal Value (₹)"
                     type="number"
                     required
                     placeholder="e.g. 1500000"
                     value={newOpp.dealValue}
                     onChange={(e) => setNewOpp({ ...newOpp, dealValue: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-opportunities-structure-type" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Structure Type
                   </label>
-                  <select
+                  <select id="crm-opportunities-structure-type" name="structureType" aria-label="Structure Type"
                     value={newOpp.structureType}
                     onChange={(e) => setNewOpp({ ...newOpp, structureType: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -973,25 +973,25 @@ export default function CrmOpportunitiesView({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-opportunities-capacity-k-w" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Capacity (kW)
                   </label>
-                  <input
+                  <input id="crm-opportunities-capacity-k-w" name="capacityKW" aria-label="Capacity (kW)"
                     type="number"
                     placeholder="e.g. 500"
                     value={newOpp.capacityKw}
                     onChange={(e) => setNewOpp({ ...newOpp, capacityKw: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-opportunities-starting-stage" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Starting Stage
                   </label>
-                  <select
+                  <select id="crm-opportunities-starting-stage" name="startingStage" aria-label="Starting Stage"
                     value={newOpp.stage}
                     onChange={(e) => setNewOpp({ ...newOpp, stage: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
@@ -1003,15 +1003,15 @@ export default function CrmOpportunitiesView({
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label htmlFor="crm-opportunities-target-close-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     Target Close Date
                   </label>
-                  <input
+                  <input id="crm-opportunities-target-close-date" name="targetCloseDate" aria-label="Target Close Date"
                     type="date"
                     value={newOpp.targetCloseDate}
                     onChange={(e) => setNewOpp({ ...newOpp, targetCloseDate: e.target.value })}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                  />
+                   />
                 </div>
               </div>
 

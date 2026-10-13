@@ -311,7 +311,7 @@ export default function WhatsAppQrModal({ isOpen, onClose, onSessionChanged }) {
                       Send Quick Verification Test
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
+                      <input id="whats-app-qr-test-phone" name="testPhone" aria-label="Enter phone with country code ( 919876543210)"
                         type="text"
                         placeholder="Enter phone with country code (e.g. 919876543210)"
                         value={testPhone}
@@ -323,7 +323,7 @@ export default function WhatsAppQrModal({ isOpen, onClose, onSessionChanged }) {
                           border: '1px solid #CBD5E1',
                           fontSize: '12px'
                         }}
-                      />
+                       />
                       <button
                         type="submit"
                         disabled={testSending || !testPhone}

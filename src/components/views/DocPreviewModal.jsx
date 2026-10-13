@@ -216,7 +216,7 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
                 boxShadow: '0 2px 6px rgba(14,116,144,0.3)'
               }}>
                 <Upload size={14} /> Upload Compressed Image (&lt; 5 MB)
-                <input
+                <input id="doc-preview-input-1" name="input1" aria-label="Input 1"
                   type="file"
                   accept=".jpg,.jpeg,.png,.webp,.pdf"
                   style={{ display: 'none' }}
@@ -281,7 +281,7 @@ export default function DocPreviewModal({ previewDocModal, onClose }) {
                       }
                     }
                   }}
-                />
+                 />
               </label>
             </div>
           ) : isImg ? (

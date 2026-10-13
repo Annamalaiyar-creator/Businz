@@ -738,20 +738,20 @@ export default function Customer360PageView({
                 />
 
                 <div style={{ backgroundColor: '#FFFFFF', padding: '12px', borderRadius: '10px', border: `1px solid ${C.line}`, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
+                  <input id="customer360page-new-task-input" name="newTaskInput" aria-label="What task needs to be completed for this customer?"
                     type="text"
                     placeholder="What task needs to be completed for this customer?"
                     value={newTaskInput}
                     onChange={(e) => setNewTaskInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddCustomerTask(custKey)}
                     style={{ flex: 1, minWidth: '200px', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '9px 12px', fontSize: '13px', outline: 'none' }}
-                  />
-                  <input
+                   />
+                  <input id="customer360page-new-task-due-date" name="newTaskDueDate" aria-label="NewTaskDueDate"
                     type="date"
                     value={newTaskDueDate}
                     onChange={(e) => setNewTaskDueDate(e.target.value)}
                     style={{ border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', outline: 'none' }}
-                  />
+                   />
                   <PrimaryButton icon={Plus} onClick={() => handleAddCustomerTask(custKey)}>Add Task</PrimaryButton>
                 </div>
 
@@ -773,13 +773,13 @@ export default function Customer360PageView({
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', transition: 'all 0.15s ease'
                         }}
                       >
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}>
-                          <input
+                        <label htmlFor="customer360page-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}>
+                          <input id="customer360page-checkbox" name="checkbox" aria-label="Checkbox"
                             type="checkbox"
                             checked={task.completed}
                             onChange={() => handleToggleCustomerTask(custKey, task.id)}
                             style={{ accentColor: C.teal, cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
-                          />
+                           />
                           <span style={{ fontSize: '13px', fontWeight: task.completed ? '500' : '700', color: task.completed ? C.muted : C.ink, textDecoration: task.completed ? 'line-through' : 'none' }}>
                             {task.text}
                           </span>
@@ -810,13 +810,13 @@ export default function Customer360PageView({
                 <TabHeading title="Internal CRM Account Notes" subtitle="Shared with sales & engineering reps" />
 
                 <div style={{ backgroundColor: '#FFFFFF', padding: '14px', borderRadius: '10px', border: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <textarea
+                  <textarea id="customer360page-new-note-input" name="newNoteInput" aria-label="Write an internal note, meeting minutes, or project update for this customer"
                     rows={3}
                     placeholder="Write an internal note, meeting minutes, or project update for this customer..."
                     value={newNoteInput}
                     onChange={(e) => setNewNoteInput(e.target.value)}
                     style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
-                  />
+                   />
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <PrimaryButton icon={Send} onClick={() => handleAddCustomerNote(custKey)}>Post Note</PrimaryButton>
                   </div>

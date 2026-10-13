@@ -101,13 +101,13 @@ export default function ProductionTableView({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '340px' }}>
           <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-          <input
+          <input id="production-table-page-config-search-placeholder" name="pageConfigSearchPlaceholder" aria-label="PageConfig searchPlaceholder"
             type="text"
             placeholder={pageConfig.searchPlaceholder}
             value={prodSearchQueryText}
             onChange={(e) => setProdSearchQueryText(e.target.value)}
             style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
@@ -121,7 +121,7 @@ export default function ProductionTableView({
             }}
           />
 
-          <select
+          <select id="production-table-prod-filter-status-select" name="prodFilterStatusSelect" aria-label="ProdFilterStatusSelect"
             value={prodFilterStatusSelect}
             onChange={(e) => {
               setProdFilterStatusSelect(e.target.value);
@@ -204,12 +204,12 @@ export default function ProductionTableView({
             <thead>
               <tr style={{ color: '#334155', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: '700', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input
+                  <input id="production-table-select-row" name="selectRow" aria-label="SelectRow"
                     type="checkbox"
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                     checked={filteredRows.length > 0 && selectedRows.length === filteredRows.length}
                     onChange={(e) => handleSelectAllGeneric(e, filteredRows, 'code')}
-                  />
+                   />
                 </th>
                 {pageConfig.headers.map((h, i) => {
                   const isRight = h.includes('Amount') || h.includes('Cost') || h.includes('Value') || h.includes('Price') || h.includes('Spend');
@@ -280,12 +280,12 @@ export default function ProductionTableView({
                         boxSizing: 'border-box',
                         borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
                       }}>
-                        <input
+                        <input id="production-table-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
                           checked={isChecked}
                           onChange={() => handleSelectRowGeneric(row.code)}
-                        />
+                         />
                       </td>
                       <td
                         onClick={() => onRowClick(row)}
@@ -382,7 +382,7 @@ export default function ProductionTableView({
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>Showing per page</span>
-                  <select
+                  <select id="production-table-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
                     value={rowsPerPage}
                     onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                     style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
@@ -456,14 +456,14 @@ export default function ProductionTableView({
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                  <input
+                  <input name="pageJump" aria-label="PageJump"
                     type="number"
                     min="1"
                     max={totalPages || 1}
                     defaultValue={currentPage}
                     id="bom-goto-page-input"
                     style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                  />
+                   />
                   <button
                     onClick={() => {
                       const val = parseInt(document.getElementById('bom-goto-page-input')?.value || '1', 10);

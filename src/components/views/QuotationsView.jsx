@@ -984,7 +984,7 @@ export default function QuotationsView(props) {
   const renderSelect = (value, onChange, options, style = {}) => {
     return (
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: style.width || (style.minWidth ? 'auto' : '100%'), minWidth: style.minWidth || 'auto', flexShrink: 0 }}>
-        <select
+        <select id="quotations-value" name="value" aria-label="Value"
           value={value}
           onChange={onChange}
           style={{
@@ -2032,13 +2032,13 @@ export default function QuotationsView(props) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '12px 16px', backgroundColor: '#fafbfc', borderRadius: '12px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', backgroundColor: '#f8fafc', width: '380px' }}>
                 <Search style={{ width: '15px', height: '15px', color: '#64748b' }} />
-                <input
+                <input id="quotations-quotation-search-query" name="quotationSearchQuery" aria-label="Search by Quotation No, Customer, Project"
                   type="text"
                   placeholder="Search by Quotation No, Customer, Project..."
                   value={quotationSearchQuery}
                   onChange={(e) => { setQuotationSearchQuery(e.target.value); setQuotationCurrentPage(1); }}
                   style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', color: '#334155' }}
-                />
+                 />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
@@ -2047,7 +2047,7 @@ export default function QuotationsView(props) {
                   <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
                 </div>
 
-                <select value={quotationStatusFilter} onChange={(e) => { setQuotationStatusFilter(e.target.value); setQuotationActiveTab(e.target.value); setQuotationCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
+                <select id="quotations-quotation-status-filter" name="quotationStatusFilter" aria-label="QuotationStatusFilter" value={quotationStatusFilter} onChange={(e) => { setQuotationStatusFilter(e.target.value); setQuotationActiveTab(e.target.value); setQuotationCurrentPage(1); }} style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}>
                   {['All', 'Draft', 'Sent', 'Viewed', 'Accepted', 'Expired', 'Rejected'].map(s => (
                     <option key={s} value={s}>
                       {s === 'All' ? 'Status: All' : s}
@@ -2130,12 +2130,12 @@ export default function QuotationsView(props) {
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', height: '48px' }}>
                       <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', boxSizing: 'border-box' }}>
-                        <input
+                        <input id="quotations-select-all" name="selectAll" aria-label="SelectAll"
                           type="checkbox"
                           onChange={handleSelectAll}
                           checked={currentRows.length > 0 && currentRows.every(r => selectedQuotations.includes(r.id))}
                           style={{ cursor: 'pointer', accentColor: '#0E7490' }}
-                        />
+                         />
                       </th>
                       <th style={{ width: '150px', minWidth: '150px', padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: '700', boxSizing: 'border-box' }}>Quotation No</th>
                       <th style={{ width: '120px', minWidth: '120px', padding: '12px 16px', textAlign: 'left', color: '#475569', fontWeight: '700', boxSizing: 'border-box' }}>Date</th>
@@ -2162,12 +2162,12 @@ export default function QuotationsView(props) {
                             onClick={() => handleSelectRow(row.id)}
                           >
                             <td style={{ textAlign: 'center', padding: '12px 16px' }} onClick={(e) => e.stopPropagation()}>
-                              <input
+                              <input id="quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => handleSelectRow(row.id)}
                                 style={{ cursor: 'pointer' }}
-                              />
+                               />
                             </td>
                             <td style={{ padding: '14px 16px', color: '#2563eb', fontWeight: 'bold' }}>{row.id}</td>
                             <td style={{ padding: '14px 16px', color: '#475569' }}>{row.date}</td>
@@ -2313,7 +2313,7 @@ export default function QuotationsView(props) {
 
                   {/* Rows per page selector */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <select
+                    <select id="quotations-quotation-rows-per-page" name="quotationRowsPerPage" aria-label="QuotationRowsPerPage"
                       value={quotationRowsPerPage}
                       onChange={(e) => { setQuotationRowsPerPage(parseInt(e.target.value)); setQuotationCurrentPage(1); }}
                       style={{ height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 8px', fontSize: '12px', backgroundColor: 'white' }}
@@ -2390,33 +2390,33 @@ export default function QuotationsView(props) {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Customer</label>
-                      <input
+                      <label htmlFor="quotations-customer" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Customer</label>
+                      <input id="quotations-customer" name="customer" aria-label="Customer"
                         type="text"
                         value={editingQuotation.customer}
                         onChange={(e) => setEditingQuotation({ ...editingQuotation, customer: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Project</label>
-                      <input
+                      <label htmlFor="quotations-project" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Project</label>
+                      <input id="quotations-project" name="project" aria-label="Project"
                         type="text"
                         value={editingQuotation.project}
                         onChange={(e) => setEditingQuotation({ ...editingQuotation, project: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Amount</label>
-                      <input
+                      <label htmlFor="quotations-amount" style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>Amount</label>
+                      <input id="quotations-amount" name="amount" aria-label="Amount"
                         type="text"
                         value={editingQuotation.amount}
                         onChange={(e) => setEditingQuotation({ ...editingQuotation, amount: e.target.value })}
                         style={{ height: '36px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 12px', fontSize: '13px' }}
-                      />
+                       />
                     </div>
                   </div>
 

@@ -1712,7 +1712,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                         }}>
                           <Palette size={18} color="#FFFFFF" />
                         </div>
-                        <input
+                        <input id="vrmtemplate-studio-active-accent" name="activeAccent" aria-label="ActiveAccent"
                           type="color"
                           value={activeAccent}
                           onChange={(e) => updateSetting({ accentColor: e.target.value })}
@@ -1725,7 +1725,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                             height: '100%',
                             cursor: 'pointer'
                           }}
-                        />
+                         />
                       </label>
 
                       {/* Hex Code Input */}
@@ -1734,7 +1734,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                           Hex Color Code (#)
                         </label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                          <input
+                          <input id="vrmtemplate-studio-active-accent" name="activeAccent" aria-label="ActiveAccent"
                             type="text"
                             maxLength={7}
                             value={activeAccent}
@@ -1755,7 +1755,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                               borderRadius: '6px',
                               outline: 'none'
                             }}
-                          />
+                           />
                         </div>
                       </div>
                     </div>
@@ -1852,7 +1852,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                     border: '1px dashed #CBD5E1',
                     textAlign: 'center'
                   }}>
-                    <input
+                    <input id="vrmtemplate-studio-input-1" name="input1" aria-label="Input 1"
                       ref={logoInputRef}
                       type="file"
                       accept="image/*"
@@ -1863,7 +1863,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                         const compressed = await compressImageFile(file, 600, 0.9);
                         updateSetting({ customLogoUrl: compressed, showLogo: true });
                       }}
-                    />
+                     />
 
                     <button
                       type="button"
@@ -1972,7 +1972,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                      <input
+                      <input id="vrmtemplate-studio-input-2" name="input2" aria-label="Input 2"
                         ref={stampInputRef}
                         type="file"
                         accept="image/*"
@@ -1983,7 +1983,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                           const compressed = await compressImageFile(file, 400, 0.9);
                           updateSetting({ customStampUrl: compressed, stampMode: 'custom' });
                         }}
-                      />
+                       />
                       <button
                         type="button"
                         onClick={() => stampInputRef.current?.click()}
@@ -2069,7 +2069,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                           }}
                         >
                           <span>{col.label}</span>
-                          <input
+                          <input id="vrmtemplate-studio-checkbox" name="checkbox" aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={(e) => {
@@ -2080,7 +2080,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                               }
                             }}
                             style={{ accentColor: activeAccent, cursor: 'pointer' }}
-                          />
+                           />
                         </label>
                       );
                     })}
@@ -2132,7 +2132,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                           }}
                         >
                           <span>{sec.label}</span>
-                          <input
+                          <input id="vrmtemplate-studio-checkbox" name="checkbox" aria-label="Checkbox"
                             type="checkbox"
                             checked={isChecked}
                             onChange={(e) => {
@@ -2143,7 +2143,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                               }
                             }}
                             style={{ accentColor: activeAccent, cursor: 'pointer' }}
-                          />
+                           />
                         </label>
                       );
                     })}
@@ -2335,8 +2335,8 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
             </p>
 
             <div style={{ marginBottom: '14px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155' }}>Template Name</label>
-              <input
+              <label htmlFor="vrmtemplate-studio-template-name" style={{ fontSize: '11px', fontWeight: '700', color: '#334155' }}>Template Name</label>
+              <input id="vrmtemplate-studio-template-name" name="templateName" aria-label="Template Name"
                 type="text"
                 autoFocus
                 placeholder="e.g. Commercial PI (Zero Rates)"
@@ -2351,12 +2351,12 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                   fontSize: '13px',
                   boxSizing: 'border-box'
                 }}
-              />
+               />
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155' }}>Description (Optional)</label>
-              <textarea
+              <label htmlFor="vrmtemplate-studio-description-optional" style={{ fontSize: '11px', fontWeight: '700', color: '#334155' }}>Description (Optional)</label>
+              <textarea id="vrmtemplate-studio-description-optional" name="descriptionOptional" aria-label="Description (Optional)"
                 rows={2}
                 placeholder="Short description of this template variant..."
                 value={newTemplateDesc}
@@ -2371,7 +2371,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                   boxSizing: 'border-box',
                   resize: 'none'
                 }}
-              />
+               />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>

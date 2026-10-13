@@ -25,16 +25,16 @@ export function CloseInvoiceReasonModal({ closeInvoiceReasonModal, onClose, setI
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
+          <label htmlFor="invoice-modals-close-reason-text" style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
             Why are you closing this invoice without sending the product? <span style={{ color: '#DC2626' }}>*</span>
           </label>
-          <textarea
+          <textarea id="invoice-modals-close-reason-text" name="closeReasonText" aria-label="Why are you closing this invoice without sending the product?"
             value={closeReasonText}
             onChange={(e) => setCloseReasonText(e.target.value)}
             placeholder="Specify reason (e.g., Customer cancelled missing items / Short supply agreed / Refund issued)..."
             rows={4}
             style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
-          />
+           />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
