@@ -2727,8 +2727,7 @@ app.get('/api/customers', async (req, res) => {
       return res.json(all);
     }
 
-    const defaultLimit = limitParam > 0 ? limitParam : 300;
-    const bounded = all.slice(0, defaultLimit).map(formatSummary);
+    const bounded = limitParam > 0 ? all.slice(0, limitParam).map(formatSummary) : all.map(formatSummary);
     return res.json(bounded);
   } catch (err) {
     console.error('Error in GET /api/customers:', err);
