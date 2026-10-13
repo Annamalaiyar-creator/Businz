@@ -191,32 +191,6 @@ export default function BomOrdersView(props) {
 
         // Immediately unblock table loading as soon as BOM records are available
         if (isInitial) setTableLoading(false);
-
-        // Sync Customers in background without delaying BOM table rendering
-        (async () => {
-          try {
-            let custs = await fetchCloudStore('customer_store', []);
-            if (!Array.isArray(custs) || custs.length === 0) {
-              const custRes = await fetch('/api/customers');
-              if (custRes.ok) {
-                const fetchedCusts = await custRes.json();
-                if (Array.isArray(fetchedCusts) && fetchedCusts.length > 0) custs = fetchedCusts;
-              }
-            }
-            if (Array.isArray(custs) && custs.length > 0) {
-              setCustomerList(prev => {
-                if (Array.isArray(prev) && prev.length === custs.length) {
-                  const idPrev0 = prev[0]?.customerCode || prev[0]?.id;
-                  const idCust0 = custs[0]?.customerCode || custs[0]?.id;
-                  const idPrevEnd = prev[prev.length - 1]?.customerCode || prev[prev.length - 1]?.id;
-                  const idCustEnd = custs[custs.length - 1]?.customerCode || custs[custs.length - 1]?.id;
-                  if (idPrev0 === idCust0 && idPrevEnd === idCustEnd) return prev;
-                }
-                return custs;
-              });
-            }
-          } catch (_) {}
-        })();
       } catch (err) {
         console.error('Error in syncFromCloud:', err);
       } finally {
@@ -297,10 +271,7 @@ export default function BomOrdersView(props) {
       debouncedSync();
     };
 
-    window.addEventListener('storage', handleStorageUpdate);
-    window.addEventListener('controlroom_storage_update', handleStorageUpdate);
     window.addEventListener('controlroom_store_update', handleStoreUpdate);
-    window.addEventListener('controlroom_customer_update', handleStorageUpdate);
     window.addEventListener('controlroom_bom_updated', handleStorageUpdate);
     window.addEventListener('controlroom_bom_store_updated', handleStorageUpdate);
     window.addEventListener('visibilitychange', handleVisibilityChange);
@@ -310,10 +281,7 @@ export default function BomOrdersView(props) {
       clearInterval(fallbackInterval);
       if (debounceSyncTimerRef.current) clearTimeout(debounceSyncTimerRef.current);
       if (realtimeSub && realtimeSub.unsubscribe) realtimeSub.unsubscribe();
-      window.removeEventListener('storage', handleStorageUpdate);
-      window.removeEventListener('controlroom_storage_update', handleStorageUpdate);
       window.removeEventListener('controlroom_store_update', handleStoreUpdate);
-      window.removeEventListener('controlroom_customer_update', handleStorageUpdate);
       window.removeEventListener('controlroom_bom_updated', handleStorageUpdate);
       window.removeEventListener('controlroom_bom_store_updated', handleStorageUpdate);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -323,6 +291,17 @@ export default function BomOrdersView(props) {
 
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
+
+  // Lazy-load customer list only when Create BOM Form is opened (zero impact on main table)
+  useEffect(() => {
+    if (!showBOMForm || customerList.length > 0) return;
+    fetch('/api/customers')
+      .then(res => res.ok ? res.json() : [])
+      .then(custs => {
+        if (Array.isArray(custs) && custs.length > 0) setCustomerList(custs);
+      })
+      .catch(() => {});
+  }, [showBOMForm, customerList.length]);
   const [confirmingBomModal, setConfirmingBomModal] = useState(null);
   const [uploadPaymentModal, setUploadPaymentModal] = useState(null);
   const [paymentProofFile, setPaymentProofFile] = useState(null);

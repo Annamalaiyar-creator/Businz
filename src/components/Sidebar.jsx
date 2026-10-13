@@ -32,6 +32,14 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   }, []);
 
   useEffect(() => {
+    let updateTimer = null;
+    const debouncedUpdateCounts = () => {
+      if (updateTimer) clearTimeout(updateTimer);
+      updateTimer = setTimeout(() => {
+        updateCounts();
+      }, 1500);
+    };
+
     const updateCounts = async () => {
       try {
         const [boms, pos, grnsCloud] = await Promise.all([
@@ -62,11 +70,12 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
       } catch (_) {}
     };
     updateCounts();
-    window.addEventListener('controlroom_storage_update', updateCounts);
-    window.addEventListener('central_inventory_updated', updateCounts);
+    window.addEventListener('controlroom_storage_update', debouncedUpdateCounts);
+    window.addEventListener('central_inventory_updated', debouncedUpdateCounts);
     return () => {
-      window.removeEventListener('controlroom_storage_update', updateCounts);
-      window.removeEventListener('central_inventory_updated', updateCounts);
+      if (updateTimer) clearTimeout(updateTimer);
+      window.removeEventListener('controlroom_storage_update', debouncedUpdateCounts);
+      window.removeEventListener('central_inventory_updated', debouncedUpdateCounts);
     };
   }, []);
 

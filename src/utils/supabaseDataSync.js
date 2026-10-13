@@ -70,11 +70,16 @@ export function toConsumerCustomer(c) {
     state: c.dispatch_state || c.state || '',
     pincode: c.dispatch_pincode || c.pincode || ''
   };
-  const phone = (c.phone && c.phone !== '—') ? c.phone : '';
-  const email = (c.email && c.email !== '—') ? c.email : '';
+  const pContact = c.primary_contact || {};
+  const rawPhone = (c.phone && c.phone !== '—') ? c.phone : (pContact.phone || pContact.altPhone || pContact.whatsapp || '');
+  const cleanPhone = String(rawPhone || '').replace(/^'/, '').trim();
+  const email = (c.email && c.email !== '—') ? c.email : (pContact.email || '');
   const gst = (c.gst_number && c.gst_number !== '—') ? c.gst_number : '';
   const pan = (c.pan_number && c.pan_number !== '—') ? c.pan_number : '';
   const rep = c.assigned_salesperson || 'Sales Rep';
+  const contactName = (pContact.name && pContact.name !== '—') 
+    ? pContact.name 
+    : (c.customer_name && c.customer_name !== comp ? c.customer_name : '');
 
   return {
     ...c,
@@ -85,6 +90,8 @@ export function toConsumerCustomer(c) {
     c2: comp,
     customerName: name,
     c3: name,
+    contactPerson: contactName,
+    contact: contactName,
     customerType: c.customer_type || 'Customer',
     industry: c.industry || 'Solar Energy / Infrastructure',
     gstNumber: gst || '—',
@@ -112,16 +119,17 @@ export function toConsumerCustomer(c) {
     salesPerson: rep,
     c8: rep,
     source: c.source || 'Manual',
-    primaryContact: c.primary_contact || {
-      name: name,
-      phone: phone,
-      whatsapp: phone,
+    primaryContact: {
+      ...pContact,
+      name: contactName || name,
+      phone: cleanPhone,
+      whatsapp: cleanPhone,
       email: email
     },
     email: email || '—',
     c5: email || '—',
-    phone: phone || '—',
-    c4: phone || '—',
+    phone: cleanPhone || '—',
+    c4: cleanPhone || '—',
     status: (c.status || 'Active').toUpperCase(),
     notes: c.notes || '',
     createdAt: c.created_at || new Date().toISOString(),
@@ -1235,8 +1243,23 @@ export async function fetchBomAccountsVerification(orderId) {
  * @returns {Promise<Array|Object>}
  */
 export async function fetchCloudStore(storeKey, fallbackData = []) {
-  // CANONICAL CUSTOMER READ PATH: Query public.customers directly (Zero leaves table egress)
+  // CANONICAL CUSTOMER READ PATH: Query local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
+    // 1. Try local server memory cache first (Zero Supabase PostgREST egress)
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch('/api/customers', { signal: controller.signal }).catch(() => null);
+      clearTimeout(tId);
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json && Array.isArray(json) && json.length > 0) {
+          return json;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Direct query fallback: bounded by 500 rows to prevent main-thread freeze
     try {
       const { data: dbCustomers, error: custErr } = await supabase
         .from('customers')
@@ -1247,7 +1270,8 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
           same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
           source, primary_contact, email, phone, status, notes, created_at, updated_at
         `)
-        .order('company_name', { ascending: true });
+        .order('company_name', { ascending: true })
+        .limit(500);
 
       if (!custErr && Array.isArray(dbCustomers) && dbCustomers.length > 0) {
         return dbCustomers.map(c => toConsumerCustomer(c));

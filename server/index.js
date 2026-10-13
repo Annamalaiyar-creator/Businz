@@ -122,58 +122,75 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
       .order('company_name', { ascending: true });
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(c => ({
-        id: c.customer_code || c.id,
-        customerCode: c.customer_code,
-        code: c.customer_code,
-        companyName: c.company_name,
-        c2: c.company_name,
-        customerName: c.customer_name || c.company_name,
-        c3: c.customer_name || c.company_name,
-        customerType: c.customer_type || 'Customer',
-        industry: c.industry || '',
-        gstNumber: c.gst_number || '—',
-        gstNo: c.gst_number || '—',
-        address1: c.billing_address_obj?.address1 || c.billing_address || '',
-        address2: c.billing_address_obj?.address2 || '',
-        billingAddress1: c.billing_address_obj?.address1 || c.billing_address || '',
-        billingAddress2: c.billing_address_obj?.address2 || '',
-        address: c.billing_address || '',
-        city: c.city || '',
-        state: c.state || '',
-        pincode: c.pincode || '',
-        billingAddress: c.billing_address || '',
-        c6: c.billing_address || '',
-        billingAddressObj: c.billing_address_obj || {},
-        dispatchAddress1: c.delivery_address_obj?.address1 || c.dispatch_address || '',
-        dispatchAddress2: c.delivery_address_obj?.address2 || '',
-        shippingAddress1: c.delivery_address_obj?.address1 || c.dispatch_address || '',
-        shippingAddress2: c.delivery_address_obj?.address2 || '',
-        dispatchAddress: c.dispatch_address || '',
-        deliveryAddress: c.dispatch_address || '',
-        c7: c.dispatch_address || '',
-        dispatchCity: c.dispatch_city || '',
-        dispatchState: c.dispatch_state || '',
-        dispatchPincode: c.dispatch_pincode || '',
-        deliveryAddressObj: c.delivery_address_obj || {},
-        sameAsBilling: Boolean(c.same_as_billing),
-        creditLimit: Number(c.credit_limit || 0),
-        creditDays: Number(c.credit_days || 0),
-        paymentTerms: c.payment_terms || 'Due on Receipt',
-        assignedSalesperson: c.assigned_salesperson || 'Sales Rep',
-        salesPerson: c.assigned_salesperson || 'Sales Rep',
-        c8: c.assigned_salesperson || 'Sales Rep',
-        source: c.source || 'Manual',
-        primaryContact: c.primary_contact || {},
-        email: c.email || '—',
-        c5: c.email || '—',
-        phone: c.phone || '—',
-        c4: c.phone || '—',
-        status: (c.status || 'Active').toUpperCase(),
-        notes: c.notes || '',
-        createdAt: c.created_at || new Date().toISOString(),
-        updatedAt: c.updated_at || new Date().toISOString()
-      }));
+      const mapped = data.map(c => {
+        const pContact = c.primary_contact || {};
+        const effectiveContact = (pContact.name && pContact.name !== '—') 
+          ? pContact.name 
+          : (c.customer_name && c.customer_name !== c.company_name ? c.customer_name : '');
+        const rawPhone = (c.phone && c.phone !== '—') ? c.phone : (pContact.phone || pContact.altPhone || pContact.whatsapp || '—');
+        const cleanPhone = String(rawPhone || '').replace(/^'/, '').trim();
+        const effectiveEmail = (c.email && c.email !== '—') ? c.email : (pContact.email || '—');
+
+        return {
+          id: c.customer_code || c.id,
+          customerCode: c.customer_code,
+          code: c.customer_code,
+          companyName: c.company_name,
+          c2: c.company_name,
+          customerName: c.customer_name || c.company_name,
+          c3: c.customer_name || c.company_name,
+          contactPerson: effectiveContact,
+          contact: effectiveContact,
+          customerType: c.customer_type || 'Customer',
+          industry: c.industry || '',
+          gstNumber: c.gst_number || '—',
+          gstNo: c.gst_number || '—',
+          address1: c.billing_address_obj?.address1 || c.billing_address || '',
+          address2: c.billing_address_obj?.address2 || '',
+          billingAddress1: c.billing_address_obj?.address1 || c.billing_address || '',
+          billingAddress2: c.billing_address_obj?.address2 || '',
+          address: c.billing_address || '',
+          city: c.city || '',
+          state: c.state || '',
+          pincode: c.pincode || '',
+          billingAddress: c.billing_address || '',
+          c6: c.billing_address || '',
+          billingAddressObj: c.billing_address_obj || {},
+          dispatchAddress1: c.delivery_address_obj?.address1 || c.dispatch_address || '',
+          dispatchAddress2: c.delivery_address_obj?.address2 || '',
+          shippingAddress1: c.delivery_address_obj?.address1 || c.dispatch_address || '',
+          shippingAddress2: c.delivery_address_obj?.address2 || '',
+          dispatchAddress: c.dispatch_address || '',
+          deliveryAddress: c.dispatch_address || '',
+          c7: c.dispatch_address || '',
+          dispatchCity: c.dispatch_city || '',
+          dispatchState: c.dispatch_state || '',
+          dispatchPincode: c.dispatch_pincode || '',
+          deliveryAddressObj: c.delivery_address_obj || {},
+          sameAsBilling: Boolean(c.same_as_billing),
+          creditLimit: Number(c.credit_limit || 0),
+          creditDays: Number(c.credit_days || 0),
+          paymentTerms: c.payment_terms || 'Due on Receipt',
+          assignedSalesperson: c.assigned_salesperson || 'Sales Rep',
+          salesPerson: c.assigned_salesperson || 'Sales Rep',
+          c8: c.assigned_salesperson || 'Sales Rep',
+          source: c.source || 'Manual',
+          primaryContact: {
+            ...pContact,
+            name: effectiveContact || c.company_name,
+            phone: cleanPhone !== '—' ? cleanPhone : (pContact.phone || ''),
+            email: effectiveEmail !== '—' ? effectiveEmail : (pContact.email || '')
+          },
+          email: effectiveEmail,
+          c5: effectiveEmail,
+          phone: cleanPhone,
+          c4: cleanPhone,
+          status: (c.status || 'Active').toUpperCase(),
+          notes: c.notes || '',
+          createdAt: c.created_at || new Date().toISOString(),
+          updatedAt: c.updated_at || new Date().toISOString()
+        };
+      });
 
       supabaseMemoryStore.customer_store = mapped;
       supabaseMemoryStore.crm_customers = mapped;

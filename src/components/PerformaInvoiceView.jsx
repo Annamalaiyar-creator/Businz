@@ -1011,33 +1011,71 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (isMounted && unified.length > 0) {
           setCustomerList(unified);
           try {
-            const lightweight = unified.slice(0, 500).map(c => ({
-              id: c.id,
-              customerCode: c.customerCode || c.code || '',
-              companyName: c.companyName || c.name || c.c2 || '',
-              name: c.companyName || c.name || '',
-              customerName: c.customerName || c.name || '',
-              contactPerson: c.contactPerson || c.contact || '',
-              contact: c.contact || c.contactPerson || '',
-              phone: c.phone || c.mobile || '',
-              mobile: c.mobile || c.phone || '',
-              email: c.email || '',
-              gstNo: c.gstNo || c.gstNumber || c.gst || '',
-              gst: c.gst || c.gstNumber || c.gstNo || '',
-              gstNumber: c.gstNumber || c.gstNo || c.gst || '',
-              billingAddress: c.billingAddress || c.address1 || c.address || '',
-              address1: c.address1 || c.billingAddress || c.address || '',
-              address: c.address || c.billingAddress || c.address1 || '',
-              city: c.city || '',
-              state: c.state || '',
-              pincode: c.pincode || '',
-              dispatchAddress: c.dispatchAddress || c.deliveryAddress || '',
-              deliveryAddress: c.deliveryAddress || c.dispatchAddress || '',
-              dispatchCity: c.dispatchCity || '',
-              dispatchState: c.dispatchState || '',
-              dispatchPincode: c.dispatchPincode || '',
-              paymentTerms: c.paymentTerms || ''
-            }));
+            const lightweight = unified.slice(0, 500).map(c => {
+              const pContact = c.primaryContact || {};
+              const cPerson = (c.contactPerson && c.contactPerson !== '—' ? c.contactPerson : '') ||
+                              (c.contact && c.contact !== '—' ? c.contact : '') ||
+                              pContact.name ||
+                              (c.customerName && c.customerName !== c.companyName ? c.customerName : '') ||
+                              '';
+              const rawPh = (c.phone && c.phone !== '—' ? c.phone : '') ||
+                            (c.mobile && c.mobile !== '—' ? c.mobile : '') ||
+                            pContact.phone || pContact.altPhone || pContact.whatsapp || '';
+              const cleanPh = String(rawPh || '').replace(/^'/, '').trim();
+              const em = (c.email && c.email !== '—' ? c.email : '') || pContact.email || '';
+              const gst = (c.gstNo && c.gstNo !== '—' ? c.gstNo : '') ||
+                          (c.gstNumber && c.gstNumber !== '—' ? c.gstNumber : '') ||
+                          (c.gst && c.gst !== '—' ? c.gst : '') || '';
+              const bAddr = c.billingAddress || c.address1 || c.address || c.street || c.billingAddressObj?.address1 || c.billingAddressObj?.address || '';
+              const dAddr = c.dispatchAddress || c.deliveryAddress || c.dispatchAddress1 || c.deliveryAddressObj?.address1 || c.deliveryAddressObj?.address || bAddr;
+
+              return {
+                id: c.id || c.customerCode || '',
+                customerCode: c.customerCode || c.code || '',
+                companyName: c.companyName || c.name || c.c2 || '',
+                name: c.companyName || c.name || '',
+                customerName: c.customerName || cPerson || c.companyName || '',
+                contactPerson: cPerson,
+                contact: cPerson,
+                phone: cleanPh,
+                mobile: cleanPh,
+                email: em,
+                gstNo: gst,
+                gst: gst,
+                gstNumber: gst,
+                primaryContact: {
+                  name: cPerson || c.companyName || '',
+                  phone: cleanPh,
+                  whatsapp: cleanPh,
+                  email: em
+                },
+                billingAddress: bAddr,
+                address1: bAddr,
+                address: bAddr,
+                city: c.city || c.billingAddressObj?.city || '',
+                state: c.state || c.billingAddressObj?.state || '',
+                pincode: c.pincode || c.pinCode || c.zip || c.billingAddressObj?.pincode || '',
+                billingAddressObj: c.billingAddressObj || {
+                  address: bAddr,
+                  city: c.city || '',
+                  state: c.state || '',
+                  pincode: c.pincode || ''
+                },
+                dispatchAddress: dAddr,
+                deliveryAddress: dAddr,
+                dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || c.city || '',
+                dispatchState: c.dispatchState || c.deliveryAddressObj?.state || c.state || '',
+                dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || c.pincode || '',
+                deliveryAddressObj: c.delivery_address_obj || c.deliveryAddressObj || {
+                  address: dAddr,
+                  city: c.dispatchCity || c.city || '',
+                  state: c.dispatchState || c.state || '',
+                  pincode: c.dispatchPincode || c.pincode || ''
+                },
+                sameAsBilling: c.sameAsBilling !== false,
+                paymentTerms: c.paymentTerms || ''
+              };
+            });
             localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
             localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
           } catch (_) {}
@@ -1288,7 +1326,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           dispatchCity: c.dispatchCity || existing.dispatchCity || '',
           dispatchState: c.dispatchState || existing.dispatchState || '',
           dispatchPincode: c.dispatchPincode || existing.dispatchPincode || '',
-          paymentTerms: c.paymentTerms || existing.paymentTerms || ''
+          paymentTerms: c.paymentTerms || existing.paymentTerms || '',
+          primaryContact: c.primaryContact || existing.primaryContact || {},
+          billingAddressObj: c.billingAddressObj || existing.billingAddressObj || {},
+          deliveryAddressObj: c.deliveryAddressObj || existing.deliveryAddressObj || {}
         });
       }
     });
@@ -1345,35 +1386,41 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     }
 
     if (found) {
+      const pContact = found.primaryContact || {};
       const gstVal = (found.gst && found.gst !== '—' ? found.gst : '') ||
                      (found.gstNumber && found.gstNumber !== '—' ? found.gstNumber : '') ||
                      (found.gstNo && found.gstNo !== '—' ? found.gstNo : '') ||
                      (found.gstin && found.gstin !== '—' ? found.gstin : '') || '';
-      if (gstVal) setGstNo(gstVal);
+      setGstNo(gstVal);
 
       const contactVal = (found.contactPerson && found.contactPerson !== '—' ? found.contactPerson : '') ||
                          (found.contact && found.contact !== '—' ? found.contact : '') ||
-                         found.primaryContact?.name ||
-                         (found.customerName && found.customerName !== nameToSet && found.customerName !== '—' ? found.customerName : '') || '';
-      if (contactVal) setContactPerson(contactVal);
+                         (pContact.name && pContact.name !== '—' ? pContact.name : '') ||
+                         (found.customerName && found.customerName !== nameToSet && found.customerName !== '—' ? found.customerName : '') ||
+                         found.customerName || '';
+      setContactPerson(contactVal);
 
-      const phoneVal = (found.phone && found.phone !== '—' ? found.phone : '') ||
+      const phoneRaw = (found.phone && found.phone !== '—' ? found.phone : '') ||
                        (found.mobile && found.mobile !== '—' ? found.mobile : '') ||
-                       found.primaryContact?.phone ||
-                       found.primaryContact?.whatsapp ||
+                       (pContact.phone && pContact.phone !== '—' ? pContact.phone : '') ||
+                       (pContact.altPhone && pContact.altPhone !== '—' ? pContact.altPhone : '') ||
+                       (pContact.whatsapp && pContact.whatsapp !== '—' ? pContact.whatsapp : '') ||
+                       (found.altPhone && found.altPhone !== '—' ? found.altPhone : '') ||
                        (found.c4 && found.c4 !== '—' ? found.c4 : '') || '';
-      if (phoneVal) setPhone(phoneVal);
+      const phoneVal = String(phoneRaw || '').replace(/^'/, '').trim();
+      setPhone(phoneVal);
 
       const emailVal = (found.email && found.email !== '—' ? found.email : '') ||
-                       found.primaryContact?.email ||
+                       (pContact.email && pContact.email !== '—' ? pContact.email : '') ||
                        (found.c5 && found.c5 !== '—' ? found.c5 : '') || '';
-      if (emailVal) setEmail(emailVal);
+      setEmail(emailVal);
 
       const termsVal = found.paymentTerms || found.terms || '';
       if (termsVal) setPaymentTerms(termsVal);
 
       const bAddrObj = found.billingAddressObj || {};
       const street = (found.billingAddress && found.billingAddress !== '—' ? found.billingAddress : '') ||
+                     (found.billingAddress1 && found.billingAddress1 !== '—' ? found.billingAddress1 : '') ||
                      (found.address1 && found.address1 !== '—' ? found.address1 : '') ||
                      (found.address && found.address !== '—' ? found.address : '') ||
                      (found.street && found.street !== '—' ? found.street : '') ||
@@ -1392,10 +1439,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       bAddrObj.pincode ||
                       '';
 
-      if (street) setBillingStreet(street);
-      if (city) setBillingCity(city);
-      if (state) setBillingState(state);
-      if (pincode) setBillingPincode(pincode);
+      setBillingStreet(street);
+      setBillingCity(city);
+      setBillingState(state);
+      setBillingPincode(pincode);
 
       const dAddrObj = found.deliveryAddressObj || {};
       const dStreet = (found.dispatchAddress && found.dispatchAddress !== '—' ? found.dispatchAddress : '') ||
@@ -1410,18 +1457,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const dState = (found.dispatchState && found.dispatchState !== '—' ? found.dispatchState : '') || dAddrObj.state || state;
       const dPincode = (found.dispatchPincode && found.dispatchPincode !== '—' ? found.dispatchPincode : '') || dAddrObj.pincode || pincode;
 
-      setDeliveryStreet(dStreet || street);
-      setDeliveryCity(dCity || city);
-      setDeliveryState(dState || state);
-      setDeliveryPincode(dPincode || pincode);
-
-      if (found.sameAsBilling !== undefined) {
-        setSameAsBilling(Boolean(found.sameAsBilling));
-      } else if (dStreet && street && dStreet !== street) {
-        setSameAsBilling(false);
-      } else {
-        setSameAsBilling(true);
-      }
+      const isSame = (found.sameAsBilling !== false && (!dStreet || dStreet === street));
+      setSameAsBilling(isSame);
+      setDeliveryStreet(isSame ? street : (dStreet || street));
+      setDeliveryCity(isSame ? city : (dCity || city));
+      setDeliveryState(isSame ? state : (dState || state));
+      setDeliveryPincode(isSame ? pincode : (dPincode || pincode));
     }
   };
 
@@ -3784,6 +3825,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           return (
                             <div
                               key={idx}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleSelectCustomer(c);
+                                setIsCustomerDropdownOpen(false);
+                              }}
                               onClick={() => {
                                 handleSelectCustomer(c);
                                 setIsCustomerDropdownOpen(false);
