@@ -116,17 +116,34 @@ export default function TypeableProductSelect({
     }
   }, [isOpen]);
 
+  const [catalogTick, setCatalogTick] = useState(0);
+
+  // Live listener to auto-refresh dropdown whenever products or inventory are updated anywhere
+  useEffect(() => {
+    const handleCatalogUpdate = () => {
+      setCatalogTick(t => t + 1);
+    };
+    window.addEventListener('controlroom_items_update', handleCatalogUpdate);
+    window.addEventListener('central_inventory_updated', handleCatalogUpdate);
+    window.addEventListener('controlroom_store_update', handleCatalogUpdate);
+    window.addEventListener('controlroom_storage_update', handleCatalogUpdate);
+    window.addEventListener('storage', handleCatalogUpdate);
+    return () => {
+      window.removeEventListener('controlroom_items_update', handleCatalogUpdate);
+      window.removeEventListener('central_inventory_updated', handleCatalogUpdate);
+      window.removeEventListener('controlroom_store_update', handleCatalogUpdate);
+      window.removeEventListener('controlroom_storage_update', handleCatalogUpdate);
+      window.removeEventListener('storage', handleCatalogUpdate);
+    };
+  }, []);
+
   // Resolved active items list with fallback to full products catalog
   const activeItemsList = useMemo(() => {
     let list = [];
-    if (Array.isArray(itemsList) && itemsList.length > 0) {
-      list = itemsList;
-    } else {
-      try {
-        list = getFullProductsCatalogWithStock();
-      } catch (_) {
-        list = [];
-      }
+    try {
+      list = getFullProductsCatalogWithStock(itemsList);
+    } catch (_) {
+      list = Array.isArray(itemsList) && itemsList.length > 0 ? itemsList : [];
     }
     try {
       const delRaw = localStorage.getItem('controlroom_deleted_raw_materials');
@@ -140,7 +157,7 @@ export default function TypeableProductSelect({
       }
     } catch (_) {}
     return list;
-  }, [itemsList]);
+  }, [itemsList, catalogTick]);
 
   // Filter items based on query
   // Filter items based on query (displays ALL catalog products without artificial cutoffs)

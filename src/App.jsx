@@ -457,14 +457,14 @@ function App() {
 
     // Listen to real-time inventory updates so all logged-in employees see stock updates with 0s latency
     const handleRawUpdate = (e) => {
-      const updated = e?.detail?.rawMaterials || e?.detail?.items || e?.detail?.storeData;
+      const updated = e?.detail?.rawMaterials || e?.detail?.items || (e?.detail?.item ? [e.detail.item] : null) || e?.detail?.storeData;
       if (Array.isArray(updated) && updated.length > 0) {
         setItemsList(prev => {
           if (!Array.isArray(prev)) return prev;
           const rawMap = new Map();
           updated.forEach(rm => {
-            const rawK = String(rm.code || rm.sku || rm.itemId || rm.name).toUpperCase().trim();
-            if (/^\d{10,}$/.test(rawK)) return;
+            const rawK = String(rm.code || rm.sku || rm.itemId || rm.name || '').toUpperCase().trim();
+            if (!rawK || /^\d{10,}$/.test(rawK)) return;
             const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
             rawMap.set(rawK, rm);
             rawMap.set(canonK, rm);
@@ -472,13 +472,14 @@ function App() {
           });
           const matchedKeys = new Set();
           const nextItems = prev.map(it => {
-            const rawK = String(it.code || it.sku || it.itemId || it.name).toUpperCase().trim();
+            const rawK = String(it.code || it.sku || it.itemId || it.name || '').toUpperCase().trim();
             const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
             const nameK = it.name ? String(it.name).toUpperCase().trim() : '';
             const rm = rawMap.get(rawK) || rawMap.get(canonK) || (nameK && rawMap.get(nameK));
             if (rm) {
               matchedKeys.add(rawK);
               matchedKeys.add(canonK);
+              if (nameK) matchedKeys.add(nameK);
               return {
                 ...it,
                 stock: rm.stock !== undefined ? rm.stock : it.stock,
@@ -489,16 +490,35 @@ function App() {
             }
             return it;
           });
-          return nextItems;
+
+          // Also append any newly created products not yet in itemsList
+          const brandNewItems = [];
+          updated.forEach(rm => {
+            const rawK = String(rm.code || rm.sku || rm.itemId || rm.name || '').toUpperCase().trim();
+            const canonK = CANONICAL_PRODUCT_ALIASES[rawK] || rawK;
+            const nameK = rm.name ? String(rm.name).toUpperCase().trim() : '';
+            if (rawK && !matchedKeys.has(rawK) && !matchedKeys.has(canonK) && (!nameK || !matchedKeys.has(nameK))) {
+              brandNewItems.push(rm);
+              matchedKeys.add(rawK);
+              if (nameK) matchedKeys.add(nameK);
+            }
+          });
+
+          return [...brandNewItems, ...nextItems];
         });
+        try {
+          window.dispatchEvent(new Event('central_inventory_updated'));
+        } catch (_) {}
       }
     };
 
     window.addEventListener('controlroom_raw_materials_update', handleRawUpdate);
     window.addEventListener('controlroom_items_update', handleRawUpdate);
+    window.addEventListener('controlroom_store_update', handleRawUpdate);
     return () => {
       window.removeEventListener('controlroom_raw_materials_update', handleRawUpdate);
       window.removeEventListener('controlroom_items_update', handleRawUpdate);
+      window.removeEventListener('controlroom_store_update', handleRawUpdate);
     };
   }, []);
 

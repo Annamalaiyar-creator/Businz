@@ -292,25 +292,23 @@ export function createLocalDbClient(memoryStore = {}) {
         // Execution via Promise then()
         async then(resolve, reject) {
           try {
-            // 1. If PostgreSQL is connected, attempt SQL execution
-            if (isConnected) {
-              const res = await executeSql(state);
-              if (res) {
-                if (res.error) {
-                  return resolve({ data: null, error: res.error });
-                }
+            // 1. Attempt SQL execution directly against PostgreSQL
+            const res = await executeSql(state);
+            if (res) {
+              if (res.error) {
+                // If table error or PG error, log warning and attempt fallback
+                console.warn(`[LocalDb Query Notice on ${state.table}]:`, res.error.message);
+              } else {
+                isConnected = true;
                 return resolve(res);
               }
             }
 
-            // 2. Safe Fallback to server memoryStore / disk if DB not connected
+            // 2. Safe Fallback to server memoryStore / disk if DB not connected or errored
             const fallbackRes = executeFallback(state, memoryStore);
             return resolve(fallbackRes);
           } catch (err) {
             console.error(`[LocalDb Error on ${state.table}]:`, err.message);
-            if (isConnected) {
-              return resolve({ data: null, error: err });
-            }
             const fallbackRes = executeFallback(state, memoryStore);
             return resolve(fallbackRes);
           }

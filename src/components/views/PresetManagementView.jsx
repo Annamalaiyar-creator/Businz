@@ -5,6 +5,7 @@ import {
   Package, AlertCircle, ArrowLeft, Eye
 } from 'lucide-react';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
+import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 import { VRM_HDG_PRESETS, getAllActivePresets, saveCustomPreset, deleteCustomPreset, syncPresetsWithCloud } from '../../vrmHdgProposalPresets';
 import { saveCloudStore, fetchCloudStore } from '../../utils/supabaseDataSync';
 import CreatePresetKitView from './CreatePresetKitView';
@@ -142,11 +143,13 @@ export default function PresetManagementView(props) {
       return;
     }
     const q = itemSearchTerm.toLowerCase().trim();
-    const matches = (VRM_PRODUCTS || []).filter(p =>
+    const catalog = getFullProductsCatalogWithStock();
+    const matches = (catalog || []).filter(p =>
       (p.name && p.name.toLowerCase().includes(q)) ||
       (p.code && p.code.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q)) ||
       (p.material && p.material.toLowerCase().includes(q))
-    ).slice(0, 10);
+    ).slice(0, 15);
     setSuggestedProducts(matches);
   }, [itemSearchTerm]);
 

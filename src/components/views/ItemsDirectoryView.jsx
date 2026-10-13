@@ -15,6 +15,7 @@ import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
 import { getVendors, getItems } from '../../services/businzDataService';
 import { fetchCloudStore, saveCloudStore, subscribeToCloudStore } from '../../utils/supabaseDataSync';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, readCompressedImage, compressAndSaveFile } from '../../utils/otherViewsShared';
+import { centralInventoryStore } from '../../utils/centralInventoryStore';
 
 const ITEM_IMPORT_FIELDS = [
   { key: 'name', label: 'Item Name', required: true, description: 'Product or item title (Zoho: Item Name)' },
@@ -1319,16 +1320,30 @@ export default function ItemsDirectoryView(props) {
       setIsCreatingProduct(true);
       setCreateStatus(null);
 
+      const cleanCode = newItemData.sku && newItemData.sku.trim() ? newItemData.sku.trim() : (newItemData.code && newItemData.code.trim() ? newItemData.code.trim() : ('ITM-' + Date.now().toString().slice(-6)));
+      const cleanRate = Number(newItemData.rate) || 0;
+      const cleanUnit = newItemData.unit || 'NOS';
+      const cleanCat = newItemData.category || (newItemData.productType === 'service' ? 'Services' : 'Finished Goods');
+
       const payload = {
         name: newItemData.name.trim(),
-        rate: Number(newItemData.rate) || 0,
-        sku: newItemData.sku ? newItemData.sku.trim() : '',
+        code: cleanCode,
+        sku: cleanCode,
+        rate: cleanRate,
+        price: cleanRate,
         description: newItemData.description ? newItemData.description.trim() : '',
-        unit: newItemData.unit || 'NOS',
+        unit: cleanUnit,
+        uom: cleanUnit,
         purchaseRate: Number(newItemData.purchaseRate) || 0,
         purchaseDescription: newItemData.purchaseDescription ? newItemData.purchaseDescription.trim() : '',
         productType: newItemData.productType || 'goods',
-        status: newItemData.status || 'Active'
+        category: cleanCat,
+        cat: cleanCat,
+        status: newItemData.status || 'Active',
+        stock: 0,
+        openingStock: 0,
+        physicalStock: 0,
+        availableStock: 0
       };
 
       const res = await fetch('/api/items', {
@@ -1340,23 +1355,39 @@ export default function ItemsDirectoryView(props) {
       const result = await res.json().catch(() => ({}));
       const createdItem = result.item || {
         itemId: 'ITEM-' + Date.now(),
+        id: 'ITEM-' + Date.now(),
         ...payload
       };
 
-      // 1. Immediately update React state
+      // 1. Immediately register into Central Inventory Store
+      try {
+        centralInventoryStore.registerItem(createdItem);
+      } catch (_) {}
+
+      // 2. Immediately update React state
       setItemsList(prev => {
-        const filtered = (prev || []).filter(i => (i.itemId || i.id || i.sku) !== (createdItem.itemId || createdItem.sku));
+        const filtered = (prev || []).filter(i => (i.itemId || i.id || i.sku || i.code) !== (createdItem.itemId || createdItem.sku || createdItem.code));
         const updated = [createdItem, ...filtered];
-        // 2. Persist to localStorage immediately
+        // 3. Persist to local caches immediately
         try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
-        // 3. Persist directly to Supabase leaves cloud store (ITEM_STORE)
+          localStorage.setItem('controlroom_item_store', JSON.stringify(updated));
+          localStorage.setItem('controlroom_items_list', JSON.stringify(updated));
+        } catch (_) {}
+        // 4. Persist to Cloud Store
         try {
           saveCloudStore('item_store', updated);
         } catch (e) {}
         return updated;
       });
+
+      // 5. Broadcast events so all product dropdowns, preset management, and inventory views update live
+      try {
+        window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: { item: createdItem } }));
+        window.dispatchEvent(new CustomEvent('central_inventory_updated', { detail: { item: createdItem } }));
+        window.dispatchEvent(new CustomEvent('controlroom_store_update', { detail: { storeKey: 'item_store', data: [createdItem] } }));
+        window.dispatchEvent(new Event('central_inventory_updated'));
+        window.dispatchEvent(new Event('controlroom_storage_update'));
+      } catch (_) {}
 
       setCreateStatus({ type: 'success', text: result.message || 'Product created successfully!' });
 
@@ -1377,26 +1408,59 @@ export default function ItemsDirectoryView(props) {
       }, 1000);
     } catch (err) {
       console.error("Error creating product:", err);
+      const cleanCode = newItemData.sku && newItemData.sku.trim() ? newItemData.sku.trim() : ('ITM-' + Date.now().toString().slice(-6));
+      const cleanRate = Number(newItemData.rate) || 0;
+      const cleanUnit = newItemData.unit || 'NOS';
+      const cleanCat = newItemData.category || (newItemData.productType === 'service' ? 'Services' : 'Finished Goods');
+
       const fallback = {
         itemId: 'ITEM-' + Date.now(),
+        id: 'ITEM-' + Date.now(),
+        code: cleanCode,
+        sku: cleanCode,
         name: newItemData.name,
-        rate: Number(newItemData.rate) || 0,
-        sku: newItemData.sku || '—',
-        unit: newItemData.unit || 'NOS',
+        rate: cleanRate,
+        price: cleanRate,
+        unit: cleanUnit,
+        uom: cleanUnit,
+        category: cleanCat,
+        cat: cleanCat,
         description: newItemData.description || '—',
-        status: (newItemData.status && String(newItemData.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active'
+        purchaseRate: Number(newItemData.purchaseRate) || 0,
+        purchaseDescription: newItemData.purchaseDescription || '—',
+        productType: newItemData.productType || 'goods',
+        status: (newItemData.status && String(newItemData.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active',
+        stock: 0,
+        openingStock: 0,
+        physicalStock: 0,
+        availableStock: 0
       };
+
+      try {
+        centralInventoryStore.registerItem(fallback);
+      } catch (_) {}
+
       setItemsList(prev => {
-        const filtered = (prev || []).filter(i => (i.itemId || i.id || i.sku) !== (fallback.itemId || fallback.sku));
+        const filtered = (prev || []).filter(i => (i.itemId || i.id || i.sku || i.code) !== (fallback.itemId || fallback.sku || fallback.code));
         const updated = [fallback, ...filtered];
         try {
-          saveCloudStore('item_store', updated);
-        } catch (e) {}
+          localStorage.setItem('controlroom_item_store', JSON.stringify(updated));
+          localStorage.setItem('controlroom_items_list', JSON.stringify(updated));
+        } catch (_) {}
         try {
           saveCloudStore('item_store', updated);
         } catch (e) {}
         return updated;
       });
+
+      try {
+        window.dispatchEvent(new CustomEvent('controlroom_items_update', { detail: { item: fallback } }));
+        window.dispatchEvent(new CustomEvent('central_inventory_updated', { detail: { item: fallback } }));
+        window.dispatchEvent(new CustomEvent('controlroom_store_update', { detail: { storeKey: 'item_store', data: [fallback] } }));
+        window.dispatchEvent(new Event('central_inventory_updated'));
+        window.dispatchEvent(new Event('controlroom_storage_update'));
+      } catch (_) {}
+
       setCreateStatus({ type: 'success', text: 'Product created locally in Control Room.' });
       setTimeout(() => {
         setIsCreatingItem(false);

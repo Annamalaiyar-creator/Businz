@@ -271,20 +271,35 @@ export default function SalesCrmEngine({
             }
           });
 
-          // Final deduplication strictly by company name
+          // Final deduplication by unique customer code / ID / company name
           const finalMap = new Map();
           for (const val of map.values()) {
-            const k = (val.companyName || val.name || '').toLowerCase().trim();
-            if (k && !finalMap.has(k)) {
-              finalMap.set(k, val);
+            const codeKey = (val.customerCode || val.id || val.code || '').toLowerCase().trim();
+            const nameKey = (val.companyName || val.name || '').toLowerCase().trim();
+            const primaryKey = codeKey || nameKey;
+            if (primaryKey && !finalMap.has(primaryKey)) {
+              finalMap.set(primaryKey, val);
             }
           }
           const unified = Array.from(finalMap.values());
           if (unified.length > 0) {
             setCustomers(prev => areListsEqual(prev, unified, 'customerCode') ? prev : unified);
             try {
-              localStorage.setItem('controlroom_customer_store', JSON.stringify(unified));
-              localStorage.setItem('businz_crm_customers', JSON.stringify(unified));
+              const lightweight = unified.map(c => ({
+                id: c.id,
+                customerCode: c.customerCode,
+                code: c.customerCode || c.code,
+                companyName: c.companyName,
+                customerName: c.customerName,
+                phone: c.phone,
+                email: c.email,
+                city: c.city,
+                state: c.state,
+                gstNumber: c.gstNumber || c.gstNo,
+                status: c.status
+              }));
+              localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+              localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
             } catch (_) {}
           }
         }
@@ -383,10 +398,24 @@ export default function SalesCrmEngine({
     const unified = Array.from(map.values());
     setCustomers(unified);
     saveCrmStore('customers', unified);
-    saveCloudStore('customer_store', unified);
+    // User Rule #2 & #3: Save only the changed customer records to cloud store
+    saveCloudStore('customer_store', customerList);
     try {
-      localStorage.setItem('controlroom_customer_store', JSON.stringify(unified));
-      localStorage.setItem('businz_crm_customers', JSON.stringify(unified));
+      const lightweight = unified.map(c => ({
+        id: c.id,
+        customerCode: c.customerCode,
+        code: c.customerCode || c.code,
+        companyName: c.companyName,
+        customerName: c.customerName,
+        phone: c.phone,
+        email: c.email,
+        city: c.city,
+        state: c.state,
+        gstNumber: c.gstNumber || c.gstNo,
+        status: c.status
+      }));
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
       window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: unified }));
     } catch (e) {}
   };
@@ -477,8 +506,21 @@ export default function SalesCrmEngine({
     // Also sync to Supabase canonical customers table so BOM creation and all views pick it up immediately
     try {
       saveCloudStore('customer_store', customer);
-      localStorage.setItem('controlroom_customer_store', JSON.stringify(updated));
-      localStorage.setItem('businz_crm_customers', JSON.stringify(updated));
+      const lightweight = updated.map(c => ({
+        id: c.id,
+        customerCode: c.customerCode,
+        code: c.customerCode || c.code,
+        companyName: c.companyName,
+        customerName: c.customerName,
+        phone: c.phone,
+        email: c.email,
+        city: c.city,
+        state: c.state,
+        gstNumber: c.gstNumber || c.gstNo,
+        status: c.status
+      }));
+      localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+      localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
       window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: customer }));
       window.dispatchEvent(new CustomEvent('controlroom_customer_store_updated', { detail: updated }));
     } catch (e) {

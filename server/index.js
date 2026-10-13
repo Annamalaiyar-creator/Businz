@@ -61,6 +61,9 @@ let supabaseMemoryStore = {};
 
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
+  loadDatabaseCustomers(true).then(list => {
+    console.log(`✅ [Database Customers] Loaded ${list?.length || 0} authoritative customers from PostgreSQL.`);
+  }).catch(err => console.warn('[Customers Init Notice]:', err.message));
   setTimeout(() => {
     syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
   }, 2000);
@@ -102,8 +105,8 @@ const getPoStageRank = (p) => {
 };
 
 // Canonical Supabase Customers Data Layer (Zero leaves table egress)
-const loadDatabaseCustomers = async () => {
-  if (supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 0) {
+const loadDatabaseCustomers = async (forceRefresh = false) => {
+  if (!forceRefresh && supabaseMemoryStore.customer_store && Array.isArray(supabaseMemoryStore.customer_store) && supabaseMemoryStore.customer_store.length > 500) {
     return supabaseMemoryStore.customer_store;
   }
   try {
@@ -174,16 +177,19 @@ const loadDatabaseCustomers = async () => {
 
       supabaseMemoryStore.customer_store = mapped;
       supabaseMemoryStore.crm_customers = mapped;
+      try {
+        fs.writeFileSync(getStoreFilePath('customer_store.json'), JSON.stringify(mapped, null, 2), 'utf8');
+        fs.writeFileSync(getStoreFilePath('crm_customers.json'), JSON.stringify(mapped, null, 2), 'utf8');
+      } catch (_) {}
       return mapped;
     }
   } catch (err) {
     console.warn('[loadDatabaseCustomers] Supabase fetch notice:', err?.message || err);
   }
 
-  // Fallback to local and auto-extracted customers
+  // Fallback to local and auto-extracted customers ONLY if DB returned nothing
   const localList = loadLocalCustomers();
   if (localList && localList.length > 0) {
-    saveLocalCustomers(localList).catch(() => {});
     return localList;
   }
 
@@ -1000,29 +1006,45 @@ const broadcastRealtimeEvent = (eventType, payload) => {
 
 const saveLocalCustomers = async (customers) => {
   if (!customers) return;
-  const list = Array.isArray(customers) ? customers : [customers];
-  supabaseMemoryStore.customer_store = list;
-  supabaseMemoryStore.crm_customers = list;
+  const incoming = Array.isArray(customers) ? customers : [customers];
+  if (incoming.length === 0) return;
 
-  // 1. Persist to disk files for zero data loss
+  // 1. Fetch current full database customers to merge against (ensuring existing records are NEVER lost)
+  const currentDbCustomers = await loadDatabaseCustomers();
+  const custMap = new Map();
+  
+  // Register existing database customers
+  (currentDbCustomers || []).forEach(c => {
+    const k = String(c.customerCode || c.id || c.code || '').toLowerCase().trim();
+    if (k) custMap.set(k, c);
+  });
+
+  // Merge or append incoming customer records
+  incoming.forEach(c => {
+    const k = String(c.customerCode || c.id || c.code || '').toLowerCase().trim();
+    if (k) {
+      const existing = custMap.get(k) || {};
+      custMap.set(k, { ...existing, ...c });
+    }
+  });
+
+  const fullList = Array.from(custMap.values());
+  supabaseMemoryStore.customer_store = fullList;
+  supabaseMemoryStore.crm_customers = fullList;
+
+  // 2. Persist full list to disk files for zero data loss
   try {
     const custPath = getStoreFilePath('customer_store.json');
-    fs.writeFileSync(custPath, JSON.stringify(list, null, 2), 'utf8');
+    fs.writeFileSync(custPath, JSON.stringify(fullList, null, 2), 'utf8');
     const crmPath = getStoreFilePath('crm_customers.json');
-    fs.writeFileSync(crmPath, JSON.stringify(list, null, 2), 'utf8');
+    fs.writeFileSync(crmPath, JSON.stringify(fullList, null, 2), 'utf8');
   } catch (diskErr) {
     console.warn('[saveLocalCustomers disk write error]:', diskErr?.message);
   }
 
-  // 2. Broadcast via SSE to all connected clients
+  // 3. Upsert incoming records to canonical public.customers table (Zero data loss, 1 record changed = 1 write)
   try {
-    broadcastRealtimeEvent('store_updated', { key: 'customer_store', storeData: list });
-    broadcastRealtimeEvent('crm_updated', { type: 'customers_updated', customers: list });
-  } catch (_) {}
-
-  // 3. Upsert to canonical public.customers table (Zero leaves table interaction)
-  try {
-    const rows = list.map(c => ({
+    const rows = incoming.map(c => ({
       id: c.customerCode || c.id || c.code,
       customer_code: c.customerCode || c.id || c.code,
       company_name: c.companyName || c.c2 || c.customerName || 'Customer',
@@ -1050,7 +1072,7 @@ const saveLocalCustomers = async (customers) => {
       primary_contact: c.primaryContact || {},
       email: c.email || c.c5 || '—',
       phone: c.phone || c.c4 || '—',
-      status: c.status || 'Active',
+      status: (c.status || 'Active').toUpperCase(),
       notes: c.notes || '',
       updated_at: new Date().toISOString()
     }));
@@ -1062,6 +1084,12 @@ const saveLocalCustomers = async (customers) => {
   } catch (sbErr) {
     console.warn('[saveLocalCustomers Supabase upsert notice]:', sbErr?.message || sbErr);
   }
+
+  // 4. Broadcast via SSE to all connected clients
+  try {
+    broadcastRealtimeEvent('store_updated', { key: 'customer_store', storeData: fullList });
+    broadcastRealtimeEvent('crm_updated', { type: 'customers_updated', customers: fullList });
+  } catch (_) {}
 };
 
 const saveLocalOpportunities = async (opportunities) => {
@@ -6150,20 +6178,35 @@ app.post('/api/items', async (req, res) => {
       incomingList.forEach((it, idx) => {
         const newItemId = it.itemId || it.id || it.sku || `ITEM-${Date.now()}-${idx + 1}`;
         const reqStatus = (it.status && String(it.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
+        const cleanCode = String(it.code || it.sku || newItemId).trim();
+        const cleanRate = Number(it.rate || it.price || 0) || 0;
+        const cleanUnit = it.unit || it.uom || 'NOS';
+        const cleanCat = it.category || it.cat || (it.productType === 'service' ? 'Services' : 'Finished Goods');
+        const cleanStock = it.stock !== undefined ? Number(it.stock) : 0;
+
         const itemRecord = {
           itemId: newItemId,
           id: newItemId,
+          code: cleanCode,
+          sku: cleanCode,
           name: String(it.name || it.description || newItemId).trim(),
-          rate: Number(it.rate || it.price || 0) || 0,
-          sku: String(it.sku || it.itemCode || newItemId).trim(),
+          rate: cleanRate,
+          price: cleanRate,
           status: reqStatus,
           description: it.description || '—',
-          unit: it.unit || it.uom || 'NOS',
+          unit: cleanUnit,
+          uom: cleanUnit,
           purchaseRate: Number(it.purchaseRate || 0) || 0,
           purchaseDescription: it.purchaseDescription || '—',
-          productType: it.productType || it.cat || 'goods',
-          category: it.category || it.cat || 'General',
-          stock: it.stock !== undefined ? Number(it.stock) : 0,
+          productType: it.productType || 'goods',
+          category: cleanCat,
+          cat: cleanCat,
+          stock: cleanStock,
+          openingStock: it.openingStock !== undefined ? Number(it.openingStock) : cleanStock,
+          physicalStock: it.physicalStock !== undefined ? Number(it.physicalStock) : cleanStock,
+          availableStock: it.availableStock !== undefined ? Number(it.availableStock) : cleanStock,
+          available: cleanStock,
+          reserved: 0,
           createdAt: it.createdAt || new Date().toISOString()
         };
 
@@ -6173,7 +6216,7 @@ app.post('/api/items', async (req, res) => {
 
         const exIdx = currentItems.findIndex(i => {
           const iId = String(i.itemId || i.id || '').toLowerCase().trim();
-          const iSku = String(i.sku || '').toLowerCase().trim();
+          const iSku = String(i.sku || i.code || '').toLowerCase().trim();
           const iName = String(i.name || '').toLowerCase().trim();
           return (targetSku && iSku === targetSku) || (targetId && iId === targetId) || (targetName && iName === targetName);
         });
@@ -6188,6 +6231,11 @@ app.post('/api/items', async (req, res) => {
 
       saveLocalItems(currentItems);
 
+      try {
+        broadcastRealtimeEvent('item_store_updated', { items: currentItems });
+        broadcastRealtimeEvent('store_updated', { key: 'item_store', storeData: currentItems });
+      } catch (_) {}
+
       return res.json({
         success: true,
         count: createdItems.length,
@@ -6198,25 +6246,54 @@ app.post('/api/items', async (req, res) => {
 
     const newItemId = req.body.itemId || req.body.id || ('ITEM-' + Date.now());
     const reqStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'Inactive' : 'Active';
+    const cleanCode = String(req.body.code || req.body.sku || newItemId).trim();
+    const cleanRate = Number(req.body.rate || req.body.price || 0) || 0;
+    const cleanUnit = req.body.unit || req.body.uom || 'NOS';
+    const cleanCat = req.body.category || req.body.cat || (req.body.productType === 'service' ? 'Services' : 'Finished Goods');
+    const cleanStock = req.body.stock !== undefined ? Number(req.body.stock) : 0;
+
     const itemToSave = {
       itemId: newItemId,
       id: newItemId,
-      name: req.body.name,
-      rate: Number(req.body.rate) || 0,
-      sku: req.body.sku || '—',
+      code: cleanCode,
+      sku: cleanCode,
+      name: String(req.body.name || '').trim(),
+      rate: cleanRate,
+      price: cleanRate,
       status: reqStatus,
       description: req.body.description || '—',
-      unit: req.body.unit || 'NOS',
+      unit: cleanUnit,
+      uom: cleanUnit,
       purchaseRate: Number(req.body.purchaseRate) || 0,
       purchaseDescription: req.body.purchaseDescription || '—',
       productType: req.body.productType || 'goods',
-      stock: req.body.stock !== undefined ? Number(req.body.stock) : 0,
+      category: cleanCat,
+      cat: cleanCat,
+      stock: cleanStock,
+      openingStock: req.body.openingStock !== undefined ? Number(req.body.openingStock) : cleanStock,
+      physicalStock: req.body.physicalStock !== undefined ? Number(req.body.physicalStock) : cleanStock,
+      availableStock: req.body.availableStock !== undefined ? Number(req.body.availableStock) : cleanStock,
+      available: cleanStock,
+      reserved: 0,
       createdAt: req.body.createdAt || new Date().toISOString()
     };
 
-    const filtered = localItems.filter(i => String(i.itemId || i.id || i.sku).toLowerCase() !== String(itemToSave.itemId || itemToSave.sku || itemToSave.name).toLowerCase());
+    const filtered = localItems.filter(i => {
+      const iId = String(i.itemId || i.id || '').toLowerCase().trim();
+      const iSku = String(i.sku || i.code || '').toLowerCase().trim();
+      const iName = String(i.name || '').toLowerCase().trim();
+      const tId = String(itemToSave.itemId).toLowerCase().trim();
+      const tSku = String(itemToSave.sku).toLowerCase().trim();
+      const tName = String(itemToSave.name).toLowerCase().trim();
+      return (tId && iId === tId) || (tSku && iSku === tSku) || (tName && iName === tName);
+    });
     const updated = [itemToSave, ...filtered];
     saveLocalItems(updated);
+
+    try {
+      broadcastRealtimeEvent('item_store_updated', { items: updated });
+      broadcastRealtimeEvent('store_updated', { key: 'item_store', storeData: updated });
+    } catch (_) {}
 
     return res.json({ 
       success: true, 

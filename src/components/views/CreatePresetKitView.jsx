@@ -4,6 +4,7 @@ import {
   Search, X
 } from 'lucide-react';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
+import { getFullProductsCatalogWithStock } from '../../utils/productCatalogService';
 
 export default function CreatePresetKitView({
   preset = null,
@@ -13,6 +14,28 @@ export default function CreatePresetKitView({
   userRole = 'Tech Support'
 }) {
   const isEditing = Boolean(preset && preset.id && !preset.id.startsWith('preset_custom_new_temp'));
+
+  const [catalogTick, setCatalogTick] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setCatalogTick(t => t + 1);
+    window.addEventListener('controlroom_items_update', refresh);
+    window.addEventListener('central_inventory_updated', refresh);
+    window.addEventListener('controlroom_store_update', refresh);
+    return () => {
+      window.removeEventListener('controlroom_items_update', refresh);
+      window.removeEventListener('central_inventory_updated', refresh);
+      window.removeEventListener('controlroom_store_update', refresh);
+    };
+  }, []);
+
+  const catalogProducts = React.useMemo(() => {
+    try {
+      return getFullProductsCatalogWithStock();
+    } catch (_) {
+      return VRM_PRODUCTS || [];
+    }
+  }, [catalogTick]);
 
   // Default Categories List combined with any passed from store
   const defaultCategories = [
@@ -61,13 +84,14 @@ export default function CreatePresetKitView({
       return;
     }
     const q = itemSearchTerm.toLowerCase().trim();
-    const matches = (VRM_PRODUCTS || []).filter(p =>
+    const matches = (catalogProducts || []).filter(p =>
       (p.name && p.name.toLowerCase().includes(q)) ||
       (p.code && p.code.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q)) ||
       (p.material && p.material.toLowerCase().includes(q))
-    ).slice(0, 10);
+    ).slice(0, 15);
     setSuggestedProducts(matches);
-  }, [itemSearchTerm]);
+  }, [itemSearchTerm, catalogProducts]);
 
   const handleAddItemFromCatalog = (product) => {
     const newItem = {
@@ -511,7 +535,7 @@ export default function CreatePresetKitView({
                         value={item.name || ''}
                         onChange={(e) => {
                           const val = e.target.value;
-                          const matched = (VRM_PRODUCTS || []).find(p =>
+                          const matched = (catalogProducts || []).find(p =>
                             (p.name || '').toLowerCase() === val.toLowerCase() ||
                             (p.code || '').toLowerCase() === val.toLowerCase()
                           );
@@ -520,7 +544,7 @@ export default function CreatePresetKitView({
                               ...mat,
                               name: matched.name,
                               uom: matched.uom || mat.uom || 'NOS',
-                              category: matched.material || mat.category || 'General'
+                              category: matched.category || matched.material || mat.category || 'General'
                             } : mat));
                           } else {
                             handleUpdateItem(i, 'name', val);
@@ -541,9 +565,9 @@ export default function CreatePresetKitView({
                         }}
                       />
                       <datalist id={`preset-product-datalist-${i}`}>
-                        {(VRM_PRODUCTS || []).map((prod, pidx) => (
+                        {(catalogProducts || []).map((prod, pidx) => (
                           <option key={pidx} value={prod.name}>
-                            {prod.code ? `[${prod.code}] ${prod.name} (${prod.material || 'General'})` : prod.name}
+                            {prod.code ? `[${prod.code}] ${prod.name} (${prod.category || prod.material || 'General'})` : prod.name}
                           </option>
                         ))}
                       </datalist>

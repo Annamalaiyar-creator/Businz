@@ -46,6 +46,20 @@ class CentralInventoryStore {
     this.storageKeyNotifications = 'controlroom_central_notifications_v2';
 
     this.initStore();
+
+    if (typeof window !== 'undefined') {
+      const handleExternalItemUpdate = (e) => {
+        const item = e?.detail?.item;
+        const items = e?.detail?.items || (e?.detail?.storeKey === 'item_store' ? e?.detail?.data : null);
+        if (item) {
+          this.registerItem(item);
+        } else if (Array.isArray(items) && items.length > 0) {
+          items.forEach(it => this.registerItem(it));
+        }
+      };
+      window.addEventListener('controlroom_items_update', handleExternalItemUpdate);
+      window.addEventListener('controlroom_store_update', handleExternalItemUpdate);
+    }
   }
 
   initStore() {
@@ -76,6 +90,39 @@ class CentralInventoryStore {
             const n = String(item?.name || '').trim();
             if (isDeletedItem(item)) return false;
             return !/^\d{10,}$/.test(c) && !/^\d{10,}$/.test(n);
+          });
+        }
+      }
+    } catch (_) {}
+
+    // Ingest any newly created products from item_store / controlroom_item_store
+    try {
+      const customStoreRaw = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
+      if (customStoreRaw) {
+        const parsedCustom = JSON.parse(customStoreRaw);
+        if (Array.isArray(parsedCustom) && parsedCustom.length > 0) {
+          const seededCodeMap = new Set(seeded.map(s => String(s.code || s.sku || s.name).toUpperCase().trim()));
+          parsedCustom.forEach(ci => {
+            const codeKey = String(ci?.code || ci?.sku || ci?.itemId || ci?.name || '').toUpperCase().trim();
+            if (codeKey && !seededCodeMap.has(codeKey) && !isDeletedItem(ci) && !/^\d{10,}$/.test(codeKey)) {
+              seeded.push({
+                code: ci.code || ci.sku || ci.itemId || ci.name,
+                sku: ci.sku || ci.code || '',
+                name: ci.name,
+                cat: ci.category || ci.cat || (ci.productType === 'service' ? 'Services' : 'Finished Goods'),
+                type: ci.productType === 'service' ? 'Service' : 'Finished Product',
+                uom: ci.uom || ci.unit || 'NOS',
+                unitRate: Number(ci.rate || ci.price || 0),
+                openingStock: Number(ci.openingStock !== undefined ? ci.openingStock : (ci.stock || 0)),
+                physicalStock: Number(ci.physicalStock !== undefined ? ci.physicalStock : (ci.stock || 0)),
+                stock: Number(ci.stock || 0),
+                available: Number(ci.available !== undefined ? ci.available : (ci.stock || 0)),
+                availableStock: Number(ci.availableStock !== undefined ? ci.availableStock : (ci.stock || 0)),
+                onHand: Number(ci.onHand !== undefined ? ci.onHand : (ci.stock || 0)),
+                reserved: 0
+              });
+              seededCodeMap.add(codeKey);
+            }
           });
         }
       }
@@ -159,8 +206,15 @@ class CentralInventoryStore {
       }
     }).catch(() => {});
 
+    const safeStorageGet = (key) => {
+      try {
+        if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
+      } catch (_) {}
+      return null;
+    };
+
     // 2. Load Transactions Ledger
-    const savedTx = localStorage.getItem(this.storageKeyTx);
+    const savedTx = safeStorageGet(this.storageKeyTx);
     if (savedTx) {
       try {
         this.transactions = JSON.parse(savedTx);
@@ -189,7 +243,7 @@ class CentralInventoryStore {
     }
 
     // 3. Load GRNs
-    const savedGrn = localStorage.getItem(this.storageKeyGrn);
+    const savedGrn = safeStorageGet(this.storageKeyGrn);
     if (savedGrn) {
       try {
         this.grnList = JSON.parse(savedGrn);
@@ -202,7 +256,7 @@ class CentralInventoryStore {
     }
 
     // 4. Load Job Works
-    const savedJw = localStorage.getItem(this.storageKeyJobWork);
+    const savedJw = safeStorageGet(this.storageKeyJobWork);
     if (savedJw) {
       try {
         this.jobWorks = JSON.parse(savedJw);
@@ -215,7 +269,7 @@ class CentralInventoryStore {
     }
 
     // 5. Load Production Orders
-    const savedProd = localStorage.getItem(this.storageKeyProdOrders);
+    const savedProd = safeStorageGet(this.storageKeyProdOrders);
     if (savedProd) {
       try {
         this.productionOrders = JSON.parse(savedProd);
@@ -228,7 +282,7 @@ class CentralInventoryStore {
     }
 
     // 6. Load Reservations
-    const savedRes = localStorage.getItem(this.storageKeyReservations);
+    const savedRes = safeStorageGet(this.storageKeyReservations);
     if (savedRes) {
       try {
         this.reservations = JSON.parse(savedRes);
@@ -241,7 +295,7 @@ class CentralInventoryStore {
     }
 
     // 7. Load Notifications
-    const savedNotif = localStorage.getItem(this.storageKeyNotifications);
+    const savedNotif = safeStorageGet(this.storageKeyNotifications);
     if (savedNotif) {
       try {
         this.notifications = JSON.parse(savedNotif);
@@ -298,6 +352,62 @@ class CentralInventoryStore {
   notifyChange() {
     this.evaluateStockAlerts();
     window.dispatchEvent(new Event('central_inventory_updated'));
+  }
+
+  registerItem(item) {
+    if (!item || !item.name) return null;
+    const cleanCode = String(item.code || item.sku || item.itemId || item.name).trim();
+    if (!cleanCode || /^\d{10,}$/.test(cleanCode)) return null;
+    const upperCode = cleanCode.toUpperCase();
+    const upperName = String(item.name).toUpperCase().trim();
+
+    if (!Array.isArray(this.items)) this.items = [];
+    const existingIdx = this.items.findIndex(i => {
+      const c = String(i.code || i.sku || i.itemId || '').toUpperCase().trim();
+      const n = String(i.name || '').toUpperCase().trim();
+      return (c && c === upperCode) || (n && n === upperName);
+    });
+
+    const cleanCat = item.category || item.cat || (item.productType === 'service' ? 'Services' : 'Finished Goods');
+    const cleanRate = Number(item.rate || item.price || item.unitRate || 0);
+    const cleanStock = Number(item.stock !== undefined ? item.stock : 0);
+    const cleanUom = item.uom || item.unit || 'NOS';
+
+    const normalizedItem = {
+      code: cleanCode,
+      sku: item.sku || cleanCode,
+      itemId: item.itemId || cleanCode,
+      name: item.name.trim(),
+      cat: cleanCat,
+      category: cleanCat,
+      type: item.productType === 'service' ? 'Service' : 'Finished Product',
+      uom: cleanUom,
+      unit: cleanUom,
+      unitRate: cleanRate,
+      price: cleanRate,
+      rate: cleanRate,
+      minLevel: item.minLevel || 20,
+      reorderLevel: item.reorderLevel || 50,
+      maxLevel: item.maxLevel || 10000,
+      location: item.location || 'Finished Goods Bay',
+      openingStock: Number(item.openingStock !== undefined ? item.openingStock : cleanStock),
+      physicalStock: Number(item.physicalStock !== undefined ? item.physicalStock : cleanStock),
+      stock: cleanStock,
+      available: Number(item.available !== undefined ? item.available : cleanStock),
+      availableStock: Number(item.availableStock !== undefined ? item.availableStock : cleanStock),
+      onHand: Number(item.onHand !== undefined ? item.onHand : cleanStock),
+      reserved: Number(item.reserved || 0)
+    };
+
+    if (existingIdx !== -1) {
+      this.items[existingIdx] = { ...this.items[existingIdx], ...normalizedItem };
+    } else {
+      this.items = [normalizedItem, ...this.items];
+    }
+
+    this.saveItems();
+    this.notifyChange();
+    return normalizedItem;
   }
 
   // ----------------------------------------------------

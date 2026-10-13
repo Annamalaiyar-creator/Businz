@@ -51,11 +51,15 @@ export default function CreateBomFormPage(props) {
       setItemsList(getFullProductsCatalogWithStock());
     };
     window.addEventListener('central_inventory_updated', refreshCatalog);
+    window.addEventListener('controlroom_items_update', refreshCatalog);
+    window.addEventListener('controlroom_store_update', refreshCatalog);
     window.addEventListener('controlroom_raw_materials_update', refreshCatalog);
     window.addEventListener('controlroom_storage_update', refreshCatalog);
     window.addEventListener('storage', refreshCatalog);
     return () => {
       window.removeEventListener('central_inventory_updated', refreshCatalog);
+      window.removeEventListener('controlroom_items_update', refreshCatalog);
+      window.removeEventListener('controlroom_store_update', refreshCatalog);
       window.removeEventListener('controlroom_raw_materials_update', refreshCatalog);
       window.removeEventListener('controlroom_storage_update', refreshCatalog);
       window.removeEventListener('storage', refreshCatalog);
