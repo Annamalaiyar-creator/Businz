@@ -136,7 +136,14 @@ async function executeHostingerRequest(state) {
   // 1. SELECT Query
   if (action === 'select') {
     try {
-      const endpoint = mapSelectEndpoint(table);
+      let endpoint = mapSelectEndpoint(table);
+      const qp = new URLSearchParams();
+      conditions.forEach(c => {
+        if (c.type === 'eq' && c.column) qp.append(c.column, String(c.value));
+      });
+      const qs = qp.toString();
+      if (qs) endpoint += (endpoint.includes('?') ? '&' : '?') + qs;
+
       const res = await fetch(endpoint, {
         headers: { 'Accept': 'application/json' }
       }).catch(() => null);

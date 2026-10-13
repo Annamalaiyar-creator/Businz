@@ -55,13 +55,12 @@ export function getOrCreateSessionId() {
 }
 
 /**
- * Register or update active session in Supabase cloud database
+ * Register or update active session in backend session registry
  */
 export async function registerActiveSession(userEmail, empCode, displayName, userRole) {
   if (!userEmail) return null;
   const sessionId = getOrCreateSessionId();
   const { device, browser } = getDeviceInfo();
-  const now = new Date().toISOString();
 
   const sessionPayload = {
     id: sessionId,
@@ -79,41 +78,19 @@ export async function registerActiveSession(userEmail, empCode, displayName, use
   };
 
   try {
-    // Check if session record exists in 'leaves' table where employee = 'SESSION_REGISTRY'
-    const { data: existing } = await supabase
-      .from('leaves')
-      .select('id, duration')
-      .eq('employee', 'SESSION_REGISTRY')
-      .eq('duration', sessionId)
-      .maybeSingle();
-
-    if (existing && existing.id) {
-      await supabase
-        .from('leaves')
-        .update({
-          reason: JSON.stringify(sessionPayload),
-          dates: now,
-          status: 'active'
-        })
-        .eq('id', existing.id);
-    } else {
-      await supabase
-        .from('leaves')
-        .insert({
-          employee: 'SESSION_REGISTRY',
-          type: 'USER_SESSION',
-          duration: sessionId,
-          dates: now,
-          reason: JSON.stringify(sessionPayload),
-          status: 'active'
-        });
-    }
+    await fetch('/api/sessions/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionPayload)
+    }).catch(() => null);
   } catch (err) {
-    console.error('Error registering active device session:', err);
+    console.warn('[SessionService] Register notice:', err);
   }
 
   return sessionPayload;
 }
+
+let isHeartbeatInFlight = false;
 
 /**
  * Update heartbeat / last active timestamp for current device
@@ -122,122 +99,79 @@ export async function heartbeatActiveSession() {
   const sessionId = localStorage.getItem('controlroom_device_session_id');
   if (!sessionId) return;
   const isAuthenticated = localStorage.getItem('controlroom_is_authenticated') === 'true';
-  if (!isAuthenticated) return;
+  if (!isAuthenticated || isHeartbeatInFlight) return;
 
-  // Grace period: do not force logout within 30 seconds of starting a session
-  const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
-  const sessionAgeSeconds = (Date.now() - sessionStartTime) / 1000;
-
+  isHeartbeatInFlight = true;
   try {
-    const { data: existing } = await supabase
-      .from('leaves')
-      .select('id, reason, status')
-      .eq('employee', 'SESSION_REGISTRY')
-      .eq('duration', sessionId)
-      .maybeSingle();
+    const res = await fetch('/api/sessions/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    }).catch(() => null);
 
-    if (existing) {
-      // Only treat as revoked if not in fresh session grace window
-      if (existing.status === 'revoked' && sessionAgeSeconds > 30) {
-        console.warn('Session has been revoked remotely. Logging out.');
-        localStorage.removeItem('controlroom_is_authenticated');
-        localStorage.removeItem('controlroom_user_role');
-        localStorage.removeItem('controlroom_device_session_id');
-        localStorage.removeItem('controlroom_session_start_time');
-        window.location.reload();
-        return;
+    if (res && res.ok) {
+      const json = await res.json().catch(() => null);
+      if (json && json.status === 'revoked') {
+        const sessionStartTime = Number(localStorage.getItem('controlroom_session_start_time') || 0);
+        if ((Date.now() - sessionStartTime) / 1000 > 30) {
+          console.warn('Session has been revoked remotely. Logging out.');
+          localStorage.removeItem('controlroom_is_authenticated');
+          localStorage.removeItem('controlroom_user_role');
+          localStorage.removeItem('controlroom_device_session_id');
+          localStorage.removeItem('controlroom_session_start_time');
+          window.location.reload();
+        }
       }
-
-      let payload = {};
-      try {
-        payload = JSON.parse(existing.reason);
-      } catch (e) {}
-      payload.lastActiveTimestamp = Date.now();
-      payload.lastActive = 'Just now';
-
-      await supabase
-        .from('leaves')
-        .update({
-          reason: JSON.stringify(payload),
-          dates: new Date().toISOString(),
-          status: 'active'
-        })
-        .eq('id', existing.id);
     }
-  } catch (e) {}
+  } catch (_) {
+  } finally {
+    isHeartbeatInFlight = false;
+  }
 }
 
 /**
  * Automatically clean up revoked or expired sessions (> 24 hours) from Supabase
  */
 export async function pruneStaleSessions() {
-  try {
-    const oneDayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const { data: stale } = await supabase
-      .from('leaves')
-      .select('id, status, dates')
-      .eq('employee', 'SESSION_REGISTRY');
-
-    if (Array.isArray(stale) && stale.length > 0) {
-      const toDelete = stale
-        .filter(s => s.status === 'revoked' || (s.dates && s.dates < oneDayAgo))
-        .map(s => s.id);
-
-      if (toDelete.length > 0) {
-        await supabase.from('leaves').delete().in('id', toDelete);
-      }
-    }
-  } catch (err) {
-    console.warn('[SessionService] Session pruning notice:', err);
-  }
+  // Pruning is handled automatically server-side in /api/sessions/active
 }
 
 /**
- * Fetch all active sessions across all devices from Supabase
+ * Fetch all active sessions across all devices from native backend
  */
 export async function fetchLiveActiveSessions() {
   const currentSessionId = getOrCreateSessionId();
-  // Asynchronously prune stale/revoked sessions in background
-  pruneStaleSessions().catch(() => {});
 
   try {
-    const { data, error } = await supabase
-      .from('leaves')
-      .select('id, duration, reason, status, dates')
-      .eq('employee', 'SESSION_REGISTRY')
-      .order('dates', { ascending: false });
-
-    if (error || !Array.isArray(data)) return [];
+    const res = await fetch('/api/sessions/active').catch(() => null);
+    if (!res || !res.ok) return [];
+    const json = await res.json().catch(() => null);
+    const data = Array.isArray(json?.data) ? json.data : [];
 
     const now = Date.now();
     return data
       .filter(item => item.status === 'active')
       .map(item => {
-        let parsed = {};
-        try {
-          parsed = JSON.parse(item.reason);
-        } catch (e) {}
-
-        const diffSeconds = Math.floor((now - (parsed.lastActiveTimestamp || 0)) / 1000);
+        const diffSeconds = Math.floor((now - (item.lastActiveTimestamp || 0)) / 1000);
         let activeLabel = 'Just now';
         if (diffSeconds > 120) {
           activeLabel = `${Math.floor(diffSeconds / 60)} mins ago`;
         }
 
         return {
-          id: item.duration || ('SES-' + item.id),
+          id: item.id,
           dbId: item.id,
-          user: parsed.user || parsed.email || 'Employee',
-          email: parsed.email,
-          empCode: parsed.empCode,
-          role: parsed.role,
-          device: parsed.device || 'Desktop PC',
-          browser: parsed.browser || 'Web Browser',
-          ip: parsed.ip || 'Live Client',
-          location: parsed.location || 'India',
-          loginTime: parsed.loginTime || 'Today',
+          user: item.user || item.email || 'Employee',
+          email: item.email,
+          empCode: item.empCode,
+          role: item.role,
+          device: item.device || 'Desktop PC',
+          browser: item.browser || 'Web Browser',
+          ip: item.ip || 'Live Client',
+          location: item.location || 'India',
+          loginTime: item.loginTime || 'Today',
           lastActive: activeLabel,
-          isCurrent: (item.duration === currentSessionId)
+          isCurrent: (item.id === currentSessionId)
         };
       });
   } catch (err) {
@@ -251,11 +185,11 @@ export async function fetchLiveActiveSessions() {
  */
 export async function revokeSession(sessionId) {
   try {
-    await supabase
-      .from('leaves')
-      .update({ status: 'revoked' })
-      .eq('employee', 'SESSION_REGISTRY')
-      .eq('duration', sessionId);
+    await fetch('/api/sessions/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    }).catch(() => null);
     return true;
   } catch (err) {
     console.error('Error revoking session:', err);
@@ -269,11 +203,12 @@ export async function revokeSession(sessionId) {
 export async function revokeAllOtherSessions() {
   const currentSessionId = getOrCreateSessionId();
   try {
-    await supabase
-      .from('leaves')
-      .update({ status: 'revoked' })
-      .eq('employee', 'SESSION_REGISTRY')
-      .neq('duration', currentSessionId);
+    const sessions = await fetchLiveActiveSessions();
+    for (const s of sessions) {
+      if (s.id !== currentSessionId) {
+        await revokeSession(s.id);
+      }
+    }
     return true;
   } catch (err) {
     console.error('Error revoking all other sessions:', err);
