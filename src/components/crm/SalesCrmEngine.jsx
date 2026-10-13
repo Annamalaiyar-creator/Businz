@@ -287,16 +287,30 @@ export default function SalesCrmEngine({
             try {
               const lightweight = unified.map(c => ({
                 id: c.id,
-                customerCode: c.customerCode,
+                customerCode: c.customerCode || c.code,
                 code: c.customerCode || c.code,
-                companyName: c.companyName,
-                customerName: c.customerName,
-                phone: c.phone,
-                email: c.email,
-                city: c.city,
-                state: c.state,
-                gstNumber: c.gstNumber || c.gstNo,
-                status: c.status
+                companyName: c.companyName || c.name || c.c2 || '',
+                customerName: c.customerName || c.name || '',
+                contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
+                contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
+                phone: c.phone || c.c4 || c.primaryContact?.phone || '',
+                email: c.email || c.c5 || c.primaryContact?.email || '',
+                city: c.city || c.billingAddressObj?.city || '',
+                state: c.state || c.billingAddressObj?.state || '',
+                pincode: c.pincode || c.billingAddressObj?.pincode || '',
+                address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+                address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
+                billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+                dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
+                deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
+                dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
+                dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
+                dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
+                paymentTerms: c.paymentTerms || '',
+                gst: c.gst || c.gstNumber || c.gstNo || '',
+                gstNumber: c.gstNumber || c.gstNo || c.gst || '',
+                gstNo: c.gstNumber || c.gstNo || c.gst || '',
+                status: c.status || 'ACTIVE'
               }));
               localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
               localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
@@ -403,16 +417,30 @@ export default function SalesCrmEngine({
     try {
       const lightweight = unified.map(c => ({
         id: c.id,
-        customerCode: c.customerCode,
+        customerCode: c.customerCode || c.code,
         code: c.customerCode || c.code,
-        companyName: c.companyName,
-        customerName: c.customerName,
-        phone: c.phone,
-        email: c.email,
-        city: c.city,
-        state: c.state,
-        gstNumber: c.gstNumber || c.gstNo,
-        status: c.status
+        companyName: c.companyName || c.name || c.c2 || '',
+        customerName: c.customerName || c.name || '',
+        contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
+        contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
+        phone: c.phone || c.c4 || c.primaryContact?.phone || '',
+        email: c.email || c.c5 || c.primaryContact?.email || '',
+        city: c.city || c.billingAddressObj?.city || '',
+        state: c.state || c.billingAddressObj?.state || '',
+        pincode: c.pincode || c.billingAddressObj?.pincode || '',
+        address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+        address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
+        billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+        dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
+        deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
+        dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
+        dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
+        dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
+        paymentTerms: c.paymentTerms || '',
+        gst: c.gst || c.gstNumber || c.gstNo || '',
+        gstNumber: c.gstNumber || c.gstNo || c.gst || '',
+        gstNo: c.gstNumber || c.gstNo || c.gst || '',
+        status: c.status || 'ACTIVE'
       }));
       localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
       localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
@@ -508,16 +536,30 @@ export default function SalesCrmEngine({
       saveCloudStore('customer_store', customer);
       const lightweight = updated.map(c => ({
         id: c.id,
-        customerCode: c.customerCode,
+        customerCode: c.customerCode || c.code,
         code: c.customerCode || c.code,
-        companyName: c.companyName,
-        customerName: c.customerName,
-        phone: c.phone,
-        email: c.email,
-        city: c.city,
-        state: c.state,
-        gstNumber: c.gstNumber || c.gstNo,
-        status: c.status
+        companyName: c.companyName || c.name || c.c2 || '',
+        customerName: c.customerName || c.name || '',
+        contactPerson: c.contactPerson || c.primaryContact?.name || c.customerName || '',
+        contact: c.contact || c.contactPerson || c.primaryContact?.name || c.customerName || '',
+        phone: c.phone || c.c4 || c.primaryContact?.phone || '',
+        email: c.email || c.c5 || c.primaryContact?.email || '',
+        city: c.city || c.billingAddressObj?.city || '',
+        state: c.state || c.billingAddressObj?.state || '',
+        pincode: c.pincode || c.billingAddressObj?.pincode || '',
+        address: c.address || c.billingAddress || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+        address1: c.address1 || c.billingAddress || c.address || c.c6 || c.billingAddressObj?.address1 || '',
+        billingAddress: c.billingAddress || c.address || c.address1 || c.c6 || c.billingAddressObj?.address || '',
+        dispatchAddress: c.dispatchAddress || c.deliveryAddress || c.c7 || c.deliveryAddressObj?.address || '',
+        deliveryAddress: c.deliveryAddress || c.dispatchAddress || c.c7 || c.deliveryAddressObj?.address || '',
+        dispatchCity: c.dispatchCity || c.deliveryAddressObj?.city || '',
+        dispatchState: c.dispatchState || c.deliveryAddressObj?.state || '',
+        dispatchPincode: c.dispatchPincode || c.deliveryAddressObj?.pincode || '',
+        paymentTerms: c.paymentTerms || '',
+        gst: c.gst || c.gstNumber || c.gstNo || '',
+        gstNumber: c.gstNumber || c.gstNo || c.gst || '',
+        gstNo: c.gstNumber || c.gstNo || c.gst || '',
+        status: c.status || 'ACTIVE'
       }));
       localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
       localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
