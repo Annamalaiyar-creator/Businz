@@ -585,7 +585,9 @@ class CentralInventoryStore {
       };
       this.notifications.unshift(newNotif);
       this.saveNotifications();
-      window.dispatchEvent(new Event('central_notification_added'));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('central_notification_added'));
+      }
     }
   }
 
@@ -599,7 +601,9 @@ class CentralInventoryStore {
     if (n) {
       n.read = true;
       this.saveNotifications();
-      window.dispatchEvent(new Event('central_notification_added'));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('central_notification_added'));
+      }
     }
   }
 
@@ -1179,6 +1183,25 @@ class CentralInventoryStore {
 
     this.notifyChange();
     return newOrder;
+  }
+
+  reserveStockForBOM(refNo, requiredMaterials) {
+    if (Array.isArray(requiredMaterials)) {
+      requiredMaterials.forEach(mat => {
+        const itemCode = mat.code || mat.itemCode;
+        if (!itemCode) return;
+        const resId = `RES-${refNo}-${itemCode}`;
+        this.reservations.push({
+          id: resId,
+          refNo: refNo,
+          itemCode: itemCode,
+          reservedQty: parseFloat(mat.reqQty || mat.qty) || 0,
+          date: new Date().toISOString().split('T')[0],
+          status: 'Active'
+        });
+      });
+      this.saveReservations();
+    }
   }
 
   issueProductionMaterial(prodOrderNo, itemCode, issueQty, user = 'Production Supervisor') {
