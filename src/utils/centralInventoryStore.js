@@ -547,7 +547,20 @@ class CentralInventoryStore {
   // ----------------------------------------------------
   evaluateStockAlerts() {
     const now = Date.now();
-    if (this._lastAlertEval && now - this._lastAlertEval < 60000) return;
+    if (this._lastAlertEval && now - this._lastAlertEval < 60000) {
+      if (!this._trailingAlertTimer) {
+        const remaining = Math.max(1000, 60000 - (now - this._lastAlertEval));
+        this._trailingAlertTimer = setTimeout(() => {
+          this._trailingAlertTimer = null;
+          this.evaluateStockAlerts();
+        }, remaining);
+      }
+      return;
+    }
+    if (this._trailingAlertTimer) {
+      clearTimeout(this._trailingAlertTimer);
+      this._trailingAlertTimer = null;
+    }
     this._lastAlertEval = now;
 
     const computedItems = this.getInventoryItems();
