@@ -901,9 +901,29 @@ export default function CrmQuotationsView({
     if (!quoteItems || quoteItems.length === 0) {
       missing.push({ name: 'Quotation Items (Add at least 1 item or preset kit)', targetId: 'quote-field-items' });
     } else {
-      const hasValidItem = quoteItems.some(it => (it.name && it.name.trim()) || it.isPresetItem);
-      if (!hasValidItem) {
-        missing.push({ name: 'Valid Product / Item in Quotation Scope', targetId: 'quote-field-items' });
+      const invalidItems = [];
+      quoteItems.forEach((it, idx) => {
+        const q = parseFloat(it.qty) || 0;
+        const r = parseFloat(it.rate) || 0;
+        const isPresetItem = Boolean(it.isPresetItem);
+        if (!it.name || !it.name.trim()) {
+          invalidItems.push(`Item #${idx + 1}: Name is required`);
+        } else if (q <= 0) {
+          invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be > 0`);
+        } else if (!isPresetItem && r <= 0) {
+          invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be > 0`);
+        }
+      });
+      if (presetGroups && Object.keys(presetGroups).length > 0) {
+        Object.values(presetGroups).forEach(g => {
+          const kp = parseFloat(g.kitPrice) || 0;
+          if (kp <= 0) {
+            invalidItems.push(`Preset Kit (${g.presetName || 'Kit'}): Kit Price (₹) is required and must be > 0`);
+          }
+        });
+      }
+      if (invalidItems.length > 0) {
+        missing.push({ name: `Incomplete Items: ${invalidItems.join(' • ')}`, targetId: 'quote-field-items' });
       }
     }
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1770,7 +1790,7 @@ export default function CrmQuotationsView({
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹)</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
                     {quoteItems.some(it => it.isPresetItem) && <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Preset Amt (₹)</th>}
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>

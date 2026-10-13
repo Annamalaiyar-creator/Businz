@@ -1072,7 +1072,7 @@ export default function CreateBomFormPage(props) {
                 <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>
                   Qty <span style={{ color: '#EF4444' }}>*</span>
                 </th>
-                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%' }}>Price (₹)</th>
+                <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                 <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
                 <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
                 <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
@@ -1677,6 +1677,26 @@ export default function CreateBomFormPage(props) {
               }
               if (!bomMaterialsList || bomMaterialsList.length === 0) {
                 alert('⚠️ Please add at least one Product / Item to the BOM materials list.');
+                return;
+              }
+              const invalidItems = [];
+              bomMaterialsList.forEach((it, idx) => {
+                const qty = parseFloat(it.qty) || 0;
+                const r = parseFloat(it.rate) || 0;
+                const isPreset = selectedPreset && (it.isPresetItem || parseFloat(it.rate || 0) === 0);
+                if (!it.name || !it.name.trim()) {
+                  invalidItems.push(`Item #${idx + 1}: Product name is required`);
+                } else if (qty <= 0) {
+                  invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be greater than 0`);
+                } else if (!isPreset && r <= 0) {
+                  invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be greater than 0`);
+                }
+              });
+              if (selectedPreset && parseFloat(presetFullPrice || 0) <= 0) {
+                invalidItems.push(`Preset Kit (${selectedPreset}): Preset Full Price (₹) is required and must be greater than 0`);
+              }
+              if (invalidItems.length > 0) {
+                alert(`⚠️ Incomplete Item Details:\n\n• ${invalidItems.join('\n• ')}`);
                 return;
               }
               setBomConfirmModal('create');

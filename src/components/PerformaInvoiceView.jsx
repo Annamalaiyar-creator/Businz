@@ -1684,12 +1684,24 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const invalid = [];
       piItems.forEach((it, idx) => {
         const q = parseFloat(it.qty) || 0;
+        const r = parseFloat(it.rate) || 0;
+        const isPresetItem = Boolean(it.isPresetItem);
         if (!it.name || !it.name.trim()) {
           invalid.push(`Item #${idx + 1}: Name is required`);
         } else if (q <= 0) {
           invalid.push(`Item #${idx + 1} (${it.name}): Quantity must be > 0`);
+        } else if (!isPresetItem && r <= 0) {
+          invalid.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be > 0`);
         }
       });
+      if (presetGroups && Object.keys(presetGroups).length > 0) {
+        Object.values(presetGroups).forEach(g => {
+          const kp = parseFloat(g.kitPrice) || 0;
+          if (kp <= 0) {
+            invalid.push(`Preset Kit (${g.presetName || 'Kit'}): Kit Price (₹) is required and must be > 0`);
+          }
+        });
+      }
       if (invalid.length > 0) {
         missingList.push({
           field: 'Incomplete Item Details',
@@ -3985,7 +3997,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Preset Amt (₹)</th>}
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>

@@ -144,21 +144,29 @@ export default function VehicleLoadingModal({
   const existingLoading = bom.vehicleLoading || {};
   const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
 
-  const [deliveryMode, setDeliveryMode] = useState(
-    bom.deliveryMode || existingLoading.deliveryMode || 'transport' // 'transport' | 'direct'
-  );
+  const initialMode = (() => {
+    if (existingLoading.deliveryMode) return existingLoading.deliveryMode;
+    if (bom.deliveryMode) return bom.deliveryMode;
+    const tm = String(bom.transportMode || '').toLowerCase();
+    if (tm.includes('own') || tm.includes('porter') || tm.includes('company')) return 'own_vehicle';
+    if (tm.includes('self') || tm.includes('direct') || tm.includes('pickup') || tm.includes('customer')) return 'direct';
+    return 'transport';
+  })();
+  const [deliveryMode, setDeliveryMode] = useState(initialMode);
   const [lrCopyDoc, setLrCopyDoc] = useState(
     bom.lrCopyDoc || existingLoading.lrCopyDoc || null
   );
   const [uploadingLr, setUploadingLr] = useState(false);
+  const [showLrPopup, setShowLrPopup] = useState(false);
+  const [popupLrNo, setPopupLrNo] = useState('');
 
   const [vehicleLoadingData, setVehicleLoadingData] = useState({
     vehicleNo: existingLoading.vehicleNo || "",
     driverName: existingLoading.driverName || "",
     driverPhone: existingLoading.driverPhone || "",
-    transporter: existingLoading.transporter || "VRL Logistics Direct Fleet",
-    lrNo: existingLoading.lrNo || "LR-881204",
-    sealNo: existingLoading.sealNo || "SL-884920"
+    transporter: existingLoading.transporter || "",
+    lrNo: existingLoading.lrNo || "",
+    sealNo: existingLoading.sealNo || ""
   });
   const [loadingPhotos, setLoadingPhotos] = useState([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -354,321 +362,242 @@ export default function VehicleLoadingModal({
   const vNo = vehicleLoadingData.vehicleNo || existingLoading.vehicleNo || '';
   const dName = vehicleLoadingData.driverName || existingLoading.driverName || '';
   const dPhone = vehicleLoadingData.driverPhone || existingLoading.driverPhone || '';
-  const transp = vehicleLoadingData.transporter || existingLoading.transporter || 'VRL Logistics Direct Fleet';
-  const lr = vehicleLoadingData.lrNo || existingLoading.lrNo || 'LR-881204';
-  const seal = vehicleLoadingData.sealNo || existingLoading.sealNo || 'SL-884920';
+  const transp = vehicleLoadingData.transporter || existingLoading.transporter || '';
+  const lr = vehicleLoadingData.lrNo || existingLoading.lrNo || '';
+  const seal = vehicleLoadingData.sealNo || existingLoading.sealNo || '';
 
-const currentPhotos = loadingPhotos.length > 0 ? loadingPhotos : (existingLoading.photos || []);
-const currentVideos = existingLoading.videos || [];
+  const currentPhotos = loadingPhotos.length > 0 ? loadingPhotos : (existingLoading.photos || []);
+  const currentVideos = existingLoading.videos || [];
 
-const packedItems = (bom.dispatchPacking && Array.isArray(bom.dispatchPacking) && bom.dispatchPacking.length > 0)
-  ? bom.dispatchPacking.filter(p => Boolean(p.packed))
-  : (bom.items || []).filter(i => i.selected !== false);
+  const packedItems = (bom.dispatchPacking && Array.isArray(bom.dispatchPacking) && bom.dispatchPacking.length > 0)
+    ? bom.dispatchPacking.filter(p => Boolean(p.packed))
+    : (bom.items || []).filter(i => i.selected !== false);
 
-const handleAddPhotoFiles = async (files) => {
-  if (!files || files.length === 0) return;
-  setUploadingMedia(true);
-  setUploadError('');
-  try {
-    for (const file of Array.from(files)) {
-      validateClientFile(file);
-      const localPreview = URL.createObjectURL(file);
-      const localDataUrl = await readFileAsDataUrl(file);
-      const metadata = await uploadBomDocumentFile({
-        file,
-        bomCode: bCode,
-        category: 'dispatch/images'
-      });
-      const newPhoto = {
-        id: `photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: metadata.originalName || file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-        storageBucket: metadata.storageBucket,
-        storagePath: metadata.storagePath,
-        url: metadata.url || localPreview,
-        dataUrl: metadata.dataUrl || localDataUrl,
-        previewUrl: localPreview,
-        mimeType: metadata.mimeType || file.type,
-        uploadedAt: metadata.uploadedAt || new Date().toISOString(),
-        capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      };
-      setLoadingPhotos(prev => [...prev, newPhoto]);
-    }
-  } catch (err) {
-    console.error('Photo upload error:', err);
-    setUploadError(err.message || 'Failed to upload photo');
-    alert(`Failed to upload photo: ${err.message}`);
-  } finally {
-    setUploadingMedia(false);
-  }
-};
-
-const handleAddSamplePhoto = () => {
-  // Generate an illustrative canvas snapshot for truck loading
-  const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 400;
-  const ctx = canvas.getContext('2d');
-
-  // Background truck interior
-  ctx.fillStyle = '#1E293B';
-  ctx.fillRect(0, 0, 640, 400);
-
-  // Staged pallets & solar rails
-  ctx.fillStyle = '#334155';
-  ctx.fillRect(60, 160, 520, 180);
-  ctx.fillStyle = '#64748B';
-  ctx.fillRect(100, 100, 440, 100);
-
-  // Straps
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(140, 80);
-  ctx.lineTo(140, 340);
-  ctx.moveTo(320, 80);
-  ctx.lineTo(320, 340);
-  ctx.moveTo(500, 80);
-  ctx.lineTo(500, 340);
-  ctx.stroke();
-
-  // Header banner overlay
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.fillRect(0, 0, 640, 60);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(`TRUCK LOADING VERIFICATION: ${bCode}`, 20, 36);
-  ctx.font = '12px sans-serif';
-  ctx.fillStyle = '#86EFAC';
-  ctx.fillText(`VEHICLE: ${vNo || 'TN-09-CB-4821'} • TIME: ${new Date().toLocaleTimeString()}`, 380, 36);
-
-  canvas.toBlob(async (blob) => {
-    if (!blob) return;
+  const handleAddPhotoFiles = async (files) => {
+    if (!files || files.length === 0) return;
     setUploadingMedia(true);
+    setUploadError('');
     try {
-      const fileName = `Truck_Loading_LivePhoto_${Date.now().toString().slice(-4)}.jpg`;
-      const file = new File([blob], fileName, { type: 'image/jpeg' });
-      const sampleBlobUrl = URL.createObjectURL(blob);
-      const sampleDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      const metadata = await uploadBomDocumentFile({
-        file,
-        bomCode: bCode,
-        category: 'dispatch/images'
-      });
-      const samplePhoto = {
-        id: `photo_sample_${Date.now()}`,
-        name: fileName,
-        size: '1.4 MB',
-        storageBucket: metadata.storageBucket,
-        storagePath: metadata.storagePath,
-        url: metadata.url || sampleBlobUrl,
-        dataUrl: metadata.dataUrl || sampleDataUrl,
-        previewUrl: sampleBlobUrl,
-        mimeType: metadata.mimeType || 'image/jpeg',
-        uploadedAt: metadata.uploadedAt || new Date().toISOString(),
-        capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      };
-      setLoadingPhotos(prev => [...prev, samplePhoto]);
+      for (const file of Array.from(files)) {
+        validateClientFile(file);
+        const localPreview = URL.createObjectURL(file);
+        const localDataUrl = await readFileAsDataUrl(file);
+        const metadata = await uploadBomDocumentFile({
+          file,
+          bomCode: bCode,
+          category: 'dispatch/images'
+        });
+        const newPhoto = {
+          id: `photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: metadata.originalName || file.name,
+          size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+          storageBucket: metadata.storageBucket,
+          storagePath: metadata.storagePath,
+          url: metadata.url || localPreview,
+          dataUrl: metadata.dataUrl || localDataUrl,
+          previewUrl: localPreview,
+          mimeType: metadata.mimeType || file.type,
+          uploadedAt: metadata.uploadedAt || new Date().toISOString(),
+          capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        };
+        setLoadingPhotos(prev => [...prev, newPhoto]);
+      }
     } catch (err) {
-      alert(`Sample photo upload failed: ${err.message}`);
+      console.error('Photo upload error:', err);
+      setUploadError(err.message || 'Failed to upload photo');
+      alert(`Failed to upload photo: ${err.message}`);
     } finally {
       setUploadingMedia(false);
     }
-  }, 'image/jpeg', 0.85);
-};
-
-const handleFinalizeVehicleLoading = async () => {
-  if (uploadingMedia || uploadingLr) {
-    alert('Media or LR document is currently uploading to secure storage. Please wait until upload completes.');
-    return;
-  }
-
-  const isTransport = deliveryMode === 'transport';
-  const effectiveVehicleNo = vNo || (isTransport ? 'TN-09-CB-4821' : 'Customer Vehicle / Handover');
-  const effectiveTransporter = isTransport ? (transp || 'VRL Logistics Direct Fleet') : 'Self-Pickup / Customer Handover';
-  const effectiveLr = isTransport ? (lr || 'LR-881204') : 'N/A (Self-Pickup)';
-
-  let finalizedPhotos = currentPhotos;
-  if (!isReadOnly && !isAwaitingLr && finalizedPhotos.length === 0) {
-    // Generate verified inspection proof photo so vehicle dispatch is never blocked
-    try {
-      const autoCanvas = document.createElement('canvas');
-      autoCanvas.width = 640;
-      autoCanvas.height = 480;
-      const ctx = autoCanvas.getContext('2d');
-      if (ctx) {
-        const grad = ctx.createLinearGradient(0, 0, 640, 480);
-        grad.addColorStop(0, '#0F172A');
-        grad.addColorStop(1, '#0E7490');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 640, 480);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 22px sans-serif';
-        ctx.fillText('DISPATCH VEHICLE LOADING VERIFIED', 40, 180);
-        ctx.font = '15px sans-serif';
-        ctx.fillStyle = '#67E8F9';
-        ctx.fillText(`Order Ref: ${bCode}`, 40, 220);
-        ctx.fillText(`Logistics: ${effectiveTransporter} (${effectiveVehicleNo})`, 40, 250);
-        ctx.fillText(`Timestamp: ${new Date().toLocaleString('en-IN')}`, 40, 280);
-        ctx.fillStyle = '#86EFAC';
-        ctx.fillText('STATUS: VERIFIED & CLEARED FOR ROAD TRANSIT', 40, 320);
-        const dataUrl = autoCanvas.toDataURL('image/jpeg', 0.85);
-        finalizedPhotos = [{
-          id: `photo_auto_${Date.now()}`,
-          name: `Dispatch_${bCode}_Verified.jpg`,
-          size: '185 KB',
-          url: dataUrl,
-          dataUrl: dataUrl,
-          mimeType: 'image/jpeg',
-          uploadedAt: new Date().toISOString(),
-          capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-        }];
-        setLoadingPhotos(finalizedPhotos);
-      }
-    } catch (_) {}
-  }
-
-  const hasLrCopy = Boolean(lrCopyDoc && (lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.name));
-  const willCloseBom = !isTransport || hasLrCopy;
-  const nextBomStatus = willCloseBom ? 'Completed' : 'Dispatched - Awaiting LR Copy';
-  const nextInvoiceStatus = willCloseBom ? 'Fully Dispatched & Delivered' : 'Dispatched - In Transit';
-
-  const loadingPayload = {
-    ...existingLoading,
-    deliveryMode,
-    isTransport,
-    vehicleNo: effectiveVehicleNo,
-    driverName: dName || 'K. Murugan',
-    driverPhone: dPhone || '+91 98765 43210',
-    transporter: effectiveTransporter,
-    lrNo: effectiveLr,
-    sealNo: isTransport ? (seal || 'SL-884920') : 'N/A',
-    lrCopyDoc: lrCopyDoc || null,
-    photos: finalizedPhotos,
-    videos: currentVideos,
-    loadedAt: existingLoading.loadedAt || new Date().toISOString(),
-    loadedTimeStr: existingLoading.loadedTimeStr || new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-    fullyCompleted: willCloseBom
   };
 
-  // Preserve authentic salesperson details from the order
-  const authenticSalesPerson = bom.salesPerson || bom.sales_person || bom.createdBy || 'Sales Department';
-  const authenticSalesPersonCode = bom.salesPersonCode || bom.sales_person_code || bom.createdById || '';
-
-  // Permanently Deduct Inventory in Central Inventory Store & Raw Materials Store upon Vehicle Loading ONLY if not already deducted at Invoice
-  if (!bom.stockDeducted) {
-    try {
-      const itemsToDeduct = (bom.items && bom.items.length > 0) ? bom.items : packedItems;
-      centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, authenticSalesPerson || 'Dispatch Vehicle Loading', false);
-    } catch (cErr) {
-      console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
+  const handleInitiateConfirm = () => {
+    if (uploadingMedia || uploadingLr) {
+      alert('Media or LR document is currently uploading to secure storage. Please wait until upload completes.');
+      return;
     }
-  }
-  try {
-    centralInventoryStore.releaseReservation(bCode);
-  } catch (_) {}
 
-  const updatedBomData = {
-    ...bom,
-    status: nextBomStatus,
-    fullyCompleted: willCloseBom,
-    stockDeducted: true,
-    vehicleLoading: loadingPayload,
-    lrCopyDoc: lrCopyDoc || bom.lrCopyDoc || null,
-    salesPerson: authenticSalesPerson,
-    salesPersonCode: authenticSalesPersonCode,
-    dispatchedAt: bom.dispatchedAt || new Date().toISOString(),
-    completedAt: willCloseBom ? new Date().toISOString() : null
+    // If own vehicle or customer self-pickup -> complete immediately, NO POPUP!
+    if (deliveryMode === 'own_vehicle' || deliveryMode === 'direct') {
+      handleFinalizeVehicleLoading({ forceStatus: 'Completed', overrideLrDoc: null });
+      return;
+    }
+
+    // If 3rd-party transport:
+    // If LR copy is already attached, complete immediately
+    if (lrCopyDoc && (lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.name)) {
+      handleFinalizeVehicleLoading({ forceStatus: 'Completed', overrideLrDoc: lrCopyDoc });
+      return;
+    }
+
+    // If no LR copy attached, open the dedicated LR Copy Upload Popup Menu
+    setPopupLrNo(vehicleLoadingData.lrNo || existingLoading.lrNo || '');
+    setShowLrPopup(true);
   };
 
-  // 1. Update BOM status in local React state immediately
-  setBomStore(prev => {
-    const updated = (prev || []).map(b => (b.bomCode === bCode || b.code === bCode || b.id === bCode) ? updatedBomData : b);
-    try {
-      localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-    } catch (_) {}
-    return updated;
-  });
+  const handleFinalizeVehicleLoading = async (options = {}) => {
+    if (uploadingMedia || uploadingLr) {
+      alert('Media or LR document is currently uploading to secure storage. Please wait until upload completes.');
+      return;
+    }
 
-  // 2. Authoritative server update first - immediately updates server cache & PostgreSQL
-  try {
-    await fetch('/api/boms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bom: updatedBomData, isUpdate: true })
-    });
-  } catch (apiErr) {
-    console.warn('Error saving BOM to /api/boms in VehicleLoadingModal:', apiErr);
-  }
+    const { forceStatus, overrideLrDoc, overrideLrNo } = options;
 
-  // 3. Direct cloud sync via Supabase client
-  try {
-    await saveCloudBomRow(updatedBomData);
-  } catch (e) {
-    console.warn('Error saving BOM row to cloud in VehicleLoadingModal:', e);
-  }
+    const isTransport = deliveryMode === 'transport';
+    const isOwnVehicle = deliveryMode === 'own_vehicle';
 
-  // Update Invoice status & persist
-  if (typeof setInvoiceList === 'function') {
-    setInvoiceList(prev => {
-      const updatedInvoices = (prev || []).map(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo) ? {
-        ...i,
-        status: nextInvoiceStatus,
-        pay: willCloseBom ? 'Completed & Delivered' : 'Dispatched - In Transit',
-        vehicleLoading: loadingPayload,
-        lrCopyDoc: lrCopyDoc || i.lrCopyDoc || null
-      } : i);
+    const effectiveVehicleNo = vNo || (isTransport ? '' : isOwnVehicle ? 'Own Vehicle / Porter' : 'Customer Pickup');
+    const effectiveTransporter = transp || (isTransport ? '' : isOwnVehicle ? 'Own Vehicle / Porter' : 'Self-Pickup / Direct Delivery');
+    const activeLrDoc = overrideLrDoc !== undefined ? overrideLrDoc : lrCopyDoc;
+    const effectiveLrNo = overrideLrNo !== undefined ? overrideLrNo : (lr || popupLrNo || '');
+
+    const hasLrCopy = Boolean(activeLrDoc && (activeLrDoc.url || activeLrDoc.dataUrl || activeLrDoc.name));
+    const willCloseBom = forceStatus ? (forceStatus === 'Completed') : (!isTransport || hasLrCopy);
+    const nextBomStatus = forceStatus || (willCloseBom ? 'Completed' : 'Dispatched - Awaiting LR Copy');
+    const nextInvoiceStatus = willCloseBom ? 'Fully Dispatched & Delivered' : 'Dispatched - In Transit';
+
+    // Strictly user-uploaded photos. No fake canvas images are ever generated.
+    const finalizedPhotos = currentPhotos;
+
+    const loadingPayload = {
+      ...existingLoading,
+      deliveryMode,
+      isTransport,
+      vehicleNo: effectiveVehicleNo,
+      driverName: dName,
+      driverPhone: dPhone,
+      transporter: effectiveTransporter,
+      lrNo: effectiveLrNo || (isTransport ? (willCloseBom ? '' : 'Awaiting LR Copy') : 'N/A (Own Vehicle / Direct)'),
+      sealNo: seal || '',
+      lrCopyDoc: activeLrDoc || null,
+      photos: finalizedPhotos,
+      videos: currentVideos,
+      loadedAt: existingLoading.loadedAt || new Date().toISOString(),
+      loadedTimeStr: existingLoading.loadedTimeStr || new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      fullyCompleted: willCloseBom
+    };
+
+    // Preserve authentic salesperson details from the order
+    const authenticSalesPerson = bom.salesPerson || bom.sales_person || bom.createdBy || 'Sales Department';
+    const authenticSalesPersonCode = bom.salesPersonCode || bom.sales_person_code || bom.createdById || '';
+
+    // Permanently Deduct Inventory in Central Inventory Store & Raw Materials Store upon Vehicle Loading ONLY if not already deducted at Invoice
+    if (!bom.stockDeducted) {
       try {
-        const targetInvoice = updatedInvoices.find(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo));
-        if (targetInvoice) saveCloudInvoiceRow(targetInvoice);
-        localStorage.setItem('controlroom_invoice_store', JSON.stringify(updatedInvoices.map(stripDataUrlsFromRecord)));
-      } catch (e) { }
-      return updatedInvoices;
-    });
-  }
+        const itemsToDeduct = (bom.items && bom.items.length > 0) ? bom.items : packedItems;
+        centralInventoryStore.deductStockForBOM(bCode, itemsToDeduct, authenticSalesPerson || 'Dispatch Vehicle Loading', false);
+      } catch (cErr) {
+        console.warn('Central store deduction error in VehicleLoadingModal:', cErr);
+      }
+    }
+    try {
+      centralInventoryStore.releaseReservation(bCode);
+    } catch (_) {}
 
-  window.dispatchEvent(new Event('central_inventory_updated'));
-  window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-  window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData, action: 'upsert' } }));
-
-  // Notify Sales Person that dispatch for this BOM is completed
-  try {
-    notifyDispatchCompletedToSales({
-      bomCode: bCode,
-      customerName: custName,
+    const updatedBomData = {
+      ...bom,
+      status: nextBomStatus,
+      fullyCompleted: willCloseBom,
+      stockDeducted: true,
+      vehicleLoading: loadingPayload,
+      lrCopyDoc: activeLrDoc || bom.lrCopyDoc || null,
       salesPerson: authenticSalesPerson,
       salesPersonCode: authenticSalesPersonCode,
-      vehicleNo: vNo,
-      lrNo: isTransport ? lr : 'Self-Pickup',
-      transporter: isTransport ? transp : 'Self-Pickup / Customer Handover',
-      deliveryMode,
-      status: nextBomStatus
+      dispatchedAt: bom.dispatchedAt || new Date().toISOString(),
+      completedAt: willCloseBom ? new Date().toISOString() : null
+    };
+
+    // 1. Update BOM status in local React state immediately
+    setBomStore(prev => {
+      const updated = (prev || []).map(b => (b.bomCode === bCode || b.code === bCode || b.id === bCode) ? updatedBomData : b);
+      try {
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+      } catch (_) {}
+      return updated;
     });
-  } catch (nErr) {
-    console.warn('Dispatch completion notification error:', nErr);
-  }
 
-  const completedSummary = {
-    bomCode: bCode,
-    invoiceNo: invNo,
-    customer: custName,
-    salesPerson: authenticSalesPerson,
-    deliveryAddress: delAddr,
-    packedCount: packedItems.length,
-    vehicleLoading: loadingPayload,
-    status: nextBomStatus
-  };
-
-  onClose();
-  setLoadingPhotos([]);
-
-  if (willCloseBom) {
-    if (typeof setCompletedBomSummaryModal === 'function') {
-      setCompletedBomSummaryModal(completedSummary);
+    // 2. Authoritative server update first - immediately updates server cache & PostgreSQL
+    try {
+      await fetch('/api/boms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bom: updatedBomData, isUpdate: true })
+      });
+    } catch (apiErr) {
+      console.warn('Error saving BOM to /api/boms in VehicleLoadingModal:', apiErr);
     }
-    alert(`Vehicle loading verified & goods dispatched!\n\nOrder ${bCode} is marked as "Dispatched - Awaiting LR Copy". The BOM will remain open in Dispatch Orders until the Transporter LR receipt is uploaded.`);
-  }
-};
+
+    // 3. Direct cloud sync via Supabase client
+    try {
+      await saveCloudBomRow(updatedBomData);
+    } catch (e) {
+      console.warn('Error saving BOM row to cloud in VehicleLoadingModal:', e);
+    }
+
+    // Update Invoice status & persist
+    if (typeof setInvoiceList === 'function') {
+      setInvoiceList(prev => {
+        const updatedInvoices = (prev || []).map(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo) ? {
+          ...i,
+          status: nextInvoiceStatus,
+          pay: willCloseBom ? 'Completed & Delivered' : 'Dispatched - In Transit',
+          vehicleLoading: loadingPayload,
+          lrCopyDoc: activeLrDoc || i.lrCopyDoc || null
+        } : i);
+        try {
+          const targetInvoice = updatedInvoices.find(i => (i.poNo === bCode || i.code === bCode || i.invNo === invNo));
+          if (targetInvoice) saveCloudInvoiceRow(targetInvoice);
+          localStorage.setItem('controlroom_invoice_store', JSON.stringify(updatedInvoices.map(stripDataUrlsFromRecord)));
+        } catch (e) { }
+        return updatedInvoices;
+      });
+    }
+
+    window.dispatchEvent(new Event('central_inventory_updated'));
+    window.dispatchEvent(new Event('controlroom_raw_materials_update'));
+    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData, action: 'upsert' } }));
+
+    // Notify Sales Person that dispatch for this BOM is completed
+    try {
+      notifyDispatchCompletedToSales({
+        bomCode: bCode,
+        customerName: custName,
+        salesPerson: authenticSalesPerson,
+        salesPersonCode: authenticSalesPersonCode,
+        vehicleNo: effectiveVehicleNo,
+        lrNo: isTransport ? effectiveLrNo : 'N/A (Own Vehicle / Direct)',
+        transporter: effectiveTransporter,
+        deliveryMode,
+        status: nextBomStatus
+      });
+    } catch (nErr) {
+      console.warn('Dispatch completion notification error:', nErr);
+    }
+
+    const completedSummary = {
+      bomCode: bCode,
+      invoiceNo: invNo,
+      customer: custName,
+      salesPerson: authenticSalesPerson,
+      deliveryAddress: delAddr,
+      packedCount: packedItems.length,
+      vehicleLoading: loadingPayload,
+      status: nextBomStatus
+    };
+
+    setShowLrPopup(false);
+    onClose();
+    setLoadingPhotos([]);
+
+    if (willCloseBom) {
+      if (typeof setCompletedBomSummaryModal === 'function') {
+        setCompletedBomSummaryModal(completedSummary);
+      }
+      alert(`Vehicle loading verified & goods dispatched successfully for Order ${bCode}!`);
+    } else {
+      alert(`Vehicle loading recorded & goods dispatched.\n\nOrder ${bCode} is marked as "Dispatched - Awaiting LR Copy". The BOM will remain open in Dispatch Orders until the Transporter LR receipt is uploaded.`);
+    }
+  };
 
 return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif", minHeight: '100%' }}>
@@ -766,7 +695,7 @@ return (
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
           <button
             type="button"
-            onClick={handleFinalizeVehicleLoading}
+            onClick={handleInitiateConfirm}
             disabled={uploadingMedia || uploadingLr}
             style={{
               border: 'none',
@@ -783,8 +712,8 @@ return (
             {uploadingMedia || uploadingLr
               ? 'Uploading Media...'
               : isAwaitingLr
-                ? 'Save LR Copy & Close BOM'
-                : (deliveryMode === 'transport' && !lrCopyDoc ? 'Confirm Loading & Dispatch (Await LR)' : 'Confirm Loading & Dispatch')}
+                ? 'Upload LR Copy & Close BOM'
+                : 'Confirm Loading & Dispatch'}
           </button>
         </div>
       )}
@@ -814,14 +743,14 @@ return (
         </div>
 
         {/* Delivery Movement Selector */}
-        <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px', gap: '6px' }}>
+        <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px', gap: '6px', flexWrap: 'wrap' }}>
           <button
             type="button"
             disabled={isReadOnly}
             onClick={() => setDeliveryMode('transport')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 18px', borderRadius: '8px', border: 'none',
+              padding: '8px 16px', borderRadius: '8px', border: 'none',
               backgroundColor: deliveryMode === 'transport' ? '#0E7490' : 'transparent',
               color: deliveryMode === 'transport' ? '#FFFFFF' : '#64748B',
               fontSize: '12.5px', fontWeight: '800', cursor: isReadOnly ? 'default' : 'pointer',
@@ -834,10 +763,26 @@ return (
           <button
             type="button"
             disabled={isReadOnly}
+            onClick={() => setDeliveryMode('own_vehicle')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 16px', borderRadius: '8px', border: 'none',
+              backgroundColor: deliveryMode === 'own_vehicle' ? '#2563EB' : 'transparent',
+              color: deliveryMode === 'own_vehicle' ? '#FFFFFF' : '#64748B',
+              fontSize: '12.5px', fontWeight: '800', cursor: isReadOnly ? 'default' : 'pointer',
+              boxShadow: deliveryMode === 'own_vehicle' ? '0 2px 6px rgba(37,99,235,0.3)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Truck style={{ width: '15px', height: '15px' }} /> Own Vehicle / Porter
+          </button>
+          <button
+            type="button"
+            disabled={isReadOnly}
             onClick={() => setDeliveryMode('direct')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 18px', borderRadius: '8px', border: 'none',
+              padding: '8px 16px', borderRadius: '8px', border: 'none',
               backgroundColor: deliveryMode === 'direct' ? '#059669' : 'transparent',
               color: deliveryMode === 'direct' ? '#FFFFFF' : '#64748B',
               fontSize: '12.5px', fontWeight: '800', cursor: isReadOnly ? 'default' : 'pointer',
@@ -856,7 +801,7 @@ return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Vehicle / Lorry Number <span style={{ color: '#EF4444' }}>*</span>
+                Vehicle / Lorry Number
               </label>
               <input
                 type="text"
@@ -868,76 +813,120 @@ return (
               />
             </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Driver Full Name
-            </label>
-            <input
-              type="text"
-              disabled={isReadOnly}
-              value={dName}
-              onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
-              placeholder="e.g. K. Murugan"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Logistics / Fleet Carrier
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={transp}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, transporter: e.target.value })}
+                placeholder="e.g. VRL Logistics, ARC, ABT, Courier"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Driver Phone Number
-            </label>
-            <input
-              type="text"
-              disabled={isReadOnly}
-              value={dPhone}
-              onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
-              placeholder="e.g. +91 98765 43210"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                LR / Bilty / Docket No
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={lr}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, lrNo: e.target.value })}
+                placeholder="e.g. LR-2026-8812 (or enter in final popup)"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Logistics / Fleet Carrier
-            </label>
-            <input
-              type="text"
-              disabled={isReadOnly}
-              value={transp}
-              onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, transporter: e.target.value })}
-              placeholder="e.g. VRL Logistics / Company Fleet"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Driver Full Name
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={dName}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
+                placeholder="Driver Name"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              LR / Bilty / Docket No
-            </label>
-            <input
-              type="text"
-              disabled={isReadOnly}
-              value={lr}
-              onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, lrNo: e.target.value })}
-              placeholder="e.g. LR-2026-8812"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Driver Phone Number
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={dPhone}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
+                placeholder="+91 98765 43210"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Container / Seal Number
-            </label>
-            <input
-              type="text"
-              disabled={isReadOnly}
-              value={seal}
-              onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, sealNo: e.target.value })}
-              placeholder="e.g. SEAL-99201"
-              style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-            />
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Container / Seal Number
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={seal}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, sealNo: e.target.value })}
+                placeholder="e.g. SEAL-99201"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
           </div>
-        </div>
+        ) : deliveryMode === 'own_vehicle' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Vehicle Number / Porter Ref
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={vNo}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
+                placeholder="e.g. TN-02-AZ-9999 / Porter"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Driver / Delivery Person Name
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={dName}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
+                placeholder="e.g. In-house Driver / Porter Exec"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Driver / Delivery Contact Phone
+              </label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={dPhone}
+                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
+                placeholder="e.g. +91 98765 43210"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
@@ -949,7 +938,7 @@ return (
                 disabled={isReadOnly}
                 value={vNo}
                 onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
-                placeholder="e.g. Self-Pickup / Customer Vehicle"
+                placeholder="e.g. Customer Vehicle / Direct Handover"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
@@ -984,130 +973,68 @@ return (
           </div>
         )}
 
-        {/* LR Copy Attachment */}
-        {deliveryMode === 'transport' && (
+        {/* Subtle LR Attachment Indicator (shown only if already attached) */}
+        {deliveryMode === 'transport' && lrCopyDoc && (
           <div style={{
-            backgroundColor: lrCopyDoc ? '#F0FDF4' : '#FFFBEB',
-            border: `1.5px dashed ${lrCopyDoc ? '#86EFAC' : '#FCD34D'}`,
-            borderRadius: '12px',
-            padding: '16px 18px',
+            backgroundColor: '#F0FDF4',
+            border: '1px solid #86EFAC',
+            borderRadius: '10px',
+            padding: '10px 16px',
             display: 'flex',
-            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '10px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={18} style={{ color: lrCopyDoc ? '#16A34A' : '#D97706' }} />
-                <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                  Transporter Lorry Receipt (LR Copy)
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={18} style={{ color: '#16A34A' }} />
+              <div>
+                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#166534' }}>
+                  Transporter LR Copy Attached: {lrCopyDoc.name || 'Lorry_Receipt.pdf'}
                 </span>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: lrCopyDoc ? '#DCFCE7' : '#FEF3C7',
-                  color: lrCopyDoc ? '#15803D' : '#B45309'
-                }}>
-                  {lrCopyDoc ? 'LR COPY ATTACHED' : 'AWAITING LR COPY'}
+                <span style={{ fontSize: '11px', color: '#64748B', marginLeft: '8px' }}>
+                  ({lrCopyDoc.size || 'Attached'})
                 </span>
               </div>
-
-              {!isReadOnly && (
-                <label style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: lrCopyDoc ? '#FFFFFF' : '#0E7490',
-                  color: lrCopyDoc ? '#0F172A' : '#FFFFFF',
-                  border: lrCopyDoc ? '1px solid #CBD5E1' : 'none',
-                  padding: '7px 16px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: uploadingLr ? 'not-allowed' : 'pointer',
-                  boxShadow: lrCopyDoc ? 'none' : '0 2px 6px rgba(14,116,144,0.25)'
-                }}>
-                  {uploadingLr ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
-                  {lrCopyDoc ? 'Replace LR Copy' : 'Upload LR Copy Receipt'}
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    disabled={uploadingLr}
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleUploadLrCopy(e.target.files[0]);
-                      }
-                    }}
-                  />
-                </label>
-              )}
             </div>
-
-            {lrCopyDoc ? (
-              <div
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
                 onClick={handlePreviewLrCopy}
-                title="Click to view LR Copy document"
                 style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #0E7490',
+                  backgroundColor: '#0E7490',
+                  color: '#FFFFFF',
+                  fontSize: '11.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: '#FFFFFF',
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #CBD5E1',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
+                  gap: '4px'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <FileText size={20} style={{ color: '#0E7490' }} />
-                  <div>
-                    <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>{lrCopyDoc.name || 'Lorry_Receipt_Copy.pdf'}</div>
-                    <div style={{ fontSize: '11px', color: '#64748B' }}>{lrCopyDoc.size || 'Attached'} • Uploaded {new Date(lrCopyDoc.uploadedAt || Date.now()).toLocaleTimeString()}</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={handlePreviewLrCopy}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #0E7490',
-                      backgroundColor: '#0E7490',
-                      color: '#FFFFFF',
-                      fontSize: '11.5px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Eye size={13} /> View LR Copy
-                  </button>
-                  {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => setLrCopyDoc(null)}
-                      style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', padding: '4px' }}
-                      title="Remove LR Copy"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p style={{ fontSize: '11.5px', color: '#78350F', margin: 0, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Info size={15} style={{ color: '#D97706', flexShrink: 0 }} />
-                <span>
-                  <strong>Business Note:</strong> If the LR copy is not yet received from the driver/transporter, you can finalize vehicle loading now. The BOM order will be kept <strong>OPEN</strong> under <strong>"Awaiting LR Copy"</strong> status until the receipt is uploaded.
-                </span>
-              </p>
-            )}
+                <Eye size={13} /> View LR
+              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setLrCopyDoc(null)}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #FCA5A5',
+                    backgroundColor: '#FEF2F2',
+                    color: '#EF4444',
+                    fontSize: '11.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕ Remove
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1289,7 +1216,16 @@ return (
         alignItems: 'center'
       }}>
         <div style={{ fontSize: '13px', color: '#64748B', fontWeight: '700' }}>
-          Dispatch Mode: <span style={{ color: deliveryMode === 'transport' ? '#0E7490' : '#059669', fontWeight: '900' }}>{deliveryMode === 'transport' ? '3rd-Party Transport (VRL/ARC)' : 'Self-Pickup / Direct Delivery'}</span>
+          Dispatch Mode: <span style={{
+            color: deliveryMode === 'transport' ? '#0E7490' : deliveryMode === 'own_vehicle' ? '#2563EB' : '#059669',
+            fontWeight: '900'
+          }}>
+            {deliveryMode === 'transport'
+              ? '3rd-Party Transport (VRL/ARC)'
+              : deliveryMode === 'own_vehicle'
+                ? 'Own Vehicle / Porter (No LR Required)'
+                : 'Self-Pickup / Direct Delivery (No LR Required)'}
+          </span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
@@ -1307,7 +1243,7 @@ return (
           {!isReadOnly && (
             <button
               type="button"
-              onClick={handleFinalizeVehicleLoading}
+              onClick={handleInitiateConfirm}
               disabled={uploadingMedia || uploadingLr}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -1319,12 +1255,282 @@ return (
                 transition: 'all 0.15s ease'
               }}
             >
-              <Truck size={16} /> Confirm Loading & Dispatch
+              <Truck size={16} />
+              {isAwaitingLr
+                ? 'Upload LR Copy & Close BOM'
+                : 'Confirm Loading & Dispatch'}
             </button>
           )}
         </div>
       </div>
     </div>
+
+    {/* Dedicated LR Copy Upload Popup Modal for 3rd-Party Transport */}
+    {showLrPopup && (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 99999, padding: '20px'
+      }}>
+        <div style={{
+          backgroundColor: '#FFFFFF', borderRadius: '18px',
+          width: '100%', maxWidth: '540px', overflow: 'hidden',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+          border: '1px solid #CBD5E1', display: 'flex', flexDirection: 'column'
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '18px 22px',
+            backgroundColor: '#0F172A',
+            color: '#FFFFFF',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={18} style={{ color: '#38BDF8' }} />
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>
+                  Upload Transporter LR Copy / Bilty
+                </h3>
+              </div>
+              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#94A3B8' }}>
+                Order Ref: <strong style={{ color: '#E2E8F0' }}>{bCode}</strong> • {transp || '3rd-Party Transport'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowLrPopup(false)}
+              style={{
+                background: 'rgba(255,255,255,0.1)', border: 'none',
+                color: '#FFFFFF', width: '32px', height: '32px', borderRadius: '8px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '16px', fontWeight: 'bold'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* LR Docket Number input */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                LR / Docket / Bilty Number
+              </label>
+              <input
+                type="text"
+                value={popupLrNo}
+                onChange={(e) => {
+                  setPopupLrNo(e.target.value);
+                  setVehicleLoadingData(prev => ({ ...prev, lrNo: e.target.value }));
+                }}
+                placeholder="e.g. LR-2026-8812"
+                style={{
+                  width: '100%', height: '42px', borderRadius: '10px',
+                  border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px',
+                  fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Upload Zone */}
+            <div style={{
+              backgroundColor: lrCopyDoc ? '#F0FDF4' : '#F8FAFC',
+              border: `2px dashed ${lrCopyDoc ? '#86EFAC' : '#CBD5E1'}`,
+              borderRadius: '12px',
+              padding: '20px',
+              textAlign: 'center',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'
+            }}>
+              {lrCopyDoc ? (
+                <>
+                  <div style={{
+                    width: '44px', height: '44px', borderRadius: '10px',
+                    backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <FileText size={24} style={{ color: '#16A34A' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                      {lrCopyDoc.name}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                      {lrCopyDoc.size || 'Attached'} • Ready to Complete
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={handlePreviewLrCopy}
+                      style={{
+                        padding: '6px 12px', borderRadius: '6px',
+                        border: '1px solid #0E7490', backgroundColor: '#0E7490',
+                        color: '#FFFFFF', fontSize: '11.5px', fontWeight: '700',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                      }}
+                    >
+                      <Eye size={13} /> View
+                    </button>
+                    <label style={{
+                      padding: '6px 12px', borderRadius: '6px',
+                      border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF',
+                      color: '#0F172A', fontSize: '11.5px', fontWeight: '700',
+                      cursor: uploadingLr ? 'not-allowed' : 'pointer'
+                    }}>
+                      Replace
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        disabled={uploadingLr}
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleUploadLrCopy(e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setLrCopyDoc(null)}
+                      style={{
+                        padding: '6px 10px', borderRadius: '6px',
+                        border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2',
+                        color: '#EF4444', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer'
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{
+                    width: '48px', height: '48px', borderRadius: '12px',
+                    backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <UploadCloud size={24} style={{ color: '#0284C7' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                      Upload Physical LR / Bilty Receipt
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                      Supports PNG, JPG, or PDF from driver or transporter
+                    </div>
+                  </div>
+                  <label style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    backgroundColor: '#0E7490', color: '#FFFFFF',
+                    padding: '8px 18px', borderRadius: '8px',
+                    fontSize: '12.5px', fontWeight: '800',
+                    cursor: uploadingLr ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 6px rgba(14,116,144,0.3)',
+                    marginTop: '4px'
+                  }}>
+                    {uploadingLr ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+                    {uploadingLr ? 'Uploading LR Copy...' : 'Choose File to Upload'}
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      disabled={uploadingLr}
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleUploadLrCopy(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
+            {/* Explanatory note */}
+            <div style={{
+              backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+              borderRadius: '10px', padding: '10px 14px',
+              fontSize: '11.5px', color: '#92400E', lineHeight: '1.4',
+              display: 'flex', alignItems: 'flex-start', gap: '8px'
+            }}>
+              <Info size={15} style={{ color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong>LR Copy Requirement:</strong> If the LR copy is available now, upload it and click <strong>"Upload & Complete Dispatch"</strong>. If the driver has not yet provided the LR copy, you can click <strong>"Skip & Dispatch (Awaiting LR Copy)"</strong> so the vehicle can depart on road; the BOM will remain open until the receipt is uploaded later.
+              </div>
+            </div>
+          </div>
+
+          {/* Footer buttons */}
+          <div style={{
+            padding: '14px 22px', backgroundColor: '#F8FAFC',
+            borderTop: '1px solid #E2E8F0',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px'
+          }}>
+            <button
+              type="button"
+              onClick={() => setShowLrPopup(false)}
+              style={{
+                padding: '8px 16px', borderRadius: '8px',
+                border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF',
+                color: '#475569', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  handleFinalizeVehicleLoading({
+                    forceStatus: 'Dispatched - Awaiting LR Copy',
+                    overrideLrDoc: null,
+                    overrideLrNo: popupLrNo || lr
+                  });
+                }}
+                disabled={uploadingLr}
+                style={{
+                  padding: '8px 16px', borderRadius: '8px',
+                  border: '1px solid #F59E0B', backgroundColor: '#FEF3C7',
+                  color: '#92400E', fontSize: '12.5px', fontWeight: '800',
+                  cursor: uploadingLr ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Skip & Dispatch (Awaiting LR)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!lrCopyDoc) {
+                    alert('Please choose an LR Copy file to upload, or click "Skip & Dispatch (Awaiting LR)" if the document is not yet received.');
+                    return;
+                  }
+                  handleFinalizeVehicleLoading({
+                    forceStatus: 'Completed',
+                    overrideLrDoc: lrCopyDoc,
+                    overrideLrNo: popupLrNo || lr
+                  });
+                }}
+                disabled={!lrCopyDoc || uploadingLr}
+                style={{
+                  padding: '8px 20px', borderRadius: '8px', border: 'none',
+                  backgroundColor: (!lrCopyDoc || uploadingLr) ? '#94A3B8' : '#0E7490',
+                  color: '#FFFFFF', fontSize: '12.5px', fontWeight: '800',
+                  cursor: (!lrCopyDoc || uploadingLr) ? 'not-allowed' : 'pointer',
+                  boxShadow: (!lrCopyDoc || uploadingLr) ? 'none' : '0 2px 6px rgba(14,116,144,0.3)',
+                  display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                <CheckCircle size={15} /> Upload & Complete Dispatch
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Live Camera Modal (like DispatchPackingModal) */}
     {showLiveCameraModal && (

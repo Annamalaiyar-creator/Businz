@@ -426,12 +426,24 @@ export default function BomOrdersView(props) {
       const invalidItems = [];
       bomMaterialsList.forEach((it, idx) => {
         const qty = parseFloat(it.qty) || 0;
+        const r = parseFloat(it.rate) || 0;
+        const isPresetItem = Boolean(it.isPresetItem);
         if (!it.name || !it.name.trim()) {
           invalidItems.push(`Item #${idx + 1}: Item name is missing`);
         } else if (qty <= 0) {
           invalidItems.push(`Item #${idx + 1} (${it.name}): Quantity must be greater than 0`);
+        } else if (!isPresetItem && r <= 0) {
+          invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be greater than 0`);
         }
       });
+      if (presetGroups && Object.keys(presetGroups).length > 0) {
+        Object.values(presetGroups).forEach(g => {
+          const kp = parseFloat(g.kitPrice) || 0;
+          if (kp <= 0) {
+            invalidItems.push(`Preset Kit (${g.presetName || 'Kit'}): Kit Price (₹) is required and must be greater than 0`);
+          }
+        });
+      }
       if (invalidItems.length > 0) {
         errors.items = invalidItems.join(', ');
         missingList.push({
@@ -3579,7 +3591,7 @@ export default function BomOrdersView(props) {
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                  <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹)</th>
+                  <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
                   {bomMaterialsList.some(it => it.isPresetItem) && <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Preset Amt (₹)</th>}
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
