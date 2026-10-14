@@ -208,8 +208,11 @@ cat << EOF > "${MANIFEST_FILE}"
 EOF
 echo "✅ Deployment manifest created with all ${TOTAL_STORES} expected stores."
 
-# Copy standalone rollback script to backup location
-cp "${APP_DIR}/scripts/rollback_from_manifest.sh" "${BACKUP_BASE}/rollback_from_manifest.sh"
+# Ensure standalone rollback script exists in backup location
+if [ -f "${APP_DIR}/scripts/rollback_from_manifest.sh" ]; then
+  cp "${APP_DIR}/scripts/rollback_from_manifest.sh" "${BACKUP_BASE}/rollback_from_manifest.sh"
+fi
+[ -s "${BACKUP_BASE}/rollback_from_manifest.sh" ] || { echo "❌ Missing rollback_from_manifest.sh in ${BACKUP_BASE}"; exit 1; }
 chmod +x "${BACKUP_BASE}/rollback_from_manifest.sh"
 
 # --- PHASE 3: SEED EXTERNAL STORAGE ---
