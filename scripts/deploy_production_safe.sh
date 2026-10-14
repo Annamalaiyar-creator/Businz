@@ -118,7 +118,7 @@ sudo -u "${PM2_USER}" touch "${EXT_DATA_DIR}/.perm_test" && rm -f "${EXT_DATA_DI
 echo "✅ External storage permissions verified for ${PM2_USER}."
 
 # 8. Verify PostgreSQL write capability in rolled-back transaction
-sudo -u "${PM2_USER}" psql -d businz -c "BEGIN; CREATE TEMP TABLE _businz_write_test(id int); INSERT INTO _businz_write_test VALUES(1); ROLLBACK;"
+sudo -u postgres psql -d businz -c "BEGIN; CREATE TEMP TABLE _businz_write_test(id int); INSERT INTO _businz_write_test VALUES(1); ROLLBACK;"
 echo "✅ PostgreSQL write capability confirmed."
 
 # 9. Verify available disk space for backup (>= 2GB)
