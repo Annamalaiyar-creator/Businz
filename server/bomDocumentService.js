@@ -2,12 +2,13 @@ import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { getBomDocumentsDir } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const BUCKET_NAME = 'bom-documents';
-export const UPLOADS_BASE = path.resolve(__dirname, 'uploads', BUCKET_NAME);
+export const UPLOADS_BASE = getBomDocumentsDir();
 export const MAX_FILE_SIZE = 52428800; // 50 MB limit
 export const DEFAULT_SIGNED_URL_EXPIRY = 900; // 15 minutes in seconds
 

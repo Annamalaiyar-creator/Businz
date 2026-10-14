@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { getStoreFilePath } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,7 +123,7 @@ export async function initPostgresDatabase() {
     for (const storeKey of storesToSeed) {
       const checkRes = await client.query(`SELECT key FROM controlroom_store WHERE key = $1`, [storeKey]);
       if (checkRes.rows.length === 0) {
-        const filePath = path.resolve(__dirname, `${storeKey}.json`);
+        const filePath = getStoreFilePath(`${storeKey}.json`);
         if (fs.existsSync(filePath)) {
           try {
             const raw = fs.readFileSync(filePath, 'utf8');

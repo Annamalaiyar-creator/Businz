@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getBackupDir, getStoreFilePath } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BACKUP_DIR = path.resolve(__dirname, 'backups');
+const BACKUP_DIR = getBackupDir();
 
 // Ensure backups directory exists
 if (!fs.existsSync(BACKUP_DIR)) {
@@ -84,7 +85,7 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
 
     // B. Check server disk file
     if (!data) {
-      const diskPath = path.join(__dirname, `${key}.json`);
+      const diskPath = getStoreFilePath(`${key}.json`);
       if (fs.existsSync(diskPath)) {
         try {
           data = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
@@ -133,7 +134,7 @@ export async function createFullBackup({ supabaseClient, memoryStore = {}, trigg
 
   // 3. Collect Media Cache (All PDFs, images, proof documents, datasheets)
   let mediaCache = {};
-  const mediaPath = path.join(__dirname, 'media_cache.json');
+  const mediaPath = getStoreFilePath('media_cache.json');
   if (fs.existsSync(mediaPath)) {
     try {
       mediaCache = JSON.parse(fs.readFileSync(mediaPath, 'utf8'));
@@ -265,7 +266,7 @@ export async function restoreFromBackup(backupData, { supabaseClient, memoryStor
       memoryStore[storeKey] = storeValue;
 
       // Disk file
-      const diskPath = path.join(__dirname, `${storeKey}.json`);
+      const diskPath = getStoreFilePath(`${storeKey}.json`);
       fs.writeFileSync(diskPath, JSON.stringify(storeValue, null, 2), 'utf8');
 
       // Supabase cloud table
@@ -303,7 +304,7 @@ export async function restoreFromBackup(backupData, { supabaseClient, memoryStor
   let restoredMediaCount = 0;
   if (backupData.media && typeof backupData.media === 'object') {
     try {
-      const mediaPath = path.join(__dirname, 'media_cache.json');
+      const mediaPath = getStoreFilePath('media_cache.json');
       fs.writeFileSync(mediaPath, JSON.stringify(backupData.media, null, 2), 'utf8');
       restoredMediaCount = Object.keys(backupData.media).length;
       console.log(`[BackupEngine] Restored ${restoredMediaCount} media files to media_cache.json`);

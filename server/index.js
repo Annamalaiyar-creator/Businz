@@ -50,11 +50,25 @@ import {
   getUserChats,
   addUserChat
 } from './whatsappMultiService.js';
+import {
+  getStoreFilePath,
+  getUploadsDir,
+  getBomDocumentsDir,
+  getBackupDir,
+  getWaSessionsDir,
+  getDataDir,
+  isExternalStorageActive,
+  initRuntimeStorage
+} from './runtimePaths.js';
+
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
+
+// Initialize persistent runtime storage (decouples JSON stores & uploads from Git working tree)
+initRuntimeStorage();
 
 // In-memory active cache for server stores
 let supabaseMemoryStore = {};
@@ -73,17 +87,6 @@ initPostgresDatabase().then(() => {
 
 // Self-hosted database client (queries local PostgreSQL directly with fallback to disk)
 const supabase = createLocalDbClient(supabaseMemoryStore);
-
-// Local Store file path & helpers
-function getStoreFilePath(filename) {
-  const p1 = path.join(__dirname, filename);
-  if (fs.existsSync(p1)) return p1;
-  const p2 = path.resolve(process.cwd(), 'server', filename);
-  if (fs.existsSync(p2)) return p2;
-  const p3 = path.resolve(process.cwd(), filename);
-  if (fs.existsSync(p3)) return p3;
-  return p1;
-}
 
 
 const getPoStageRank = (p) => {
@@ -448,7 +451,7 @@ const loadDatabaseOpportunities = async () => {
 
   // Fallback to disk JSON
   try {
-    const diskPath = path.resolve(__dirname, 'crm_opportunities.json');
+    const diskPath = getStoreFilePath('crm_opportunities.json');
     if (fs.existsSync(diskPath)) {
       const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
       supabaseMemoryStore.crm_opportunities = diskData;
@@ -519,9 +522,9 @@ const loadDatabaseLeads = async () => {
     console.warn('[loadDatabaseLeads] Supabase fetch notice:', err?.message || err);
   }
 
-  // Fallback to disk JSON (server/crm_leads.json)
+  // Fallback to disk JSON (crm_leads.json)
   try {
-    const diskPath = path.resolve(__dirname, 'crm_leads.json');
+    const diskPath = getStoreFilePath('crm_leads.json');
     if (fs.existsSync(diskPath)) {
       const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
       if (Array.isArray(diskData) && diskData.length > 0) {
@@ -1340,6 +1343,10 @@ const saveDatabaseStore = async (key, storeData) => {
       try {
         fs.writeFileSync(getStoreFilePath('employees_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
       } catch (_) {}
+    } else if (cleanKey === 'invoice_store' && Array.isArray(storeData)) {
+      try {
+        fs.writeFileSync(getStoreFilePath('invoice_store.json'), JSON.stringify(storeData, null, 2), 'utf8');
+      } catch (_) {}
     }
   } catch (diskErr) {
     console.warn(`[saveDatabaseStore disk backup notice for ${key}]:`, diskErr?.message);
@@ -1498,8 +1505,58 @@ app.use(cors({
 app.use(express.json({ limit: '150mb' }));
 app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
+// 🔒 CONTROLLED MAINTENANCE WINDOW: WRITE-BLOCKING MIDDLEWARE
+// Prevents concurrent writes during Git operations, backups, and migration tasks.
+global.__BUSINZ_MAINTENANCE_MODE = process.env.BUSINZ_MAINTENANCE_MODE === 'true';
+
+app.use((req, res, next) => {
+  if (global.__BUSINZ_MAINTENANCE_MODE) {
+    // Whitelist read-only operations, static assets, and health/maintenance endpoints
+    const isReadOnly = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+    const isMaintenanceEndpoint = req.path.startsWith('/api/maintenance') || req.path === '/api/health';
+    if (isReadOnly || isMaintenanceEndpoint) {
+      return next();
+    }
+    // Block mutating requests (POST, PUT, PATCH, DELETE) with HTTP 503
+    res.setHeader('Retry-After', '30');
+    return res.status(503).json({
+      success: false,
+      error: 'System is temporarily in read-only maintenance mode for deployment data protection.',
+      maintenance: true,
+      retryAfter: 30
+    });
+  }
+  next();
+});
+
+// Maintenance window status & control endpoints
+app.get('/api/maintenance/status', (req, res) => {
+  res.json({
+    success: true,
+    maintenance: Boolean(global.__BUSINZ_MAINTENANCE_MODE),
+    externalStorage: isExternalStorageActive(),
+    dataDir: getDataDir(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.post('/api/maintenance/toggle', (req, res) => {
+  const { enabled, secret } = req.body || {};
+  const expectedSecret = process.env.BUSINZ_ADMIN_SECRET || 'businz_maint_key_2026';
+  if (secret && secret !== expectedSecret) {
+    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  }
+  global.__BUSINZ_MAINTENANCE_MODE = Boolean(enabled);
+  console.log(`🔒 [Maintenance Mode] Write-blocking set to: ${global.__BUSINZ_MAINTENANCE_MODE}`);
+  res.json({
+    success: true,
+    maintenance: Boolean(global.__BUSINZ_MAINTENANCE_MODE),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 📁 STATIC MEDIA UPLOADS & STREAMING DIRECTORY (Supports byte-range video streaming)
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = getUploadsDir();
 try {
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -1584,7 +1641,7 @@ app.get('/api/media/find/:name', (req, res) => {
     }
 
     // 1. Check server media_cache.json
-    const mediaCachePath = path.join(__dirname, 'media_cache.json');
+    const mediaCachePath = getStoreFilePath('media_cache.json');
     if (fs.existsSync(mediaCachePath)) {
       try {
         const mediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8'));
@@ -4315,7 +4372,7 @@ app.post('/api/boms/:bomCode/documents', requireBusinzSession, async (req, res) 
 
     // Also mirror to media_cache.json so instant lookup works seamlessly across sessions
     try {
-      const mediaCachePath = path.join(__dirname, 'media_cache.json');
+      const mediaCachePath = getStoreFilePath('media_cache.json');
       let mediaCache = {};
       if (fs.existsSync(mediaCachePath)) {
         mediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8') || '{}');
@@ -7263,7 +7320,7 @@ app.get('/api/system/backup/create', async (req, res) => {
 app.get('/api/system/backup/download/:filename', (req, res) => {
   try {
     const safeFilename = path.basename(req.params.filename);
-    const filePath = path.resolve(__dirname, 'backups', safeFilename);
+    const filePath = path.resolve(getBackupDir(), safeFilename);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, error: 'Backup file not found' });
     }
@@ -7284,7 +7341,7 @@ app.get('/api/system/backup/latest/download', (req, res) => {
       return res.status(404).json({ success: false, error: 'No backups exist yet' });
     }
     const latest = backups[0];
-    const filePath = path.resolve(__dirname, 'backups', latest.filename);
+    const filePath = path.resolve(getBackupDir(), latest.filename);
     res.setHeader('Content-Disposition', `attachment; filename="${latest.filename}"`);
     res.setHeader('Content-Type', 'application/json');
     fs.createReadStream(filePath).pipe(res);
@@ -7300,7 +7357,7 @@ app.post('/api/system/backup/restore', async (req, res) => {
     // If filename is passed instead of full payload
     if (req.body.filename && (!req.body.stores || Object.keys(req.body.stores).length === 0)) {
       const safeFilename = path.basename(req.body.filename);
-      const filePath = path.resolve(__dirname, 'backups', safeFilename);
+      const filePath = path.resolve(getBackupDir(), safeFilename);
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({ success: false, error: 'Backup file does not exist on server' });
       }

@@ -4,14 +4,12 @@ import { fileURLToPath } from 'url';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
+import { getWaSessionsDir } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SESSIONS_BASE_DIR = path.join(__dirname, 'wa_sessions');
-if (!fs.existsSync(SESSIONS_BASE_DIR)) {
-  fs.mkdirSync(SESSIONS_BASE_DIR, { recursive: true });
-}
+const SESSIONS_BASE_DIR = getWaSessionsDir();
 
 const silentLogger = pino({ level: 'silent' });
 
