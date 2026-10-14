@@ -19,6 +19,18 @@ const defaultSalesPIs = [];
 
 const defaultProcurementPIs = [];
 
+export const PRESET_THEMES = [
+  { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', tagBg: '#CFFAFE', tagText: '#155E75', badge: 'PRESET 1', dot: '#0891B2' },
+  { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', tagBg: '#E0E7FF', tagText: '#3730A3', badge: 'PRESET 2', dot: '#4F46E5' },
+  { primary: '#D97706', bg: '#FFFBEB', border: '#FDE68A', tagBg: '#FEF3C7', tagText: '#92400E', badge: 'PRESET 3', dot: '#B45309' },
+  { primary: '#059669', bg: '#ECFDF5', border: '#A7F3D0', tagBg: '#D1FAE5', tagText: '#065F46', badge: 'PRESET 4', dot: '#047857' },
+  { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'PRESET 5', dot: '#6D28D9' },
+];
+
+export const getPresetTheme = (groupIndex) => {
+  return PRESET_THEMES[groupIndex % PRESET_THEMES.length] || PRESET_THEMES[0];
+};
+
 export const is5PctSolarProduct = (name = '', cat = '') => {
   const text = `${name} ${cat}`.toLowerCase();
   return (
@@ -3209,7 +3221,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
                                           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                                         >
-                                          📦 {bCode} ↗
+                                          <Boxes size={12} style={{ marginRight: '3px' }} />
+                                          {bCode} ↗
                                         </button>
                                       );
                                     })}
@@ -4510,20 +4523,41 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           </div>
                         </td>
                       </tr>
-                    ) : (
-                      piItems.map((item, i) => {
+                    ) : (() => {
+                      const distinctPresetGroupIds = [];
+                      piItems.forEach(it => {
+                        if (it.isPresetItem && it.presetGroupId && !distinctPresetGroupIds.includes(it.presetGroupId)) {
+                          distinctPresetGroupIds.push(it.presetGroupId);
+                        }
+                      });
+
+                      return piItems.map((item, i) => {
                         const isChecked = selectedItemIndexes.includes(i);
                         const isPresetItem = Boolean(item.isPresetItem);
                         const groupId = item.presetGroupId;
                         const currentGroup = groupId ? (presetGroups[groupId] || { kitPrice: '', setCount: 1, presetName: item.presetName }) : null;
 
+                        const groupIndex = groupId ? distinctPresetGroupIds.indexOf(groupId) : -1;
+                        const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
+                        const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
+
                         let isFirstInGroup = false;
                         let groupCount = 0;
+                        let itemIndexInGroup = 0;
                         if (isPresetItem && groupId) {
                           const itemsInGroup = piItems.filter(it => it.presetGroupId === groupId);
                           groupCount = itemsInGroup.length;
                           isFirstInGroup = piItems.findIndex(it => it.presetGroupId === groupId) === i;
+                          itemIndexInGroup = itemsInGroup.findIndex(it => it === item) + 1;
                         }
+
+                        const customItems = piItems.filter(it => !it.isPresetItem);
+                        const isFirstCustomItem = !isPresetItem && piItems.findIndex(it => !it.isPresetItem) === i;
+                        const customIndex = !isPresetItem ? customItems.findIndex(it => it === item) + 1 : null;
+
+                        const displaySNo = isPresetItem && distinctPresetGroupIds.length > 0
+                          ? `${presetNumber}.${itemIndexInGroup}`
+                          : (customIndex !== null ? (distinctPresetGroupIds.length > 0 ? `C.${customIndex}` : `${i + 1}`) : `${i + 1}`);
 
                         const q = parseFloat(item.qty) || 0;
                         const r = parseFloat(item.rate) || 0;
@@ -4532,352 +4566,463 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         const itemTotal = taxable + (taxable * (gstPct / 100));
 
                         return (
-                          <tr
-                            key={i}
-                            style={{
-                              borderBottom: '1px solid #F1F5F9',
-                              backgroundColor: isChecked ? '#ECFEFF' : (isPresetItem ? '#F8FAFC' : 'transparent'),
-                              transition: 'background-color 0.15s ease'
-                            }}
-                          >
-                            <td style={{
-                              padding: '12px 14px',
-                              textAlign: 'center',
-                              borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
-                            }}>
-                              <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) setSelectedItemIndexes(prev => [...prev, i]);
-                                  else setSelectedItemIndexes(prev => prev.filter(idx => idx !== i));
-                                }}
-                                style={{ accentColor: '#0E7490', cursor: 'pointer' }}
-                               />
-                            </td>
-                            <td style={{ padding: '12px 10px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <TypeableProductSelect
-                                  value={item.name || ''}
-                                  itemsList={itemsList}
-                                  placeholder="Type or select product / item..."
-                                  accentColor="#0E7490"
-                                  onChange={(val, matched) => {
-                                    if (!matched) {
-                                      setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
-                                      return;
-                                    }
-                                    const pName = matched.name;
-                                    const pCat = matched.category || matched.description || item.category;
-                                    const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
-                                    const isSolar5 = is5PctSolarProduct(pName, pCat);
-                                    let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
-                                    const u = String(rawUom).trim().toUpperCase();
-                                    let resolvedUom = rawUom;
-                                    if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
-                                    else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
-                                    else if (['NUMBERS', 'NUMBER', 'NOS', 'NO'].includes(u)) resolvedUom = 'NOS';
-                                    else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
-                                    else if (['KW', 'KILOWATT', 'KILOWATTS', 'KWP'].includes(u)) resolvedUom = 'KW';
-                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? {
-                                      ...mat,
-                                      code: pCode || mat.code,
-                                      name: pName,
-                                      rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
-                                      uom: resolvedUom,
-                                      category: pCat,
-                                      gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
-                                    } : mat));
-                                  }}
-                                />
-                                <input id={`performa-invoice-category-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`category_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description / Technical specs"
-                                  type="text"
-                                  placeholder="Description / Technical specs..."
-                                  value={item.category || ''}
+                          <React.Fragment key={i}>
+                            {isFirstInGroup && (
+                              <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
+                                <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '8px 14px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        backgroundColor: theme.primary,
+                                        color: '#FFFFFF',
+                                        fontSize: '11px',
+                                        fontWeight: '800',
+                                        letterSpacing: '0.5px'
+                                      }}>
+                                        <Boxes size={12} />
+                                        {theme.badge}
+                                      </span>
+                                      <strong style={{ fontSize: '13px', color: '#0F172A', fontWeight: '800' }}>
+                                        {currentGroup?.presetName || item.presetName || 'Structure Kit'}
+                                      </strong>
+                                      <span style={{
+                                        fontSize: '11px',
+                                        fontWeight: '700',
+                                        padding: '1px 8px',
+                                        borderRadius: '10px',
+                                        backgroundColor: theme.tagBg,
+                                        color: theme.tagText,
+                                        border: `1px solid ${theme.border}`
+                                      }}>
+                                        {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                      </span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                                        Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddPresetItem(groupId)}
+                                        style={{
+                                          padding: '2px 8px',
+                                          fontSize: '11px',
+                                          fontWeight: '700',
+                                          color: theme.primary,
+                                          backgroundColor: '#FFFFFF',
+                                          border: `1px solid ${theme.border}`,
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                        title={`Add component row to ${theme.badge}`}
+                                      >
+                                        <Plus size={11} /> Add to {theme.badge}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
+                              <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                                <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '8px 14px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      backgroundColor: '#475569',
+                                      color: '#FFFFFF',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      letterSpacing: '0.5px'
+                                    }}>
+                                      CUSTOM ITEMS
+                                    </span>
+                                    <strong style={{ fontSize: '12px', color: '#334155' }}>
+                                      Additional Materials / Custom Products ({customItems.length} items)
+                                    </strong>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            <tr
+                              key={i}
+                              style={{
+                                borderBottom: '1px solid #F1F5F9',
+                                backgroundColor: isChecked ? '#ECFEFF' : (isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : 'transparent'),
+                                transition: 'background-color 0.15s ease'
+                              }}
+                            >
+                              <td style={{
+                                padding: '12px 14px',
+                                textAlign: 'center',
+                                borderLeft: isChecked ? '4px solid #0E7490' : (isPresetItem ? `4px solid ${theme.primary}` : '4px solid #CBD5E1')
+                              }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                  <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedItemIndexes(prev => [...prev, i]);
+                                      else setSelectedItemIndexes(prev => prev.filter(idx => idx !== i));
+                                    }}
+                                    style={{ accentColor: theme.primary, cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontSize: '10px', fontWeight: '800', color: isPresetItem ? theme.primary : '#64748B' }}>
+                                    #{displaySNo}
+                                  </span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 10px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <TypeableProductSelect
+                                    value={item.name || ''}
+                                    itemsList={itemsList}
+                                    placeholder="Type or select product / item..."
+                                    accentColor={theme.primary}
+                                    onChange={(val, matched) => {
+                                      if (!matched) {
+                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                                        return;
+                                      }
+                                      const pName = matched.name;
+                                      const pCat = matched.category || matched.description || item.category;
+                                      const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
+                                      const isSolar5 = is5PctSolarProduct(pName, pCat);
+                                      let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
+                                      const u = String(rawUom).trim().toUpperCase();
+                                      let resolvedUom = rawUom;
+                                      if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
+                                      else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
+                                      else if (['NUMBERS', 'NUMBER', 'NOS', 'NO'].includes(u)) resolvedUom = 'NOS';
+                                      else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
+                                      else if (['KW', 'KILOWATT', 'KILOWATTS', 'KWP'].includes(u)) resolvedUom = 'KW';
+                                      setPiItems(prev => prev.map((mat, idx) => idx === i ? {
+                                        ...mat,
+                                        code: pCode || mat.code,
+                                        name: pName,
+                                        rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
+                                        uom: resolvedUom,
+                                        category: pCat,
+                                        gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
+                                      } : mat));
+                                    }}
+                                  />
+                                  <input id={`performa-invoice-category-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`category_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Description / Technical specs"
+                                    type="text"
+                                    placeholder="Description / Technical specs..."
+                                    value={item.category || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setPiItems(prev => prev.map((mat, idx) => {
+                                        if (idx !== i) return mat;
+                                        const isSolar5 = is5PctSolarProduct(mat.name, val);
+                                        return {
+                                          ...mat,
+                                          category: val,
+                                          gstRate: isSolar5 ? '5%' : mat.gstRate
+                                        };
+                                      }));
+                                    }}
+                                    style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
+                                  />
+                                  {isPresetItem && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                      <span style={{
+                                        fontSize: '10px',
+                                        fontWeight: '800',
+                                        padding: '1px 6px',
+                                        borderRadius: '4px',
+                                        backgroundColor: theme.tagBg,
+                                        color: theme.tagText,
+                                        border: `1px solid ${theme.border}`,
+                                        letterSpacing: '0.3px'
+                                      }}>
+                                        {theme.badge} • Component {itemIndexInGroup} of {groupCount}
+                                      </span>
+                                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }} title={currentGroup?.presetName || item.presetName}>
+                                        {currentGroup?.presetName || item.presetName}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 10px' }}>
+                                <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
+                                  value={item.uom || 'NOS'}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => {
-                                      if (idx !== i) return mat;
-                                      const isSolar5 = is5PctSolarProduct(mat.name, val);
-                                      return {
-                                        ...mat,
-                                        category: val,
-                                        gstRate: isSolar5 ? '5%' : mat.gstRate
-                                      };
-                                    }));
+                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
                                   }}
-                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC' }}
-                                 />
-                              </div>
-                            </td>
-                            <td style={{ padding: '12px 10px' }}>
-                              <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
-                                value={item.uom || 'NOS'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
-                                }}
-                                style={{
-                                  width: '100%',
-                                  height: '38px',
-                                  borderRadius: '8px',
-                                  border: '1px solid #E2E8F0',
-                                  padding: '0 6px',
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  color: '#0F172A',
-                                  backgroundColor: '#FFFFFF',
-                                  outline: 'none',
-                                  boxSizing: 'border-box',
-                                  cursor: 'pointer',
-                                  textAlign: 'center'
-                                }}
-                              >
-                                <option value="MTR">MTR (Meter)</option>
-                                <option value="PCS">PCS (Pieces)</option>
-                                <option value="NOS">NOS (Numbers)</option>
-                                <option value="SET">SET (Sets)</option>
-                                <option value="KW">KW (Kilowatt)</option>
-                                {item.uom && !['MTR', 'PCS', 'NOS', 'SET', 'KW', 'Kw'].includes(item.uom) && (
-                                  <option value={item.uom}>{item.uom}</option>
+                                  style={{
+                                    width: '100%',
+                                    height: '38px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #E2E8F0',
+                                    padding: '0 6px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    color: '#0F172A',
+                                    backgroundColor: '#FFFFFF',
+                                    outline: 'none',
+                                    boxSizing: 'border-box',
+                                    cursor: 'pointer',
+                                    textAlign: 'center'
+                                  }}
+                                >
+                                  <option value="MTR">MTR (Meter)</option>
+                                  <option value="PCS">PCS (Pieces)</option>
+                                  <option value="NOS">NOS (Numbers)</option>
+                                  <option value="SET">SET (Sets)</option>
+                                  <option value="KW">KW (Kilowatt)</option>
+                                  {item.uom && !['MTR', 'PCS', 'NOS', 'SET', 'KW', 'Kw'].includes(item.uom) && (
+                                    <option value={item.uom}>{item.uom}</option>
+                                  )}
+                                </select>
+                              </td>
+                              <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
+                                <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <input id={`performa-invoice-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
+                                    type="number"
+                                    value={item.qty}
+                                    placeholder="0"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setPiItems(prev => prev.map((mat, idx) => {
+                                        if (idx !== i) return mat;
+                                        const mult = Math.max(1, parseInt(currentGroup?.setCount) || 1);
+                                        const parsedVal = parseFloat(val) || 0;
+                                        return {
+                                          ...mat,
+                                          qty: val,
+                                          baseQty: isPresetItem ? (parsedVal / mult) : mat.baseQty
+                                        };
+                                      }));
+                                    }}
+                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
+                                  />
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 10px' }}>
+                                {isPresetItem ? (
+                                  <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
+                                ) : (
+                                  <input id={`performa-invoice-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
+                                    type="number"
+                                    value={item.rate}
+                                    placeholder="0.00"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
+                                    }}
+                                    style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                                  />
                                 )}
-                              </select>
-                            </td>
-                            <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
-                              <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <input id={`performa-invoice-0-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`0_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0"
-                                  type="number"
-                                  value={item.qty}
-                                  placeholder="0"
+                              </td>
+                              <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
+                                  value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => {
-                                      if (idx !== i) return mat;
-                                      const mult = Math.max(1, parseInt(currentGroup?.setCount) || 1);
-                                      const parsedVal = parseFloat(val) || 0;
-                                      return {
-                                        ...mat,
-                                        qty: val,
-                                        baseQty: isPresetItem ? (parsedVal / mult) : mat.baseQty
-                                      };
-                                    }));
+                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, gstRate: val } : mat));
                                   }}
-                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 8px', fontSize: '13px', textAlign: 'center', outline: 'none', boxSizing: 'border-box', fontWeight: '600', backgroundColor: '#FFFFFF' }}
-                                 />
-                              </div>
-                            </td>
-                            <td style={{ padding: '12px 10px' }}>
-                              {isPresetItem ? (
-                                <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>—</span>
-                              ) : (
-                                <input id={`performa-invoice-0-00-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`000_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="0.00"
-                                  type="number"
-                                  value={item.rate}
-                                  placeholder="0.00"
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, rate: val } : mat));
-                                  }}
-                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '13px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                                 />
-                              )}
-                            </td>
-                            <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                              <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
-                                value={item.gstRate || (currentGroup && currentGroup.gstRate) || '18%'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, gstRate: val } : mat));
-                                }}
-                                style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
-                              >
-                                <option value="18%">18% GST</option>
-                                <option value="12%">12% GST</option>
-                                <option value="5%">5% GST</option>
-                                <option value="0%">0% Exempt</option>
-                              </select>
-                            </td>
-                            {hasAnyPreset && (() => {
-                              if (isPresetItem) {
-                                if (isFirstInGroup) {
-                                  return (
-                                    <td
-                                      rowSpan={groupCount}
-                                      style={{
-                                        padding: '12px 10px',
-                                        verticalAlign: 'middle',
-                                        backgroundColor: '#EEF2FF',
-                                        borderLeft: '2px solid #C7D2FE',
-                                        borderRight: '2px solid #C7D2FE'
-                                      }}
-                                    >
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                        <span
-                                          style={{
-                                            fontSize: '11px',
-                                            fontWeight: '800',
-                                            color: '#4338CA',
-                                            textAlign: 'center',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                            maxWidth: '120px',
-                                            display: 'block'
-                                          }}
-                                          title={currentGroup?.presetName}
-                                        >
-                                          {currentGroup?.presetName}
-                                        </span>
-
-                                        <div style={{ position: 'relative', width: '100%' }}>
-                                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#DC2626' : '#6366F1', pointerEvents: 'none' }}>₹</span>
-                                          <input id="performa-invoice-0-00" name="000" aria-label="0.00"
-                                            type="number"
-                                            required
-                                            value={currentGroup?.kitPrice || ''}
-                                            placeholder="Enter Amt *"
-                                            onFocus={(e) => e.target.select()}
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              if (groupId) {
-                                                setPresetGroups(prev => ({
-                                                  ...prev,
-                                                  [groupId]: { ...(prev[groupId] || currentGroup), kitPrice: val }
-                                                }));
-                                              }
-                                            }}
+                                  style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
+                                >
+                                  <option value="18%">18% GST</option>
+                                  <option value="12%">12% GST</option>
+                                  <option value="5%">5% GST</option>
+                                  <option value="0%">0% Exempt</option>
+                                </select>
+                              </td>
+                              {hasAnyPreset && (() => {
+                                if (isPresetItem) {
+                                  if (isFirstInGroup) {
+                                    return (
+                                      <td
+                                        rowSpan={groupCount}
+                                        style={{
+                                          padding: '12px 10px',
+                                          verticalAlign: 'middle',
+                                          backgroundColor: theme.bg,
+                                          borderLeft: `2px solid ${theme.border}`,
+                                          borderRight: `2px solid ${theme.border}`
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                                          <span
                                             style={{
-                                              width: '100%', height: '42px', borderRadius: '8px',
-                                              border: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '2px solid #EF4444' : '2px solid #818CF8',
-                                              padding: '0 10px 0 26px',
-                                              fontSize: '15px', fontWeight: '800',
-                                              color: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#DC2626' : '#312E81',
-                                              textAlign: 'right', outline: 'none', boxSizing: 'border-box',
-                                              backgroundColor: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#FEF2F2' : 'white'
+                                              fontSize: '11px',
+                                              fontWeight: '800',
+                                              color: theme.primary,
+                                              textAlign: 'center',
+                                              overflow: 'hidden',
+                                              textOverflow: 'ellipsis',
+                                              whiteSpace: 'nowrap',
+                                              maxWidth: '120px',
+                                              display: 'block'
                                             }}
-                                           />
-                                        </div>
-                                        {(!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) && (
-                                          <span style={{ fontSize: '10px', fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
-                                            * Mandatory Amount
+                                            title={currentGroup?.presetName}
+                                          >
+                                            {theme.badge}: {currentGroup?.presetName}
                                           </span>
-                                        )}
 
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                          <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                            {groupCount} items ×
-                                          </span>
-                                          <input id="performa-invoice-set-count" name="setCount" aria-label="SetCount"
-                                            type="number"
-                                            min="0"
-                                            max="999"
-                                            value={currentGroup?.setCount !== undefined && currentGroup?.setCount !== null ? currentGroup.setCount : ''}
-                                            onFocus={(e) => e.target.select()}
-                                            onChange={(e) => {
-                                              const rawVal = e.target.value;
-                                              if (rawVal === '') {
+                                          <div style={{ position: 'relative', width: '100%' }}>
+                                            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#DC2626' : theme.primary, pointerEvents: 'none' }}>₹</span>
+                                            <input id="performa-invoice-0-00" name="000" aria-label="0.00"
+                                              type="number"
+                                              required
+                                              value={currentGroup?.kitPrice || ''}
+                                              placeholder="Enter Amt *"
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
                                                 if (groupId) {
                                                   setPresetGroups(prev => ({
                                                     ...prev,
-                                                    [groupId]: { ...(prev[groupId] || currentGroup), setCount: '' }
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), kitPrice: val }
                                                   }));
                                                 }
-                                                return;
-                                              }
-                                              const parsed = parseInt(rawVal);
-                                              const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
-                                              if (groupId) {
-                                                setPresetGroups(prev => ({
-                                                  ...prev,
-                                                  [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
-                                                }));
-                                              }
-                                              const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
-                                              setPiItems(prev => prev.map(mat => {
-                                                if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                  return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
+                                              }}
+                                              style={{
+                                                width: '100%', height: '42px', borderRadius: '8px',
+                                                border: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '2px solid #EF4444' : `2px solid ${theme.border}`,
+                                                padding: '0 10px 0 26px',
+                                                fontSize: '15px', fontWeight: '800',
+                                                color: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#DC2626' : '#0F172A',
+                                                textAlign: 'right', outline: 'none', boxSizing: 'border-box',
+                                                backgroundColor: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#FEF2F2' : 'white'
+                                              }}
+                                            />
+                                          </div>
+                                          {(!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) && (
+                                            <span style={{ fontSize: '10px', fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
+                                              * Mandatory Amount
+                                            </span>
+                                          )}
+
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '700' }}>
+                                              {groupCount} items ×
+                                            </span>
+                                            <input id="performa-invoice-set-count" name="setCount" aria-label="SetCount"
+                                              type="number"
+                                              min="0"
+                                              max="999"
+                                              value={currentGroup?.setCount !== undefined && currentGroup?.setCount !== null ? currentGroup.setCount : ''}
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => {
+                                                const rawVal = e.target.value;
+                                                if (rawVal === '') {
+                                                  if (groupId) {
+                                                    setPresetGroups(prev => ({
+                                                      ...prev,
+                                                      [groupId]: { ...(prev[groupId] || currentGroup), setCount: '' }
+                                                    }));
+                                                  }
+                                                  return;
                                                 }
-                                                return mat;
-                                              }));
-                                            }}
-                                            style={{
-                                              width: '42px', height: '26px', borderRadius: '6px',
-                                              border: '1.5px solid #818CF8', fontSize: '13px',
-                                              fontWeight: '800', color: '#312E81', textAlign: 'center',
-                                              padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
-                                            }}
-                                            title="Sets multiplier for this preset"
-                                           />
-                                          <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
-                                            set{(parseInt(currentGroup?.setCount) || 1) !== 1 ? 's' : ''}
-                                          </span>
+                                                const parsed = parseInt(rawVal);
+                                                const valToSave = isNaN(parsed) ? '' : Math.max(0, parsed);
+                                                if (groupId) {
+                                                  setPresetGroups(prev => ({
+                                                    ...prev,
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
+                                                  }));
+                                                }
+                                                const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                                setPiItems(prev => prev.map(mat => {
+                                                  if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
+                                                    return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
+                                                  }
+                                                  return mat;
+                                                }));
+                                              }}
+                                              style={{
+                                                width: '42px', height: '26px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, fontSize: '13px',
+                                                fontWeight: '800', color: theme.primary, textAlign: 'center',
+                                                padding: '0 2px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box'
+                                              }}
+                                              title="Sets multiplier for this preset"
+                                            />
+                                            <span style={{ fontSize: '11px', color: theme.primary, fontWeight: '600' }}>
+                                              set{(parseInt(currentGroup?.setCount) || 1) !== 1 ? 's' : ''}
+                                            </span>
+                                          </div>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                            <span style={{ fontSize: '10px', color: theme.primary, fontWeight: '700' }}>GST:</span>
+                                            <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
+                                              value={currentGroup?.gstRate || item.gstRate || '18%'}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (groupId) {
+                                                  setPresetGroups(prev => ({
+                                                    ...prev,
+                                                    [groupId]: { ...(prev[groupId] || currentGroup), gstRate: val }
+                                                  }));
+                                                }
+                                                setPiItems(prev => prev.map((mat, idx) =>
+                                                  ((mat.presetGroupId || 'legacy_default') === groupId || idx === i)
+                                                    ? { ...mat, gstRate: val }
+                                                    : mat
+                                                ));
+                                              }}
+                                              style={{
+                                                height: '24px', borderRadius: '6px',
+                                                border: `1.5px solid ${theme.border}`, padding: '0 4px',
+                                                fontSize: '11px', fontWeight: '800',
+                                                color: theme.primary, backgroundColor: '#FFFFFF',
+                                                outline: 'none', cursor: 'pointer'
+                                              }}
+                                              title="Change GST Rate for this preset"
+                                            >
+                                              <option value="18%">18%</option>
+                                              <option value="12%">12%</option>
+                                              <option value="5%">5%</option>
+                                              <option value="0%">0%</option>
+                                            </select>
+                                          </div>
+                                          {groupId && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemovePresetGroup(groupId)}
+                                              style={{
+                                                border: 'none',
+                                                backgroundColor: 'transparent',
+                                                color: '#EF4444',
+                                                fontSize: '10px',
+                                                fontWeight: '700',
+                                                cursor: 'pointer',
+                                                padding: '2px 6px',
+                                                borderRadius: '4px',
+                                                marginTop: '2px'
+                                              }}
+                                              title={`Remove entire ${currentGroup?.presetName} preset`}
+                                            >
+                                              Remove Kit
+                                            </button>
+                                          )}
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                                           <span style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700' }}>GST:</span>
-                                           <select id={`performa-invoice-gst-rate-18-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`gstRate18_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="GstRate 18"
-                                             value={currentGroup?.gstRate || item.gstRate || '18%'}
-                                             onChange={(e) => {
-                                               const val = e.target.value;
-                                               if (groupId) {
-                                                 setPresetGroups(prev => ({
-                                                   ...prev,
-                                                   [groupId]: { ...(prev[groupId] || currentGroup), gstRate: val }
-                                                 }));
-                                               }
-                                               setPiItems(prev => prev.map((mat, idx) =>
-                                                 ((mat.presetGroupId || 'legacy_default') === groupId || idx === i)
-                                                   ? { ...mat, gstRate: val }
-                                                   : mat
-                                               ));
-                                             }}
-                                             style={{
-                                               height: '24px', borderRadius: '6px',
-                                               border: '1.5px solid #818CF8', padding: '0 4px',
-                                               fontSize: '11px', fontWeight: '800',
-                                               color: '#312E81', backgroundColor: '#FFFFFF',
-                                               outline: 'none', cursor: 'pointer'
-                                             }}
-                                             title="Change GST Rate for this preset"
-                                           >
-                                             <option value="18%">18%</option>
-                                             <option value="12%">12%</option>
-                                             <option value="5%">5%</option>
-                                             <option value="0%">0%</option>
-                                           </select>
-                                         </div>
-                                        {groupId && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemovePresetGroup(groupId)}
-                                            style={{
-                                              border: 'none',
-                                              backgroundColor: 'transparent',
-                                              color: '#EF4444',
-                                              fontSize: '10px',
-                                              fontWeight: '700',
-                                              cursor: 'pointer',
-                                              padding: '2px 6px',
-                                              borderRadius: '4px',
-                                              marginTop: '2px'
-                                            }}
-                                            title={`Remove entire ${currentGroup?.presetName} preset`}
-                                          >
-                                            Remove Kit
-                                          </button>
-                                        )}
-                                      </div>
+                                      </td>
+                                    );
+                                  }
+                                  return null;
+                                } else {
+                                  return (
+                                    <td style={{ padding: '12px 10px', textAlign: 'center', color: '#94A3B8', fontSize: '11px' }}>
+                                      —
                                     </td>
                                   );
                                 }
-                                return null;
-                              } else {
-                                return (
-                                  <td style={{ padding: '12px 10px', textAlign: 'center', color: '#94A3B8', fontSize: '11px' }}>
-                                    —
-                                  </td>
-                                );
-                              }
-                            })()}
+                              })()}
                             <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>
                               {isPresetItem ? (
                                 <span style={{ fontSize: '11px', color: '#94A3B8' }}>—</span>
@@ -4923,9 +5068,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               </button>
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
                   </tbody>
                 </table>
               </div>
@@ -5436,8 +5582,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     gap: '12px'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#059669', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
-                        📦
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#059669', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Boxes size={22} color="#FFFFFF" />
                       </div>
                       <div>
                         <div style={{ fontSize: '14px', fontWeight: '800', color: '#065F46' }}>
@@ -5683,9 +5829,41 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </tr>
                     </thead>
                     <tbody>
-                      {piItemsList.length > 0 ? (
-                        piItemsList.map((it, idx) => {
+                      {piItemsList.length > 0 ? (() => {
+                        const distinctDetailsGroupIds = [];
+                        piItemsList.forEach(it => {
+                          if (it.presetGroupId && !distinctDetailsGroupIds.includes(it.presetGroupId)) {
+                            distinctDetailsGroupIds.push(it.presetGroupId);
+                          }
+                        });
+
+                        return piItemsList.map((it, idx) => {
                           const isPreset = Boolean(it.isPresetItem || it.presetGroupId || (!it.rate && subtotalVal > 0));
+                          const groupId = it.presetGroupId;
+                          const groupIndex = groupId ? distinctDetailsGroupIds.indexOf(groupId) : -1;
+                          const presetNumber = groupIndex >= 0 ? groupIndex + 1 : 1;
+                          const theme = groupIndex >= 0 ? getPresetTheme(groupIndex) : PRESET_THEMES[0];
+                          const pGroups = selectedPi.presetGroups || {};
+                          const currentGroup = groupId ? (pGroups[groupId] || { kitPrice: '', setCount: 1, presetName: it.presetName }) : null;
+
+                          let isFirstInGroup = false;
+                          let groupCount = 0;
+                          let itemIndexInGroup = 0;
+                          if (isPreset && groupId) {
+                            const itemsInGroup = piItemsList.filter(x => x.presetGroupId === groupId);
+                            groupCount = itemsInGroup.length;
+                            isFirstInGroup = piItemsList.findIndex(x => x.presetGroupId === groupId) === idx;
+                            itemIndexInGroup = itemsInGroup.findIndex(x => x === it) + 1;
+                          }
+
+                          const customItems = piItemsList.filter(x => !(x.isPresetItem || x.presetGroupId || (!x.rate && subtotalVal > 0)));
+                          const isFirstCustomItem = !isPreset && piItemsList.findIndex(x => !(x.isPresetItem || x.presetGroupId || (!x.rate && subtotalVal > 0))) === idx;
+                          const customIndex = !isPreset ? customItems.findIndex(x => x === it) + 1 : null;
+
+                          const displaySNo = isPreset && distinctDetailsGroupIds.length > 0
+                            ? `${presetNumber}.${itemIndexInGroup}`
+                            : (customIndex !== null ? (distinctDetailsGroupIds.length > 0 ? `C.${customIndex}` : `${idx + 1}`) : `${idx + 1}`);
+
                           const itQty = parseFloat(it.qty) || 1;
                           const itRate = parseFloat(it.rate) || 0;
                           const itTaxable = isPreset ? 0 : (itQty * itRate);
@@ -5693,63 +5871,140 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           const itAmt = isPreset ? null : (itTaxable + (itTaxable * (itGstPct / 100)));
 
                           return (
-                            <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA' }}>
-                              <td style={{ padding: '10px 12px', color: '#64748B', fontWeight: '600' }}>{idx + 1}</td>
-                              <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: '700' }}>
-                                <div>{it.name || 'Component Item'}</div>
-                                {it.category && <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 'normal' }}>{it.category}</span>}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                {(() => {
-                                  const avail = getItemStock(it.name, it.code);
-                                  if (avail === null) return <span style={{ color: '#94A3B8' }}>—</span>;
-                                  const isOut = avail <= 0;
-                                  return (
-                                    <span style={{
-                                      fontSize: '10px',
-                                      fontWeight: '800',
-                                      padding: '1px 6px',
-                                      borderRadius: '8px',
-                                      backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
-                                      color: isOut ? '#DC2626' : '#059669',
-                                      border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0'
-                                    }}>
-                                      {avail.toLocaleString()}
+                            <React.Fragment key={idx}>
+                              {isFirstInGroup && (
+                                <tr key={`modal-preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
+                                  <td colSpan={8} style={{ padding: '8px 12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{
+                                          padding: '2px 8px',
+                                          borderRadius: '6px',
+                                          backgroundColor: theme.primary,
+                                          color: '#FFFFFF',
+                                          fontSize: '11px',
+                                          fontWeight: '800',
+                                          letterSpacing: '0.5px'
+                                        }}>
+                                          {theme.badge}
+                                        </span>
+                                        <strong style={{ fontSize: '12px', color: '#0F172A', fontWeight: '800' }}>
+                                          {currentGroup?.presetName || it.presetName || 'Structure Kit'}
+                                        </strong>
+                                        <span style={{
+                                          fontSize: '10px',
+                                          fontWeight: '700',
+                                          padding: '1px 6px',
+                                          borderRadius: '8px',
+                                          backgroundColor: theme.tagBg,
+                                          color: theme.tagText,
+                                          border: `1px solid ${theme.border}`
+                                        }}>
+                                          {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
+                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                              {isFirstCustomItem && distinctDetailsGroupIds.length > 0 && (
+                                <tr key="modal-custom-hdr" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                                  <td colSpan={8} style={{ padding: '6px 12px' }}>
+                                    <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', marginRight: '8px' }}>
+                                      CUSTOM ITEMS
                                     </span>
-                                  );
-                                })()}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'center', color: '#334155', fontWeight: '600' }}>
-                                {itQty} {it.uom || 'NOS'}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
-                                {isPreset ? (
-                                  <span style={{ fontSize: '11px', color: '#0E7490', fontStyle: 'italic', fontWeight: '600' }}>In Kit</span>
-                                ) : (
-                                  `₹ ${itRate.toLocaleString('en-IN')}`
-                                )}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
-                                {isPreset ? (
-                                  <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
-                                ) : (
-                                  `₹ ${itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                                )}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
-                                {it.gstRate || '18%'}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
-                                {isPreset ? (
-                                  <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
-                                ) : (
-                                  `₹ ${(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                                )}
-                              </td>
-                            </tr>
+                                    <strong style={{ fontSize: '11px', color: '#334155' }}>
+                                      Additional Materials ({customItems.length} items)
+                                    </strong>
+                                  </td>
+                                </tr>
+                              )}
+                              <tr key={idx} style={{
+                                borderBottom: '1px solid #F1F5F9',
+                                backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
+                              }}>
+                                <td style={{
+                                  padding: '10px 12px',
+                                  color: isPreset ? theme.primary : '#64748B',
+                                  fontWeight: '800',
+                                  borderLeft: isPreset ? `4px solid ${theme.primary}` : '4px solid #CBD5E1'
+                                }}>
+                                  #{displaySNo}
+                                </td>
+                                <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: '700' }}>
+                                  <div>{it.name || 'Component Item'}</div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                    {isPreset && (
+                                      <span style={{
+                                        fontSize: '9.5px',
+                                        fontWeight: '800',
+                                        padding: '1px 5px',
+                                        borderRadius: '4px',
+                                        backgroundColor: theme.tagBg,
+                                        color: theme.tagText,
+                                        border: `1px solid ${theme.border}`
+                                      }}>
+                                        {theme.badge} • Component {itemIndexInGroup} of {groupCount}
+                                      </span>
+                                    )}
+                                    {it.category && <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 'normal' }}>{it.category}</span>}
+                                  </div>
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                  {(() => {
+                                    const avail = getItemStock(it.name, it.code);
+                                    if (avail === null) return <span style={{ color: '#94A3B8' }}>—</span>;
+                                    const isOut = avail <= 0;
+                                    return (
+                                      <span style={{
+                                        fontSize: '10px',
+                                        fontWeight: '800',
+                                        padding: '1px 6px',
+                                        borderRadius: '8px',
+                                        backgroundColor: isOut ? '#FEF2F2' : '#ECFDF5',
+                                        color: isOut ? '#DC2626' : '#059669',
+                                        border: isOut ? '1px solid #FECACA' : '1px solid #A7F3D0'
+                                      }}>
+                                        {avail.toLocaleString()}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#334155', fontWeight: '600' }}>
+                                  {itQty} {it.uom || 'NOS'}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                                  {isPreset ? (
+                                    <span style={{ fontSize: '11px', color: theme.primary, fontStyle: 'italic', fontWeight: '700' }}>In Kit ({theme.badge})</span>
+                                  ) : (
+                                    `₹ ${itRate.toLocaleString('en-IN')}`
+                                  )}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#334155', fontWeight: '600' }}>
+                                  {isPreset ? (
+                                    <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
+                                  ) : (
+                                    `₹ ${itTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                                  )}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#4338CA', fontWeight: '700' }}>
+                                  {it.gstRate || '18%'}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
+                                  {isPreset ? (
+                                    <span style={{ fontSize: '11px', color: '#64748B' }}>—</span>
+                                  ) : (
+                                    `₹ ${(itAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                                  )}
+                                </td>
+                              </tr>
+                            </React.Fragment>
                           );
-                        })
-                      ) : (
+                        });
+                      })() : (
                         <tr>
                           <td style={{ padding: '12px 14px', color: '#64748B' }}>1</td>
                           <td style={{ padding: '12px 14px', color: '#0F172A', fontWeight: '700' }}>{selectedPi.productName || 'Solar Structure MMS Kit'}</td>

@@ -5021,7 +5021,7 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
   } catch (_) {}
 
   pushStoreToSupabase('proforma_invoice_store', updatedProforma).catch(() => {});
-  pushStoreToSupabase('sales_pi_store', updatedProforma).catch(() => {});
+  pushStoreToSupabase('sales_pi_store', updatedSales).catch(() => {});
 
   return res.json({
     success: true,

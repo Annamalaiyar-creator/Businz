@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO } from '../utils/vrmOfficialAssets';
@@ -209,20 +210,29 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
             html, body {
               width: 100% !important;
               height: auto !important;
+              min-height: 0 !important;
               overflow: visible !important;
               background: #ffffff !important;
               margin: 0 !important;
               padding: 0 !important;
             }
 
-            body * {
-              visibility: hidden !important;
+            body.vrm-bom-print-active > *:not(.vrm-bom-modal-overlay),
+            body.vrm-bom-print-active #root,
+            body:has(.vrm-bom-modal-overlay) > *:not(.vrm-bom-modal-overlay),
+            body:has(.vrm-bom-modal-overlay) #root,
+            body > *:not(.vrm-bom-modal-overlay) {
+              display: none !important;
+              height: 0 !important;
+              max-height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
             }
 
             .no-print,
             .no-print * {
               display: none !important;
-              visibility: hidden !important;
               height: 0 !important;
               margin: 0 !important;
               padding: 0 !important;
@@ -238,6 +248,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               -webkit-backdrop-filter: none !important;
               overflow: visible !important;
               height: auto !important;
+              min-height: 0 !important;
               width: 100% !important;
               max-width: 100% !important;
             }
@@ -251,6 +262,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               border-radius: 0 !important;
               overflow: visible !important;
               height: auto !important;
+              min-height: 0 !important;
               background: transparent !important;
               margin: 0 !important;
               padding: 0 !important;
@@ -263,14 +275,15 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               print-color-adjust: exact !important;
             }
 
-            /* Absolute full-width layout matching Tax Invoice and PI print templates */
+            /* Natural flow layout: begins at top of Page 1 and paginates cleanly onto Page 2 */
             #${id} {
-              position: absolute !important;
+              visibility: visible !important;
+              position: relative !important;
               left: 0 !important;
               top: 0 !important;
               width: 100% !important;
               max-width: 100% !important;
-              min-height: auto !important;
+              min-height: 0 !important;
               height: auto !important;
               box-shadow: none !important;
               border-radius: 0 !important;
@@ -546,6 +559,17 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   };
 
   useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.add('vrm-bom-print-active');
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('vrm-bom-print-active');
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!autoPrint) return;
     const timer = setTimeout(() => {
       window.print();
@@ -555,7 +579,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
 
   const bomNumber = b.bomCode || b.code || b.piNo || b.id || 'BOM Order';
 
-  return (
+  const modalContent = (
     <div
       className="vrm-bom-modal-overlay"
       style={{
@@ -656,4 +680,8 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 }

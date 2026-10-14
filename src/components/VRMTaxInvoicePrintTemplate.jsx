@@ -819,12 +819,7 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
                   }}
                   onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_STAMP; }}
                 />
-                {/* Signature overlay */}
-                <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-40%)', pointerEvents: 'none' }}>
-                  <svg width="125" height="38" viewBox="0 0 125 38">
-                    <path d="M 8 26 Q 32 4 60 20 T 115 14" stroke="#1E3A8A" strokeWidth="2.2" fill="none" />
-                  </svg>
-                </div>
+
               </div>
               <div style={{ fontSize: '10px', fontWeight: '600', color: '#1E293B', marginTop: '6px', textAlign: 'center' }}>
                 Authorized Signatory
