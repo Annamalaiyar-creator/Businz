@@ -1163,6 +1163,7 @@ export default function CreateBomFormPage(props) {
                       <datalist id={`uom-list-${i}`}>
                         <option value="NOS" />
                         <option value="SET" />
+                        <option value="KW" />
                         <option value="KG" />
                         <option value="MTR" />
                         <option value="PCS" />
@@ -1849,7 +1850,11 @@ export default function CreateBomFormPage(props) {
 
                     const pendingPiFromStorage = (() => {
                       try {
-                        return (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('controlroom_pending_pi_to_bom') || '{}') : {});
+                        const parsed = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('controlroom_pending_pi_to_bom') || '{}') : {};
+                        if (parsed && (parsed.status === 'Draft' || parsed.statusType === 'draft')) {
+                          return {};
+                        }
+                        return parsed;
                       } catch (e) {
                         return {};
                       }

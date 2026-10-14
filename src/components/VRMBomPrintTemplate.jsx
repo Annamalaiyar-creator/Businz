@@ -202,7 +202,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         {`
           @page {
             size: A4 portrait;
-            margin: 10mm 12mm;
+            margin: 10mm 12mm !important;
           }
 
           @media print {
@@ -219,8 +219,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               visibility: hidden !important;
             }
 
-            .no-print {
+            .no-print,
+            .no-print * {
               display: none !important;
+              visibility: hidden !important;
+              height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
             }
 
             .vrm-bom-modal-overlay {
@@ -229,6 +234,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               padding: 0 !important;
               margin: 0 !important;
               background: transparent !important;
+              backdrop-filter: none !important;
+              -webkit-backdrop-filter: none !important;
               overflow: visible !important;
               height: auto !important;
               width: 100% !important;
@@ -245,6 +252,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               overflow: visible !important;
               height: auto !important;
               background: transparent !important;
+              margin: 0 !important;
+              padding: 0 !important;
             }
 
             #${id},
@@ -254,19 +263,23 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               print-color-adjust: exact !important;
             }
 
+            /* Absolute full-width layout matching Tax Invoice and PI print templates */
             #${id} {
-              position: static !important;
-              display: block !important;
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
               width: 100% !important;
               max-width: 100% !important;
               min-height: auto !important;
               height: auto !important;
               box-shadow: none !important;
               border-radius: 0 !important;
+              border: none !important;
               padding: 0 !important;
               margin: 0 !important;
               overflow: visible !important;
               background: #ffffff !important;
+              display: block !important;
             }
 
             table {

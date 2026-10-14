@@ -917,13 +917,18 @@ export default function CrmQuotationsView({
           invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be > 0`);
         }
       });
-      if (presetGroups && Object.keys(presetGroups).length > 0) {
-        Object.values(presetGroups).forEach(g => {
-          const kp = parseFloat(g.kitPrice) || 0;
-          if (kp <= 0) {
-            invalidItems.push(`Preset Kit (${g.presetName || 'Kit'}): Kit Price (₹) is required and must be > 0`);
-          }
-        });
+      const presetItems = quoteItems.filter(it => it.isPresetItem);
+      if (presetItems.length > 0) {
+        if (!presetGroups || Object.keys(presetGroups).length === 0) {
+          invalidItems.push('Preset Amt (₹) is mandatory: Please enter a valid Preset Amount for the configured preset kit.');
+        } else {
+          Object.values(presetGroups).forEach(g => {
+            const kp = parseFloat(g.kitPrice) || 0;
+            if (kp <= 0) {
+              invalidItems.push(`Preset Amt (₹) is mandatory for "${g.presetName || 'Kit'}": Must be greater than 0`);
+            }
+          });
+        }
       }
       if (invalidItems.length > 0) {
         missing.push({ name: `Incomplete Items: ${invalidItems.join(' • ')}`, targetId: 'quote-field-items' });
@@ -1795,7 +1800,11 @@ export default function CrmQuotationsView({
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
-                    {quoteItems.some(it => it.isPresetItem) && <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Preset Amt (₹)</th>}
+                    {quoteItems.some(it => it.isPresetItem) && (
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                        Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
+                      </th>
+                    )}
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>

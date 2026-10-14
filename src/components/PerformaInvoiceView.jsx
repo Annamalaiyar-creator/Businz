@@ -6,7 +6,7 @@ import TypeableProductSelect from './TypeableProductSelect';
 import ModernDateRangePicker from './ModernDateRangePicker';
 import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
-import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../utils/otherViewsShared';
+import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS, stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
 import { centralInventoryStore } from '../utils/centralInventoryStore';
@@ -199,6 +199,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   // Two-way helper to find all BOMs generated from this PI (Strict 1-to-1 mapping)
   const getConvertedBomsForPi = (pi) => {
     if (!pi) return [];
+    // STRICT DRAFT GUARD: A Draft PI is work-in-progress and can never be converted or linked to a BOM
+    if (pi.status === 'Draft' || pi.statusType === 'draft') return [];
 
     const piNum = String(pi.piNo || pi.estimate_number || pi.id || '').trim().toLowerCase();
     if (!piNum) return [];
@@ -590,6 +592,76 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     } finally {
       setSyncingPiNo(null);
     }
+  };
+
+  // Direct one-click completion and release of a Draft PI
+  const handleReleaseDraftPi = async (targetPi) => {
+    if (!targetPi) return;
+    const cleanPiNo = targetPi.piNo || targetPi.id;
+    const safeCustomer = (targetPi.vendor || targetPi.customerName || 'Customer').trim();
+
+    // Check line items exist
+    const itemsList = Array.isArray(targetPi.items) ? targetPi.items : [];
+    if (itemsList.length === 0) {
+      showTopToast('⚠️ Cannot complete PI without line items. Please click "Edit Info" to add items first.', 'warning', 4000);
+      return;
+    }
+
+    // Check Preset Amt is entered if preset items exist
+    const hasPreset = itemsList.some(it => it.isPresetItem);
+    if (hasPreset) {
+      const pGroups = targetPi.presetGroups || {};
+      let missingKitPrice = false;
+      if (Object.keys(pGroups).length === 0) {
+        if (!targetPi.unitValue || parseFloat(targetPi.unitValue) <= 0) {
+          missingKitPrice = true;
+        }
+      } else {
+        Object.values(pGroups).forEach(g => {
+          if (!g.kitPrice || parseFloat(g.kitPrice) <= 0) {
+            missingKitPrice = true;
+          }
+        });
+      }
+      if (missingKitPrice) {
+        showTopToast('⚠️ Preset Amt (₹) is mandatory for preset structure kits. Please click "Edit Info" to enter the amount first.', 'warning', 4500);
+        return;
+      }
+    }
+
+    const updatedPI = {
+      ...targetPi,
+      status: 'Issued',
+      statusType: 'issued',
+      issuedAt: new Date().toISOString()
+    };
+
+    const updatedList = piList.map(p => {
+      const matchNo = String(p.piNo || '').trim().toLowerCase();
+      const matchId = String(p.id || '').trim().toLowerCase();
+      const targetKey = String(cleanPiNo).trim().toLowerCase();
+      if (matchNo === targetKey || matchId === targetKey) {
+        return updatedPI;
+      }
+      return p;
+    });
+
+    updatePiList(updatedList);
+    setSelectedPi(null);
+    showTopToast(`✅ Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been completed and released!`, 'success', 5000);
+
+    // Push to backend /api/estimates
+    try {
+      const sanitized = stripDataUrlsFromRecord(updatedPI);
+      delete sanitized.paymentProofDoc;
+      delete sanitized.deliveryProofDoc;
+      delete sanitized.deliveryAddressProofDoc;
+      fetch('/api/estimates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sanitized)
+      }).catch(err => console.warn('Background PI release sync:', err));
+    } catch (_) {}
   };
 
   const handleConvertToBom = (pi) => {
@@ -1787,7 +1859,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const fetchNextPiNumber = async () => {
-    const fallback = getNextSequence('PI', piList || []).code;
+    const fallback = getNextSequence('PI', [...(piList || []), ...(bomList || [])]).code;
 
     try {
       const controller = new AbortController();
@@ -1955,13 +2027,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           invalid.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be > 0`);
         }
       });
-      if (presetGroups && Object.keys(presetGroups).length > 0) {
-        Object.values(presetGroups).forEach(g => {
-          const kp = parseFloat(g.kitPrice) || 0;
-          if (kp <= 0) {
-            invalid.push(`Preset Kit (${g.presetName || 'Kit'}): Kit Price (₹) is required and must be > 0`);
-          }
-        });
+      const presetItems = piItems.filter(it => it.isPresetItem);
+      if (presetItems.length > 0) {
+        if (!presetGroups || Object.keys(presetGroups).length === 0) {
+          invalid.push('Preset Amt (₹) is mandatory: Please enter a valid Preset Amount for the configured preset kit.');
+        } else {
+          Object.values(presetGroups).forEach(g => {
+            const kp = parseFloat(g.kitPrice) || 0;
+            if (kp <= 0) {
+              invalid.push(`Preset Amt (₹) is mandatory for "${g.presetName || 'Preset Kit'}": Please enter an amount > 0`);
+            }
+          });
+        }
       }
       if (invalid.length > 0) {
         missingList.push({
@@ -2011,6 +2088,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       });
       return;
     }
+    // Check if preset items exist without Preset Amt
+    const presetItems = (piItems || []).filter(it => it.isPresetItem);
+    if (presetItems.length > 0) {
+      let missingKitPrice = false;
+      if (!presetGroups || Object.keys(presetGroups).length === 0) {
+        missingKitPrice = true;
+      } else {
+        Object.values(presetGroups).forEach(g => {
+          if (!g.kitPrice || parseFloat(g.kitPrice) <= 0) {
+            missingKitPrice = true;
+          }
+        });
+      }
+      if (missingKitPrice) {
+        setValidationAlert({
+          fields: ['Preset Amt (₹) is Mandatory'],
+          message: 'Preset Amt (₹) is mandatory for preset structure items. Please enter a valid amount before saving.',
+          firstTargetId: 'pi-field-items'
+        });
+        return;
+      }
+    }
     setPiConfirmModal('draft');
   };
 
@@ -2033,6 +2132,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
 
       setPiNumber(cleanPiNo);
+
+      const targetKey = String(cleanPiNo || '').trim().toLowerCase();
+      const existingMatchIdx = (piList || []).findIndex(p => {
+        const pNo = String(p.piNo || '').trim().toLowerCase();
+        const pId = String(p.id || '').trim().toLowerCase();
+        return pNo === targetKey || pId === targetKey;
+      });
+
+      const matchedExisting = existingMatchIdx !== -1 ? piList[existingMatchIdx] : (editIdx !== null ? piList[editIdx] : null);
 
       const newPI = {
         id: cleanPiNo,
@@ -2079,26 +2187,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         signedPiDoc: signedPiDoc || null,
         piDate: piDate || new Date().toISOString().split('T')[0],
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        status: isDraft ? 'Draft' : (editIdx !== null ? (piList[editIdx].status === 'Pending Approval' || piList[editIdx].status === 'Approved' ? 'Issued' : piList[editIdx].status) : 'Issued'),
-        statusType: isDraft ? 'draft' : (editIdx !== null ? (piList[editIdx].statusType === 'pending' || piList[editIdx].statusType === 'approved' ? 'issued' : piList[editIdx].statusType) : 'issued'),
-        salesPerson: editIdx !== null ? (piList[editIdx].salesPerson || getEffectiveSalesPerson()) : getEffectiveSalesPerson(),
-        salesperson: editIdx !== null ? (piList[editIdx].salesPerson || getEffectiveSalesPerson()) : getEffectiveSalesPerson(),
-        salesPersonCode: editIdx !== null ? (piList[editIdx].salesPersonCode || currentEmpId || 'SE-VRM001') : (currentEmpId || 'SE-VRM001'),
-        salesPersonEmail: editIdx !== null ? (piList[editIdx].salesPersonEmail || currentLoggedEmail || 'sales@armsai.com') : (currentLoggedEmail || 'sales@armsai.com'),
-        createdBy: editIdx !== null ? (piList[editIdx].createdBy || getEffectiveSalesPerson()) : getEffectiveSalesPerson(),
-        createdById: editIdx !== null ? (piList[editIdx].createdById || currentEmpId || 'SE-VRM001') : (currentEmpId || 'SE-VRM001'),
-        zohoSynced: editIdx !== null ? (piList[editIdx].zohoSynced || false) : false,
-        zohoEstimateId: editIdx !== null ? (piList[editIdx].zohoEstimateId || null) : null,
+        status: isDraft ? 'Draft' : (matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
+        statusType: isDraft ? 'draft' : (matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
+        salesPerson: matchedExisting?.salesPerson || getEffectiveSalesPerson(),
+        salesperson: matchedExisting?.salesPerson || getEffectiveSalesPerson(),
+        salesPersonCode: matchedExisting?.salesPersonCode || currentEmpId || 'SE-VRM001',
+        salesPersonEmail: matchedExisting?.salesPersonEmail || currentLoggedEmail || 'sales@armsai.com',
+        createdBy: matchedExisting?.createdBy || getEffectiveSalesPerson(),
+        createdById: matchedExisting?.createdById || currentEmpId || 'SE-VRM001',
+        zohoSynced: matchedExisting?.zohoSynced || false,
+        zohoEstimateId: matchedExisting?.zohoEstimateId || null,
         zohoModule: 'Quotes'
       };
 
       let updatedList;
-      if (editIdx !== null) {
+      if (existingMatchIdx !== -1) {
+        updatedList = [...piList];
+        updatedList[existingMatchIdx] = newPI;
+        setEditIdx(null);
+      } else if (editIdx !== null && editIdx >= 0 && editIdx < piList.length) {
         updatedList = [...piList];
         updatedList[editIdx] = newPI;
         setEditIdx(null);
       } else {
         updatedList = [newPI, ...piList];
+        setEditIdx(null);
         try {
           notifyPiCreated({
             piNo: newPI.piNo,
@@ -2114,10 +2227,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       updatePiList(updatedList);
 
       // Push to Zoho Books Quotes (Estimates API)
+      const sanitizedPayload = stripDataUrlsFromRecord(newPI);
+      delete sanitizedPayload.paymentProofDoc;
+      delete sanitizedPayload.deliveryProofDoc;
+      delete sanitizedPayload.deliveryAddressProofDoc;
+
       fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPI)
+        body: JSON.stringify(sanitizedPayload)
       }).then(res => res.json()).then(data => {
         const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
         const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
@@ -2649,12 +2767,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             String(pi.productName || '').toLowerCase().includes(searchLower) ||
             bomCodesStr.includes(searchLower);
 
-          const isConverted = hasSavedBom;
-          const currentStatus = isConverted
-            ? 'Converted to BOM'
-            : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
-              ? 'Issued'
-              : (pi.status || 'Issued'));
+          const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
+          const isConverted = !isDraft && hasSavedBom;
+          const currentStatus = isDraft
+            ? 'Draft'
+            : (isConverted
+              ? 'Converted to BOM'
+              : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
+                ? 'Issued'
+                : (pi.status || 'Issued')));
 
           const matchesStatus = statusFilter === 'All'
             || (statusFilter === 'Issued' && currentStatus === 'Issued')
@@ -2814,17 +2935,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 {[
                   { id: 'All', label: 'All Invoices (Total Sent)', count: visiblePIList.length },
                   { id: 'Issued', label: 'Issued / Active', count: visiblePIList.filter(pi => {
+                    if (pi.status === 'Draft' || pi.statusType === 'draft' || pi.status === 'Cancelled') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
-                    const isConverted = matchedBoms.length > 0;
-                    const st = isConverted ? 'Converted to BOM' : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM') ? 'Issued' : (pi.status || 'Issued'));
-                    return st === 'Issued';
+                    return matchedBoms.length === 0;
                   }).length },
                   { id: 'Converted to BOM', label: 'Converted to BOM', count: visiblePIList.filter(pi => {
+                    if (pi.status === 'Draft' || pi.statusType === 'draft') return false;
                     const matchedBoms = getConvertedBomsForPi(pi);
                     return matchedBoms.length > 0;
                   }).length },
                   { id: 'Cancelled', label: 'Cancelled', count: visiblePIList.filter(pi => pi.status === 'Cancelled').length },
-                  { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => pi.status === 'Draft').length }
+                  { id: 'Draft', label: 'Draft', count: visiblePIList.filter(pi => pi.status === 'Draft' || pi.statusType === 'draft').length }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -2965,14 +3086,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       currentRows.map((pi, idx) => {
                         const isChecked = selectedPIs.includes(pi.piNo);
 
+                        const isDraft = (pi.status === 'Draft' || pi.statusType === 'draft');
                         const matchedBoms = getConvertedBomsForPi(pi);
                         const hasSavedBom = matchedBoms.length > 0;
-                        const isConverted = hasSavedBom;
-                        const currentStatus = isConverted
-                          ? 'Converted to BOM'
-                          : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
-                            ? 'Issued'
-                            : (pi.status || 'Issued'));
+                        const isConverted = !isDraft && hasSavedBom;
+                        const currentStatus = isDraft
+                          ? 'Draft'
+                          : (isConverted
+                            ? 'Converted to BOM'
+                            : ((pi.status === 'Pending Approval' || pi.status === 'Approved' || pi.status === 'Converted to BOM')
+                              ? 'Issued'
+                              : (pi.status || 'Issued')));
 
                         let statusBg = '#eff6ff';
                         let statusFg = '#2563eb';
@@ -3114,6 +3238,35 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     }}
                                   >
                                     Complete BOM →
+                                  </button>
+                                )}
+                                {isDraft && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReleaseDraftPi(pi);
+                                    }}
+                                    title="Complete and Release this Proforma Invoice"
+                                    style={{
+                                      backgroundColor: '#10B981',
+                                      color: '#FFFFFF',
+                                      border: 'none',
+                                      fontSize: '10.5px',
+                                      fontWeight: '800',
+                                      padding: '3px 9px',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      boxShadow: '0 1px 3px rgba(16,185,129,0.3)',
+                                      transition: 'transform 0.1s ease'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                  >
+                                    <CheckCircle size={11} /> Complete PI →
                                   </button>
                                 )}
                               </div>
@@ -3296,7 +3449,39 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 {/* Convert to BOM / View BOM button */}
                 {(() => {
                   const target = selectedPIs.length === 1 ? piList.find(p => p.piNo === selectedPIs[0]) : null;
-                  if (!target || target.status === 'Cancelled' || target.status === 'Draft') return null;
+                  if (!target || target.status === 'Cancelled') return null;
+
+                  if (target.status === 'Draft' || target.statusType === 'draft') {
+                    return (
+                      <button
+                        onClick={() => {
+                          setSelectedPIs([]);
+                          handleReleaseDraftPi(target);
+                        }}
+                        style={{
+                          backgroundColor: '#10B981',
+                          border: 'none',
+                          color: '#FFFFFF',
+                          borderRadius: '10px',
+                          padding: '6px 16px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#10B981'}
+                      >
+                        <CheckCircle size={14} style={{ color: '#FFFFFF' }} /> Complete & Release PI →
+                      </button>
+                    );
+                  }
                   const matchedBoms = getConvertedBomsForPi(target);
                   const hasSavedBom = matchedBoms.length > 0;
                   const isConverted = hasSavedBom;
@@ -4304,7 +4489,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
-                      {hasAnyPreset && <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Preset Amt (₹)</th>}
+                      {hasAnyPreset && (
+                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                          Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
+                        </th>
+                      )}
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
@@ -4389,6 +4578,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
                                     else if (['NUMBERS', 'NUMBER', 'NOS', 'NO'].includes(u)) resolvedUom = 'NOS';
                                     else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
+                                    else if (['KW', 'KILOWATT', 'KILOWATTS', 'KWP'].includes(u)) resolvedUom = 'KW';
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? {
                                       ...mat,
                                       code: pCode || mat.code,
@@ -4447,7 +4637,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 <option value="PCS">PCS (Pieces)</option>
                                 <option value="NOS">NOS (Numbers)</option>
                                 <option value="SET">SET (Sets)</option>
-                                {item.uom && !['MTR', 'PCS', 'NOS', 'SET'].includes(item.uom) && (
+                                <option value="KW">KW (Kilowatt)</option>
+                                {item.uom && !['MTR', 'PCS', 'NOS', 'SET', 'KW', 'Kw'].includes(item.uom) && (
                                   <option value={item.uom}>{item.uom}</option>
                                 )}
                               </select>
@@ -4539,11 +4730,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         </span>
 
                                         <div style={{ position: 'relative', width: '100%' }}>
-                                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: '#6366F1', pointerEvents: 'none' }}>₹</span>
+                                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#DC2626' : '#6366F1', pointerEvents: 'none' }}>₹</span>
                                           <input id="performa-invoice-0-00" name="000" aria-label="0.00"
                                             type="number"
+                                            required
                                             value={currentGroup?.kitPrice || ''}
-                                            placeholder="0.00"
+                                            placeholder="Enter Amt *"
                                             onFocus={(e) => e.target.select()}
                                             onChange={(e) => {
                                               const val = e.target.value;
@@ -4556,13 +4748,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                             }}
                                             style={{
                                               width: '100%', height: '42px', borderRadius: '8px',
-                                              border: '2px solid #818CF8', padding: '0 10px 0 26px',
-                                              fontSize: '15px', fontWeight: '800', color: '#312E81',
+                                              border: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '2px solid #EF4444' : '2px solid #818CF8',
+                                              padding: '0 10px 0 26px',
+                                              fontSize: '15px', fontWeight: '800',
+                                              color: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#DC2626' : '#312E81',
                                               textAlign: 'right', outline: 'none', boxSizing: 'border-box',
-                                              backgroundColor: 'white'
+                                              backgroundColor: (!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) ? '#FEF2F2' : 'white'
                                             }}
                                            />
                                         </div>
+                                        {(!currentGroup?.kitPrice || parseFloat(currentGroup?.kitPrice) <= 0) && (
+                                          <span style={{ fontSize: '10px', fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
+                                            * Mandatory Amount
+                                          </span>
+                                        )}
 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                           <span style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600' }}>
@@ -5028,7 +5227,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#059669'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#10B981'; }}
                 >
-                  Confirm & Save Proforma Invoice
+                  {editIdx !== null && (piList[editIdx]?.status === 'Draft' || piList[editIdx]?.statusType === 'draft')
+                    ? 'Complete & Release PI'
+                    : 'Confirm & Save Proforma Invoice'}
                 </button>
               </div>
             </div>
@@ -5061,9 +5262,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const subtotalVal = Number(selectedPi.unitValue) || piItemsList.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
         const grandTotalVal = parseFloat(String(selectedPi.amount || 0).replace(/[^0-9.]/g, '')) || (subtotalVal * 1.18);
         const totalGstVal = Math.max(0, grandTotalVal - subtotalVal);
+        const isDraft = (selectedPi.status === 'Draft' || selectedPi.statusType === 'draft');
         const matchedBoms = getConvertedBomsForPi(selectedPi);
         const hasSavedBom = matchedBoms.length > 0;
-        const isConverted = hasSavedBom;
+        const isConverted = !isDraft && hasSavedBom;
 
         const modalGstTiersMap = {};
         (piItemsList || []).forEach(it => {
@@ -5143,8 +5345,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         Proforma Invoice {selectedPi.piNo}
                       </h3>
                       {renderStatusBadge(
-                        isConverted ? 'converted' : selectedPi.status === 'Cancelled' ? 'cancelled' : selectedPi.status === 'Draft' ? 'draft' : 'issued',
-                        isConverted ? 'Converted to BOM' : selectedPi.status || 'Issued'
+                        isDraft ? 'draft' : (isConverted ? 'converted' : selectedPi.status === 'Cancelled' ? 'cancelled' : 'issued'),
+                        isDraft ? 'Draft' : (isConverted ? 'Converted to BOM' : selectedPi.status || 'Issued')
                       )}
                     </div>
                     <span style={{ fontSize: '12px', color: '#64748B' }}>
@@ -5675,6 +5877,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {(selectedPi.status === 'Draft' || selectedPi.statusType === 'draft') && (
+                    <button
+                      type="button"
+                      onClick={() => handleReleaseDraftPi(selectedPi)}
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: '#10B981',
+                        color: '#FFFFFF',
+                        fontSize: '13px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#10B981'}
+                    >
+                      <CheckCircle size={15} /> Complete & Release PI →
+                    </button>
+                  )}
+
                   {!isConverted && (
                     <button
                       type="button"

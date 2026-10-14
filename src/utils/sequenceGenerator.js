@@ -64,6 +64,7 @@ export function extractMaxSequence(moduleType, fy, records = []) {
     'code', 'bomCode', 'bom_code', 'convertedBomCode', 'converted_bom_code',
     'poNo', 'po_no', 'purchaseorder_number',
     'piNo', 'pi_no', 'estimate_number', 'estimateNo',
+    'sourcePiNo', 'source_pi_no',
     'invNo', 'invoiceNo', 'invoice_no',
     'quoteNumber', 'quoteNo', 'quote_no',
     'leadNumber', 'leadId', 'lead_number',

@@ -4734,7 +4734,7 @@ app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) =
     const fy = getFinancialYear();
     let records = [];
 
-    // 1. Query PostgreSQL proforma_invoices if connected
+    // 1. Query PostgreSQL proforma_invoices and bom_orders (source_pi_no) if connected
     if (isDbConnected()) {
       try {
         const dbRes = await query(`
@@ -4743,21 +4743,29 @@ app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) =
         `).catch(() => null);
         if (dbRes?.rows) records.push(...dbRes.rows);
       } catch (_) {}
+
+      try {
+        const bomDbRes = await query(`
+          SELECT source_pi_no as pi_no FROM public.bom_orders
+          WHERE source_pi_no IS NOT NULL AND source_pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
+        `).catch(() => null);
+        if (bomDbRes?.rows) records.push(...bomDbRes.rows);
+      } catch (_) {}
     }
 
-    // 2. Check local proforma_invoice_store.json, sales_pi_store.json, and in-memory stores
-    const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json'];
+    // 2. Check local proforma_invoice_store.json, sales_pi_store.json, bom_store.json, and in-memory stores
+    const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json', 'bom_store.json'];
     for (const sf of storeFiles) {
       try {
         const p = getStoreFilePath(sf);
         if (fs.existsSync(p)) {
-          const localPIs = JSON.parse(fs.readFileSync(p, 'utf8'));
-          if (Array.isArray(localPIs)) records.push(...localPIs);
+          const list = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (Array.isArray(list)) records.push(...list);
         }
       } catch (_) {}
     }
 
-    ['proforma_invoice_store', 'sales_pi_store'].forEach(key => {
+    ['proforma_invoice_store', 'sales_pi_store', 'bom_store'].forEach(key => {
       const list = supabaseMemoryStore[key];
       if (Array.isArray(list)) records.push(...list);
     });
@@ -4984,16 +4992,21 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
   } catch (_) {}
 
   const cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
+  const targetLower = cleanPiNo.toLowerCase();
+
+  const existingProforma = localEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower);
 
   const newPI = {
+    ...(existingProforma || {}),
     ...req.body,
     id: req.body.id || cleanPiNo,
     piNo: cleanPiNo,
-    createdAt: req.body.createdAt || new Date().toISOString()
+    createdAt: (existingProforma && existingProforma.createdAt) || req.body.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
   // Persist to BOTH local stores and Supabase
-  const updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || '').trim() !== cleanPiNo)];
+  const updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
   try {
     fs.writeFileSync(pProforma, JSON.stringify(updatedProforma, null, 2), 'utf8');
   } catch (_) {}
@@ -5003,7 +5016,7 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
     if (fs.existsSync(pSales)) {
       try { salesEstimates = JSON.parse(fs.readFileSync(pSales, 'utf8')); } catch (_) {}
     }
-    const updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || '').trim() !== cleanPiNo)];
+    const updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
     fs.writeFileSync(pSales, JSON.stringify(updatedSales, null, 2), 'utf8');
   } catch (_) {}
 

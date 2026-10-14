@@ -420,13 +420,18 @@ export default function BomOrdersView(props) {
           invalidItems.push(`Item #${idx + 1} (${it.name}): Price (₹) is required and must be greater than 0`);
         }
       });
-      if (presetGroups && Object.keys(presetGroups).length > 0) {
-        Object.values(presetGroups).forEach(g => {
-          const kp = parseFloat(g.kitPrice) || 0;
-          if (kp <= 0) {
-            invalidItems.push(`Preset Kit (${g.presetName || 'Kit'}): Kit Price (₹) is required and must be greater than 0`);
-          }
-        });
+      const presetItems = bomMaterialsList.filter(it => it.isPresetItem);
+      if (presetItems.length > 0) {
+        if (!presetGroups || Object.keys(presetGroups).length === 0) {
+          invalidItems.push('Preset Amt (₹) is mandatory: Please enter a valid Preset Amount for the configured preset kit.');
+        } else {
+          Object.values(presetGroups).forEach(g => {
+            const kp = parseFloat(g.kitPrice) || 0;
+            if (kp <= 0) {
+              invalidItems.push(`Preset Amt (₹) is mandatory for "${g.presetName || 'Preset Kit'}": Must be greater than 0`);
+            }
+          });
+        }
       }
       if (invalidItems.length > 0) {
         errors.items = invalidItems.join(', ');
@@ -1035,6 +1040,12 @@ export default function BomOrdersView(props) {
   useEffect(() => {
     const processConversion = (pendingPi) => {
       if (!pendingPi) return;
+
+      // STRICT DRAFT GUARD: Never convert or import a Draft PI into BOM
+      if (pendingPi.status === 'Draft' || pendingPi.statusType === 'draft') {
+        console.warn('[BOM CONVERSION REJECTED]: Cannot convert a Draft Proforma Invoice to BOM.');
+        return;
+      }
 
       // 0. Strict 1-to-1 Safeguard: Check if this PI already has an existing active BOM in bomStore!
       const targetPiNo = String(pendingPi.sourcePiNo || pendingPi.piNo || '').trim();
@@ -3577,7 +3588,11 @@ export default function BomOrdersView(props) {
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
-                  {bomMaterialsList.some(it => it.isPresetItem) && <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>Preset Amt (₹)</th>}
+                  {bomMaterialsList.some(it => it.isPresetItem) && (
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                      Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
+                    </th>
+                  )}
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
                   <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
@@ -3700,6 +3715,7 @@ export default function BomOrdersView(props) {
                               <datalist id={`uom-list-${i}`}>
                                 <option value="NOS" />
                                 <option value="SET" />
+                                <option value="KW" />
                                 <option value="KG" />
                                 <option value="MTR" />
                                 <option value="PCS" />
