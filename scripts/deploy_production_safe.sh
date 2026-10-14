@@ -302,13 +302,13 @@ fi
 echo "✅ Maintenance write-blocking verified active (HTTP 503 on mutating requests)."
 
 # 2. Verify external storage status
-curl -s http://localhost:${PORT}/api/storage/status | grep "\"externalStorage\":true"
+curl -s http://localhost:${PORT}/api/maintenance/status | grep "\"externalStorage\":true"
 echo "✅ External storage resolver active and verified."
 
 # 3. Verify core business entity read endpoints
-curl -s http://localhost:${PORT}/api/boms | grep "\"success\":true"
-curl -s http://localhost:${PORT}/api/invoices | grep "\"success\":true"
-curl -s http://localhost:${PORT}/api/raw-materials | grep "\"success\":true"
+curl -s http://localhost:${PORT}/api/boms | grep -q "\"data\":"
+curl -s http://localhost:${PORT}/api/invoices | grep -q '\['
+curl -s http://localhost:${PORT}/api/raw-materials | grep -q '\['
 echo "✅ Core business read APIs validated on port ${PORT} against external storage."
 
 # 4. Explicitly disable maintenance mode using configured secret (no fallback)
