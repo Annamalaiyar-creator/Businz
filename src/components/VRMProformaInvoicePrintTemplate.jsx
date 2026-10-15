@@ -1279,20 +1279,24 @@ export function VRMProformaInvoicePrintSheet({
                   visible={cfg.showLogo}
                   settingKey="showLogo"
                   title="Company Logo"
+                  style={{ display: 'inline-flex', alignItems: 'center' }}
                 >
-                  <img
-                    src={cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')) || VRM_OFFICIAL_LOGO}
-                    alt={cfg.companyName || 'VRM Structures'}
-                    style={{
-                      height: '44px',
-                      width: 'auto',
-                      maxWidth: '180px',
-                      objectFit: 'contain'
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.src = VRM_OFFICIAL_LOGO;
-                    }}
-                  />
+                  <div style={{ height: '48px', maxWidth: '180px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', overflow: 'hidden' }}>
+                    <img
+                      src={cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')) || VRM_OFFICIAL_LOGO}
+                      alt={cfg.companyName || 'VRM Structures'}
+                      style={{
+                        maxHeight: '44px',
+                        maxWidth: '180px',
+                        width: 'auto',
+                        height: 'auto',
+                        display: 'block'
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.src = VRM_OFFICIAL_LOGO;
+                      }}
+                    />
+                  </div>
                 </RemovableBlock>
               )}
               <div>
@@ -1639,344 +1643,504 @@ export function VRMProformaInvoicePrintSheet({
 
         {/* 4. LINE ITEMS TABLE */}
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: '700', textAlign: 'center' }}>
-                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 3px', width: '30px' }}>#</th>
-                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 6px', textAlign: 'left' }}>
-                  <EditableText
-                    value={cfg.itemColLabel || 'Item & Description'}
-                    fallback="Item & Description"
-                    onSave={(v) => onUpdateSetting?.({ itemColLabel: v })}
-                  />
-                </th>
-                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 3px', width: '70px' }}>
-                  <EditableText
-                    value={cfg.hsnColLabel || 'HSN/SAC'}
-                    fallback="HSN/SAC"
-                    onSave={(v) => onUpdateSetting?.({ hsnColLabel: v })}
-                  />
-                </th>
-                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 3px', width: '50px' }}>
-                  <EditableText
-                    value={cfg.qtyColLabel || 'Qty'}
-                    fallback="Qty"
-                    onSave={(v) => onUpdateSetting?.({ qtyColLabel: v })}
-                  />
-                </th>
-                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 6px', width: '75px', textAlign: 'right' }}>
-                  <EditableText
-                    value={cfg.rateColLabel || 'Rate'}
-                    fallback="Rate"
-                    onSave={(v) => onUpdateSetting?.({ rateColLabel: v })}
-                  />
-                </th>
-                {isIntra ? (
-                  <>
-                    <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '3px 4px' }}>CGST</th>
-                    <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '3px 4px' }}>SGST</th>
-                  </>
-                ) : (
-                  <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '3px 4px' }}>IGST</th>
-                )}
-                <th rowSpan={2} style={{ border: '1px solid #CBD5E1', padding: '4px 6px', width: '80px', textAlign: 'right' }}>
-                  <EditableText
-                    value={cfg.amountColLabel || 'Amount'}
-                    fallback="Amount"
-                    onSave={(v) => onUpdateSetting?.({ amountColLabel: v })}
-                  />
-                </th>
-              </tr>
-              <tr style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: '700', textAlign: 'center' }}>
-                {isIntra ? (
-                  <>
-                    <th style={{ border: '1px solid #CBD5E1', padding: '2px 3px', width: '40px' }}>%</th>
-                    <th style={{ border: '1px solid #CBD5E1', padding: '2px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
-                    <th style={{ border: '1px solid #CBD5E1', padding: '2px 3px', width: '40px' }}>%</th>
-                    <th style={{ border: '1px solid #CBD5E1', padding: '2px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
-                  </>
-                ) : (
-                  <>
-                    <th style={{ border: '1px solid #CBD5E1', padding: '2px 3px', width: '40px' }}>%</th>
-                    <th style={{ border: '1px solid #CBD5E1', padding: '2px 5px', width: '70px', textAlign: 'right' }}>Amt</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it, idx) => (
-                <React.Fragment key={idx}>
-                  {it.isFirstInGroup && (
-                    <tr
-                      className="preset-group-banner-row"
-                      style={{
-                        backgroundColor: '#F8FAFC',
-                        pageBreakAfter: 'avoid',
-                        breakAfter: 'avoid',
-                        pageBreakBefore: (it.presetGroupNum > 1 && idx > 5) ? 'always' : 'auto',
-                        breakBefore: (it.presetGroupNum > 1 && idx > 5) ? 'page' : 'auto'
-                      }}
-                    >
-                      <td
-                        colSpan={isIntra ? 10 : 8}
-                        style={{
-                          border: '1px solid #CBD5E1',
-                          padding: '3px 8px',
-                          backgroundColor: it.presetGroupNum % 2 === 1 ? '#F0FDFA' : '#EEF2FF',
-                          borderTop: `2px solid ${it.presetGroupNum % 2 === 1 ? '#0E7490' : '#6366F1'}`
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: '800', color: it.presetGroupNum % 2 === 1 ? '#0E7490' : '#4338CA', fontSize: '10px' }}>
-                            PRESET {it.presetGroupNum}:{' '}
-                            <EditableText
-                              value={it.presetName}
-                              fallback="Solar Structure MMS Kit"
-                              onSave={(v) => {
-                                if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
-                              }}
-                            />
-                            {' '}({it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#475569', fontWeight: '700' }}>
-                            Kit Subtotal: ₹{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  <tr
-                    className={it.isFirstInGroup ? 'preset-first-item-row' : ''}
-                    style={{
-                      verticalAlign: 'top',
-                      pageBreakBefore: it.isFirstInGroup ? 'avoid' : 'auto',
-                      breakBefore: it.isFirstInGroup ? 'avoid' : 'auto'
-                    }}
-                  >
-                    <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', color: '#334155', fontWeight: it.isPresetItem ? '700' : 'normal', fontSize: '9.5px' }}>
-                      {it.displaySNo || it.sNo}
-                    </td>
-                    <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px' }}>
-                      <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px', lineHeight: '1.2' }}>
-                        <EditableText
-                          value={it.name}
-                          fallback="Item Name"
-                          onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { name: v })}
-                        />
-                      </div>
-                      {it.description ? (
-                        <div style={{ fontSize: '8.5px', color: '#475569', marginTop: '1px', whiteSpace: 'pre-line', lineHeight: '1.15' }}>
-                          <EditableText
-                            value={it.description}
-                            fallback=""
-                            placeholder=""
-                            multiline={true}
-                            onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { description: v })}
-                          />
-                        </div>
-                      ) : isEditable ? (
-                        <div className="no-print" style={{ fontSize: '7.5px', color: '#94A3B8', marginTop: '1px' }}>
-                          <EditableText
-                            value=""
-                            fallback=""
-                            placeholder="+ desc"
-                            multiline={true}
-                            onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { description: v })}
-                          />
-                        </div>
-                      ) : null}
-                    </td>
-                    <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
-                      <EditableText
-                        value={it.hsn || '73089090'}
-                        fallback="73089090"
-                        onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { hsn: v })}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
-                      <div>
-                        <EditableText
-                          value={typeof it.qty === 'number' ? it.qty.toFixed(2) : String(it.qty || '1')}
-                          fallback="1.00"
-                          onSave={(v) => {
-                            const n = parseFloat(v);
-                            handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { qty: isNaN(n) ? v : n });
-                          }}
-                        />
-                      </div>
-                      <div style={{ fontSize: '8px', color: '#64748B' }}>
-                        <EditableText
-                          value={it.uom || "no's"}
-                          fallback="NOS"
-                          onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v })}
-                        />
-                      </div>
-                    </td>
+          {(() => {
+            const hasSno = cfg.showSnoCol !== false;
+            const hasDesc = cfg.showItemDescription !== false;
+            const hasHsn = cfg.showHsn !== false;
+            const hasQty = cfg.showQty !== false;
+            const hasRate = cfg.showRateCol !== false;
+            const hasGst = cfg.showGstCol !== false;
+            const hasAmt = cfg.showTotalCol !== false;
 
-                    {/* RATE COLUMN: Merged vertically in the middle for Preset Kit */}
-                    {it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td
-                          rowSpan={it.groupCount}
-                          style={{
-                            border: '1px solid #CBD5E1',
-                            padding: '4px 6px',
-                            textAlign: 'right',
-                            fontSize: '10.5px',
-                            verticalAlign: 'middle',
-                            backgroundColor: '#FFFFFF',
-                            fontWeight: '700'
-                          }}
-                        >
-                          <div style={{ color: '#0F172A' }}>
-                            <EditableText
-                              value={Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              fallback="0.00"
-                              onSave={(v) => {
-                                const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                if (!isNaN(num) && it.grpId) {
-                                  handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
-                                }
+            const computedColSpan = (hasSno ? 1 : 0) +
+              (hasDesc ? 1 : 0) +
+              (hasHsn ? 1 : 0) +
+              (hasQty ? 1 : 0) +
+              (hasRate ? 1 : 0) +
+              (hasGst ? (isIntra ? 4 : 2) : 0) +
+              (hasAmt ? 1 : 0);
+
+            const colHeaderRemoveBtnStyle = {
+              position: 'absolute',
+              top: '2px',
+              right: '2px',
+              backgroundColor: '#FEE2E2',
+              color: '#DC2626',
+              border: '1px solid #FCA5A5',
+              borderRadius: '50%',
+              width: '13px',
+              height: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '10px',
+              lineHeight: '1',
+              cursor: 'pointer',
+              padding: 0,
+              zIndex: 5
+            };
+
+            return (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: '700', textAlign: 'center' }}>
+                    {hasSno && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '4px 3px', width: '30px', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <EditableText
+                            value={cfg.colHeaderSno || '#'}
+                            fallback="#"
+                            onSave={(v) => onUpdateSetting?.({ colHeaderSno: v })}
+                          />
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showSnoCol: false });
+                                onElementRemoved?.('showSnoCol', 'S.No Column');
                               }}
-                            />
-                          </div>
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px', textAlign: 'right', fontSize: '9.5px', verticalAlign: 'top' }}>
-                        <EditableText
-                          value={Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          fallback="0.00"
-                          onSave={(v) => {
-                            const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                            if (!isNaN(num)) handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { rate: num });
-                          }}
-                        />
-                      </td>
+                              title="Remove S.No Column"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </div>
+                      </th>
                     )}
-
-                    {/* TAX COLUMNS: Merged vertically in the middle for Preset Kit */}
-                    {isIntra ? (
-                      it.isPresetItem ? (
-                        it.isFirstInGroup ? (
-                          <>
-                            <td
-                              rowSpan={it.groupCount}
-                              style={{ border: '1px solid #CBD5E1', padding: '4px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#FFFFFF' }}
-                            >
-                              {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
-                            </td>
-                            <td
-                              rowSpan={it.groupCount}
-                              style={{ border: '1px solid #CBD5E1', padding: '4px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                            >
-                              {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td
-                              rowSpan={it.groupCount}
-                              style={{ border: '1px solid #CBD5E1', padding: '4px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#FFFFFF' }}
-                            >
-                              {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
-                            </td>
-                            <td
-                              rowSpan={it.groupCount}
-                              style={{ border: '1px solid #CBD5E1', padding: '4px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                            >
-                              {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </>
-                        ) : null
-                      ) : (
+                    {hasDesc && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '4px 6px', textAlign: 'left', position: 'relative' }}>
+                        <EditableText
+                          value={cfg.itemColLabel || 'Item & Description'}
+                          fallback="Item & Description"
+                          onSave={(v) => onUpdateSetting?.({ itemColLabel: v })}
+                        />
+                      </th>
+                    )}
+                    {hasHsn && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '4px 3px', width: '70px', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <EditableText
+                            value={cfg.hsnColLabel || 'HSN/SAC'}
+                            fallback="HSN/SAC"
+                            onSave={(v) => onUpdateSetting?.({ hsnColLabel: v })}
+                          />
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showHsn: false });
+                                onElementRemoved?.('showHsn', 'HSN Column');
+                              }}
+                              title="Remove HSN Column"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </div>
+                      </th>
+                    )}
+                    {hasQty && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '4px 3px', width: '50px', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <EditableText
+                            value={cfg.qtyColLabel || 'Qty'}
+                            fallback="Qty"
+                            onSave={(v) => onUpdateSetting?.({ qtyColLabel: v })}
+                          />
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showQty: false });
+                                onElementRemoved?.('showQty', 'Quantity Column');
+                              }}
+                              title="Remove Quantity Column"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </div>
+                      </th>
+                    )}
+                    {hasRate && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '4px 6px', width: '75px', textAlign: 'right', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <EditableText
+                            value={cfg.rateColLabel || 'Rate'}
+                            fallback="Rate"
+                            onSave={(v) => onUpdateSetting?.({ rateColLabel: v })}
+                          />
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showRateCol: false });
+                                onElementRemoved?.('showRateCol', 'Rate Column');
+                              }}
+                              title="Remove Rate Column"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </div>
+                      </th>
+                    )}
+                    {hasGst && (
+                      isIntra ? (
                         <>
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
-                            {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
-                          </td>
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
-                            {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
-                            {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
-                          </td>
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
-                            {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
+                          <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '3px 4px', position: 'relative' }}>
+                            CGST
+                            {isEditable && (
+                              <button
+                                type="button"
+                                className="no-print"
+                                onClick={() => {
+                                  onUpdateSetting?.({ showGstCol: false });
+                                  onElementRemoved?.('showGstCol', 'GST Columns');
+                                }}
+                                title="Remove GST Columns"
+                                style={colHeaderRemoveBtnStyle}
+                              >×</button>
+                            )}
+                          </th>
+                          <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '3px 4px' }}>SGST</th>
                         </>
-                      )
-                    ) : (
-                      it.isPresetItem ? (
-                        it.isFirstInGroup ? (
-                          <>
-                            <td
-                              rowSpan={it.groupCount}
-                              style={{ border: '1px solid #CBD5E1', padding: '4px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#FFFFFF' }}
-                            >
-                              {it.gRate ? `${it.gRate}%` : '18%'}
-                            </td>
-                            <td
-                              rowSpan={it.groupCount}
-                              style={{ border: '1px solid #CBD5E1', padding: '4px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#FFFFFF', fontWeight: '600' }}
-                            >
-                              {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </>
-                        ) : null
                       ) : (
-                        <>
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
-                            {it.gRate ? `${it.gRate}%` : '5%'}
-                          </td>
-                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
-                            {(it.gstAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </>
+                        <th colSpan={2} style={{ border: '1px solid #CBD5E1', padding: '3px 4px', position: 'relative' }}>
+                          IGST
+                          {isEditable && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={() => {
+                                onUpdateSetting?.({ showGstCol: false });
+                                onElementRemoved?.('showGstCol', 'GST Columns');
+                              }}
+                              title="Remove GST Columns"
+                              style={colHeaderRemoveBtnStyle}
+                            >×</button>
+                          )}
+                        </th>
                       )
                     )}
-
-                    {/* AMOUNT COLUMN: Merged vertically in the middle for Preset Kit */}
-                    {it.isPresetItem ? (
-                      it.isFirstInGroup ? (
-                        <td
-                          rowSpan={it.groupCount}
-                          style={{
-                            border: '1px solid #CBD5E1',
-                            padding: '4px 6px',
-                            textAlign: 'right',
-                            fontWeight: '800',
-                            color: '#0F172A',
-                            fontSize: '10.5px',
-                            verticalAlign: 'middle',
-                            backgroundColor: '#FFFFFF'
-                          }}
-                        >
-                          <EditableText
-                            value={Number(it.groupTaxable || it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            fallback="0.00"
-                            onSave={(v) => {
-                              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                              if (!isNaN(num) && it.grpId) {
-                                handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
-                              }
-                            }}
-                          />
-                        </td>
-                      ) : null
-                    ) : (
-                      <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '9.5px', verticalAlign: 'top' }}>
+                    {hasAmt && (
+                      <th rowSpan={hasGst ? 2 : 1} style={{ border: '1px solid #CBD5E1', padding: '4px 6px', width: '80px', textAlign: 'right' }}>
                         <EditableText
-                          value={Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          fallback="0.00"
-                          onSave={(v) => {
-                            const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                            if (!isNaN(num)) handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { amount: num });
-                          }}
+                          value={cfg.amountColLabel || 'Amount'}
+                          fallback="Amount"
+                          onSave={(v) => onUpdateSetting?.({ amountColLabel: v })}
                         />
-                      </td>
+                      </th>
                     )}
                   </tr>
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                  {hasGst && (
+                    <tr style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: '700', textAlign: 'center' }}>
+                      {isIntra ? (
+                        <>
+                          <th style={{ border: '1px solid #CBD5E1', padding: '2px 3px', width: '40px' }}>%</th>
+                          <th style={{ border: '1px solid #CBD5E1', padding: '2px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
+                          <th style={{ border: '1px solid #CBD5E1', padding: '2px 3px', width: '40px' }}>%</th>
+                          <th style={{ border: '1px solid #CBD5E1', padding: '2px 5px', width: '60px', textAlign: 'right' }}>Amt</th>
+                        </>
+                      ) : (
+                        <>
+                          <th style={{ border: '1px solid #CBD5E1', padding: '2px 3px', width: '40px' }}>%</th>
+                          <th style={{ border: '1px solid #CBD5E1', padding: '2px 5px', width: '70px', textAlign: 'right' }}>Amt</th>
+                        </>
+                      )}
+                    </tr>
+                  )}
+                </thead>
+                <tbody>
+                  {items.map((it, idx) => (
+                    <React.Fragment key={idx}>
+                      {it.isFirstInGroup && (
+                        <tr
+                          className="preset-group-banner-row"
+                          style={{
+                            backgroundColor: '#F8FAFC',
+                            pageBreakAfter: 'avoid',
+                            breakAfter: 'avoid',
+                            pageBreakBefore: (it.presetGroupNum > 1 && idx > 5) ? 'always' : 'auto',
+                            breakBefore: (it.presetGroupNum > 1 && idx > 5) ? 'page' : 'auto'
+                          }}
+                        >
+                          <td
+                            colSpan={computedColSpan || (isIntra ? 10 : 8)}
+                            style={{
+                              border: '1px solid #CBD5E1',
+                              padding: '3px 8px',
+                              backgroundColor: it.presetGroupNum % 2 === 1 ? '#F0FDFA' : '#EEF2FF',
+                              borderTop: `2px solid ${it.presetGroupNum % 2 === 1 ? '#0E7490' : '#6366F1'}`
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: '800', color: it.presetGroupNum % 2 === 1 ? '#0E7490' : '#4338CA', fontSize: '10px' }}>
+                                PRESET {it.presetGroupNum}:{' '}
+                                <EditableText
+                                  value={it.presetName}
+                                  fallback="Solar Structure MMS Kit"
+                                  onSave={(v) => {
+                                    if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
+                                  }}
+                                />
+                                {' '}({it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
+                              </span>
+                              <span style={{ fontSize: '9px', color: '#475569', fontWeight: '700' }}>
+                                Kit Subtotal: ₹{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr
+                        className={it.isFirstInGroup ? 'preset-first-item-row' : ''}
+                        style={{
+                          verticalAlign: 'top',
+                          pageBreakBefore: it.isFirstInGroup ? 'avoid' : 'auto',
+                          breakBefore: it.isFirstInGroup ? 'avoid' : 'auto'
+                        }}
+                      >
+                        {hasSno && (
+                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', color: '#334155', fontWeight: it.isPresetItem ? '700' : 'normal', fontSize: '9.5px' }}>
+                            {it.displaySNo || it.sNo}
+                          </td>
+                        )}
+                        {hasDesc && (
+                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px' }}>
+                            <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '10px', lineHeight: '1.2' }}>
+                              <EditableText
+                                value={it.name}
+                                fallback="Item Name"
+                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { name: v })}
+                              />
+                            </div>
+                            {it.description ? (
+                              <div style={{ fontSize: '8.5px', color: '#475569', marginTop: '1px', whiteSpace: 'pre-line', lineHeight: '1.15' }}>
+                                <EditableText
+                                  value={it.description}
+                                  fallback=""
+                                  placeholder=""
+                                  multiline={true}
+                                  onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { description: v })}
+                                />
+                              </div>
+                            ) : isEditable ? (
+                              <div className="no-print" style={{ fontSize: '7.5px', color: '#94A3B8', marginTop: '1px' }}>
+                                <EditableText
+                                  value=""
+                                  fallback=""
+                                  placeholder="+ desc"
+                                  multiline={true}
+                                  onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { description: v })}
+                                />
+                              </div>
+                            ) : null}
+                          </td>
+                        )}
+                        {hasHsn && (
+                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
+                            <EditableText
+                              value={it.hsn || '73089090'}
+                              fallback="73089090"
+                              onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { hsn: v })}
+                            />
+                          </td>
+                        )}
+                        {hasQty && (
+                          <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
+                            <div>
+                              <EditableText
+                                value={typeof it.qty === 'number' ? it.qty.toFixed(2) : String(it.qty || '1')}
+                                fallback="1.00"
+                                onSave={(v) => {
+                                  const n = parseFloat(v);
+                                  handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { qty: isNaN(n) ? v : n });
+                                }}
+                              />
+                            </div>
+                            <div style={{ fontSize: '8px', color: '#64748B' }}>
+                              <EditableText
+                                value={it.uom || "no's"}
+                                fallback="NOS"
+                                onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { uom: v })}
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        {/* RATE COLUMN: Merged vertically in the middle for Preset Kit */}
+                        {hasRate && (
+                          it.isPresetItem ? (
+                            it.isFirstInGroup ? (
+                              <td
+                                rowSpan={it.groupCount}
+                                style={{
+                                  border: '1px solid #CBD5E1',
+                                  padding: '4px 6px',
+                                  textAlign: 'right',
+                                  fontSize: '10.5px',
+                                  verticalAlign: 'middle',
+                                  backgroundColor: '#FFFFFF',
+                                  fontWeight: '700'
+                                }}
+                              >
+                                <div style={{ color: '#0F172A' }}>
+                                  <EditableText
+                                    value={Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    fallback="0.00"
+                                    onSave={(v) => {
+                                      const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                      if (!isNaN(num) && it.grpId) {
+                                        handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </td>
+                            ) : null
+                          ) : (
+                            <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px', textAlign: 'right', fontSize: '9.5px', verticalAlign: 'top' }}>
+                              <EditableText
+                                value={Number(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                fallback="0.00"
+                                onSave={(v) => {
+                                  const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                  if (!isNaN(num)) handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { rate: num });
+                                }}
+                              />
+                            </td>
+                          )
+                        )}
+
+                        {/* TAX COLUMNS: Merged vertically in the middle for Preset Kit */}
+                        {hasGst && (
+                          isIntra ? (
+                            it.isPresetItem ? (
+                              it.isFirstInGroup ? (
+                                <>
+                                  <td
+                                    rowSpan={it.groupCount}
+                                    style={{ border: '1px solid #CBD5E1', padding: '4px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#FFFFFF' }}
+                                  >
+                                    {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
+                                  </td>
+                                  <td
+                                    rowSpan={it.groupCount}
+                                    style={{ border: '1px solid #CBD5E1', padding: '4px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                                  >
+                                    {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td
+                                    rowSpan={it.groupCount}
+                                    style={{ border: '1px solid #CBD5E1', padding: '4px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#FFFFFF' }}
+                                  >
+                                    {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
+                                  </td>
+                                  <td
+                                    rowSpan={it.groupCount}
+                                    style={{ border: '1px solid #CBD5E1', padding: '4px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                                  >
+                                    {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </>
+                              ) : null
+                            ) : (
+                              <>
+                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
+                                  {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
+                                </td>
+                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
+                                  {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
+                                  {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '2.5%'}
+                                </td>
+                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
+                                  {(it.gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </>
+                            )
+                          ) : (
+                            it.isPresetItem ? (
+                              it.isFirstInGroup ? (
+                                <>
+                                  <td
+                                    rowSpan={it.groupCount}
+                                    style={{ border: '1px solid #CBD5E1', padding: '4px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#FFFFFF' }}
+                                  >
+                                    {it.gRate ? `${it.gRate}%` : '18%'}
+                                  </td>
+                                  <td
+                                    rowSpan={it.groupCount}
+                                    style={{ border: '1px solid #CBD5E1', padding: '4px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#FFFFFF', fontWeight: '600' }}
+                                  >
+                                    {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </>
+                              ) : null
+                            ) : (
+                              <>
+                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontSize: '9px', verticalAlign: 'top' }}>
+                                  {it.gRate ? `${it.gRate}%` : '5%'}
+                                </td>
+                                <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 5px', textAlign: 'right', fontSize: '9px', verticalAlign: 'top' }}>
+                                  {(it.gstAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </>
+                            )
+                          )
+                        )}
+
+                        {/* AMOUNT COLUMN: Merged vertically in the middle for Preset Kit */}
+                        {hasAmt && (
+                          it.isPresetItem ? (
+                            it.isFirstInGroup ? (
+                              <td
+                                rowSpan={it.groupCount}
+                                style={{
+                                  border: '1px solid #CBD5E1',
+                                  padding: '4px 6px',
+                                  textAlign: 'right',
+                                  fontWeight: '800',
+                                  color: '#0F172A',
+                                  fontSize: '10.5px',
+                                  verticalAlign: 'middle',
+                                  backgroundColor: '#FFFFFF'
+                                }}
+                              >
+                                <EditableText
+                                  value={Number(it.groupTaxable || it.groupPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  fallback="0.00"
+                                  onSave={(v) => {
+                                    const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                    if (!isNaN(num) && it.grpId) {
+                                      handleUpdatePresetGroup(it.grpId, { kitPrice: num / (it.setCount || 1) });
+                                    }
+                                  }}
+                                />
+                              </td>
+                            ) : null
+                          ) : (
+                            <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 6px', textAlign: 'right', fontWeight: '600', color: '#0F172A', fontSize: '9.5px', verticalAlign: 'top' }}>
+                              <EditableText
+                                value={Number(it.taxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                fallback="0.00"
+                                onSave={(v) => {
+                                  const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                  if (!isNaN(num)) handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { amount: num });
+                                }}
+                              />
+                            </td>
+                          )
+                        )}
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
 
         {/* BOM TOTAL QUANTITY FOOTER */}
