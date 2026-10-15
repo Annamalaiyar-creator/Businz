@@ -830,44 +830,45 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
                   const resolveDateTime = (order, fallbackPi) => {
-                    const rawTs = order?.salesConfirmedAt || order?.createdAt || order?.date || order?.timestamp || fallbackPi?.salesConfirmedAt || fallbackPi?.createdAt || fallbackPi?.date;
+                    const rawTs = order?.salesConfirmedAt || order?.createdAt || order?.timestamp || fallbackPi?.salesConfirmedAt || fallbackPi?.createdAt || order?.date || fallbackPi?.date;
                     if (!rawTs) {
-                      const now = new Date();
-                      const dStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                      const tStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-                      return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
+                      return { date: '—', time: '', combined: '—' };
                     }
 
-                    let d = new Date(rawTs);
-                    if (isNaN(d.getTime())) {
-                      const s = String(rawTs).trim();
-                      const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
-                      if (isoMatch) {
-                        const yr = parseInt(isoMatch[1], 10);
-                        const mo = parseInt(isoMatch[2], 10) - 1;
-                        const da = parseInt(isoMatch[3], 10);
-                        const hr = isoMatch[4] ? parseInt(isoMatch[4], 10) : 10;
-                        const mi = isoMatch[5] ? parseInt(isoMatch[5], 10) : 30;
-                        d = new Date(yr, mo, da, hr, mi);
-                      }
+                    const s = String(rawTs).trim();
+
+                    // 1. If it's strictly a date format YYYY-MM-DD without any time portion, show ONLY the real date
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+                      const parts = s.split('-');
+                      const yr = parseInt(parts[0], 10);
+                      const mo = parseInt(parts[1], 10) - 1;
+                      const da = parseInt(parts[2], 10);
+                      const d = new Date(yr, mo, da);
+                      const dStr = isNaN(d.getTime()) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      return { date: dStr, time: '', combined: dStr };
                     }
 
+                    // 2. Check for midnight UTC or date-only automated seeds (T00:00:00 or T05:30:00)
+                    const isDateOnlySeed = /T00:00:00(?:\.000)?Z?$/i.test(s) || /T05:30:00(?:\.\d+)?Z?$/i.test(s);
+                    if (isDateOnlySeed) {
+                      const datePart = s.split('T')[0];
+                      const parts = datePart.split('-');
+                      const yr = parseInt(parts[0], 10);
+                      const mo = parseInt(parts[1], 10) - 1;
+                      const da = parseInt(parts[2], 10);
+                      const d = new Date(yr, mo, da);
+                      const dStr = isNaN(d.getTime()) ? datePart : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      return { date: dStr, time: '', combined: dStr };
+                    }
+
+                    // 3. Real genuine timestamp recorded at order creation or confirmation
+                    const d = new Date(rawTs);
                     if (isNaN(d.getTime())) {
-                      return { date: String(rawTs), time: '', combined: String(rawTs) };
+                      return { date: s, time: '', combined: s };
                     }
 
                     const dStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                    let hours = d.getHours();
-                    const minutes = d.getMinutes();
-
-                    // Business hours alignment: Off-hour morning times (12:00 AM - 6:59 AM) are business PM hours (e.g. 5:30 AM -> 5:30 PM, 12:00 AM -> 12:00 PM)
-                    if (hours >= 0 && hours < 7) {
-                      hours = hours + 12;
-                    }
-
-                    const period = hours >= 12 ? 'PM' : 'AM';
-                    const dispHour = hours % 12 === 0 ? 12 : hours % 12;
-                    const tStr = `${String(dispHour).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+                    const tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
                     return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
                   };

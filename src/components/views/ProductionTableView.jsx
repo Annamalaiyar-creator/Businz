@@ -303,7 +303,9 @@ export default function ProductionTableView({
                         {activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
                           <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
                             <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
-                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
+                            {row.dateTimeObj.time && (
+                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
+                            )}
                           </div>
                         ) : (
                           row.c3 || row.date1
