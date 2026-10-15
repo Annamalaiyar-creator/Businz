@@ -3,7 +3,7 @@ import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
   UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User
 } from "lucide-react";
-import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, uploadMediaFile } from "../../utils/otherViewsShared";
+import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, getMediaFromCacheAsync, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
@@ -12,6 +12,146 @@ import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+
+/**
+ * Async Dispatch Photo Thumbnail Component
+ * Resolves signed URLs, local caches, and fallback server uploads asynchronously
+ * so photos never show a black or broken preview.
+ */
+function DispatchPhotoThumbnail({ ph, phIdx, bomCode, onPreview, onRemove, canRemove, formatUploadTime }) {
+  const [src, setSrc] = useState(
+    ph.url || ph.dataUrl || ph.previewUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || ''
+  );
+  const [loading, setLoading] = useState(!src);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    // Check if we already have a usable direct or base64 URL
+    const existing = ph.url || ph.dataUrl || ph.previewUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
+    if (existing && !existing.startsWith('blob:')) {
+      setSrc(existing);
+      setLoading(false);
+      setLoadError(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const resolveUrl = async () => {
+      // 1. If it has storageBucket/storagePath, ask documentResolver for signed URL
+      if (ph.storageBucket || ph.storagePath) {
+        try {
+          const signedUrl = await resolveDocumentUrlAsync(ph, bomCode);
+          if (active && signedUrl) {
+            setSrc(signedUrl);
+            setLoading(false);
+            setLoadError(false);
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Try async media cache / server media finder
+      const docKey = ph.name || ph.id || ph.storagePath;
+      if (docKey) {
+        try {
+          const cachedUrl = await getMediaFromCacheAsync(docKey);
+          if (active && cachedUrl) {
+            setSrc(cachedUrl);
+            setLoading(false);
+            setLoadError(false);
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 3. Try /api/uploads direct fallback
+      if (ph.name) {
+        const directUploadUrl = `/api/uploads/${encodeURIComponent(ph.name)}`;
+        if (active) {
+          setSrc(directUploadUrl);
+          setLoading(false);
+          setLoadError(false);
+        }
+      } else {
+        if (active) {
+          setLoading(false);
+          setLoadError(true);
+        }
+      }
+    };
+
+    resolveUrl();
+
+    return () => { active = false; };
+  }, [ph, bomCode]);
+
+  const timeText = formatUploadTime(ph);
+
+  return (
+    <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <div
+        onClick={() => onPreview({ ...ph, type: 'image', url: src, name: ph.name })}
+        style={{
+          height: '95px',
+          backgroundColor: '#F8FAFC',
+          cursor: 'pointer',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative'
+        }}
+      >
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+            <Loader2 className="animate-spin" size={20} style={{ color: '#0E7490' }} />
+            <span style={{ fontSize: '10px', fontWeight: '700' }}>Loading...</span>
+          </div>
+        ) : src && !loadError ? (
+          <img
+            src={src}
+            alt={ph.name || 'Packing photo'}
+            onError={() => {
+              if (ph.name && !src.includes('/api/uploads/')) {
+                setSrc(`/api/uploads/${encodeURIComponent(ph.name)}`);
+              } else {
+                setLoadError(true);
+              }
+            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#94A3B8' }}>
+            <Camera size={22} style={{ color: '#CBD5E1' }} />
+            <span style={{ fontSize: '10px', fontWeight: '600' }}>Photo Preview</span>
+          </div>
+        )}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(15,23,42,0.82)', color: '#FFFFFF', padding: '3px 8px', fontSize: '10px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', backdropFilter: 'blur(2px)' }}>
+          <Clock size={11} style={{ color: '#38BDF8', flexShrink: 0 }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timeText}</span>
+        </div>
+      </div>
+      <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '11px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }} title={ph.name}>
+          {ph.name || `Photo ${phIdx + 1}`}
+        </span>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+            title="Remove photo"
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DispatchPackingModal({
   dispatchPackingModal,
@@ -1076,50 +1216,29 @@ export default function DispatchPackingModal({
           {/* Media Gallery Thumbnails */}
           {(dispatchPackingModal.dispatchPackingMedia?.photos || []).length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginTop: '6px' }}>
-              {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => {
-                const photoSrc = ph.url || ph.dataUrl || getMediaFromCache(ph.name) || getMediaFromCache(ph.id);
-                const timeText = formatUploadTime(ph);
-                return (
-                  <div key={ph.id || phIdx} style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div
-                      onClick={() => handleMediaPreview({ type: 'image', url: photoSrc, name: ph.name })}
-                      style={{ height: '95px', backgroundColor: '#0F172A', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-                    >
-                      <img src={photoSrc} alt={ph.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(15,23,42,0.8)', color: '#FFFFFF', padding: '3px 8px', fontSize: '10px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={11} style={{ color: '#38BDF8', flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timeText}</span>
-                      </div>
-                    </div>
-                    <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }} title={ph.name}>
-                        {ph.name || `Photo ${phIdx + 1}`}
-                      </span>
-                      {!isCancelled && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDispatchPackingModal(prev => {
-                              const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
-                              const updatedPhotos = existingMedia.photos.filter((_, i) => i !== phIdx);
-                              const updatedMedia = { ...existingMedia, photos: updatedPhotos };
-                              syncModalMediaToStore(updatedMedia);
-                              return {
-                                ...prev,
-                                dispatchPackingMedia: updatedMedia
-                              };
-                            });
-                          }}
-                          style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
-                          title="Remove photo"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {(dispatchPackingModal.dispatchPackingMedia?.photos || []).map((ph, phIdx) => (
+                <DispatchPhotoThumbnail
+                  key={ph.id || phIdx}
+                  ph={ph}
+                  phIdx={phIdx}
+                  bomCode={dispatchPackingModal.bomCode}
+                  onPreview={handleMediaPreview}
+                  onRemove={() => {
+                    setDispatchPackingModal(prev => {
+                      const existingMedia = prev.dispatchPackingMedia || { photos: [], videos: [] };
+                      const updatedPhotos = existingMedia.photos.filter((_, i) => i !== phIdx);
+                      const updatedMedia = { ...existingMedia, photos: updatedPhotos };
+                      syncModalMediaToStore(updatedMedia);
+                      return {
+                        ...prev,
+                        dispatchPackingMedia: updatedMedia
+                      };
+                    });
+                  }}
+                  canRemove={!isCancelled}
+                  formatUploadTime={formatUploadTime}
+                />
+              ))}
             </div>
           ) : (
             <div style={{ fontSize: '11px', color: '#64748B', fontStyle: 'italic' }}>
