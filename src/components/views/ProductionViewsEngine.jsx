@@ -1256,6 +1256,7 @@ export default function ProductionViewsEngine(props) {
                 handleCancelBomOrder={handleCancelBomOrder}
                 setActiveMediaPreviewModal={setActiveMediaPreviewModal}
                 setVehicleLoadingModal={setVehicleLoadingModal}
+                userRole={userRole}
               />
             );
           }

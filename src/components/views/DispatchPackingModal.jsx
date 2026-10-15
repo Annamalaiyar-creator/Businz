@@ -22,7 +22,8 @@ export default function DispatchPackingModal({
   canCancelBom = false,
   handleCancelBomOrder = () => {},
   setActiveMediaPreviewModal,
-  setVehicleLoadingModal
+  setVehicleLoadingModal,
+  userRole = 'Dispatch Head'
 }) {
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
@@ -247,9 +248,11 @@ export default function DispatchPackingModal({
       return;
     }
 
-    let confirmedItems;
-    let nextStatus;
-    let isFullyConfirmed = false;
+    try {
+      const wasAlreadySentToAccounts = Boolean(isAlreadySentToAccounts || isAccountsLocked);
+      let confirmedItems;
+      let nextStatus;
+      let isFullyConfirmed = false;
 
     const is100Paid = Boolean(
       dispatchPackingModal.paymentType === '100% Paid' ||
@@ -320,8 +323,9 @@ export default function DispatchPackingModal({
       })
     } : null;
 
-    const packedByUserId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
-    const packedByName = (localStorage.getItem('controlroom_logged_user_name') || userRole || 'Dispatch Executive').trim();
+    const packedByUserId = (typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') || '' : '').trim();
+    const loggedName = typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') || '' : '';
+    const packedByName = (loggedName || userRole || 'Dispatch Executive').trim();
     const packedAt = new Date().toISOString();
 
     const isDispatchUser = (name) => {
@@ -489,7 +493,11 @@ export default function DispatchPackingModal({
     } else {
       alert(`📦 Dispatch packing progress saved as Partially Packed.`);
     }
-  };
+  } catch (saveErr) {
+    console.error('Error during savePackingData:', saveErr);
+    alert(`Could not confirm packing: ${saveErr.message}`);
+  }
+};
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif", minHeight: '100%' }}>
