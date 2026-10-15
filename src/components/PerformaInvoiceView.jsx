@@ -920,6 +920,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [presetGroups, setPresetGroups] = useState({});
   const [selectedItemIndexes, setSelectedItemIndexes] = useState([]);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
+  const [showCreateSetModal, setShowCreateSetModal] = useState(false);
+  const [newSetName, setNewSetName] = useState('');
+  const [newSetCount, setNewSetCount] = useState(1);
+  const [newSetPrice, setNewSetPrice] = useState('');
+  const [newSetGstRate, setNewSetGstRate] = useState('18%');
   const [piConfirmModal, setPiConfirmModal] = useState(null); // 'cancel' | 'draft' | 'create'
   const [previewDocModal, setPreviewDocModal] = useState(null);
   const [copiedBankField, setCopiedBankField] = useState(null);
@@ -1794,6 +1799,48 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
       return [...items, newItem];
     });
+  };
+
+  const handleCreateCustomSet = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
+    const count = Math.max(1, parseInt(newSetCount) || 1);
+    const groupId = 'custom_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const setGst = newSetGstRate || '18%';
+
+    setPresetGroups(prev => ({
+      ...prev,
+      [groupId]: {
+        groupId,
+        presetId: 'custom_set',
+        presetName: cleanName,
+        setCount: count,
+        kitPrice: newSetPrice ? String(newSetPrice) : '',
+        gstRate: setGst,
+        isCustomSet: true
+      }
+    }));
+
+    const initialItem = {
+      name: '',
+      category: '',
+      uom: 'NOS',
+      qty: String(1 * count),
+      baseQty: 1,
+      rate: '0',
+      gstRate: setGst,
+      isPresetItem: true,
+      presetGroupId: groupId,
+      presetName: cleanName
+    };
+
+    setPiItems(prev => [...(prev || []), initialItem]);
+
+    setNewSetName('');
+    setNewSetCount(1);
+    setNewSetPrice('');
+    setNewSetGstRate('18%');
+    setShowCreateSetModal(false);
   };
 
   const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -5093,6 +5140,38 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   {hasAnyPreset ? 'Add Standalone Item' : 'Add Product / Item'}
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewSetName(`Custom Set ${Object.keys(presetGroups || {}).length + 1}`);
+                    setNewSetCount(1);
+                    setNewSetPrice('');
+                    setNewSetGstRate('18%');
+                    setShowCreateSetModal(true);
+                  }}
+                  style={{
+                    border: '1px solid #DDD6FE',
+                    background: '#F5F3FF',
+                    color: '#6D28D9',
+                    padding: '9px 18px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 2px rgba(109, 40, 217, 0.06)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EDE9FE'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F5F3FF'; }}
+                  title="Create a custom ad-hoc Set / Kit for this PI alone (does not alter preset dropdown)"
+                >
+                  <Layers style={{ width: '15px', height: '15px', color: '#7C3AED' }} />
+                  + Create Set
+                </button>
+
                 {Object.values(presetGroups).map(grp => (
                   <button
                     key={grp.groupId}
@@ -6657,6 +6736,186 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 Yes, Clear All
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== CREATE CUSTOM SET MODAL (THIS PI ALONE) ==================== */}
+      {showCreateSetModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              width: '460px',
+              maxWidth: '92vw',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', backgroundColor: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Layers size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Create Custom Set / Kit
+                  </h3>
+                  <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                    Bundle products into a kit for this PI alone
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateSetModal(false)}
+                style={{ border: 'none', background: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Notice badge */}
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: '8px', padding: '10px 12px', fontSize: '11.5px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px' }}>🔒</span>
+              <span>This custom set exists <strong>only in this PI</strong> and will not be added to the master preset dropdown.</span>
+            </div>
+
+            <form onSubmit={handleCreateCustomSet} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Set / Kit Name <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newSetName}
+                  onChange={(e) => setNewSetName(e.target.value)}
+                  placeholder="e.g. Custom 5kW Solar Kit, Special Client Bundle"
+                  style={{
+                    width: '100%', height: '40px', borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1', padding: '0 12px',
+                    fontSize: '13px', fontWeight: '600', color: '#0F172A',
+                    outline: 'none', boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Number of Sets
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="999"
+                    value={newSetCount}
+                    onChange={(e) => setNewSetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    style={{
+                      width: '100%', height: '40px', borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1', padding: '0 12px',
+                      fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                      outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    GST Rate
+                  </label>
+                  <select
+                    value={newSetGstRate}
+                    onChange={(e) => setNewSetGstRate(e.target.value)}
+                    style={{
+                      width: '100%', height: '40px', borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1', padding: '0 10px',
+                      fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                      outline: 'none', boxSizing: 'border-box', backgroundColor: 'white'
+                    }}
+                  >
+                    <option value="18%">18% (Standard)</option>
+                    <option value="12%">12%</option>
+                    <option value="5%">5% (Solar / TopCon)</option>
+                    <option value="0%">0% (Exempt)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Kit / Set Lump-Sum Price (₹) <span style={{ fontSize: '11px', fontWeight: '400', color: '#64748B' }}>(Optional, can set in table)</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#64748B' }}>₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={newSetPrice}
+                    onChange={(e) => setNewSetPrice(e.target.value)}
+                    placeholder="Enter total taxable price for 1 set"
+                    style={{
+                      width: '100%', height: '40px', borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1', padding: '0 12px 0 28px',
+                      fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                      outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateSetModal(false)}
+                  style={{
+                    padding: '9px 18px', borderRadius: '8px',
+                    backgroundColor: '#FFFFFF', color: '#475569',
+                    border: '1px solid #CBD5E1', fontSize: '13px',
+                    fontWeight: '700', cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '9px 20px', borderRadius: '8px',
+                    backgroundColor: '#7C3AED', color: 'white',
+                    border: 'none', fontSize: '13px',
+                    fontWeight: '800', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)'
+                  }}
+                >
+                  <Layers size={15} />
+                  Create Set & Add Items
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
