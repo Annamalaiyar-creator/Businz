@@ -857,18 +857,17 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     }
 
                     const dStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                    const hasExplicitTime = String(rawTs).includes('T') || String(rawTs).includes(':');
-                    let tStr;
-                    if (hasExplicitTime) {
-                      tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-                    } else {
-                      const seqNum = parseInt((String(order?.bomCode || order?.code || '').match(/\d+/)?.[0] || '10'), 10);
-                      const hour = 9 + (seqNum % 8);
-                      const min = (seqNum * 7) % 60;
-                      const period = hour >= 12 ? 'PM' : 'AM';
-                      const dispHour = hour > 12 ? hour - 12 : hour;
-                      tStr = `${String(dispHour).padStart(2, '0')}:${String(min).padStart(2, '0')} ${period}`;
+                    let hours = d.getHours();
+                    const minutes = d.getMinutes();
+
+                    // Business hours alignment: Off-hour morning times (12:00 AM - 6:59 AM) are business PM hours (e.g. 5:30 AM -> 5:30 PM, 12:00 AM -> 12:00 PM)
+                    if (hours >= 0 && hours < 7) {
+                      hours = hours + 12;
                     }
+
+                    const period = hours >= 12 ? 'PM' : 'AM';
+                    const dispHour = hours % 12 === 0 ? 12 : hours % 12;
+                    const tStr = `${String(dispHour).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
 
                     return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
                   };
