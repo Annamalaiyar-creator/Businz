@@ -271,7 +271,17 @@ export default function DispatchPackingModal({
   const handleMediaPreview = async (media) => {
     let resolvedUrl = media.url;
     if (!resolvedUrl && (media.storageBucket || media.storagePath)) {
-      resolvedUrl = await resolveDocumentUrlAsync(media, dispatchPackingModal.bomCode);
+      try {
+        resolvedUrl = await resolveDocumentUrlAsync(media, dispatchPackingModal.bomCode);
+      } catch (_) {}
+    }
+    if (!resolvedUrl && (media.name || media.id)) {
+      try {
+        resolvedUrl = await getMediaFromCacheAsync(media.name || media.id);
+      } catch (_) {}
+    }
+    if (!resolvedUrl && media.name) {
+      resolvedUrl = `/api/uploads/${encodeURIComponent(media.name)}`;
     }
     const finalMedia = { ...media, url: resolvedUrl || media.dataUrl, bomCode: dispatchPackingModal.bomCode };
     if (typeof setActiveMediaPreviewModal === 'function') {
