@@ -2187,8 +2187,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const totals = calculatePiTotals();
       const joinedProducts = piItems.map(it => it.name).filter(Boolean).join(', ') || 'Solar Structure & Accessories';
 
+      const isEditing = editIdx !== null;
       let cleanPiNo;
-      if (editIdx !== null) {
+      if (isEditing) {
         cleanPiNo = (piNumber && piNumber.trim() && piNumber !== 'Auto-Assigned')
           ? piNumber.trim().toUpperCase()
           : (piList[editIdx]?.piNo || `PI-${String(editIdx + 1).padStart(5, '0')}`);
@@ -2197,16 +2198,35 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         cleanPiNo = await fetchNextPiNumber();
       }
 
+      // CONCURRENCY & COLLISION PROTECTION (CLIENT-SIDE):
+      // If user is creating a NEW PI (not editing), but cleanPiNo already exists in local piList:
+      // DO NOT OVERWRITE! Advance to the next unused sequence number.
+      let targetKey = String(cleanPiNo || '').trim().toLowerCase();
+      if (!isEditing) {
+        const isCollision = (piList || []).some(p => {
+          const pNo = String(p.piNo || '').trim().toLowerCase();
+          const pId = String(p.id || '').trim().toLowerCase();
+          return pNo === targetKey || pId === targetKey;
+        });
+        if (isCollision) {
+          const { code } = getNextSequence('PI', [...(piList || []), ...(bomList || [])]);
+          console.warn(`[PI CONCURRENCY SAFETY] PI number "${cleanPiNo}" is already taken. Auto-advancing new PI to "${code}".`);
+          cleanPiNo = code;
+          targetKey = cleanPiNo.toLowerCase();
+        }
+      }
+
       setPiNumber(cleanPiNo);
 
-      const targetKey = String(cleanPiNo || '').trim().toLowerCase();
       const existingMatchIdx = (piList || []).findIndex(p => {
         const pNo = String(p.piNo || '').trim().toLowerCase();
         const pId = String(p.id || '').trim().toLowerCase();
         return pNo === targetKey || pId === targetKey;
       });
 
-      const matchedExisting = existingMatchIdx !== -1 ? piList[existingMatchIdx] : (editIdx !== null ? piList[editIdx] : null);
+      const matchedExisting = (isEditing && existingMatchIdx !== -1)
+        ? piList[existingMatchIdx]
+        : (isEditing && editIdx !== null ? piList[editIdx] : null);
 
       const newPI = {
         id: cleanPiNo,
@@ -2267,15 +2287,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       };
 
       let updatedList;
-      if (existingMatchIdx !== -1) {
+      if (isEditing && existingMatchIdx !== -1) {
         updatedList = [...piList];
         updatedList[existingMatchIdx] = newPI;
         setEditIdx(null);
-      } else if (editIdx !== null && editIdx >= 0 && editIdx < piList.length) {
+      } else if (isEditing && editIdx !== null && editIdx >= 0 && editIdx < piList.length) {
         updatedList = [...piList];
         updatedList[editIdx] = newPI;
         setEditIdx(null);
       } else {
+        // ALWAYS PREPEND new PI to list without overwriting any existing PI
         updatedList = [newPI, ...piList];
         setEditIdx(null);
         try {
@@ -2293,7 +2314,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       updatePiList(updatedList);
 
       // Push to Zoho Books Quotes (Estimates API)
-      const sanitizedPayload = stripDataUrlsFromRecord(newPI);
+      const sanitizedPayload = {
+        ...stripDataUrlsFromRecord(newPI),
+        isEdit: isEditing
+      };
       delete sanitizedPayload.paymentProofDoc;
       delete sanitizedPayload.deliveryProofDoc;
       delete sanitizedPayload.deliveryAddressProofDoc;
@@ -2303,16 +2327,25 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sanitizedPayload)
       }).then(res => res.json()).then(data => {
+        const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
         const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
         const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
-        if (estId) {
-          const finalEstNo = data?.estimate?.piNo || newPI.piNo;
-          console.log('[ZOHO ESTIMATE SYNC SUCCESS]', estId);
+
+        // If the server auto-advanced the PI number due to concurrency collision, sync local state
+        const finalEstNo = serverAssignedPiNo || data?.estimate?.piNo || newPI.piNo;
+        if (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo) {
+          console.warn(`[PI CONCURRENCY NOTIFICATION] Server auto-advanced PI number from ${newPI.piNo} to ${serverAssignedPiNo}`);
+          showTopToast(`ℹ️ PI Number was auto-advanced to ${serverAssignedPiNo} to prevent overwriting existing record.`, 'info', 6000);
+        }
+
+        if (estId || (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo)) {
+          console.log('[ZOHO ESTIMATE SYNC SUCCESS]', estId || 'Native Server Sync');
           const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
             ...p,
+            id: finalEstNo,
             piNo: finalEstNo,
-            zohoEstimateId: estId,
-            zohoSynced: true,
+            zohoEstimateId: estId || p.zohoEstimateId,
+            zohoSynced: Boolean(estId || p.zohoSynced),
             zohoSyncError: null,
             zohoModule: 'Quotes'
           } : p);

@@ -1050,9 +1050,16 @@ export default function CrmQuotationsView({
       }
     } catch (_) {}
 
+    const existingPIs = await fetchCloudStore('sales_pi_store', []);
     if (!piNumber) {
-      const existingPIs = await fetchCloudStore('sales_pi_store', []);
       piNumber = getNextSequence('PI', existingPIs || []).code;
+    }
+
+    // CONCURRENCY & COLLISION PROTECTION:
+    // If the generated piNumber already exists in existingPIs, auto-advance to next code
+    if (Array.isArray(existingPIs) && existingPIs.some(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNumber.toLowerCase())) {
+      const { code } = getNextSequence('PI', existingPIs);
+      piNumber = code;
     }
 
     // 2. Prepare items and amounts
@@ -1107,15 +1114,15 @@ export default function CrmQuotationsView({
       notes: `Generated automatically from Quotation ${quote.code || quote.quoteNumber}. Unlimited revisions kept in quotation history.`
     };
 
-    // 3. Save to sales PI store in Supabase cloud database
-    const updatedPIs = [newPI, ...(Array.isArray(existingPIs) ? existingPIs.filter(p => p.piNo !== piNumber) : [])];
+    // 3. Save to sales PI store without deleting or overwriting any existing PI
+    const updatedPIs = [newPI, ...(Array.isArray(existingPIs) ? existingPIs : [])];
     try {
       await saveCloudStoreImmediate('sales_pi_store', updatedPIs);
       await saveCloudStoreImmediate('proforma_invoice_store', updatedPIs);
       fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPI)
+        body: JSON.stringify({ ...newPI, isEdit: false })
       }).catch(() => {});
       window.dispatchEvent(new Event('controlroom_storage_update'));
     } catch (e) {}

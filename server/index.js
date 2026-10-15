@@ -5061,32 +5061,64 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
     if (fs.existsSync(pProforma)) localEstimates = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
   } catch (_) {}
 
-  const cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
-  const targetLower = cleanPiNo.toLowerCase();
+  let salesEstimates = [];
+  try {
+    if (fs.existsSync(pSales)) salesEstimates = JSON.parse(fs.readFileSync(pSales, 'utf8'));
+  } catch (_) {}
 
-  const existingProforma = localEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower);
+  const isExplicitEdit = Boolean(req.body.isEdit || req.body.editMode || req.body.isEditing);
+  let cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
+  let targetLower = cleanPiNo.toLowerCase();
+
+  const existingProforma = localEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower) ||
+    salesEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower);
+
+  // CONCURRENCY & COLLISION PROTECTION:
+  // If NOT an explicit edit and the PI number already exists, DO NOT OVERWRITE!
+  // Automatically advance to the next sequential unused PI number (e.g. VRM-PI-2026-33, VRM-PI-2026-34, etc.)
+  if (!isExplicitEdit && existingProforma) {
+    let allRecords = [...localEstimates, ...salesEstimates];
+    if (Array.isArray(supabaseMemoryStore['sales_pi_store'])) {
+      allRecords.push(...supabaseMemoryStore['sales_pi_store']);
+    }
+    if (Array.isArray(supabaseMemoryStore['proforma_invoice_store'])) {
+      allRecords.push(...supabaseMemoryStore['proforma_invoice_store']);
+    }
+    const { code } = getNextSequence('PI', allRecords);
+    console.warn(`[PI CONCURRENCY SAFETY] PI number "${cleanPiNo}" is already taken. Auto-advancing new PI to next available sequence: "${code}".`);
+    cleanPiNo = code;
+    targetLower = cleanPiNo.toLowerCase();
+  }
 
   const newPI = {
-    ...(existingProforma || {}),
+    ...(isExplicitEdit && existingProforma ? existingProforma : {}),
     ...req.body,
-    id: req.body.id || cleanPiNo,
+    id: cleanPiNo,
     piNo: cleanPiNo,
-    createdAt: (existingProforma && existingProforma.createdAt) || req.body.createdAt || new Date().toISOString(),
+    createdAt: (isExplicitEdit && existingProforma && existingProforma.createdAt) || req.body.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
   // Persist to BOTH local stores and Supabase
-  const updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
+  let updatedProforma;
+  if (isExplicitEdit) {
+    updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
+  } else {
+    updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
+  }
+
   try {
     fs.writeFileSync(pProforma, JSON.stringify(updatedProforma, null, 2), 'utf8');
   } catch (_) {}
 
+  let updatedSales;
+  if (isExplicitEdit) {
+    updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
+  } else {
+    updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
+  }
+
   try {
-    let salesEstimates = [];
-    if (fs.existsSync(pSales)) {
-      try { salesEstimates = JSON.parse(fs.readFileSync(pSales, 'utf8')); } catch (_) {}
-    }
-    const updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
     fs.writeFileSync(pSales, JSON.stringify(updatedSales, null, 2), 'utf8');
   } catch (_) {}
 
@@ -5095,7 +5127,11 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
 
   return res.json({
     success: true,
-    message: 'Proforma Invoice created in BUSINZ successfully!',
+    message: cleanPiNo !== req.body.piNo
+      ? `Proforma Invoice auto-advanced to ${cleanPiNo} to prevent overwriting existing record.`
+      : 'Proforma Invoice created in BUSINZ successfully!',
+    originalRequestedPiNo: req.body.piNo,
+    wasReassigned: cleanPiNo !== req.body.piNo,
     estimate: newPI,
     pi: newPI
   });
