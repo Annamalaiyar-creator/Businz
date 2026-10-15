@@ -497,19 +497,36 @@ export function UpdatePaymentModal({
                   ...metadata,
                   notes: updatePaymentNotes
                 };
-                setBomStore(prev => prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
-                  ...b,
-                  status: 'Payment Uploaded & Settled',
-                  paymentUpdated: true,
-                  paymentUpdatedDate: new Date().toISOString(),
-                  paymentProofDoc: updatedDoc,
-                  payments: {
-                    ...b.payments,
-                    proofDoc: metadata.name,
-                    proofDocObj: updatedDoc,
-                    paymentUpdated: true
+                setBomStore(prev => {
+                  const updated = prev.map(b => (b.bomCode === bomCode || b.id === bomCode) ? {
+                    ...b,
+                    status: 'Payment Uploaded & Settled',
+                    paymentUpdated: true,
+                    paymentUpdatedDate: new Date().toISOString(),
+                    paymentProofDoc: updatedDoc,
+                    balancePaymentProofDoc: updatedDoc,
+                    paymentProofDocName: metadata.name || b.paymentProofDocName,
+                    payments: {
+                      ...b.payments,
+                      proofDoc: metadata.name,
+                      proofDocObj: updatedDoc,
+                      balanceProofDocObj: updatedDoc,
+                      paymentUpdated: true
+                    }
+                  } : b);
+                  const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
+                  if (targetBom) {
+                    saveCloudBomRow(targetBom).catch(console.error);
+                    try {
+                      fetch('/api/boms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(targetBom)
+                      }).catch(console.error);
+                    } catch (_) {}
                   }
-                } : b));
+                  return updated;
+                });
                 onClose();
                 alert(`✅ Payment details for (${bomCode}) successfully recorded and locked in secure storage!`);
               } catch (err) {
