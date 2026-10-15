@@ -1,9 +1,9 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Check, Trash2, CheckCircle, CheckSquare, XCircle, ChevronLeft,
   UploadCloud, Package, Upload, Receipt, Camera, Video, Play, Save, X, Loader2, Truck, Clock, User
 } from "lucide-react";
-import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache } from "../../utils/otherViewsShared";
+import { stripDataUrlsFromRecord, saveMediaToCache, getMediaFromCache, uploadMediaFile } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
 import { notifyBomPackedAndSentToAccounts } from "../../services/notificationService";
@@ -32,6 +32,16 @@ export default function DispatchPackingModal({
   const dispatchCameraStreamRef = useRef(null);
   const dispatchCameraVideoRef = useRef(null);
   const dispatchCameraCanvasRef = useRef(null);
+
+  // Safety auto-reset so buttons are never permanently stuck disabled due to unhandled network/file errors
+  useEffect(() => {
+    if (uploadingCount > 0) {
+      const timer = setTimeout(() => {
+        setUploadingCount(0);
+      }, 12000);
+      return () => clearTimeout(timer);
+    }
+  }, [uploadingCount]);
 
   const handleOpenLiveCamera = async () => {
     setShowDispatchCameraModal(true);
@@ -137,10 +147,9 @@ export default function DispatchPackingModal({
     (dispatchPackingModal.status && typeof dispatchPackingModal.status === 'string' && dispatchPackingModal.status.toLowerCase().includes('cancel'))
   );
 
-  const isAlreadySentToAccounts = Boolean(
-    dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
-    dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
-    dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
+  // Accounts locked: Accounts has officially verified this BOM or it has proceeded to Billing / Vehicle Loading / Dispatched
+  const isAccountsLocked = Boolean(
+    dispatchPackingModal.accountsVerification?.verified ||
     dispatchPackingModal.status === 'Accounts Verified & Passed to Invoice' ||
     dispatchPackingModal.status === 'ACCOUNTS VERIFIED' ||
     dispatchPackingModal.status === 'Invoice Confirmed' ||
@@ -150,24 +159,31 @@ export default function DispatchPackingModal({
     dispatchPackingModal.status === 'CLOSED' ||
     dispatchPackingModal.status === 'COMPLETED & DISPATCHED' ||
     dispatchPackingModal.status === 'Completed' ||
-    dispatchPackingModal.tabGroup === 'Packed' ||
     dispatchPackingModal.tabGroup === 'AwaitingLoading' ||
-    dispatchPackingModal.tabGroup === 'Closed' ||
-    dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
-    dispatchPackingModal.accountsVerification?.readyForAccounts ||
-    dispatchPackingModal.accountsVerification?.verified
+    dispatchPackingModal.tabGroup === 'Closed'
+  );
+
+  const isAlreadySentToAccounts = Boolean(
+    !isAccountsLocked && (
+      dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
+      dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
+      dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
+      dispatchPackingModal.tabGroup === 'Packed' ||
+      dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
+      dispatchPackingModal.accountsVerification?.readyForAccounts
+    )
   );
 
   const rawItems = (dispatchPackingModal.items || []).map(it => {
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
     const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
-    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: isAlreadySentToAccounts ? true : false };
+    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: (isAccountsLocked || isAlreadySentToAccounts) ? true : false };
   });
   const itemsToPack = (dispatchPackingModal.dispatchPacking && Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0)
     ? dispatchPackingModal.dispatchPacking.map(p => {
         const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
         const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || null));
-        const isPacked = isAlreadySentToAccounts ? (p.packed !== false) : Boolean(p.packed || p.scanned || p.packedQty > 0);
+        const isPacked = isAccountsLocked ? (p.packed !== false) : Boolean(p.packed || p.scanned || p.packedQty > 0 || isAlreadySentToAccounts);
         return { ...p, code, packed: isPacked };
       })
     : rawItems;
@@ -176,7 +192,7 @@ export default function DispatchPackingModal({
     isCancelled ||
     dispatchPackingModal.isReadOnly ||
     dispatchPackingModal.isViewOnly ||
-    isAlreadySentToAccounts
+    isAccountsLocked
   );
 
   const formatUploadTime = (item) => {
@@ -249,46 +265,13 @@ export default function DispatchPackingModal({
       nextStatus = 'Partially Packed';
       isFullyConfirmed = false;
     } else {
-      // User confirmed packing: if user checked some items, keep their choices;
-      // if NO items were individually checked, default all to packed: true since user clicked "Packing Confirmed"
-      const anyChecked = (itemsToPack || []).some(it => it.packed);
+      // User confirmed packing: all items marked packed and forwarded to Accounts verification
       confirmedItems = (itemsToPack && itemsToPack.length > 0)
-        ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: anyChecked ? Boolean(it.packed) : true }))
+        ? itemsToPack.map(it => ({ ...it, qty: it.qty || it.bomQty || 1, packed: true }))
         : (dispatchPackingModal.items || []).map(it => ({ code: it.code, name: it.name, bomQty: it.qty || it.bomQty || 1, packed: true }));
 
-      const allConfirmedPacked = confirmedItems.every(it => it.packed);
-
-      // If the BOM was already confirmed / sent to Accounts or Billing: preserve its current status!
-      const wasAlreadySentToAccounts = Boolean(
-        isAlreadySentToAccounts ||
-        dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
-        dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
-        dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
-        dispatchPackingModal.status === 'Accounts Verified & Passed to Invoice' ||
-        dispatchPackingModal.status === 'ACCOUNTS VERIFIED' ||
-        dispatchPackingModal.status === 'Invoice Confirmed' ||
-        dispatchPackingModal.status === 'Awaiting Vehicle Loading & Dispatch' ||
-        dispatchPackingModal.status === 'AWAITING VEHICLE LOADING' ||
-        dispatchPackingModal.status === 'Closed' ||
-        dispatchPackingModal.status === 'CLOSED' ||
-        dispatchPackingModal.status === 'COMPLETED & DISPATCHED' ||
-        dispatchPackingModal.status === 'Completed' ||
-        dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
-        dispatchPackingModal.accountsVerification?.readyForAccounts ||
-        dispatchPackingModal.accountsVerification?.verified ||
-        dispatchPackingModal.isAccountsDone
-      );
-
-      if (wasAlreadySentToAccounts) {
-        nextStatus = dispatchPackingModal.status || 'Packed & Awaiting Accounts Verification';
-        isFullyConfirmed = true;
-      } else if (allConfirmedPacked) {
-        nextStatus = 'Packed & Awaiting Accounts Verification';
-        isFullyConfirmed = true;
-      } else {
-        nextStatus = 'Partially Packed - Sent to Accounts';
-        isFullyConfirmed = false;
-      }
+      nextStatus = 'Packed & Awaiting Accounts Verification';
+      isFullyConfirmed = true;
     }
 
     const isWhileDispatch = (dispatchPackingModal.paymentType === 'Payment While Dispatch' || (dispatchPackingModal.paymentType || '').includes('While Dispatch'));
@@ -610,7 +593,7 @@ export default function DispatchPackingModal({
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {canCancelBom && !isCancelled && !isAlreadySentToAccounts && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
+          {canCancelBom && !isCancelled && !isAccountsLocked && !isAlreadySentToAccounts && dispatchPackingModal.status !== 'Cancelled & Stock Restored' && (
             <button
               onClick={() => handleCancelBomOrder(dispatchPackingModal)}
               style={{
@@ -627,7 +610,7 @@ export default function DispatchPackingModal({
               Cancel BOM
             </button>
           )}
-          {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && (
+          {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
             <button
               type="button"
               onClick={() => savePackingData(false)}
@@ -635,7 +618,7 @@ export default function DispatchPackingModal({
               style={{
                 border: 'none',
                 backgroundColor: uploadingCount > 0 ? '#E2E8F0' : '#FFFFFF',
-                color: uploadingCount > 0 ? '#94A3B8' : (allItemsPacked ? '#065F46' : isPartial ? '#92400E' : '#1E40AF'),
+                color: uploadingCount > 0 ? '#94A3B8' : '#065F46',
                 height: '42px', padding: '0 20px',
                 borderRadius: '10px', fontSize: '13px', fontWeight: '900',
                 cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
@@ -644,7 +627,7 @@ export default function DispatchPackingModal({
               }}
             >
               <CheckCircle style={{ width: '16px', height: '16px' }} />
-              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : (allItemsPacked ? 'Packing Confirmed (Send to Accounts)' : 'Save Packing Progress')}
+              {uploadingCount > 0 ? `Uploading Media (${uploadingCount})...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed (Send to Accounts)')}
             </button>
           )}
         </div>
@@ -1186,7 +1169,8 @@ export default function DispatchPackingModal({
             >
               ← Back
             </button>
-            {isAlreadySentToAccounts && !isCancelled && (
+            {/* If Accounts has verified/locked the BOM, Dispatch can still save proof photos */}
+            {isAccountsLocked && !isCancelled && (
               <button
                 type="button"
                 onClick={() => savePackingData(false)}
@@ -1206,7 +1190,7 @@ export default function DispatchPackingModal({
                 Save Proof Photos
               </button>
             )}
-            {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && isPartial && (
+            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && isPartial && (
               <button
                 type="button"
                 onClick={() => savePackingData(true)}
@@ -1226,7 +1210,7 @@ export default function DispatchPackingModal({
                 Save Partial Progress
               </button>
             )}
-            {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && (
+            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
               <button
                 type="button"
                 onClick={() => savePackingData(false)}
@@ -1243,7 +1227,7 @@ export default function DispatchPackingModal({
                 title="Confirm goods packing and send to Accounts verification"
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (allItemsPacked ? 'Packing Confirmed (Send to Accounts)' : 'Save Packing Progress')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed (Send to Accounts)')}
               </button>
             )}
           </div>
@@ -1371,26 +1355,37 @@ export default function DispatchPackingModal({
 
                     // Asynchronously upload camera snapshot to server
                     setUploadingCount(prev => prev + 1);
-                    uploadMediaFile(photoUrl, capturedName).then(uRes => {
-                      if (uRes && uRes.url) {
-                        saveMediaToCache(capturedName, uRes.url);
-                        saveMediaToCache(capturedId, uRes.url);
-                        setDispatchPackingModal(prev => {
-                          if (!prev) return prev;
-                          const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
-                          const updatedPhotos = (existingMedia.photos || []).map(p =>
-                            p.id === capturedId ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
-                          );
-                          return {
-                            ...prev,
-                            dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
-                          };
+                    try {
+                      if (typeof uploadMediaFile === 'function') {
+                        uploadMediaFile(photoUrl, capturedName).then(uRes => {
+                          if (uRes && uRes.url) {
+                            saveMediaToCache(capturedName, uRes.url);
+                            saveMediaToCache(capturedId, uRes.url);
+                            setDispatchPackingModal(prev => {
+                              if (!prev) return prev;
+                              const existingMedia = prev?.dispatchPackingMedia || { photos: [], videos: [] };
+                              const updatedPhotos = (existingMedia.photos || []).map(p =>
+                                p.id === capturedId ? { ...p, url: uRes.url, dataUrl: uRes.url } : p
+                              );
+                              return {
+                                ...prev,
+                                dispatchPackingMedia: { ...existingMedia, photos: updatedPhotos }
+                              };
+                            });
+                            syncBOMMediaItem('photo', capturedId, uRes.url);
+                          }
+                        }).catch(e => {
+                          console.warn('Camera upload failed:', e);
+                        }).finally(() => {
+                          setUploadingCount(prev => Math.max(0, prev - 1));
                         });
-                        syncBOMMediaItem('photo', capturedId, uRes.url);
+                      } else {
+                        setUploadingCount(prev => Math.max(0, prev - 1));
                       }
-                    }).catch(() => {}).finally(() => {
+                    } catch (err) {
+                      console.warn('Camera upload failed to initiate:', err);
                       setUploadingCount(prev => Math.max(0, prev - 1));
-                    });
+                    }
 
                     if (dispatchCameraStreamRef.current) {
                       dispatchCameraStreamRef.current.getTracks().forEach(t => t.stop());

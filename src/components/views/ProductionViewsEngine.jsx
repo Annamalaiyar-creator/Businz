@@ -1732,7 +1732,7 @@ export default function ProductionViewsEngine(props) {
                   const isFullyPacked = Boolean(
                     targetRow.packingStatus === 'PACKING_VERIFIED' ||
                     targetRow.tabGroup === 'Packed' ||
-                    (targetRow.status && targetRow.status.toLowerCase().includes('packed'))
+                    (targetRow.status && !targetRow.status.toLowerCase().includes('partially') && targetRow.status.toLowerCase().includes('packed'))
                   );
                   const isAwaitingLoad = Boolean(
                     targetRow.tabGroup === 'AwaitingLoading' ||
@@ -1814,7 +1814,7 @@ export default function ProductionViewsEngine(props) {
                 rec.packingStatus === 'PACKING_VERIFIED' ||
                 fullRec.packingStatus === 'PACKING_VERIFIED' ||
                 rec.tabGroup === 'Packed' ||
-                (rec.status && rec.status.toLowerCase().includes('packed'))
+                (rec.status && !rec.status.toLowerCase().includes('partially') && rec.status.toLowerCase().includes('packed'))
               );
               const isRecAwaitingLoad = Boolean(
                 rec.tabGroup === 'AwaitingLoading' ||

@@ -589,7 +589,7 @@ export default function ProductionTableView({
                     const isFullyPacked = Boolean(
                       targetRow.packingStatus === 'PACKING_VERIFIED' ||
                       targetRow.tabGroup === 'Packed' ||
-                      (targetRow.status && targetRow.status.toLowerCase().includes('packed'))
+                      (targetRow.status && !targetRow.status.toLowerCase().includes('partially') && targetRow.status.toLowerCase().includes('packed'))
                     );
                     const isAwaitingLoading = !isClosed && !isAwaitingLr && targetRow && (
                       targetRow.tabGroup === 'AwaitingLoading' ||

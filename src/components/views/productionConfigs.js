@@ -514,6 +514,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const isPackedOrder = (b) => {
                 if (!b) return false;
                 const s = String(b.status || '').toLowerCase().trim();
+                if (s.includes('partially')) return false;
                 const acc = b.accountsVerification || {};
                 const dp = Array.isArray(b.dispatchPacking) ? b.dispatchPacking : [];
                 const packedCount = dp.filter(p => p.packed).length;
@@ -523,7 +524,9 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 return Boolean(
                   allPacked ||
                   b.packingStatus === 'PACKING_VERIFIED' ||
-                  s.includes('packed') ||
+                  s === 'packed' ||
+                  s.startsWith('packed &') ||
+                  s.startsWith('packing verified') ||
                   s.includes('ready for dispatch') ||
                   s.includes('sent to accounts') ||
                   s.includes('awaiting accounts') ||

@@ -260,7 +260,7 @@ export default function QuickPreviewDrawer({
         const isFullyPacked = Boolean(
           quickPreviewRecord.packingStatus === 'PACKING_VERIFIED' ||
           quickPreviewRecord.tabGroup === 'Packed' ||
-          (quickPreviewRecord.status && quickPreviewRecord.status.toLowerCase().includes('packed'))
+          (quickPreviewRecord.status && !quickPreviewRecord.status.toLowerCase().includes('partially') && quickPreviewRecord.status.toLowerCase().includes('packed'))
         );
         const isReadyForVehicleLoading = !isClosed && !isAwaitingLr && Boolean(
           (quickPreviewRecord.tabGroup === 'AwaitingLoading' && isAccountsDone && isInvoiceDone) ||
