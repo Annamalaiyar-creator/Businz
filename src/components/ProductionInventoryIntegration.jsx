@@ -33,7 +33,7 @@ export default function ProductionInventoryIntegration({ onNavigateToCalcEngine 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedBomCode, setSelectedBomCode] = useState('BOM-TRIANGLE-001');
   const [orderQty, setOrderQty] = useState(100);
-  const [selectedWoId, setSelectedWoId] = useState('WO-2026-101');
+  const [selectedWoId, setSelectedWoId] = useState('VRM-WO-2026-01');
   const [actualListState, setActualListState] = useState([]);
   const [outputAcceptedQty, setOutputAcceptedQty] = useState(98);
   const [outputRejectedQty, setOutputRejectedQty] = useState(2);

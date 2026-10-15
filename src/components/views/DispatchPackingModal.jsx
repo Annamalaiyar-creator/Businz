@@ -239,7 +239,8 @@ export default function DispatchPackingModal({
       dispatchPackingModal.paymentType === '100% Paid' ||
       dispatchPackingModal.paymentType === '100% Advance' ||
       (dispatchPackingModal.paymentType && dispatchPackingModal.paymentType.includes('100%')) ||
-      (dispatchPackingModal.c4 && dispatchPackingModal.c4.includes('100%'))
+      (dispatchPackingModal.c4 && dispatchPackingModal.c4.includes('100%')) ||
+      (dispatchPackingModal.c5 && dispatchPackingModal.c5.includes('100%'))
     );
 
     if (isPartialSave) {
@@ -257,7 +258,31 @@ export default function DispatchPackingModal({
 
       const allConfirmedPacked = confirmedItems.every(it => it.packed);
 
-      if (allConfirmedPacked) {
+      // If the BOM was already confirmed / sent to Accounts or Billing: preserve its current status!
+      const wasAlreadySentToAccounts = Boolean(
+        isAlreadySentToAccounts ||
+        dispatchPackingModal.status === 'Packed & Awaiting Accounts Verification' ||
+        dispatchPackingModal.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
+        dispatchPackingModal.status === 'Packing Verified - Sent to Accounts' ||
+        dispatchPackingModal.status === 'Accounts Verified & Passed to Invoice' ||
+        dispatchPackingModal.status === 'ACCOUNTS VERIFIED' ||
+        dispatchPackingModal.status === 'Invoice Confirmed' ||
+        dispatchPackingModal.status === 'Awaiting Vehicle Loading & Dispatch' ||
+        dispatchPackingModal.status === 'AWAITING VEHICLE LOADING' ||
+        dispatchPackingModal.status === 'Closed' ||
+        dispatchPackingModal.status === 'CLOSED' ||
+        dispatchPackingModal.status === 'COMPLETED & DISPATCHED' ||
+        dispatchPackingModal.status === 'Completed' ||
+        dispatchPackingModal.packingStatus === 'PACKING_VERIFIED' ||
+        dispatchPackingModal.accountsVerification?.readyForAccounts ||
+        dispatchPackingModal.accountsVerification?.verified ||
+        dispatchPackingModal.isAccountsDone
+      );
+
+      if (wasAlreadySentToAccounts) {
+        nextStatus = dispatchPackingModal.status || 'Packed & Awaiting Accounts Verification';
+        isFullyConfirmed = true;
+      } else if (allConfirmedPacked) {
         nextStatus = 'Packed & Awaiting Accounts Verification';
         isFullyConfirmed = true;
       } else {
@@ -365,15 +390,17 @@ export default function DispatchPackingModal({
       salesPersonCode: resolvedSpCode,
       createdBy: resolvedCreatedBy,
       createdById: resolvedCreatedById,
-      pendingSalesDispatchPayment: needsSalesPaymentNotification,
-      reissuedByAccounts: false,
-      isAccountsDone: false,
-      accountsVerification: {
-        ...accountsVerificationData,
-        packedAt: packedAt,
-        packedBy: packedByName,
-        packedById: packedByUserId
-      },
+      pendingSalesDispatchPayment: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.pendingSalesDispatchPayment) : needsSalesPaymentNotification,
+      reissuedByAccounts: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.reissuedByAccounts) : false,
+      isAccountsDone: wasAlreadySentToAccounts ? Boolean(dispatchPackingModal.isAccountsDone) : false,
+      accountsVerification: wasAlreadySentToAccounts
+        ? (dispatchPackingModal.accountsVerification || accountsVerificationData)
+        : {
+            ...accountsVerificationData,
+            packedAt: packedAt,
+            packedBy: packedByName,
+            packedById: packedByUserId
+          },
       isUpdate: true
     };
     delete updatedPackedBom.c2;
@@ -381,6 +408,9 @@ export default function DispatchPackingModal({
     delete updatedPackedBom.c4;
     delete updatedPackedBom.c5;
     delete updatedPackedBom.c6;
+    delete updatedPackedBom.c7;
+    delete updatedPackedBom.dateTimeObj;
+    delete updatedPackedBom.dateTime;
 
     const targetCode = dispatchPackingModal.bomCode || dispatchPackingModal.code || dispatchPackingModal.id;
 
@@ -1156,6 +1186,26 @@ export default function DispatchPackingModal({
             >
               ← Back
             </button>
+            {isAlreadySentToAccounts && !isCancelled && (
+              <button
+                type="button"
+                onClick={() => savePackingData(false)}
+                disabled={uploadingCount > 0}
+                style={{
+                  border: 'none',
+                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #0E7490, #0891B2)',
+                  color: '#FFFFFF', height: '40px', padding: '0 20px',
+                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                  cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 2px 8px rgba(14,116,144,0.3)'
+                }}
+                title="Save added packing photos without altering workflow status"
+              >
+                <Save style={{ width: '15px', height: '15px' }} />
+                Save Proof Photos
+              </button>
+            )}
             {!isAlreadySentToAccounts && !isPackedAndReady && !isCancelled && isPartial && (
               <button
                 type="button"

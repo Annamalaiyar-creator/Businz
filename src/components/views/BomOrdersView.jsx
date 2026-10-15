@@ -524,7 +524,13 @@ export default function BomOrdersView(props) {
   );
 
   const visibleBomStore = React.useMemo(() => {
-    const rawList = (bomStore || []).filter(Boolean);
+    const rawList = (bomStore || []).filter(b => {
+      if (!b) return false;
+      const code = String(b.bomCode || b.code || b.id || '').trim();
+      if (/^BOM-6\d{2}$/i.test(code)) return false;
+      if (/^BOM-(STAGING|USER|POST)/i.test(code)) return false;
+      return true;
+    });
     if (!isRestrictedSalesUser) return rawList;
 
     const curCode = (currentEmpId || '').toUpperCase();

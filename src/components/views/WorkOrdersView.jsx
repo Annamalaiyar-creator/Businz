@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Search, X, CheckCircle, Edit3, RotateCcw, Eye } from "lucide-react";
-import { prodModuleEngine } from "../../utils/productionModuleEngine";
+import { prodModuleEngine, isLegacyWoId } from "../../utils/productionModuleEngine";
 import { CANONICAL_PRODUCT_ALIASES } from "../../utils/vrmProductsData";
 import { fetchCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
@@ -34,14 +34,17 @@ export default function WorkOrdersView({
   useEffect(() => {
     const applyWorkOrders = (workOrdersList) => {
       if (workOrdersList && Array.isArray(workOrdersList)) {
-        // Filter out legacy VRM26 format work order entries (e.g., VRM26/07/061)
+        // Filter out legacy VRM26 format work order entries (e.g., VRM26/07/061) and mock WO-1 / WO-01
         const cleanWOs = workOrdersList.filter(sw => {
           const woId = sw.workOrderNo || sw.id || '';
-          return !woId.startsWith('VRM26/07');
+          return !woId.startsWith('VRM26/07') && !isLegacyWoId(woId);
         });
 
-        // Remove any existing legacy VRM26 work orders from prodModuleEngine
-        prodModuleEngine.workOrders = prodModuleEngine.workOrders.filter(w => !String(w.id || '').startsWith('VRM26/07'));
+        // Remove any existing legacy VRM26 or mock work orders from prodModuleEngine
+        prodModuleEngine.workOrders = (prodModuleEngine.workOrders || []).filter(w => {
+          const woId = w?.id || w?.workOrderNo || '';
+          return !String(woId).startsWith('VRM26/07') && !isLegacyWoId(woId);
+        });
 
         cleanWOs.reverse().forEach(sw => {
           const woId = sw.workOrderNo || sw.id;
@@ -147,7 +150,9 @@ export default function WorkOrdersView({
     }
   };
 
-  const allWorkOrderRows = prodModuleEngine.getWorkOrders().map(wo => {
+  const allWorkOrderRows = prodModuleEngine.getWorkOrders()
+    .filter(wo => !isLegacyWoId(wo?.id || wo?.workOrderNo))
+    .map(wo => {
     let stBg = '#EFF6FF';
     let stFg = '#2563EB';
     let progress = 0;

@@ -1352,10 +1352,10 @@ export default function ProductionAdminView({ activeTab, userRole }) {
                 </thead>
                 <tbody>
                   {(isDispatchView ? [
-                    { name: 'TN 09 AB 1234 (SRS Logistics)', plan: 'WO-2', act: '23-Jul-2026', util: 92, label: '24-Jul-2026' },
-                    { name: 'TN 37 CD 5678 (VRM Transport)', plan: 'WO-3', act: '23-Jul-2026', util: 88, label: '24-Jul-2026' },
-                    { name: 'KA 01 EF 9012 (Safe Way)', plan: 'WO-4', act: '23-Jul-2026', util: 95, label: '24-Jul-2026' },
-                    { name: 'TN 88 U 7890 (Speed Cargo)', plan: 'WO-5', act: '23-Jul-2026', util: 90, label: '25-Jul-2026' }
+                    { name: 'TN 09 AB 1234 (SRS Logistics)', plan: 'VRM-WO-2026-02', act: '23-Jul-2026', util: 92, label: '24-Jul-2026' },
+                    { name: 'TN 37 CD 5678 (VRM Transport)', plan: 'VRM-WO-2026-03', act: '23-Jul-2026', util: 88, label: '24-Jul-2026' },
+                    { name: 'KA 01 EF 9012 (Safe Way)', plan: 'VRM-WO-2026-04', act: '23-Jul-2026', util: 95, label: '24-Jul-2026' },
+                    { name: 'TN 88 U 7890 (Speed Cargo)', plan: 'VRM-WO-2026-05', act: '23-Jul-2026', util: 90, label: '25-Jul-2026' }
                   ] : dynamicStats.machineRows).map((m, idx) => (
                     <tr key={idx} style={{ borderBottom: idx === (isDispatchView ? 4 : dynamicStats.machineRows.length - 1) ? 'none' : '1px solid #F1F5F9' }}>
                       <td style={{ padding: '7px 10px', color: '#0F172A', fontWeight: '700' }}>{m.name}</td>

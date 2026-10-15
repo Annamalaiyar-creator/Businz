@@ -2381,10 +2381,10 @@ export default function DispatchDashboardView(props) {
                   </thead>
                   <tbody>
                     {[
-                      { vNo: 'TN 09 AB 1234', trans: 'SRS Logistics', order: 'WO-2', cust: 'Sun Power', disp: '23-Jul-2026', eta: '24-Jul-2026' },
-                      { vNo: 'TN 37 CD 5678', trans: 'VRM Transport', order: 'WO-3', cust: 'Green Infra', disp: '23-Jul-2026', eta: '24-Jul-2026' },
-                      { vNo: 'KA 01 EF 9012', trans: 'Safe Way', order: 'WO-4', cust: 'Bright Energy', disp: '23-Jul-2026', eta: '24-Jul-2026' },
-                      { vNo: 'TN 88 U 7890', trans: 'Speed Cargo', order: 'WO-5', cust: 'KPR Mill', disp: '23-Jul-2026', eta: '25-Jul-2026' }
+                      { vNo: 'TN 09 AB 1234', trans: 'SRS Logistics', order: 'VRM-WO-2026-02', cust: 'Sun Power', disp: '23-Jul-2026', eta: '24-Jul-2026' },
+                      { vNo: 'TN 37 CD 5678', trans: 'VRM Transport', order: 'VRM-WO-2026-03', cust: 'Green Infra', disp: '23-Jul-2026', eta: '24-Jul-2026' },
+                      { vNo: 'KA 01 EF 9012', trans: 'Safe Way', order: 'VRM-WO-2026-04', cust: 'Bright Energy', disp: '23-Jul-2026', eta: '24-Jul-2026' },
+                      { vNo: 'TN 88 U 7890', trans: 'Speed Cargo', order: 'VRM-WO-2026-05', cust: 'KPR Mill', disp: '23-Jul-2026', eta: '25-Jul-2026' }
                     ].map((row, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                         <td style={{ padding: '8px 10px', fontWeight: 'bold', color: '#0E7490' }}>{row.vNo}</td>
@@ -2485,8 +2485,8 @@ export default function DispatchDashboardView(props) {
                   </thead>
                   <tbody>
                     {[
-                      { order: 'WO-3', cust: 'Green Infra', val: '12,48,000', reason: 'Payment Pending' },
-                      { order: 'WO-4', cust: 'Bright Energy', val: '8,36,000', reason: 'Document Pending' }
+                      { order: 'VRM-WO-2026-03', cust: 'Green Infra', val: '12,48,000', reason: 'Payment Pending' },
+                      { order: 'VRM-WO-2026-04', cust: 'Bright Energy', val: '8,36,000', reason: 'Document Pending' }
                     ].map((row, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                         <td style={{ padding: '6px 10px', fontWeight: 'bold' }}>{row.order}</td>

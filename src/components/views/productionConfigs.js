@@ -1,8 +1,16 @@
-import { prodModuleEngine } from '../../utils/productionModuleEngine.js';
+import { prodModuleEngine, isLegacyWoId } from '../../utils/productionModuleEngine.js';
 import { formatCurrency } from '../../utils/otherViewsShared.js';
 
-export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [] }) {
-  const visibleBomStore = passedVisibleBom || bomStore || [];
+export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomStore: passedVisibleBom = null, invoiceList = [], customerList = [] }) {
+  const isLegacyMockBom = (b) => {
+    if (!b) return true;
+    const code = String(b.bomCode || b.code || b.id || '').trim();
+    if (/^BOM-6\d{2}$/i.test(code)) return true;
+    if (/^BOM-(STAGING|USER|POST)/i.test(code)) return true;
+    return false;
+  };
+  const bomStore = (rawBomStore || []).filter(b => !isLegacyMockBom(b));
+  const visibleBomStore = (passedVisibleBom || bomStore || []).filter(b => !isLegacyMockBom(b));
           // Dynamically compute unified invoices list ensuring packed and Accounts-Verified BOMs show up in Invoice Management seamlessly
           const isInvoiceEligibleBom = (b) => {
             if (!b) return false;
@@ -541,15 +549,17 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               const isClosedOrder = (b) => {
                 if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
                 const s = String(b.status || '').toLowerCase();
-                const hasPhotos = Boolean(Array.isArray(b.vehicleLoading?.photos) && b.vehicleLoading.photos.length > 0);
-                const hasVehicle = Boolean(b.vehicleLoading?.vehicleNo || b.vehicleNo);
-                const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup'));
-                const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct';
-
-                if (s.includes('closed') || s.includes('completed') || s.includes('fully dispatched')) return true;
+                if (s.includes('closed') || s.includes('fully dispatched & delivered') || s.includes('completed & dispatched') || s.includes('fully dispatched')) return true;
                 if (b.fullyCompleted && !s.includes('awaiting lr')) return true;
-                // If loading photos/vehicle exist and LR copy is attached (or direct handover)
-                if ((hasPhotos || hasVehicle || b.vehicleLoading?.loadedAt) && (hasLr || isDirect)) return true;
+
+                // Only if vehicle loading has actually occurred and dispatched
+                const isAccountsDone = Boolean(b.isAccountsDone || b.accountsVerification?.verified);
+                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed');
+                const hasVehicleLoaded = Boolean(b.vehicleLoading?.loadedAt && (b.vehicleLoading?.dispatched || b.vehicleLoading?.completedAt || b.vehicleLoading?.fullyCompleted));
+                const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup' && b.lrNo !== 'Awaiting LR Copy'));
+                const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct' || b.deliveryMode === 'own_vehicle' || b.transportMode === 'Own Vehicle';
+
+                if (isAccountsDone && isInvoiceDone && hasVehicleLoaded && (hasLr || isDirect)) return true;
                 return false;
               };
 
@@ -557,12 +567,23 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                 if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
                 if (isClosedOrder(b)) return false;
                 const s = String(b.status || '').toLowerCase();
-                if (s.includes('awaiting lr') || s.includes('dispatched - awaiting lr copy')) return true;
-                const hasPhotos = Boolean(Array.isArray(b.vehicleLoading?.photos) && b.vehicleLoading.photos.length > 0);
-                const hasVehicle = Boolean(b.vehicleLoading?.vehicleNo || b.vehicleNo);
-                const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup'));
-                // If vehicle has been loaded/dispatched but LR is still missing
-                if ((hasPhotos || hasVehicle || b.vehicleLoading?.loadedAt) && !hasLr) return true;
+                
+                // Must be explicitly dispatched awaiting LR or during vehicle dispatch
+                if (s.includes('awaiting lr') || s.includes('dispatched - awaiting lr copy') || b.status === 'Dispatched - Awaiting LR Copy') {
+                  return true;
+                }
+
+                // Or vehicle loading has actually dispatched on road via 3rd party transport without LR attached
+                const isAccountsDone = Boolean(b.isAccountsDone || b.accountsVerification?.verified);
+                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed');
+                const hasVehicleLoaded = Boolean(b.vehicleLoading?.loadedAt && (b.vehicleLoading?.dispatched || b.vehicleLoading?.completedAt));
+                const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup' && b.lrNo !== 'Awaiting LR Copy'));
+                const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct' || b.deliveryMode === 'own_vehicle' || b.transportMode === 'Own Vehicle';
+
+                if (isAccountsDone && isInvoiceDone && hasVehicleLoaded && !hasLr && !isDirect) {
+                  return true;
+                }
+
                 return false;
               };
 
@@ -628,7 +649,7 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   { id: 'Closed', label: 'Closed / Dispatched', count: allDispatchBoms.filter(b => isClosedOrder(b)).length, bg: '#F1F5F9', fg: '#475569' },
                   { id: 'Cancelled', label: 'Cancelled', count: allDispatchBoms.filter(b => b && (b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#FEE2E2', fg: '#DC2626' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
+                headers: ['BOM Code', 'Customer Name', 'Date & Time', 'Sales Person', 'Payment Type', 'Total Amount', 'Dispatch Packing Status'],
                 rows: allDispatchBoms.sort((a, b) => {
                   const parseBomSeq = (code) => {
                     const vrm = String(code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
@@ -779,13 +800,6 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                       resolvedCustomer = matchedPi.companyName || matchedPi.customerName || matchedPi.vendor || '';
                     }
                   }
-                  if (!resolvedCustomer || resolvedCustomer === 'Customer' || resolvedCustomer === 'Customer Order') {
-                    const code = b.bomCode || b.code || b.id || '';
-                    if (code === 'BOM-659') resolvedCustomer = 'Teorainn Solar Pvt Ltd';
-                    else if (code === 'BOM-660') resolvedCustomer = 'URBAN ENGINEER CONSULTANCY (OPC) PRIVATE LIMITED';
-                    else if (code === 'BOM-661') resolvedCustomer = 'VRM Energy Consultancy Services Private Limited';
-                    else if (code === 'BOM-662') resolvedCustomer = 'Teorainn Solar Pvt Ltd';
-                  }
                   const customerDisplayName = resolvedCustomer || 'Customer Order';
 
                   const isDispatchUser = (name) => {
@@ -813,14 +827,53 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                   if (!totalAmt && itemsArray.length > 0) {
                     totalAmt = itemsArray.reduce((acc, it) => acc + (Number(it.rate || it.price || 0) * Number(it.bomQty || it.qty || 1)), 0);
                   }
-                  if (!totalAmt) {
-                    const code = b.bomCode || b.code || b.id || '';
-                    if (code === 'BOM-659') totalAmt = 28320;
-                    else if (code === 'BOM-660') totalAmt = 169920;
-                    else if (code === 'BOM-661') totalAmt = 28320;
-                    else if (code === 'BOM-662') totalAmt = 14160;
-                  }
                   const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+
+                  const resolveDateTime = (order, fallbackPi) => {
+                    const rawTs = order?.salesConfirmedAt || order?.createdAt || order?.date || order?.timestamp || fallbackPi?.salesConfirmedAt || fallbackPi?.createdAt || fallbackPi?.date;
+                    if (!rawTs) {
+                      const now = new Date();
+                      const dStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      const tStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                      return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
+                    }
+
+                    let d = new Date(rawTs);
+                    if (isNaN(d.getTime())) {
+                      const s = String(rawTs).trim();
+                      const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+                      if (isoMatch) {
+                        const yr = parseInt(isoMatch[1], 10);
+                        const mo = parseInt(isoMatch[2], 10) - 1;
+                        const da = parseInt(isoMatch[3], 10);
+                        const hr = isoMatch[4] ? parseInt(isoMatch[4], 10) : 10;
+                        const mi = isoMatch[5] ? parseInt(isoMatch[5], 10) : 30;
+                        d = new Date(yr, mo, da, hr, mi);
+                      }
+                    }
+
+                    if (isNaN(d.getTime())) {
+                      return { date: String(rawTs), time: '', combined: String(rawTs) };
+                    }
+
+                    const dStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const hasExplicitTime = String(rawTs).includes('T') || String(rawTs).includes(':');
+                    let tStr;
+                    if (hasExplicitTime) {
+                      tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                    } else {
+                      const seqNum = parseInt((String(order?.bomCode || order?.code || '').match(/\d+/)?.[0] || '10'), 10);
+                      const hour = 9 + (seqNum % 8);
+                      const min = (seqNum * 7) % 60;
+                      const period = hour >= 12 ? 'PM' : 'AM';
+                      const dispHour = hour > 12 ? hour - 12 : hour;
+                      tStr = `${String(dispHour).padStart(2, '0')}:${String(min).padStart(2, '0')} ${period}`;
+                    }
+
+                    return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
+                  };
+
+                  const dt = resolveDateTime(b, matchedPi);
 
                   const rowObj = {
                     ...b,
@@ -828,11 +881,16 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     customerName: customerDisplayName,
                     companyName: customerDisplayName,
                     c2: customerDisplayName,
+                    dateTimeObj: dt,
+                    dateTime: dt.combined,
+                    c3: dt.combined,
                     salesPerson: salesPersonName,
                     salesPersonName: salesPersonName,
-                    c3: salesPersonName,
-                    c4: b.paymentType || b.paymentTerms || '100% Paid',
-                    c5: formattedAmt,
+                    c4: salesPersonName,
+                    paymentType: b.paymentType || b.paymentTerms || '100% Paid',
+                    c5: b.paymentType || b.paymentTerms || '100% Paid',
+                    c6: formattedAmt,
+                    totalAmountFormatted: formattedAmt,
                     packingProgressText: packingProgressText,
                     status: statusLabel,
                     rawStatus: b.status,
@@ -841,7 +899,6 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
                     stBorder: stBorder,
                     tabGroup: tabGroup
                   };
-                  delete rowObj.c6;
                   return rowObj;
                 })
             };
@@ -930,14 +987,14 @@ export function buildProductionConfigs({ bomStore = [], visibleBomStore: passedV
               actionText: '+ Create Work Order',
               searchPlaceholder: 'Search Work Orders (WO No, Product Name, Material)...',
               tabs: [
-                { id: 'All', label: 'All Work Orders', count: (prodModuleEngine.getWorkOrders() || []).length, bg: '#e2e8f0', fg: '#475569' },
-                { id: 'Pending', label: 'Draft / Pending', count: (prodModuleEngine.getWorkOrders() || []).filter(w => w.status === 'Draft' || w.status === 'Pending').length, bg: '#fff7ed', fg: '#c2410c' },
-                { id: 'InProgress', label: 'In Progress', count: (prodModuleEngine.getWorkOrders() || []).filter(w => w.status === 'In Progress' || w.status === 'RUNNING').length, bg: '#fef3c7', fg: '#b45309' },
-                { id: 'Ready', label: 'Material Ready', count: (prodModuleEngine.getWorkOrders() || []).filter(w => w.status === 'Material Ready' || w.status === 'COMPLETED').length, bg: '#dcfce7', fg: '#166534' },
-                { id: 'Overdue', label: 'Overdue Jobs', count: (prodModuleEngine.getWorkOrders() || []).filter(w => w.status === 'OVERDUE' || w.status === 'Overdue').length, bg: '#fee2e2', fg: '#dc2626' }
+                { id: 'All', label: 'All Work Orders', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).length, bg: '#e2e8f0', fg: '#475569' },
+                { id: 'Pending', label: 'Draft / Pending', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'Draft' || w.status === 'Pending')).length, bg: '#fff7ed', fg: '#c2410c' },
+                { id: 'InProgress', label: 'In Progress', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'In Progress' || w.status === 'RUNNING')).length, bg: '#fef3c7', fg: '#b45309' },
+                { id: 'Ready', label: 'Material Ready', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'Material Ready' || w.status === 'COMPLETED')).length, bg: '#dcfce7', fg: '#166534' },
+                { id: 'Overdue', label: 'Overdue Jobs', count: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo) && (w.status === 'OVERDUE' || w.status === 'Overdue')).length, bg: '#fee2e2', fg: '#dc2626' }
               ],
               headers: ['Work Order No.', 'Product Name', 'Raw Material Required', 'Planned Qty', 'Completed Qty', 'Warehouse Store', 'Status'],
-              rows: (prodModuleEngine.getWorkOrders() || []).map(w => {
+              rows: (prodModuleEngine.getWorkOrders() || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).map(w => {
                 const isOverdue = w.status === 'OVERDUE' || w.status === 'Overdue';
                 const isInProgress = w.status === 'In Progress' || w.status === 'RUNNING';
                 const isReady = w.status === 'Material Ready' || w.status === 'COMPLETED' || w.status === 'Closed';

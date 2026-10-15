@@ -220,7 +220,7 @@ export default function ProductionTableView({
                   else if (i === 1) { minColWidth = '200px'; }
                   else if (isCenter) { colWidth = '160px'; minColWidth = '150px'; }
                   else if (isRight) { colWidth = '150px'; minColWidth = '140px'; }
-                  else if (h.includes('Date')) { colWidth = '130px'; minColWidth = '130px'; }
+                  else if (h.includes('Date') || h.includes('Time')) { colWidth = '145px'; minColWidth = '140px'; }
                   else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '140px'; }
 
                   return (
@@ -299,7 +299,16 @@ export default function ProductionTableView({
                       >
                         {row.c2 || row.name}
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500' }}>{row.c3 || row.date1}</td>
+                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                        {activeTab === 'Dispatch Orders' && row.dateTimeObj ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
+                            <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
+                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
+                          </div>
+                        ) : (
+                          row.c3 || row.date1
+                        )}
+                      </td>
                       <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: '500', whiteSpace: 'nowrap' }}>{row.c4 || row.date2}</td>
                       {row.c5 !== undefined && (
                         <td style={{
@@ -312,7 +321,7 @@ export default function ProductionTableView({
                           {row.c5 || row.value}
                         </td>
                       )}
-                      {row.c6 !== undefined && activeTab !== 'Customer Management' && activeTab !== 'Dispatch Orders' && pageConfig.headers.length > 6 && (
+                      {row.c6 !== undefined && activeTab !== 'Customer Management' && pageConfig.headers.length > 6 && (
                         <td style={{
                           padding: '14px 16px',
                           color: (row.c6?.toString()?.includes('₹') || pageConfig.headers[5]?.includes('Amount') || pageConfig.headers[5]?.includes('Value')) ? '#0F172A' : '#475569',

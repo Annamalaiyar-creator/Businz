@@ -196,64 +196,26 @@ export const INITIAL_INVENTORY_ITEMS = [
   }
 ];
 
-// Seed Work Orders
-export const INITIAL_WORK_ORDERS = [
-  {
-    id: 'WO-1',
-    date: new Date().toISOString().split('T')[0],
-    productionHead: 'Senthil Kumar (Production Head)',
-    finishedProductCode: 'MR100',
-    finishedProductName: 'Mini Rail 100 mm',
-    targetQty: 8,
-    unit: 'Pieces',
-    recipeId: 'RECIPE-MR100',
-    recipeRatio: '1 Aluminium Length → 24 Pieces',
-    rawMaterialCode: 'ALU-LEN-2414MM',
-    rawMaterialName: 'Aluminium Length (2414 mm)',
-    rawMaterialRequiredQty: 0.33, // Exact calculated
-    rawMaterialPhysicalToIssue: 1, // Physical whole unit required
-    rawMaterialUnit: 'Length',
-    expectedOutputQty: 24,
-    excessTheoreticalQty: 16,
-    priority: 'High',
-    productionLocation: 'CNC Line 01',
-    assignedEmployee: 'Floor Employee A (Karthik)',
-    expectedStartDate: new Date().toISOString().split('T')[0],
-    expectedCompletionDate: new Date().toISOString().split('T')[0],
-    instructions: 'Cut 1 Aluminium Length (2414 mm) into 24 exact 100mm mini rail pieces. Check burr edges.',
-    remarks: 'Urgent order for Vikram Solar site.',
-    status: 'DRAFT', // DRAFT -> PENDING_MATERIAL -> RESERVED -> ISSUED -> ACCEPTED -> IN_PROGRESS -> VERIFICATION_PENDING -> APPROVED/CLOSED
-    
-    // Execution state
-    reservedAt: null,
-    issuedAt: null,
-    acceptedAt: null,
-    startedAt: null,
-    completedAt: null,
-    verifiedAt: null,
+// Helper to identify legacy / mock work orders that must never be loaded or displayed
+export const isLegacyWoId = (id) => {
+  if (!id) return false;
+  const s = String(id).trim().toUpperCase();
+  if (/^WO-\d+$/i.test(s)) return true;
+  if (s.startsWith('WO-') && !s.startsWith('VRM-WO-')) return true;
+  return s === 'WO-01' || s === 'WO-02' || s === 'WO-1' || s === 'WO-2';
+};
 
-    actualGoodOutput: 0,
-    actualRejectedOutput: 0,
-    actualWastageOutput: 0,
-    operatorRemarks: '',
-    completionImages: [],
-
-    progressHistory: [],
-    materialIssueHistory: [],
-    additionalMaterialRequests: [],
-    reworkHistory: []
-  }
-];
+// Seed Work Orders (Starts clean for official VRM-WO-YYYY-XX sequences)
+export const INITIAL_WORK_ORDERS = [];
 
 class ProductionModuleEngine {
   constructor() {
     this.recipes = [...INITIAL_MANUFACTURING_RECIPES];
     this.inventory = [...INITIAL_INVENTORY_ITEMS];
-    this.workOrders = [...INITIAL_WORK_ORDERS];
+    this.workOrders = [];
     this.ledger = [];
 
     this.subscribers = [];
-    this.workOrders = (this.workOrders || []).map(w => this._sanitizeWorkOrder(w));
     this.loadFromStorage();
     this.initCloudSync();
   }
@@ -278,7 +240,7 @@ class ProductionModuleEngine {
       fetchCloudStore('vrm_prod_ledger', this.ledger)
     ]).then(([cloudWOs, cloudInv, cloudRecipes, cloudLedger]) => {
       if (Array.isArray(cloudWOs) && cloudWOs.length > 0) {
-        this.workOrders = cloudWOs.map(w => this._sanitizeWorkOrder(w));
+        this.workOrders = cloudWOs.filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).map(w => this._sanitizeWorkOrder(w));
         try { localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders)); } catch (_) {}
       }
       if (Array.isArray(cloudInv) && cloudInv.length > 0) {
@@ -293,7 +255,7 @@ class ProductionModuleEngine {
     // Live Realtime subscriptions from Supabase
     subscribeToCloudStore('vrm_prod_workorders', (latestWOs) => {
       if (Array.isArray(latestWOs)) {
-        this.workOrders = latestWOs.map(w => this._sanitizeWorkOrder(w));
+        this.workOrders = latestWOs.filter(w => !isLegacyWoId(w?.id || w?.workOrderNo)).map(w => this._sanitizeWorkOrder(w));
         try { localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders)); } catch (_) {}
         this.notifySubscribers();
       }
@@ -314,7 +276,10 @@ class ProductionModuleEngine {
       if (rawWOs) {
         const parsed = JSON.parse(rawWOs);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          this.workOrders = parsed.map(w => this._sanitizeWorkOrder(w));
+          this.workOrders = parsed
+            .filter(w => !isLegacyWoId(w?.id || w?.workOrderNo))
+            .map(w => this._sanitizeWorkOrder(w));
+          try { localStorage.setItem('vrm_prod_workorders', JSON.stringify(this.workOrders)); } catch (_) {}
         }
       }
       const rawInv = localStorage.getItem('vrm_prod_inventory');
@@ -546,7 +511,8 @@ class ProductionModuleEngine {
 
   // Get Next Sequential WO Number (Format: VRM-WO-[YYYY]-[SEQ])
   getNextWoNumber() {
-    return getNextSequence('WO', this.workOrders || []).code;
+    const validOrders = (this.workOrders || []).filter(w => !isLegacyWoId(w?.id || w?.workOrderNo));
+    return getNextSequence('WO', validOrders).code;
   }
 
   // Create Work Order (Production Head)
@@ -1274,11 +1240,14 @@ class ProductionModuleEngine {
   }
 
   getWorkOrders() {
-    return (this.workOrders || []).map(w => this._sanitizeWorkOrder(w));
+    return (this.workOrders || [])
+      .filter(w => !isLegacyWoId(w?.id || w?.workOrderNo))
+      .map(w => this._sanitizeWorkOrder(w));
   }
 
   getWorkOrderById(woId) {
-    const wo = this.workOrders.find(w => w.id === woId);
+    if (isLegacyWoId(woId)) return null;
+    const wo = (this.workOrders || []).find(w => w.id === woId || w.workOrderNo === woId);
     return wo ? this._sanitizeWorkOrder(wo) : null;
   }
 

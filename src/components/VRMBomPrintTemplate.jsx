@@ -174,12 +174,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
       : (b.vendor || b.clientName || b.c2 || '');
 
   if (!resolvedCustomer || resolvedCustomer === 'Customer' || resolvedCustomer === 'Customer Order') {
-    const code = b.bomCode || b.code || b.id || '';
-    if (code === 'BOM-659') resolvedCustomer = 'Teorainn Solar Pvt Ltd';
-    else if (code === 'BOM-660') resolvedCustomer = 'URBAN ENGINEER CONSULTANCY (OPC) PRIVATE LIMITED';
-    else if (code === 'BOM-661') resolvedCustomer = 'VRM Energy Consultancy Services Private Limited';
-    else if (code === 'BOM-662') resolvedCustomer = 'Teorainn Solar Pvt Ltd';
-    else resolvedCustomer = 'Valued Customer';
+    resolvedCustomer = 'Valued Customer';
   }
 
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0), 0);

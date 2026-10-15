@@ -114,31 +114,5 @@
       "hardCopyReceived": false
     },
     "deliveryAddressProofDoc": null
-  },
-  {
-    "id": "INV-000012",
-    "pay": "Completed & Locked",
-    "code": "INV-000012",
-    "date": "2026-10-07",
-    "poNo": "BOM-663",
-    "invNo": "INV-000012",
-    "items": [
-      {
-        "name": "Mini Rail - 300 mm",
-        "rate": 140,
-        "unit": "NOS",
-        "quantity": 200,
-        "description": "Aluminium Profiles"
-      }
-    ],
-    "notes": "Sales Invoice confirmed for BOM BOM-663.",
-    "invAmt": 28000,
-    "status": "Invoice Confirmed",
-    "vendor": "Customer Order",
-    "bomCode": "BOM-663",
-    "isPreset": false,
-    "createdAt": "2026-10-07T18:21:30.818Z",
-    "invoiceNo": "INV-000012",
-    "customerName": "Customer Order"
   }
 ]

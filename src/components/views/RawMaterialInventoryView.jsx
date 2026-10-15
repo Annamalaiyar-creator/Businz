@@ -1320,7 +1320,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
             typeColor: entry.type === 'PRODUCTION_RECEIPT' ? '#16A34A' : (entry.type === 'OPENING_STOCK' ? '#2563EB' : '#4F46E5'),
             typeBg: entry.type === 'PRODUCTION_RECEIPT' ? '#F0FDF4' : (entry.type === 'OPENING_STOCK' ? '#EFF6FF' : '#EEF2FF'),
             typeBorder: entry.type === 'PRODUCTION_RECEIPT' ? '#DCFCE7' : (entry.type === 'OPENING_STOCK' ? '#DBEAFE' : '#E0E7FF'),
-            referenceDoc: entry.refNo || entry.sourceDoc || 'WO-Record',
+            referenceDoc: entry.refNo || entry.sourceDoc || 'VRM-WO-Record',
             itemCode: selectedMat.code,
             itemName: selectedMat.name,
             qty: entry.direction === 'IN' ? +(entry.qty || 0) : -(entry.qty || 0),

@@ -66,9 +66,9 @@ class ProductionInventoryStore {
 
     // Transaction Audit Ledger
     this.ledger = [
-      { id: 'TXN-901', timestamp: '2026-08-11 14:00', woRef: 'WO-2026-101', itemCode: 'BP', actionType: 'MATERIAL_ISSUE', qty: -1000, uom: 'Nos', user: 'Senthil Kumar', dept: 'Shop Floor', stockBefore: 1200, stockAfter: 200, notes: 'Issued for 500 Nos LEG 500 mm (HDG)' },
-      { id: 'TXN-902', timestamp: '2026-08-11 14:00', woRef: 'WO-2026-101', itemCode: 'B150', actionType: 'MATERIAL_ISSUE', qty: -500, uom: 'Nos', user: 'Senthil Kumar', dept: 'Shop Floor', stockBefore: 850, stockAfter: 350, notes: 'Issued for 500 Nos LEG 500 mm (HDG)' },
-      { id: 'TXN-903', timestamp: '2026-08-11 14:00', woRef: 'WO-2026-101', itemCode: 'LB', actionType: 'MATERIAL_ISSUE', qty: -1000, uom: 'Nos', user: 'Senthil Kumar', dept: 'Shop Floor', stockBefore: 1500, stockAfter: 500, notes: 'Issued for 500 Nos LEG 500 mm (HDG)' }
+      { id: 'TXN-901', timestamp: '2026-08-11 14:00', woRef: 'VRM-WO-2026-01', itemCode: 'BP', actionType: 'MATERIAL_ISSUE', qty: -1000, uom: 'Nos', user: 'Senthil Kumar', dept: 'Shop Floor', stockBefore: 1200, stockAfter: 200, notes: 'Issued for 500 Nos LEG 500 mm (HDG)' },
+      { id: 'TXN-902', timestamp: '2026-08-11 14:00', woRef: 'VRM-WO-2026-01', itemCode: 'B150', actionType: 'MATERIAL_ISSUE', qty: -500, uom: 'Nos', user: 'Senthil Kumar', dept: 'Shop Floor', stockBefore: 850, stockAfter: 350, notes: 'Issued for 500 Nos LEG 500 mm (HDG)' },
+      { id: 'TXN-903', timestamp: '2026-08-11 14:00', woRef: 'VRM-WO-2026-01', itemCode: 'LB', actionType: 'MATERIAL_ISSUE', qty: -1000, uom: 'Nos', user: 'Senthil Kumar', dept: 'Shop Floor', stockBefore: 1500, stockAfter: 500, notes: 'Issued for 500 Nos LEG 500 mm (HDG)' }
     ];
   }
 

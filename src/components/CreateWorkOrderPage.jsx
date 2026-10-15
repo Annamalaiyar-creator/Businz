@@ -222,6 +222,18 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
     setFloorEmployeesList(loadEmployees());
   }, []);
 
+  // Ensure fresh standard sequential Work Order number from authoritative sequence service
+  useEffect(() => {
+    fetch('/api/next-wo-number')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.nextWoNo) {
+          setWoNumber(data.nextWoNo);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [assignedEmployee, setAssignedEmployee] = useState('');
   const [assignedHeads, setAssignedHeads] = useState(['Floor Supervisor', 'Dispatch Head']);
   const floorSupervisorName = getAssignedHeadPersonName('Floor Supervisor');

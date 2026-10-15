@@ -1409,20 +1409,32 @@ const syncStoreWithSupabase = async (key) => getDatabaseStore(key);
 const pushStoreToSupabase = async (key, storeData) => saveDatabaseStore(key, storeData);
 
 // Helpers for Production Work Orders Database store
+const isLegacyWoId = (id) => {
+  if (!id) return false;
+  const s = String(id).trim().toUpperCase();
+  if (/^WO-\d+$/i.test(s)) return true;
+  if (s.startsWith('WO-') && !s.startsWith('VRM-WO-')) return true;
+  return s === 'WO-01' || s === 'WO-02' || s === 'WO-1' || s === 'WO-2';
+};
+
+// Helpers for Production Work Orders Database store
 const loadLocalWorkOrders = () => {
-  if (supabaseMemoryStore['vrm_prod_workorders'] && Array.isArray(supabaseMemoryStore['vrm_prod_workorders']) && supabaseMemoryStore['vrm_prod_workorders'].length > 0) {
-    return supabaseMemoryStore['vrm_prod_workorders'];
+  if (supabaseMemoryStore['vrm_prod_workorders'] && Array.isArray(supabaseMemoryStore['vrm_prod_workorders'])) {
+    const clean = supabaseMemoryStore['vrm_prod_workorders'].filter(o => !isLegacyWoId(o?.workOrderNo || o?.id));
+    if (clean.length > 0) return clean;
   }
-  if (supabaseMemoryStore['workorder_store'] && Array.isArray(supabaseMemoryStore['workorder_store']) && supabaseMemoryStore['workorder_store'].length > 0) {
-    return supabaseMemoryStore['workorder_store'];
+  if (supabaseMemoryStore['workorder_store'] && Array.isArray(supabaseMemoryStore['workorder_store'])) {
+    const clean = supabaseMemoryStore['workorder_store'].filter(o => !isLegacyWoId(o?.workOrderNo || o?.id));
+    if (clean.length > 0) return clean;
   }
   const diskPath = getStoreFilePath('vrm_prod_workorders.json');
   if (fs.existsSync(diskPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
-      if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore['vrm_prod_workorders'] = data;
-        return data;
+      if (Array.isArray(data)) {
+        const clean = data.filter(o => !isLegacyWoId(o?.workOrderNo || o?.id));
+        supabaseMemoryStore['vrm_prod_workorders'] = clean;
+        return clean;
       }
     } catch (_) {}
   }
@@ -1430,9 +1442,10 @@ const loadLocalWorkOrders = () => {
   if (fs.existsSync(diskPath2)) {
     try {
       const data = JSON.parse(fs.readFileSync(diskPath2, 'utf8'));
-      if (Array.isArray(data) && data.length > 0) {
-        supabaseMemoryStore['workorder_store'] = data;
-        return data;
+      if (Array.isArray(data)) {
+        const clean = data.filter(o => !isLegacyWoId(o?.workOrderNo || o?.id));
+        supabaseMemoryStore['workorder_store'] = clean;
+        return clean;
       }
     } catch (_) {}
   }
@@ -2882,8 +2895,8 @@ app.get('/api/workorders', async (req, res) => {
 // Endpoint to CREATE / ISSUE / UPDATE a Production Work Order
 app.post('/api/workorders', async (req, res) => {
   try {
-    const woId = req.body.workOrderNo || req.body.id || `WO-${Date.now().toString().slice(-4)}`;
     const currentOrders = loadLocalWorkOrders();
+    const woId = req.body.workOrderNo || req.body.id || getNextSequence('WO', currentOrders).code;
     const existingIndex = currentOrders.findIndex(o => (o.workOrderNo && o.workOrderNo === woId) || (o.id && o.id === woId));
 
     let savedOrder;
@@ -3481,12 +3494,7 @@ async function repairBomSequences() {
   if (!Array.isArray(piList)) piList = [];
 
   // Explicit sequential alignment mapping matching existing converted PIs
-  const targetMap = {
-    'PI-00061': { bomCode: 'BOM-659', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 28320 },
-    'PI-00062': { bomCode: 'BOM-660', defaultCustomer: 'URBAN ENGINEER CONSULTANCY (OPC) PRIVATE LIMITED', defaultAmount: 169920 },
-    'PI-00059': { bomCode: 'BOM-661', defaultCustomer: 'VRM Energy Consultancy Services Private Limited', defaultAmount: 28320 },
-    'PI-00060': { bomCode: 'BOM-662', defaultCustomer: 'Teorainn Solar Pvt Ltd', defaultAmount: 14160 }
-  };
+  const targetMap = {};
 
   let piUpdatedCount = 0;
   let bomUpdatedCount = 0;
@@ -3670,7 +3678,12 @@ async function repairBomSequences() {
   }
 
   // 4. Update sequence counter
-  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, 663);
+  const extractMaxBoms = (supabaseMemoryStore.bom_store || []).map(b => {
+    const m = String(b.bomCode || b.code || '').match(/VRM-BOM-\d{4}-(\d+)/i);
+    return m ? parseInt(m[1], 10) : 0;
+  });
+  const maxBomNum = extractMaxBoms.length > 0 ? Math.max(...extractMaxBoms) : 0;
+  serverBomSequenceCounter = Math.max(serverBomSequenceCounter || 0, maxBomNum);
 
   // 5. Reload memory cache & broadcast updates
   await loadDatabaseBoms(true);
@@ -3686,7 +3699,7 @@ async function repairBomSequences() {
 
 /**
  * Idempotent reconciliation:
- * Ensures all BOMs present in controlroom_store or bom_store.json (e.g. BOM-663, 664, 665)
+ * Ensures all BOMs present in controlroom_store or bom_store.json
  * are cleanly represented in public.bom_orders without overwriting existing data.
  */
 async function syncMissingRelationalBoms() {
@@ -3718,6 +3731,7 @@ async function syncMissingRelationalBoms() {
     for (const bom of bomsToSync) {
       const code = bom?.bomCode || bom?.code || bom?.id;
       if (!code) continue;
+      if (/^BOM-6\d{2}$/i.test(code) || /^BOM-(STAGING|USER|POST)/i.test(code)) continue;
 
       const existingRecord = existingDbMap.get(code) || (bom?.id && existingDbMap.get(bom.id));
       if (existingRecord) {

@@ -1548,14 +1548,17 @@ export default function ProductionViewsEngine(props) {
 
           const filteredRows = (pageConfig.rows || []).filter(r => {
             const matchesSearch = !prodSearchQueryText ||
-              (r.code && r.code.toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.c2 && r.c2.toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.c3 && r.c3.toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
-              (r.customerName && r.customerName.toLowerCase().includes(prodSearchQueryText.toLowerCase()));
+              (r.code && String(r.code).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
+              (r.c2 && String(r.c2).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
+              (r.c3 && String(r.c3).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
+              (r.c4 && String(r.c4).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
+              (r.c5 && String(r.c5).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
+              (r.customerName && String(r.customerName).toLowerCase().includes(prodSearchQueryText.toLowerCase())) ||
+              (r.salesPerson && String(r.salesPerson).toLowerCase().includes(prodSearchQueryText.toLowerCase()));
 
             // Date range filter matching
             let matchesDate = true;
-            const rDateStr = r.date || r.createdAt || r.bomDate || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
+            const rDateStr = r.salesConfirmedAt || r.date || r.createdAt || r.bomDate || (r.dateTimeObj ? r.dateTimeObj.date : null) || (r.c4 && /^\d{4}-\d{2}-\d{2}/.test(r.c4) ? r.c4 : null);
             if (rDateStr && (prodFilterDateVal || prodFilterEndDateVal)) {
               const rIso = String(rDateStr).substring(0, 10);
               if (prodFilterDateVal && rIso < prodFilterDateVal) matchesDate = false;
