@@ -16,8 +16,8 @@ EXT_BASE="/var/lib/businz"
 EXT_DATA_DIR="${EXT_BASE}/data"
 BACKUP_BASE="/var/backups/businz"
 PORT="5001"
-RELEASE_COMMIT="dc3cede60613130f00bbca378a6434fb91ff04c7"
-BASELINE_COMMIT="f0ada49745d9fa1eceab4bf4dfa27ddb43f96eba"
+RELEASE_COMMIT="${1:-a6ce5eadffb11e460e3a6762be90e880fd8273f6}"
+BASELINE_COMMIT="${2:-$(git rev-parse HEAD 2>/dev/null || echo "4091cb78f0ac1b6bf1b17885db1d49b974aa6bf4")}"
 MANIFEST_FILE="${BACKUP_BASE}/deployment_manifest.json"
 
 # Phase-aware failure trap
