@@ -375,20 +375,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return raw.filter(pi => {
       if (!pi) return false;
       const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
-      if (curCode && spCode && spCode === curCode) return true;
 
-      const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (curName && spName) {
-        if (spName === curName) return true;
-        const cleanSp = spName.replace(/\s+/g, '');
-        const cleanCur = curName.replace(/\s+/g, '');
-        if (cleanSp === cleanCur || cleanSp.includes(cleanCur) || cleanCur.includes(cleanSp)) return true;
+      // Primary Isolation Rule: Strict EMP Code matching
+      if (curCode && spCode) {
+        return spCode === curCode;
       }
 
-      if (curEmail && String(pi.salesPersonEmail || pi.email || '').toLowerCase() === curEmail) return true;
+      // If record belongs to a different EMP Code, strictly exclude
+      if (curCode && spCode && spCode !== curCode) {
+        return false;
+      }
 
-      // Allow viewing company-wide or unassigned Zoho estimates
-      if (!spCode && !spName) return true;
+      // Email match
+      if (curEmail && String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase() === curEmail) {
+        return true;
+      }
+
+      // Strict exact name match ONLY if no employee code is tagged on the record
+      const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+      if (!spCode && curName && spName && spName === curName) {
+        return true;
+      }
 
       return false;
     });

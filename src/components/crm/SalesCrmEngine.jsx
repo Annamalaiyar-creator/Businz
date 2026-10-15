@@ -658,7 +658,7 @@ export default function SalesCrmEngine({
       creditLimit: 2500000,
       creditDays: 30,
       paymentTerms: '50% Advance + 50% Dispatch',
-      assignedSalesperson: lead.assignedSalesperson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV',
+      assignedSalesperson: lead.assignedSalesperson || localStorage.getItem('controlroom_logged_user_name') || '',
       source: lead.source,
       primaryContact: {
         name: lead.contactPerson,
@@ -681,7 +681,7 @@ export default function SalesCrmEngine({
       dealValue: (lead.estimatedKw || 100) * 2800, // estimated ₹ 2,800/kW
       stage: 'Requirement Received',
       probability: 40,
-      assignedSalesperson: lead.assignedSalesperson || localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV',
+      assignedSalesperson: lead.assignedSalesperson || localStorage.getItem('controlroom_logged_user_name') || '',
       targetCloseDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
       createdAt: new Date().toISOString()
     };
@@ -711,7 +711,7 @@ export default function SalesCrmEngine({
       email: '',
       source: 'WhatsApp',
       status: 'New Lead',
-      assignedSalesperson: localStorage.getItem('controlroom_logged_user_name') || 'Mohith JV',
+      assignedSalesperson: localStorage.getItem('controlroom_logged_user_name') || '',
       estimatedKw: 100,
       category: 'Aluminium Mounting Structures',
       notes: `Inbound WhatsApp conversation automatically converted to CRM lead.`,

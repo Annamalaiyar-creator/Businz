@@ -113,17 +113,35 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
     const currentLocal = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
     const existingEmps = mergeWithCoreEmployees(currentLocal);
 
-    accountRecord = existingEmps.find(e => {
-      const empNorm = normalizeCode(e.employee_code || e.code);
-      const codeMatches = cleanEmpCodeNorm ? empNorm === cleanEmpCodeNorm : false;
-      const emailMatches = cleanUsername ? String(e.email || '').trim().toLowerCase() === cleanUsername : false;
-
-      // If both code and email are provided, both must strictly match the same account
-      if (cleanEmpCodeNorm && cleanUsername) {
-        return codeMatches && emailMatches;
+    // Collision Check: Verify if multiple accounts have been registered with the same code
+    if (cleanEmpCodeNorm) {
+      const codeMatchesList = existingEmps.filter(e => normalizeCode(e.employee_code || e.code) === cleanEmpCodeNorm);
+      if (codeMatchesList.length > 1) {
+        if (cleanUsername) {
+          accountRecord = codeMatchesList.find(e => String(e.email || '').trim().toLowerCase() === cleanUsername);
+        }
+        if (!accountRecord) {
+          return {
+            success: false,
+            error: `Employee Code Collision: Multiple user accounts were found with Employee Code "${cleanEmpId}". Please enter your registered work email to authenticate uniquely, or contact your Technical Administrator to resolve this duplicate ID.`
+          };
+        }
       }
-      return codeMatches || emailMatches;
-    });
+    }
+
+    if (!accountRecord) {
+      accountRecord = existingEmps.find(e => {
+        const empNorm = normalizeCode(e.employee_code || e.code);
+        const codeMatches = cleanEmpCodeNorm ? empNorm === cleanEmpCodeNorm : false;
+        const emailMatches = cleanUsername ? String(e.email || '').trim().toLowerCase() === cleanUsername : false;
+
+        // If both code and email are provided, both must strictly match the same account
+        if (cleanEmpCodeNorm && cleanUsername) {
+          return codeMatches && emailMatches;
+        }
+        return codeMatches || emailMatches;
+      });
+    }
   } catch(e) {}
 
   if (!accountRecord) {

@@ -146,7 +146,7 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Accounts Executive') return 'Priya';
     if (userRole === 'Sales Head') return 'Vijay';
-    if (userRole === 'Sales Executive') return 'Mohith JV';
+    if (userRole === 'Sales Executive') return localStorage.getItem('controlroom_logged_user_name') || 'Sales Executive';
     if (userRole === 'Design Engineer') return 'Dinesh';
     if (userRole === 'Procurement Head' || userRole === 'Procurement Admin') return 'ARUN BOOPATHI M';
 

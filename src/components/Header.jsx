@@ -189,7 +189,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
     else if (userRole === 'Accounts Head') userName = 'Venkatesh';
     else if (userRole === 'Accounts Executive') userName = 'Priya';
     else if (userRole === 'Sales Head') userName = 'Vijay';
-    else if (userRole === 'Sales Executive') userName = 'Mohith JV';
+    else if (userRole === 'Sales Executive') userName = 'Sales Executive';
     else if (userRole === 'Design Engineer') userName = 'Dinesh';
     else if (userRole === 'Design Executive') userName = 'Kavitha';
     else if (userRole === 'Invoice Executive' || userRole === 'Billing') userName = 'Anand';

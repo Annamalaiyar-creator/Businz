@@ -558,26 +558,26 @@ export default function BomOrdersView(props) {
       }
 
       const spCode = (b.salesPersonCode || b.createdById || '').trim().toUpperCase();
-      if (curCode && spCode && (spCode === curCode || spCode.includes(curCode) || curCode.includes(spCode))) return true;
 
+      // Primary Isolation Rule: Strict EMP Code matching
+      if (curCode && spCode) {
+        return spCode === curCode;
+      }
+
+      // If BOM belongs to a different EMP Code, strictly exclude
+      if (curCode && spCode && spCode !== curCode) {
+        return false;
+      }
+
+      // Exact email match
+      if (curEmail && (b.salesPersonEmail || b.email || '').trim().toLowerCase() === curEmail) {
+        return true;
+      }
+
+      // Strict exact name match ONLY if no employee code is on the BOM
       const spName = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
       const creatorName = (b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-
-      // Normalize spellings (e.g. Mohit JV vs MOHITH J V)
-      const cleanSpNorm = normA(spName);
-      const cleanCreatorNorm = normA(creatorName);
-
-      if (cleanCurNorm) {
-        if (cleanSpNorm && (cleanSpNorm === cleanCurNorm || cleanSpNorm.includes(cleanCurNorm) || cleanCurNorm.includes(cleanSpNorm))) return true;
-        if (cleanCreatorNorm && (cleanCreatorNorm === cleanCurNorm || cleanCreatorNorm.includes(cleanCurNorm) || cleanCurNorm.includes(cleanCreatorNorm))) return true;
-      }
-
-      if (curName) {
-        if (spName && (spName === curName || spName.includes(curName) || curName.includes(spName))) return true;
-        if (creatorName && (creatorName === curName || creatorName.includes(curName) || curName.includes(creatorName))) return true;
-      }
-
-      if (curEmail && (b.salesPersonEmail || b.email || '').toLowerCase() === curEmail) {
+      if (!spCode && curName && (spName === curName || creatorName === curName)) {
         return true;
       }
 

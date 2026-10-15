@@ -221,13 +221,16 @@ export default function LoginScreen({ onLoginSuccess }) {
       return;
     }
 
-    // Check if code is already registered in local storage and active
-    const registeredCodes = JSON.parse(localStorage.getItem('controlroom_registered_codes') || '[]');
-    const existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-    const existingRecord = existingEmps.find(e => (e.employee_code || e.code || '').toUpperCase() === code);
+    // Check if code is already registered anywhere in system
+    let existingEmps = [];
+    try {
+      existingEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    } catch (_) {}
 
-    if (existingRecord && existingRecord.status === 'Active') {
-      setErrorMsg(`Employee Code ${code} is already registered and active. Please sign in instead.`);
+    const existingRecord = existingEmps.find(e => (e.employee_code || e.code || '').trim().toUpperCase() === code);
+
+    if (existingRecord) {
+      setErrorMsg(`Employee Code "${code}" is already registered (${existingRecord.employee_name ? `${existingRecord.employee_name} - ` : ''}${existingRecord.status || 'Active'}). Each employee must have a unique Employee Code.`);
       setIsCodeVerified(false);
       setDetectedRole(null);
       return;
@@ -368,16 +371,17 @@ export default function LoginScreen({ onLoginSuccess }) {
         }
         const registeredCodes = JSON.parse(localStorage.getItem('controlroom_registered_codes') || '[]');
         
-        const existingEmailRecord = existingEmps.find(e => (e.email || '').toLowerCase() === cleanEmail);
-        const existingCodeRecord = existingEmps.find(e => (e.employee_code || e.code || '').toUpperCase() === cleanCode);
+        const existingEmailRecord = existingEmps.find(e => (e.email || '').trim().toLowerCase() === cleanEmail);
+        const existingCodeRecord = existingEmps.find(e => (e.employee_code || e.code || '').trim().toUpperCase() === cleanCode);
 
-        if (existingEmailRecord && existingEmailRecord.status === 'Active') {
-          setErrorMsg(`Account Already Exists: An account with email "${cleanEmail}" is already registered and active. Please sign in instead.`);
+        if (existingCodeRecord) {
+          setErrorMsg(`Employee Code Already in Use: Employee Code "${cleanCode}" is already assigned to ${existingCodeRecord.employee_name ? `"${existingCodeRecord.employee_name}"` : 'another user'} (${existingCodeRecord.status || 'Active'}). Every employee must have a unique Employee Code.`);
+          setIsCodeVerified(false);
           return;
         }
 
-        if (existingCodeRecord && existingCodeRecord.status === 'Active') {
-          setErrorMsg(`Account Already Exists: Employee Code "${cleanCode}" is already registered and active. Please sign in instead.`);
+        if (existingEmailRecord) {
+          setErrorMsg(`Account Already Exists: An account with email "${cleanEmail}" is already registered (${existingEmailRecord.employee_code || ''} - ${existingEmailRecord.status || 'Active'}). Please sign in instead.`);
           return;
         }
 
@@ -395,19 +399,30 @@ export default function LoginScreen({ onLoginSuccess }) {
           last_login: new Date().toISOString()
         };
 
-        // If previously pending, update that record; otherwise append new account
-        const filteredEmps = existingEmps.filter(e => 
-          (e.employee_code || e.code || '').toUpperCase() !== cleanCode && 
-          (e.email || '').toLowerCase() !== cleanEmail
-        );
-        const updatedEmpsList = [...filteredEmps, newEmpAccount];
+        // Call backend registration endpoint to atomically verify uniqueness
+        try {
+          const regRes = await fetch('/api/auth/register-employee', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newEmpAccount)
+          });
+          if (regRes) {
+            const regJson = await regRes.json().catch(() => ({}));
+            if (!regRes.ok || !regJson.success) {
+              setErrorMsg(regJson.error || `Employee Code "${cleanCode}" is already in use. Please choose a different Employee Code.`);
+              setIsCodeVerified(false);
+              return;
+            }
+          }
+        } catch (_) {}
+
+        const updatedEmpsList = [...existingEmps, newEmpAccount];
         const updatedCodesList = Array.from(new Set([...registeredCodes, cleanCode]));
 
         try {
           localStorage.setItem('controlroom_employees_list', JSON.stringify(updatedEmpsList));
           localStorage.setItem('controlroom_registered_codes', JSON.stringify(updatedCodesList));
         } catch(quotaErr) {
-          // If storage quota exceeded, clear stale temporary caches and retry
           try {
             localStorage.removeItem('controlroom_raw_materials_store');
             localStorage.setItem('controlroom_employees_list', JSON.stringify(updatedEmpsList));
@@ -415,14 +430,8 @@ export default function LoginScreen({ onLoginSuccess }) {
           } catch(e) {}
         }
 
-        // Immediately persist to server and cloud database so Admin / Developer receives access requests in real-time
         try {
           saveCloudStore('employees_store', updatedEmpsList);
-          fetch('/api/store/employees_store', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newEmpAccount)
-          }).catch(() => {});
         } catch (e) {}
       } catch(e) {}
 

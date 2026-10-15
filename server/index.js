@@ -2215,9 +2215,65 @@ app.get('/api/store/:key', async (req, res) => {
       return res.json({ success: true, data: dbRes.rows });
     }
     const data = await getDatabaseStore(key);
-    res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
+    return res.json({ success: true, data: data !== undefined && data !== null ? data : [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message, message: err.message });
+  }
+});
+
+// Dedicated employee registration endpoint with atomic uniqueness check
+app.post('/api/auth/register-employee', async (req, res) => {
+  try {
+    const { employee_code, employee_name, email, password, prefix, role, dashboard_type } = req.body || {};
+    const cleanCode = String(employee_code || '').trim().toUpperCase();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (!cleanCode || !cleanEmail || !password) {
+      return res.status(400).json({ success: false, error: 'Employee Code, Email, and Password are required.' });
+    }
+
+    const currentEmps = await getDatabaseStore('employees_store');
+    const list = Array.isArray(currentEmps) ? currentEmps : [];
+    const normalize = (s) => String(s || '').trim().toUpperCase().replace(/O/g, '0').replace(/[-_\s]/g, '');
+
+    const normCode = normalize(cleanCode);
+    const existingCode = list.find(e => normalize(e.employee_code || e.code) === normCode);
+    if (existingCode) {
+      return res.status(409).json({ 
+        success: false, 
+        error: `Employee Code "${cleanCode}" is already in use by ${existingCode.employee_name ? `"${existingCode.employee_name}"` : 'another user'} (${existingCode.status || 'Active'}). Every employee must have a unique Employee Code.` 
+      });
+    }
+
+    const existingEmail = list.find(e => String(e.email || '').trim().toLowerCase() === cleanEmail);
+    if (existingEmail) {
+      return res.status(409).json({ 
+        success: false, 
+        error: `Email "${cleanEmail}" is already registered under Employee Code "${existingEmail.employee_code || existingEmail.code || ''}". Please sign in instead.` 
+      });
+    }
+
+    const isDeveloperAccount = role === 'Technical Administrator' || prefix === 'TA' || cleanCode.startsWith('TA-') || role === 'CEO' || prefix === 'CEO' || cleanCode.startsWith('CEO-');
+
+    const newEmpAccount = {
+      employee_code: cleanCode,
+      employee_name: String(employee_name || '').trim(),
+      email: cleanEmail,
+      password: String(password),
+      prefix: prefix || cleanCode.split('-')[0] || 'SE',
+      role: role || 'Sales Executive',
+      dashboard_type: dashboard_type || role || 'Sales Executive',
+      status: isDeveloperAccount ? 'Active' : 'Pending Approval',
+      created_at: new Date().toISOString(),
+      last_login: new Date().toISOString()
+    };
+
+    const updatedList = [...list, newEmpAccount];
+    await saveDatabaseStore('employees_store', updatedList);
+
+    return res.status(201).json({ success: true, account: newEmpAccount, data: updatedList });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -2692,7 +2748,7 @@ app.post('/api/customers', async (req, res) => {
       creditLimit: incoming.creditLimit || 2500000,
       creditDays: incoming.creditDays || 30,
       paymentTerms: incoming.paymentTerms || '50% Advance + 50% Dispatch',
-      assignedSalesperson: incoming.assignedSalesperson || 'Mohith JV',
+      assignedSalesperson: incoming.assignedSalesperson || '',
       source: incoming.source || 'Direct',
       altPhone: incoming.altPhone || incoming.altNumber || incoming.primaryContact?.altPhone || '',
       altNumber: incoming.altNumber || incoming.altPhone || incoming.primaryContact?.altPhone || '',
@@ -7171,7 +7227,7 @@ app.post('/api/crm/leads/simulate-inbound', async (req, res) => {
       estimatedKw,
       category,
       estimatedValue: estimatedKw * 2800,
-      assignedSalesperson: 'Mohith JV',
+      assignedSalesperson: 'Unassigned',
       status: isAutoQualified ? 'Qualified' : 'New Lead',
       priority: estimatedKw >= 100 ? 'HIGH' : 'MEDIUM',
       notes: message,
