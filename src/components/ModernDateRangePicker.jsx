@@ -67,7 +67,8 @@ export default function ModernDateRangePicker({
   endDate = '',
   onChange,
   placeholder = 'Date range',
-  style = {}
+  style = {},
+  align = 'right'
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -337,7 +338,7 @@ export default function ModernDateRangePicker({
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
-            left: 0,
+            ...(align === 'right' ? { right: 0 } : { left: 0 }),
             minWidth: '180px',
             backgroundColor: '#FFFFFF',
             borderRadius: '14px',
@@ -469,8 +470,9 @@ export default function ModernDateRangePicker({
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
-            left: 0,
+            ...(align === 'right' ? { right: 0 } : { left: 0 }),
             width: '320px',
+            maxWidth: 'calc(100vw - 32px)',
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             border: '1px solid #E2E8F0',

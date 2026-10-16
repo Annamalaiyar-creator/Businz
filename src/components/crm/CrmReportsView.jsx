@@ -30,11 +30,60 @@ function categorizeProduct(item) {
   return 'Solar Structures';
 }
 
-function getRepName(record) {
-  if (!record) return 'Unassigned';
+function getRepName(record, fallback = 'Unassigned') {
+  if (!record) return fallback;
   const rep = record.salesPerson || record.salesperson || record.salesPersonName || record.assignedSalesperson || record.assigned_salesperson || record.createdBy || record.created_by || '';
   const clean = String(rep).replace(/\s*\([^)]*\)/g, '').trim();
-  return clean || 'Mohith JV';
+  return clean || fallback;
+}
+
+// Strict ownership match: Salespersons only see their own records
+function recordBelongsToSalesUser(record, { empId, empName, email }) {
+  if (!record) return false;
+  const curCode = (empId || '').trim().toUpperCase();
+  const curName = (empName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+  const curEmail = (email || '').trim().toLowerCase();
+
+  // If no user context available, allow record
+  if (!curCode && !curName && !curEmail) return true;
+
+  // 1. Strict EMP Code matching (highest authority)
+  const spCode = String(record.salesPersonCode || record.createdById || record.empCode || record.empId || '').trim().toUpperCase();
+  if (curCode && spCode) {
+    return spCode === curCode;
+  }
+  if (curCode && spCode && spCode !== curCode) {
+    return false;
+  }
+
+  // 2. Email matching
+  const spEmail = String(record.salesPersonEmail || record.email || record.creatorEmail || '').trim().toLowerCase();
+  if (curEmail && spEmail && spEmail === curEmail) {
+    return true;
+  }
+
+  // 3. Name matching (flexible normalization handling initials and whitespace)
+  const rawSp = record.salesPerson || record.salesperson || record.salesPersonName || record.assignedSalesperson || record.assigned_salesperson || record.createdBy || record.created_by || '';
+  const spName = String(rawSp).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+  if (curName && spName) {
+    if (spName === curName) return true;
+    const cleanSp = spName.replace(/[^a-z0-9]/g, '');
+    const cleanCur = curName.replace(/[^a-z0-9]/g, '');
+    if (cleanSp && cleanCur) {
+      if (cleanSp === cleanCur) return true;
+      if (cleanSp.length >= 4 && cleanCur.length >= 4 && (cleanSp.includes(cleanCur) || cleanCur.includes(cleanSp))) {
+        return true;
+      }
+    }
+  }
+
+  // 4. Fallback for generic 'sales' / 'sales executive' dev logins
+  if ((curName === 'sales' || curName === 'sales executive') && (!spName || spName === 'sales' || spName === 'sales executive' || spName === 'unassigned')) {
+    return true;
+  }
+
+  return false;
 }
 
 function formatINR(val) {
@@ -74,6 +123,7 @@ function formatMonthLabel(monthKey) {
 }
 
 export default function CrmReportsView({
+  userRole: propUserRole,
   leads = [],
   opportunities = [],
   quotations = [],
@@ -81,6 +131,21 @@ export default function CrmReportsView({
   boms = [],
   invoices = []
 }) {
+  const effectiveRole = propUserRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || 'Sales Executive';
+  const currentEmpId = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') || '' : '').trim();
+  const currentEmpName = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') || '' : '').trim();
+  const currentLoggedEmail = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user') || '' : '').trim().toLowerCase();
+
+  // Role check: Sales Executive sees ONLY their own records.
+  // Leadership & Management (Sales Head, Technical Admin, CEO, MD, Accounts, Dispatch) see all sales persons.
+  const isRestrictedSalesUser = Boolean(
+    effectiveRole &&
+    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim()) &&
+    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
+  );
+
+  const effectiveUserDisplayName = currentEmpName || (currentLoggedEmail ? currentLoggedEmail.split('@')[0] : '') || currentEmpId || 'Sales Executive';
+
   const [activeReportTab, setActiveReportTab] = useState('lag_report'); // 'lag_report' | 'leaderboard' | 'pi' | 'bom' | 'invoices' | 'pipeline'
   const [selectedRepFilter, setSelectedRepFilter] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('all'); // 'all' or 'YYYY-MM'
@@ -179,7 +244,28 @@ export default function CrmReportsView({
     setProductPage(1);
   };
 
-  // Extract all available months across datasets
+  // Scoped datasets: Strictly isolated to the logged-in salesperson when isRestrictedSalesUser is active
+  const scopedPis = useMemo(() => {
+    if (!isRestrictedSalesUser) return proformaInvoices;
+    return proformaInvoices.filter(pi => recordBelongsToSalesUser(pi, { empId: currentEmpId, empName: effectiveUserDisplayName, email: currentLoggedEmail }));
+  }, [isRestrictedSalesUser, proformaInvoices, currentEmpId, effectiveUserDisplayName, currentLoggedEmail]);
+
+  const scopedBoms = useMemo(() => {
+    if (!isRestrictedSalesUser) return boms;
+    return boms.filter(b => recordBelongsToSalesUser(b, { empId: currentEmpId, empName: effectiveUserDisplayName, email: currentLoggedEmail }));
+  }, [isRestrictedSalesUser, boms, currentEmpId, effectiveUserDisplayName, currentLoggedEmail]);
+
+  const scopedInvoices = useMemo(() => {
+    if (!isRestrictedSalesUser) return invoices;
+    return invoices.filter(inv => recordBelongsToSalesUser(inv, { empId: currentEmpId, empName: effectiveUserDisplayName, email: currentLoggedEmail }));
+  }, [isRestrictedSalesUser, invoices, currentEmpId, effectiveUserDisplayName, currentLoggedEmail]);
+
+  const scopedOpportunities = useMemo(() => {
+    if (!isRestrictedSalesUser) return opportunities;
+    return opportunities.filter(opp => recordBelongsToSalesUser(opp, { empId: currentEmpId, empName: effectiveUserDisplayName, email: currentLoggedEmail }));
+  }, [isRestrictedSalesUser, opportunities, currentEmpId, effectiveUserDisplayName, currentLoggedEmail]);
+
+  // Extract all available months across scoped datasets
   const availableMonths = useMemo(() => {
     const monthSet = new Set();
     const addRecordMonth = (rec) => {
@@ -187,17 +273,17 @@ export default function CrmReportsView({
       if (mk) monthSet.add(mk);
     };
 
-    opportunities.forEach(addRecordMonth);
-    proformaInvoices.forEach(addRecordMonth);
-    boms.forEach(addRecordMonth);
-    invoices.forEach(addRecordMonth);
+    scopedOpportunities.forEach(addRecordMonth);
+    scopedPis.forEach(addRecordMonth);
+    scopedBoms.forEach(addRecordMonth);
+    scopedInvoices.forEach(addRecordMonth);
 
     const now = new Date();
     const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     monthSet.add(curMonthKey);
 
     return Array.from(monthSet).sort().reverse();
-  }, [opportunities, proformaInvoices, boms, invoices]);
+  }, [scopedOpportunities, scopedPis, scopedBoms, scopedInvoices]);
 
   // Date and Search match helper
   const matchesFilters = (rec, extraSearchFields = []) => {
@@ -207,8 +293,8 @@ export default function CrmReportsView({
       if (mk !== selectedMonth) return false;
     }
 
-    // 2. Sales Rep filter
-    if (selectedRepFilter !== 'all') {
+    // 2. Sales Rep filter (Only for management; restricted sales users are already scoped)
+    if (!isRestrictedSalesUser && selectedRepFilter !== 'all') {
       const rep = getRepName(rec);
       if (rep !== selectedRepFilter) return false;
     }
@@ -251,20 +337,20 @@ export default function CrmReportsView({
 
   // Filtered operational datasets based on active filters
   const filteredPis = useMemo(() => {
-    return proformaInvoices.filter(pi => matchesFilters(pi, ['billingStreet', 'deliveryStreet']));
-  }, [proformaInvoices, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery]);
+    return scopedPis.filter(pi => matchesFilters(pi, ['billingStreet', 'deliveryStreet']));
+  }, [scopedPis, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery, isRestrictedSalesUser]);
 
   const filteredBoms = useMemo(() => {
-    return boms.filter(b => matchesFilters(b, ['bomNumber', 'site']));
-  }, [boms, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery]);
+    return scopedBoms.filter(b => matchesFilters(b, ['bomNumber', 'site']));
+  }, [scopedBoms, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery, isRestrictedSalesUser]);
 
   const filteredInvoices = useMemo(() => {
-    return invoices.filter(inv => matchesFilters(inv, ['paymentStatus']));
-  }, [invoices, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery]);
+    return scopedInvoices.filter(inv => matchesFilters(inv, ['paymentStatus']));
+  }, [scopedInvoices, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery, isRestrictedSalesUser]);
 
   const filteredOpportunities = useMemo(() => {
-    return opportunities.filter(opp => matchesFilters(opp, ['title', 'name']));
-  }, [opportunities, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery]);
+    return scopedOpportunities.filter(opp => matchesFilters(opp, ['title', 'name']));
+  }, [scopedOpportunities, selectedMonth, selectedRepFilter, filterStartDate, filterEndDate, searchQuery, isRestrictedSalesUser]);
 
   // Extract and synthesize all product line items across Invoices, PIs, and BOMs
   const allProductItems = useMemo(() => {
@@ -272,10 +358,10 @@ export default function CrmReportsView({
     let counter = 1;
 
     // 1. Line items from Tax Invoices (Realized Billed Sales)
-    invoices.forEach((inv, invIdx) => {
+    scopedInvoices.forEach((inv, invIdx) => {
       const docNo = inv.invNo || inv.invoiceNumber || inv.code || `INV-${String(invIdx + 1).padStart(4, '0')}`;
-      const cust = inv.customerName || inv.client || inv.companyName || 'Apex Solar Developers';
-      const rep = getRepName(inv);
+      const cust = inv.customerName || inv.client || inv.companyName || 'Solar EPC Client';
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(inv, 'Unassigned');
       const date = getRecordDateStr(inv);
       const items = Array.isArray(inv.items) && inv.items.length > 0 ? inv.items : (Array.isArray(inv.lineItems) && inv.lineItems.length > 0 ? inv.lineItems : null);
 
@@ -326,10 +412,10 @@ export default function CrmReportsView({
     });
 
     // 2. Line items from Proforma Invoices (PI Pipeline & Commitments)
-    proformaInvoices.forEach((pi, piIdx) => {
+    scopedPis.forEach((pi, piIdx) => {
       const docNo = pi.piNo || pi.code || `PI-${String(piIdx + 1).padStart(4, '0')}`;
-      const cust = pi.customerName || pi.client || pi.companyName || 'SunGrow Power EPC';
-      const rep = getRepName(pi);
+      const cust = pi.customerName || pi.client || pi.companyName || 'Solar EPC Client';
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(pi, 'Unassigned');
       const date = getRecordDateStr(pi);
       const items = Array.isArray(pi.items) && pi.items.length > 0 ? pi.items : (Array.isArray(pi.lineItems) && pi.lineItems.length > 0 ? pi.lineItems : null);
 
@@ -360,10 +446,10 @@ export default function CrmReportsView({
     });
 
     // 3. Line items from BOM Orders (Production Manufacturing)
-    boms.forEach((bom, bomIdx) => {
+    scopedBoms.forEach((bom, bomIdx) => {
       const docNo = bom.bomNumber || bom.bomCode || bom.code || `BOM-${String(bomIdx + 1).padStart(4, '0')}`;
-      const cust = bom.customerName || bom.client || bom.companyName || 'Tata Power Solar Site';
-      const rep = getRepName(bom);
+      const cust = bom.customerName || bom.client || bom.companyName || 'Solar EPC Client';
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(bom, 'Unassigned');
       const date = getRecordDateStr(bom);
       const items = Array.isArray(bom.items) && bom.items.length > 0 ? bom.items : (Array.isArray(bom.materials) && bom.materials.length > 0 ? bom.materials : null);
 
@@ -393,8 +479,8 @@ export default function CrmReportsView({
       }
     });
 
-    // Comprehensive standard catalogue baseline records if items in current system are under 5
-    if (list.length < 5) {
+    // Baseline catalog demonstration items ONLY if no real items exist AND user is management
+    if (list.length < 5 && !isRestrictedSalesUser) {
       const standardCatalogueItems = [
         { name: '550W Mono PERC Bifacial Solar Modules', code: 'MOD-550W-BF', category: 'Solar Panels / Modules', qty: 1200, unit: 'Nos', rate: 8500, amount: 10200000, docType: 'Tax Invoice', docNo: 'INV-2026-081', customerName: 'Tata Power Renewable EPC', salesPerson: 'Mohith JV', date: '2026-09-18', status: 'Paid' },
         { name: '540W Tier-1 Mono PERC Solar Panels', code: 'MOD-540W-MP', category: 'Solar Panels / Modules', qty: 850, unit: 'Nos', rate: 7800, amount: 6630000, docType: 'Proforma Invoice', docNo: 'PI-2026-112', customerName: 'SunEdison Green Projects', salesPerson: 'Adarsh P', date: '2026-09-22', status: 'Confirmed' },
@@ -419,7 +505,7 @@ export default function CrmReportsView({
     }
 
     return list;
-  }, [invoices, proformaInvoices, boms]);
+  }, [scopedInvoices, scopedPis, scopedBoms, isRestrictedSalesUser, effectiveUserDisplayName]);
 
   // Filtered product items based on active category, document type, and global filters
   const filteredProductItems = useMemo(() => {
@@ -525,7 +611,7 @@ export default function CrmReportsView({
     const map = {};
 
     const getOrCreate = (rep) => {
-      const cleanRep = rep || 'Mohith JV';
+      const cleanRep = rep || (isRestrictedSalesUser ? effectiveUserDisplayName : 'Unassigned');
       if (!map[cleanRep]) {
         map[cleanRep] = {
           name: cleanRep,
@@ -546,8 +632,13 @@ export default function CrmReportsView({
       return map[cleanRep];
     };
 
+    // For restricted sales rep, guarantee their scorecard row exists even if zero transactions
+    if (isRestrictedSalesUser) {
+      getOrCreate(effectiveUserDisplayName);
+    }
+
     filteredOpportunities.forEach(o => {
-      const rep = getRepName(o);
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(o);
       const s = getOrCreate(rep);
       const val = parseFloat(o.dealValue) || 0;
       s.dealsCount += 1;
@@ -562,7 +653,7 @@ export default function CrmReportsView({
     });
 
     filteredPis.forEach(pi => {
-      const rep = getRepName(pi);
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(pi);
       const s = getOrCreate(rep);
       const val = parseFloat(pi.grandTotal || pi.totalAmount || pi.total || pi.amount || 0);
       s.piCount += 1;
@@ -570,7 +661,7 @@ export default function CrmReportsView({
     });
 
     filteredBoms.forEach(b => {
-      const rep = getRepName(b);
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(b);
       const s = getOrCreate(rep);
       s.bomCount += 1;
       const itQty = Array.isArray(b.items) ? b.items.reduce((qSum, it) => qSum + (parseFloat(it.qty) || 0), 0) : 0;
@@ -578,7 +669,7 @@ export default function CrmReportsView({
     });
 
     filteredInvoices.forEach(inv => {
-      const rep = getRepName(inv);
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : getRepName(inv);
       const s = getOrCreate(rep);
       const val = parseFloat(inv.grandTotal || inv.totalAmount || inv.total || inv.amount || 0);
       s.invCount += 1;
@@ -590,16 +681,17 @@ export default function CrmReportsView({
     });
 
     return Object.values(map).sort((a, b) => (b.invValue + b.piValue) - (a.invValue + a.piValue));
-  }, [filteredOpportunities, filteredPis, filteredBoms, filteredInvoices]);
+  }, [filteredOpportunities, filteredPis, filteredBoms, filteredInvoices, isRestrictedSalesUser, effectiveUserDisplayName]);
 
   const allRepNames = useMemo(() => {
+    if (isRestrictedSalesUser) return [effectiveUserDisplayName];
     const s = new Set();
-    proformaInvoices.forEach(pi => s.add(getRepName(pi)));
-    boms.forEach(b => s.add(getRepName(b)));
-    invoices.forEach(inv => s.add(getRepName(inv)));
-    opportunities.forEach(opp => s.add(getRepName(opp)));
-    return Array.from(s);
-  }, [proformaInvoices, boms, invoices, opportunities]);
+    proformaInvoices.forEach(pi => { const n = getRepName(pi); if (n && n !== 'Unassigned') s.add(n); });
+    boms.forEach(b => { const n = getRepName(b); if (n && n !== 'Unassigned') s.add(n); });
+    invoices.forEach(inv => { const n = getRepName(inv); if (n && n !== 'Unassigned') s.add(n); });
+    opportunities.forEach(opp => { const n = getRepName(opp); if (n && n !== 'Unassigned') s.add(n); });
+    return Array.from(s).sort();
+  }, [proformaInvoices, boms, invoices, opportunities, isRestrictedSalesUser, effectiveUserDisplayName]);
 
   // Operational Lag Diagnostics & Improvement Engine
   const lagDiagnostics = useMemo(() => {
@@ -986,7 +1078,62 @@ export default function CrmReportsView({
             </select>
           </div>
 
-
+          {/* Sales Person Selector (For Management) OR Personal Identity Badge (For Sales Executive) */}
+          {!isRestrictedSalesUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Sales Rep:</span>
+              <select
+                id="crm-reports-selected-rep"
+                name="selectedRepFilter"
+                aria-label="Filter by Sales Representative"
+                value={selectedRepFilter}
+                onChange={(e) => {
+                  setSelectedRepFilter(e.target.value);
+                  setLeaderboardPage(1);
+                  setPiPage(1);
+                  setBomPage(1);
+                  setInvPage(1);
+                  setOppPage(1);
+                  setProductPage(1);
+                }}
+                style={{
+                  height: '38px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  padding: '0 12px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  color: '#0F172A',
+                  backgroundColor: '#FFFFFF',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="all">All Sales Persons ({allRepNames.length})</option>
+                {allRepNames.map(rep => (
+                  <option key={rep} value={rep}>{rep}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#ECFEFF',
+              border: '1px solid #A5F3FC',
+              borderRadius: '8px',
+              padding: '0 12px',
+              height: '38px',
+              color: '#0E7490',
+              fontSize: '12px',
+              fontWeight: '700'
+            }}>
+              <Users size={14} style={{ color: '#0E7490' }} />
+              <span>Salesperson: <strong>{effectiveUserDisplayName}</strong></span>
+              <span style={{ fontSize: '10px', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Personal</span>
+            </div>
+          )}
 
           {/* Live Sync / Refresh Button */}
           <button
@@ -1256,7 +1403,7 @@ export default function CrmReportsView({
       <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', gap: '24px', padding: '2px 4px 0', alignItems: 'center', overflowX: 'auto' }}>
         {[
           { id: 'lag_report', label: 'Where You Are Lagging & How to Improve', icon: AlertTriangle, badge: `${lagDiagnostics.bottlenecks.length} Insights`, bg: '#ECFEFF', fg: '#0E7490' },
-          { id: 'leaderboard', label: 'Salesperson 360° Realization Leaderboard', icon: Award, count: repStats.length, bg: '#F1F5F9', fg: '#64748B' },
+          { id: 'leaderboard', label: isRestrictedSalesUser ? 'My 360° Realization Scorecard' : 'Salesperson 360° Realization Leaderboard', icon: Award, count: repStats.length, bg: '#F1F5F9', fg: '#64748B' },
           { id: 'products', label: 'Product Sales & Module Breakdown', icon: Layers, count: filteredProductItems.length, bg: '#F0FDFA', fg: '#0E7490' },
           { id: 'pi', label: 'Proforma Invoices (PI)', icon: FileText, count: filteredPis.length, bg: '#ECFEFF', fg: '#0E7490' },
           { id: 'bom', label: 'BOM Production & Dispatch', icon: Boxes, count: filteredBoms.length, bg: '#FEF3C7', fg: '#B45309' },
@@ -1524,10 +1671,12 @@ export default function CrmReportsView({
           {/* Salesperson Individual Coaching Matrix */}
           <div className="section-card" style={{ padding: '20px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
             <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: '0 0 4px 0' }}>
-              Salesperson Performance Coaching & Where Each Representative Is Lagging
+              {isRestrictedSalesUser ? 'Your Performance Coaching & Targeted Action Plan' : 'Salesperson Performance Coaching & Where Each Representative Is Lagging'}
             </h3>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '0 0 16px 0' }}>
-              Individual diagnostic breakdown comparing CRM opportunities, PI conversion, and billed invoice realization with targeted improvement guidance.
+              {isRestrictedSalesUser
+                ? 'Your personal diagnostic breakdown comparing CRM opportunities, PI conversion, and billed invoice realization with targeted improvement guidance.'
+                : 'Individual diagnostic breakdown comparing CRM opportunities, PI conversion, and billed invoice realization with targeted improvement guidance.'}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

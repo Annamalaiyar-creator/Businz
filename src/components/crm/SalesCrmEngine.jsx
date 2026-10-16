@@ -744,6 +744,7 @@ export default function SalesCrmEngine({
       <div>
         {activeTab === 'Dashboard' && (
           <CrmDashboard
+            userRole={userRole}
             leads={leads}
             opportunities={opportunities}
             followups={followups}
@@ -866,6 +867,7 @@ export default function SalesCrmEngine({
 
         {activeTab === 'Reports' && (
           <CrmReportsView
+            userRole={userRole}
             leads={leads}
             opportunities={opportunities}
             quotations={quotations}

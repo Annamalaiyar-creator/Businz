@@ -1732,7 +1732,7 @@ table td {
   }
 }
 
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   html, body {
     overflow-x: hidden !important;
     width: 100% !important;
@@ -2401,3 +2401,15 @@ table td {
   border-radius: 50%;
   animation: spin 0.75s linear infinite;
 }
+
+/* Global Print Media Safety: Prevent pagination clipping in Chromium/WebKit */
+@media print {
+  html, body {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+}
+

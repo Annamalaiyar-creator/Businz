@@ -198,7 +198,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         {`
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm !important;
+            margin: 8mm 10mm;
           }
 
           @media print {
@@ -321,6 +321,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               page-break-inside: auto !important;
               break-inside: auto !important;
               width: 100% !important;
+              border-collapse: collapse !important;
             }
 
             thead {
@@ -328,7 +329,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
             }
 
             tfoot {
-              display: table-row-group !important;
+              display: table-footer-group !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
             }
 
             tr {
@@ -353,7 +356,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         paddingBottom: '8px',
         marginBottom: '8px',
         width: '100%',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        pageBreakInside: 'avoid',
+        breakInside: 'avoid'
       }}>
         {/* Left: Logo & Company Information */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0, paddingRight: '12px' }}>
@@ -395,7 +400,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         marginBottom: '8px',
         fontSize: '10px',
         width: '100%',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        pageBreakInside: 'avoid',
+        breakInside: 'avoid'
       }}>
         <div style={{ padding: '4px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
           <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Number: </span>
@@ -421,7 +428,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         marginBottom: '8px',
         backgroundColor: '#FFFFFF',
         width: '100%',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        pageBreakInside: 'avoid',
+        breakInside: 'avoid'
       }}>
         {/* Bill To Column */}
         <div style={{ borderRight: '1px solid #CBD5E1', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>

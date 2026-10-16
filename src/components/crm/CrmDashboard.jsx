@@ -9,6 +9,7 @@ import {
 import { STAGE_PROBABILITIES } from '../../services/crmStore';
 
 export default function CrmDashboard({
+  userRole: propUserRole,
   leads = [],
   opportunities = [],
   followups = [],
@@ -21,6 +22,19 @@ export default function CrmDashboard({
   onCreateOpportunity,
   isLoading = false
 }) {
+  const effectiveRole = propUserRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || 'Sales Executive';
+  const currentEmpId = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') || '' : '').trim();
+  const currentEmpName = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') || '' : '').trim();
+  const currentLoggedEmail = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user') || '' : '').trim().toLowerCase();
+
+  const isRestrictedSalesUser = Boolean(
+    effectiveRole &&
+    ['Sales Executive', 'Sales', 'Salesperson', 'Sales Rep', 'Sales Representative'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim()) &&
+    !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
+  );
+
+  const effectiveUserDisplayName = currentEmpName || (currentLoggedEmail ? currentLoggedEmail.split('@')[0] : '') || currentEmpId || 'Sales Executive';
+
   const [pipelineViewMode, setPipelineViewMode] = useState('kanban'); // 'kanban' | 'summary'
 
   // Compute Key Performance Indicators
@@ -70,18 +84,40 @@ export default function CrmDashboard({
   // Sales Rep Performance Breakdown
   const salesRepsPerformance = useMemo(() => {
     const map = {};
-    opportunities.forEach(opp => {
-      const rep = (opp.salesperson || 'Mohith JV').replace(/\s*\([^)]*\)/g, '').trim();
-      if (!map[rep]) {
-        map[rep] = { name: rep, totalDeals: 0, wonDeals: 0, wonValue: 0, activeValue: 0 };
+
+    const getOrCreate = (name) => {
+      if (!map[name]) {
+        map[name] = { name, totalDeals: 0, wonDeals: 0, wonValue: 0, activeValue: 0 };
       }
+      return map[name];
+    };
+
+    if (isRestrictedSalesUser) {
+      getOrCreate(effectiveUserDisplayName);
+    }
+
+    opportunities.forEach(opp => {
+      const rawRep = opp.salesperson || opp.assignedSalesperson || opp.salesPerson || opp.createdBy || '';
+      const cleanRep = String(rawRep).replace(/\s*\([^)]*\)/g, '').trim();
+
+      if (isRestrictedSalesUser) {
+        const curName = effectiveUserDisplayName.toLowerCase();
+        const curCode = currentEmpId.toUpperCase();
+        const oppCode = String(opp.salesPersonCode || opp.createdById || '').toUpperCase();
+        const isMatch = (curCode && oppCode && oppCode === curCode) ||
+          (cleanRep && curName && (cleanRep.toLowerCase() === curName || cleanRep.toLowerCase().includes(curName) || curName.includes(cleanRep.toLowerCase())));
+        if (!isMatch) return;
+      }
+
+      const rep = isRestrictedSalesUser ? effectiveUserDisplayName : (cleanRep || 'Unassigned');
+      const entry = getOrCreate(rep);
       const val = parseFloat(opp.dealValue) || 0;
-      map[rep].totalDeals += 1;
+      entry.totalDeals += 1;
       if (opp.stage === 'Won') {
-        map[rep].wonDeals += 1;
-        map[rep].wonValue += val;
+        entry.wonDeals += 1;
+        entry.wonValue += val;
       } else if (opp.stage !== 'Lost') {
-        map[rep].activeValue += val;
+        entry.activeValue += val;
       }
     });
 
@@ -90,7 +126,7 @@ export default function CrmDashboard({
       return [];
     }
     return list.sort((a, b) => (b.wonValue + b.activeValue) - (a.wonValue + a.activeValue));
-  }, [opportunities]);
+  }, [opportunities, isRestrictedSalesUser, effectiveUserDisplayName, currentEmpId]);
 
   // Conversion Funnel Metrics
   const funnelStages = useMemo(() => {
