@@ -198,7 +198,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         {`
           @page {
             size: A4 portrait;
-            margin: 6mm 8mm !important;
+            margin: 8mm 10mm !important;
           }
 
           @media print {
@@ -328,7 +328,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
             }
 
             tfoot {
-              display: table-footer-group !important;
+              display: table-row-group !important;
             }
 
             tr {
@@ -575,6 +575,28 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           </tfoot>
         )}
       </table>
+
+      {/* 5. OFFICIAL AUTHORIZED SIGNATORY BLOCK */}
+      <div 
+        className="print-avoid-break" 
+        style={{ 
+          borderTop: '1.5px solid #CBD5E1', 
+          paddingTop: '12px', 
+          marginTop: '16px', 
+          display: 'flex', 
+          justifyContent: 'flex-end', 
+          pageBreakInside: 'avoid', 
+          breakInside: 'avoid' 
+        }}
+      >
+        <div style={{ textAlign: 'center', minWidth: '220px' }}>
+          <div style={{ height: '36px' }}></div>
+          <div style={{ borderTop: '1.5px dashed #94A3B8', paddingTop: '5px', width: '100%' }}>
+            <strong style={{ color: '#0F172A', fontSize: '11px', display: 'block' }}>For VRM Structures India Pvt Ltd</strong>
+            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>Authorized Signatory</div>
+          </div>
+        </div>
+      </div>
 
     </div>
   );
