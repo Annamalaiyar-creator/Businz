@@ -190,9 +190,20 @@ export default function AccountsVerificationModal({
     accountsVerificationModal?.status === 'Cancelled & Stock Restored' ||
     (accountsVerificationModal?.status && typeof accountsVerificationModal.status === 'string' && accountsVerificationModal.status.toLowerCase().includes('cancel'))
   );
-  const currentPayStatus = isAlreadyCompleted 
-    ? (accVerif.paymentStatus || (accountsVerificationModal.paymentType === 'Net 30 Days' ? 'Credit Payment' : 'Payment Received — 100%'))
-    : (accVerif.paymentStatus || '');
+  const normalizePaymentTerm = (term) => {
+    if (!term) return '';
+    const str = String(term).trim();
+    if (str.includes('100%') || str === 'Full Payment' || str === 'Paid' || str === 'Payment Received — 100%') return '100% Paid';
+    if (str.includes('Partial') || str.includes('50%')) return 'Partial Paid';
+    if (str.includes('While Dispatch') || str.includes('Before Dispatch')) return 'Payment While Dispatch';
+    if (str.includes('Credit') || str.includes('Net 30')) return 'Credit Payment';
+    return str;
+  };
+  const salesPaymentStatus = normalizePaymentTerm(accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3) || '100% Paid';
+
+  const currentPayStatus = accVerif.paymentStatus 
+    ? normalizePaymentTerm(accVerif.paymentStatus)
+    : salesPaymentStatus;
   const hardCopy = isAlreadyCompleted ? true : Boolean(accVerif.hardCopyReceived);
   const bomCodeText = (accountsVerificationModal && (accountsVerificationModal.bomCode || accountsVerificationModal.code)) || 'BOM-2026';
   const custNameText = (() => {
@@ -269,9 +280,12 @@ export default function AccountsVerificationModal({
   const isPartialVerified = Boolean(currentPayStatus || currentPayDate || (currentTotalAmount !== '' && cleanNum(currentTotalAmount, 0) > 0)) && !isVerified;
 
   const payStatusConfig = {
-    'Payment Received — 100%': { bg: '#DCFCE7', color: '#166534', label: '100% Received', icon: <CheckCircle style={{ width: '18px', height: '18px' }} /> },
-    'Payment Received — 50%': { bg: '#FEF3C7', color: '#B45309', label: '50% Advance', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
-    'Credit Payment': { bg: '#DBEAFE', color: '#1E40AF', label: 'Credit / Net 30', icon: <Receipt style={{ width: '18px', height: '18px' }} /> },
+    '100% Paid': { bg: '#DCFCE7', color: '#166534', label: '100% Paid', icon: <CheckCircle style={{ width: '18px', height: '18px' }} /> },
+    'Payment Received — 100%': { bg: '#DCFCE7', color: '#166534', label: '100% Paid', icon: <CheckCircle style={{ width: '18px', height: '18px' }} /> },
+    'Partial Paid': { bg: '#FEF3C7', color: '#B45309', label: 'Partial Paid', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
+    'Payment Received — 50%': { bg: '#FEF3C7', color: '#B45309', label: 'Partial Paid', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
+    'Payment While Dispatch': { bg: '#FEF9C3', color: '#854D0E', label: 'Payment While Dispatch', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
+    'Credit Payment': { bg: '#DBEAFE', color: '#1E40AF', label: 'Credit Payment', icon: <Receipt style={{ width: '18px', height: '18px' }} /> },
   };
   const currentPayConfig = (currentPayStatus && payStatusConfig[currentPayStatus]) || { bg: '#F1F5F9', color: '#475569', label: 'Pending Verification', icon: <Clock style={{ width: '18px', height: '18px' }} /> };
 
@@ -771,7 +785,7 @@ export default function AccountsVerificationModal({
               </label>
               <select id="accounts-verification-select-1" name="select1" aria-label="Select 1"
                 disabled={isAlreadyCompleted}
-                value={currentPayStatus || ''}
+                value={currentPayStatus || '100% Paid'}
                 onChange={(e) => {
                   if (isAlreadyCompleted) return;
                   const val = e.target.value;
@@ -781,18 +795,18 @@ export default function AccountsVerificationModal({
                   }) : null);
                 }}
                 style={{
-                  width: '100%', height: '44px', borderRadius: '10px',
+                  width: '100%', height: '42px', borderRadius: '10px',
                   border: '1px solid #CBD5E1', padding: '0 14px',
-                  fontSize: '13px', fontWeight: '600', color: currentPayStatus ? '#0F172A' : '#94A3B8',
+                  fontSize: '13px', fontWeight: '600', color: '#0F172A',
                   outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
                   cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
                   opacity: isAlreadyCompleted ? 0.9 : 1
                 }}
               >
-                <option value="" disabled>-- Select Verified Payment Status --</option>
-                <option value="Payment Received — 100%">Payment Received — 100%</option>
-                <option value="Payment Received — 50%">Payment Received — 50% Advance</option>
-                <option value="Credit Payment">Credit Payment (Net 30 Days)</option>
+                <option value="100% Paid">100% Paid</option>
+                <option value="Partial Paid">Partial Paid</option>
+                <option value="Payment While Dispatch">Payment While Dispatch</option>
+                <option value="Credit Payment">Credit Payment</option>
               </select>
             </div>
 

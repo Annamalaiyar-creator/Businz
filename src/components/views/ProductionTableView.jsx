@@ -660,44 +660,58 @@ export default function ProductionTableView({
             );
           })()}
 
-          {/* View Details Button */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (selectedRows && selectedRows.length > 1) {
-                if (showAlert) showAlert("You can't open details for multiple files at once. Please select a single item to view details.");
-                return;
-              }
-              const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
-              const targetRow = codeVal
-                ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
-                : (filteredRows && filteredRows[0] ? filteredRows[0] : { code: 'CR-001', name: 'Sample Record' });
-              setSelectedRows([]);
-              onQuickPreview(targetRow);
-            }}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <Eye size={14} style={{ color: '#0E7490' }} /> View Details
-          </button>
+          {/* View Details Button - excluded in Dispatch Orders since View Dispatch Info already provides details */}
+          {(() => {
+            if (activeTab === 'Dispatch Orders') return null;
+            const selectedRowObjects = (selectedRows || []).map(code => (filteredRows || []).find(r => r.code === code || r.id === code || r.bomCode === code) || (bomStore || []).find(b => (b.bomCode === code || b.code === code || b.id === code))).filter(Boolean);
+            const isEligible = selectedRowObjects.length > 0 && selectedRowObjects.every(row => {
+              const st = String(row.status || row.c7 || row.c6 || '').toLowerCase().trim();
+              const isCompleted = st.includes('completed') || st.includes('dispatched') || st.includes('closed') || st.includes('verified');
+              const isPartiallyPacked = st.includes('partially packed') || st.includes('partially');
+              return isCompleted || isPartiallyPacked;
+            });
+            if (!isEligible) return null;
+
+            return (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (selectedRows && selectedRows.length > 1) {
+                    if (showAlert) showAlert("You can't open details for multiple files at once. Please select a single item to view details.");
+                    return;
+                  }
+                  const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+                  const targetRow = codeVal
+                    ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
+                    : (filteredRows && filteredRows[0] ? filteredRows[0] : { code: 'CR-001', name: 'Sample Record' });
+                  setSelectedRows([]);
+                  onQuickPreview(targetRow);
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#1E293B',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+              >
+                <Eye size={14} style={{ color: '#0E7490' }} /> View Details
+              </button>
+            );
+          })()}
 
           {/* View Payment Details Button - Excluded for Dispatch, Accounts, Invoice Management, and Delivery Challans */}
           {activeTab !== 'Dispatch Orders' && activeTab !== 'Accounts Verification' && activeTab !== 'Invoice Management' && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (

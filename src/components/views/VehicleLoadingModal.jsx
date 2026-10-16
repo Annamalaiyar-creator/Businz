@@ -144,15 +144,15 @@ export default function VehicleLoadingModal({
   const existingLoading = bom.vehicleLoading || {};
   const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
 
-  const initialMode = (() => {
-    if (existingLoading.deliveryMode) return existingLoading.deliveryMode;
-    if (bom.deliveryMode) return bom.deliveryMode;
-    const tm = String(bom.transportMode || '').toLowerCase();
-    if (tm.includes('own') || tm.includes('porter') || tm.includes('company')) return 'own_vehicle';
-    if (tm.includes('self') || tm.includes('direct') || tm.includes('pickup') || tm.includes('customer')) return 'direct';
-    return 'transport';
+  const salesTransportMode = (() => {
+    const raw = bom.transportMode || bom.deliveryMode || existingLoading.deliveryMode || '';
+    const str = String(raw).trim().toLowerCase();
+    if (str.includes('own') || str.includes('porter')) return 'Own Vehicle';
+    if (str.includes('portal') || str.includes('self') || str.includes('direct') || str.includes('pickup') || str.includes('customer')) return 'Portal';
+    return 'Transport';
   })();
-  const [deliveryMode, setDeliveryMode] = useState(initialMode);
+  const isTransport = salesTransportMode === 'Transport';
+  const deliveryMode = isTransport ? 'transport' : (salesTransportMode === 'Own Vehicle' ? 'own_vehicle' : 'direct');
   const [lrCopyDoc, setLrCopyDoc] = useState(
     bom.lrCopyDoc || existingLoading.lrCopyDoc || null
   );
@@ -362,7 +362,7 @@ export default function VehicleLoadingModal({
   const vNo = vehicleLoadingData.vehicleNo || existingLoading.vehicleNo || '';
   const dName = vehicleLoadingData.driverName || existingLoading.driverName || '';
   const dPhone = vehicleLoadingData.driverPhone || existingLoading.driverPhone || '';
-  const transp = vehicleLoadingData.transporter || existingLoading.transporter || '';
+  const transp = bom.transporterName || bom.transporter || vehicleLoadingData.transporter || existingLoading.transporter || '';
   const lr = vehicleLoadingData.lrNo || existingLoading.lrNo || '';
   const seal = vehicleLoadingData.sealNo || existingLoading.sealNo || '';
 
@@ -437,8 +437,8 @@ export default function VehicleLoadingModal({
       return;
     }
 
-    // If own vehicle or customer self-pickup -> complete immediately, NO POPUP!
-    if (deliveryMode === 'own_vehicle' || deliveryMode === 'direct') {
+    // If own vehicle or customer portal / self-pickup -> complete immediately, NO POPUP!
+    if (!isTransport) {
       handleFinalizeVehicleLoading({ forceStatus: 'Completed', overrideLrDoc: null });
       return;
     }
@@ -885,318 +885,157 @@ return (
       boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
       overflow: 'hidden'
     }}>
-      {/* Header Toolbar with Delivery Mode Selector */}
+      {/* Header Info */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '18px 24px', borderBottom: '1px solid #E2E8F0',
+        padding: '16px 24px', borderBottom: '1px solid #E2E8F0',
         background: 'linear-gradient(135deg, #FAFBFC 0%, #F8FAFC 100%)',
         flexWrap: 'wrap', gap: '12px'
       }}>
         <div>
           <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Truck size={18} style={{ color: '#0E7490' }} /> Vehicle & Logistics Movement Details
+            <Truck size={18} style={{ color: '#0E7490' }} /> Vehicle Loading & Dispatch Verification
           </h3>
           <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
-            Select transport mode and verify dispatch logistics details.
+            Verify vehicle loading and capture dispatch proof photos before departure.
           </p>
         </div>
-
-        {/* Delivery Movement Selector */}
-        <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '4px', borderRadius: '10px', gap: '6px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            disabled={isReadOnly}
-            onClick={() => setDeliveryMode('transport')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', border: 'none',
-              backgroundColor: deliveryMode === 'transport' ? '#0E7490' : 'transparent',
-              color: deliveryMode === 'transport' ? '#FFFFFF' : '#64748B',
-              fontSize: '12.5px', fontWeight: '800', cursor: isReadOnly ? 'default' : 'pointer',
-              boxShadow: deliveryMode === 'transport' ? '0 2px 6px rgba(14,116,144,0.3)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Truck style={{ width: '15px', height: '15px' }} /> 3rd-Party Transport (VRL/ARC)
-          </button>
-          <button
-            type="button"
-            disabled={isReadOnly}
-            onClick={() => setDeliveryMode('own_vehicle')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', border: 'none',
-              backgroundColor: deliveryMode === 'own_vehicle' ? '#2563EB' : 'transparent',
-              color: deliveryMode === 'own_vehicle' ? '#FFFFFF' : '#64748B',
-              fontSize: '12.5px', fontWeight: '800', cursor: isReadOnly ? 'default' : 'pointer',
-              boxShadow: deliveryMode === 'own_vehicle' ? '0 2px 6px rgba(37,99,235,0.3)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Truck style={{ width: '15px', height: '15px' }} /> Own Vehicle / Porter
-          </button>
-          <button
-            type="button"
-            disabled={isReadOnly}
-            onClick={() => setDeliveryMode('direct')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', borderRadius: '8px', border: 'none',
-              backgroundColor: deliveryMode === 'direct' ? '#059669' : 'transparent',
-              color: deliveryMode === 'direct' ? '#FFFFFF' : '#64748B',
-              fontSize: '12.5px', fontWeight: '800', cursor: isReadOnly ? 'default' : 'pointer',
-              boxShadow: deliveryMode === 'direct' ? '0 2px 6px rgba(5,150,105,0.3)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Package style={{ width: '15px', height: '15px' }} /> Self-Pickup / Direct Delivery
-          </button>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '8px',
+          padding: '6px 14px', borderRadius: '20px',
+          backgroundColor: isTransport ? '#ECFEFF' : '#F1F5F9',
+          border: `1px solid ${isTransport ? '#A5F3FC' : '#CBD5E1'}`,
+          fontSize: '12px', fontWeight: '800',
+          color: isTransport ? '#0E7490' : '#475569'
+        }}>
+          <Truck size={14} /> Transport Mode: {salesTransportMode} {transp ? `• ${transp}` : ''}
         </div>
       </div>
 
-      {/* Vehicle & Logistics Movement Details Section */}
-      <div style={{ padding: '20px 24px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {deliveryMode === 'transport' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            <div>
-              <label htmlFor="vehicle-loading-vehicle-lorry-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Vehicle / Lorry Number
-              </label>
-              <input id="vehicle-loading-vehicle-lorry-number" name="vehicleLorryNumber" aria-label="Vehicle / Lorry Number"
-                type="text"
-                disabled={isReadOnly}
-                value={vNo}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
-                placeholder="e.g. TN-09-CB-4821"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-logistics-fleet-carrier" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Logistics / Fleet Carrier
-              </label>
-              <input id="vehicle-loading-logistics-fleet-carrier" name="logisticsFleetCarrier" aria-label="Logistics / Fleet Carrier"
-                type="text"
-                disabled={isReadOnly}
-                value={transp}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, transporter: e.target.value })}
-                placeholder="e.g. VRL Logistics, ARC, ABT, Courier"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-lr-bilty-docket" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                LR / Bilty / Docket No
-              </label>
-              <input id="vehicle-loading-lr-bilty-docket" name="lRBiltyDocket" aria-label="LR / Bilty / Docket No"
-                type="text"
-                disabled={isReadOnly}
-                value={lr}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, lrNo: e.target.value })}
-                placeholder="e.g. LR-2026-8812 (or enter in final popup)"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-driver-full-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Driver Full Name
-              </label>
-              <input id="vehicle-loading-driver-full-name" name="driverFullName" aria-label="Driver Full Name"
-                type="text"
-                disabled={isReadOnly}
-                value={dName}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
-                placeholder="Driver Name"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-driver-phone-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Driver Phone Number
-              </label>
-              <input id="vehicle-loading-driver-phone-number" name="driverPhoneNumber" aria-label="Driver Phone Number"
-                type="text"
-                disabled={isReadOnly}
-                value={dPhone}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
-                placeholder="+91 98765 43210"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-container-seal-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Container / Seal Number
-              </label>
-              <input id="vehicle-loading-container-seal-number" name="containerSealNumber" aria-label="Container / Seal Number"
-                type="text"
-                disabled={isReadOnly}
-                value={seal}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, sealNo: e.target.value })}
-                placeholder="e.g. SEAL-99201"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-          </div>
-        ) : deliveryMode === 'own_vehicle' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            <div>
-              <label htmlFor="vehicle-loading-vehicle-number-porter" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Vehicle Number / Porter Ref
-              </label>
-              <input id="vehicle-loading-vehicle-number-porter" name="vehicleNumberPorter" aria-label="Vehicle Number / Porter Ref"
-                type="text"
-                disabled={isReadOnly}
-                value={vNo}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
-                placeholder="e.g. TN-02-AZ-9999 / Porter"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-driver-delivery-person" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Driver / Delivery Person Name
-              </label>
-              <input id="vehicle-loading-driver-delivery-person" name="driverDeliveryPerson" aria-label="Driver / Delivery Person Name"
-                type="text"
-                disabled={isReadOnly}
-                value={dName}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
-                placeholder="e.g. In-house Driver / Porter Exec"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-91-98765-43210" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Driver / Delivery Contact Phone
-              </label>
-              <input id="vehicle-loading-91-98765-43210" name="919876543210" aria-label="Driver / Delivery Contact Phone"
-                type="text"
-                disabled={isReadOnly}
-                value={dPhone}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
-                placeholder="e.g. +91 98765 43210"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            <div>
-              <label htmlFor="vehicle-loading-v-no" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Customer Vehicle / Handover Ref
-              </label>
-              <input id="vehicle-loading-v-no" name="vNo" aria-label="Customer Vehicle / Handover Ref"
-                type="text"
-                disabled={isReadOnly}
-                value={vNo}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, vehicleNo: e.target.value })}
-                placeholder="e.g. Customer Vehicle / Direct Handover"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-receiver-person-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Receiver Person Name
-              </label>
-              <input id="vehicle-loading-receiver-person-name" name="receiverPersonName" aria-label="Receiver Person Name"
-                type="text"
-                disabled={isReadOnly}
-                value={dName}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverName: e.target.value })}
-                placeholder="e.g. Customer Representative"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-
-            <div>
-              <label htmlFor="vehicle-loading-receiver-contact-phone" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Receiver Contact Phone
-              </label>
-              <input id="vehicle-loading-receiver-contact-phone" name="receiverContactPhone" aria-label="Receiver Contact Phone"
-                type="text"
-                disabled={isReadOnly}
-                value={dPhone}
-                onChange={(e) => setVehicleLoadingData({ ...vehicleLoadingData, driverPhone: e.target.value })}
-                placeholder="e.g. +91 98765 43210"
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-               />
-            </div>
-          </div>
-        )}
-
-        {/* Subtle LR Attachment Indicator (shown only if already attached) */}
-        {deliveryMode === 'transport' && lrCopyDoc && (
-          <div style={{
-            backgroundColor: '#F0FDF4',
-            border: '1px solid #86EFAC',
-            borderRadius: '10px',
-            padding: '10px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '10px'
-          }}>
+      {/* LR Copy Attachment (shown ONLY when Transport is selected by Sales) */}
+      {isTransport && (
+        <div style={{
+          padding: '18px 24px',
+          backgroundColor: '#FFFFFF',
+          borderBottom: '1px solid #E2E8F0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={18} style={{ color: '#16A34A' }} />
+              <FileText size={18} style={{ color: '#0E7490' }} />
               <div>
-                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#166534' }}>
-                  Transporter LR Copy Attached: {lrCopyDoc.name || 'Lorry_Receipt.pdf'}
-                </span>
-                <span style={{ fontSize: '11px', color: '#64748B', marginLeft: '8px' }}>
-                  ({lrCopyDoc.size || 'Attached'})
-                </span>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                  Transporter LR Copy / Bilty Attachment
+                </h4>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  Transport Mode: <strong style={{ color: '#0E7490' }}>Transport</strong> {transp ? `(${transp})` : ''}. Attach lorry receipt / bilty for 3rd-party logistics.
+                </p>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                type="button"
-                onClick={handlePreviewLrCopy}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid #0E7490',
-                  backgroundColor: '#0E7490',
-                  color: '#FFFFFF',
-                  fontSize: '11.5px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <Eye size={13} /> View LR
-              </button>
-              {!isReadOnly && (
+            {!isReadOnly && !lrCopyDoc && (
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '7px 16px', borderRadius: '8px',
+                backgroundColor: '#0E7490', color: '#FFFFFF',
+                fontSize: '12px', fontWeight: '700', cursor: uploadingLr ? 'not-allowed' : 'pointer'
+              }}>
+                <Upload size={14} /> {uploadingLr ? 'Uploading...' : 'Attach LR Copy (PDF / Image)'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  disabled={uploadingLr}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleUploadLrCopy(e.target.files[0]);
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            )}
+          </div>
+
+          {lrCopyDoc ? (
+            <div style={{
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #86EFAC',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CheckCircle size={20} style={{ color: '#16A34A' }} />
+                <div>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>
+                    Transporter LR Copy Attached: {lrCopyDoc.name || 'Lorry_Receipt.pdf'}
+                  </span>
+                  <span style={{ fontSize: '11.5px', color: '#64748B', marginLeft: '8px' }}>
+                    ({lrCopyDoc.size || 'Attached'})
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 <button
                   type="button"
-                  onClick={() => setLrCopyDoc(null)}
+                  onClick={handlePreviewLrCopy}
                   style={{
-                    padding: '5px 10px',
+                    padding: '5px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #FCA5A5',
-                    backgroundColor: '#FEF2F2',
-                    color: '#EF4444',
+                    border: '1px solid #0E7490',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
                     fontSize: '11.5px',
                     fontWeight: '700',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}
                 >
-                  ✕ Remove
+                  <Eye size={13} /> View LR
                 </button>
-              )}
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setLrCopyDoc(null)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #FCA5A5',
+                      backgroundColor: '#FEF2F2',
+                      color: '#EF4444',
+                      fontSize: '11.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✕ Remove
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              border: '1.5px dashed #CBD5E1',
+              backgroundColor: '#F8FAFC',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
+                No LR Copy attached yet. You can attach it here or when confirming dispatch departure.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── VEHICLE LOADING PROOF PHOTOS SECTION ─── */}
       <div style={{
@@ -1375,15 +1214,11 @@ return (
         alignItems: 'center'
       }}>
         <div style={{ fontSize: '13px', color: '#64748B', fontWeight: '700' }}>
-          Dispatch Mode: <span style={{
-            color: deliveryMode === 'transport' ? '#0E7490' : deliveryMode === 'own_vehicle' ? '#2563EB' : '#059669',
+          Transport Mode: <span style={{
+            color: isTransport ? '#0E7490' : '#475569',
             fontWeight: '900'
           }}>
-            {deliveryMode === 'transport'
-              ? '3rd-Party Transport (VRL/ARC)'
-              : deliveryMode === 'own_vehicle'
-                ? 'Own Vehicle / Porter (No LR Required)'
-                : 'Self-Pickup / Direct Delivery (No LR Required)'}
+            {salesTransportMode} {isTransport && transp ? `(${transp})` : (!isTransport ? '(No LR Required)' : '')}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>

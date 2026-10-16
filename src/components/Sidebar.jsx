@@ -23,6 +23,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
   const [realAccountsAwaitingPOCount, setRealAccountsAwaitingPOCount] = useState(0);
   const [realAccountsGrnCount, setRealAccountsGrnCount] = useState(0);
   const [realPendingDispatchCount, setRealPendingDispatchCount] = useState(0);
+  const [realAccountsVerificationCount, setRealAccountsVerificationCount] = useState(0);
 
   useEffect(() => {
     const unsubscribe = prodModuleEngine.subscribe(() => {
@@ -56,6 +57,40 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             return !isCancelled && !isClosed;
           });
           setRealPendingDispatchCount(pendingDispatch.length);
+
+          const isAccountsEligible = (b) => {
+            if (!b) return false;
+            if (b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored' || (typeof b.status === 'string' && b.status.toLowerCase().includes('cancel'))) return false;
+            const s = String(b.status || '').toLowerCase().trim();
+            const isSentToAccounts = Boolean(
+              b.accountsVerification?.readyForAccounts ||
+              s.includes('sent to accounts') ||
+              s.includes('awaiting accounts') ||
+              b.pendingSalesDispatchPayment
+            );
+            const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
+            const isInvoiceOrLater = s.includes('invoice') || s.includes('loading') || s.includes('dispatched') || s.includes('delivered') || s.includes('completed') || s.includes('closed');
+            return isSentToAccounts || isAccDone || isInvoiceOrLater;
+          };
+
+          const isAccVerifiedOrder = (b) => {
+            const acc = b?.accountsVerification || {};
+            const s = String(b?.status || '').toLowerCase();
+            const isWhileDisp = b?.paymentType === 'Payment While Dispatch' || String(b?.paymentType || '').includes('While Dispatch');
+            const hasProof = Boolean(
+              b?.paymentProofDoc || b?.payments?.proofDocObj || b?.payments?.proofDoc || b?.balancePaymentProofDoc || b?.proofDoc
+            );
+            if (isWhileDisp && !hasProof) return false;
+            return Boolean(
+              acc.verified ||
+              s.includes('accounts verified') ||
+              b?.isAccountsDone ||
+              (acc.paymentDate && acc.totalAmount && (acc.paymentStatus || b?.paymentType === 'Net 30 Days' || b?.paymentType === 'Credit Payment'))
+            );
+          };
+
+          const pendingAccounts = boms.filter(b => isAccountsEligible(b) && !isAccVerifiedOrder(b));
+          setRealAccountsVerificationCount(pendingAccounts.length);
         }
         if (Array.isArray(pos)) {
           setRealPendingPOCount(pos.filter(p => p.status === 'Draft' || p.status === 'WAITING FOR APPROVAL' || p.status === 'Pending Approval' || p.statusType === 'draft' || p.statusType === 'pending').length);
@@ -206,7 +241,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Goods Receipt Note (GRN)', targetTab: 'Goods Receipt Note', icon: FileCheck, badge: realAccountsGrnCount > 0 ? String(realAccountsGrnCount) : undefined },
             { label: 'Store Inventory', targetTab: 'Inventory Stores', icon: Warehouse },
             { label: 'Raw Material Inventory', targetTab: 'Raw Material Directory', icon: Layers },
-            { label: 'Accounts Verification', icon: CheckCircle }
+            { label: 'Accounts Verification', icon: CheckCircle, badge: realAccountsVerificationCount > 0 ? String(realAccountsVerificationCount) : undefined }
           ]
         }
       ];

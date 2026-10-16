@@ -296,7 +296,7 @@ export default function CrmFollowupsView({
                   <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
                     <span>📅 Date: <strong>{f.date}</strong></span>
                     <span>⏰ Time: <strong>{f.time || '10:00 AM'}</strong></span>
-                    <span>👤 Rep: <strong>{f.assignedSalesperson}</strong></span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><User size={11} style={{ color: '#64748B' }} /> Rep: <strong>{f.assignedSalesperson}</strong></span>
                   </div>
                 </div>
               </div>

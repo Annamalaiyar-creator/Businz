@@ -24,7 +24,8 @@ import {
   MessageSquare,
   Smartphone,
   Send,
-  QrCode
+  QrCode,
+  Lock
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -2655,7 +2656,7 @@ function TemplateCustomizerDrawer({
                   }}>
                     <span style={{ fontWeight: '600' }}>Logo Dimensions:</span>
                     <span style={{ fontWeight: '700', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      🔒 Fixed Standard (56px)
+                      <Lock size={12} style={{ flexShrink: 0 }} /> Fixed Standard (56px)
                     </span>
                   </div>
                 </div>
@@ -2937,7 +2938,7 @@ function TemplateCustomizerDrawer({
                     }}>
                       <span style={{ fontWeight: '600' }}>Stamp Dimensions:</span>
                       <span style={{ fontWeight: '700', color: '#0E7490', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        🔒 Fixed Standard (230px)
+                        <Lock size={12} style={{ flexShrink: 0 }} /> Fixed Standard (230px)
                       </span>
                     </div>
                   )}

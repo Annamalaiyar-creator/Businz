@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Check, Eye, FileText, AlertCircle, AlertTriangle, X, CheckCircle, Clock,
   FileCheck, CheckSquare, XCircle, ChevronLeft, RotateCcw,
-  Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode
+  Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode, User
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
@@ -1162,7 +1162,10 @@ export default function InvoiceDetailModal({
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Sales Person</div>
-              <strong style={{ color: '#0E7490' }}>👤 {((inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong>
+              <strong style={{ color: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <User size={13} style={{ color: '#0E7490' }} />
+                {((inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}
+              </strong>
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Payment Type</div>

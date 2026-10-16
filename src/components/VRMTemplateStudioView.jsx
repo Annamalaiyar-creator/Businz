@@ -33,7 +33,8 @@ import {
   Eye,
   Settings2,
   Copy,
-  ShoppingCart
+  ShoppingCart,
+  Lock
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -540,11 +541,13 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
   const effectiveRole = userRole || localStorage.getItem('controlroom_user_role') || '';
   const isBillingRole = effectiveRole === 'Billing' || effectiveRole === 'Invoice Executive' || effectiveRole.toLowerCase().includes('billing');
   const isProcurementRole = effectiveRole === 'Procurement Head' || effectiveRole === 'Procurement Admin' || effectiveRole.toLowerCase().includes('procurement');
+  const isDispatchRole = effectiveRole === 'Dispatch Head' || effectiveRole === 'Dispatch' || effectiveRole === 'Dispatch Executive' || effectiveRole.toLowerCase().includes('dispatch');
 
   // Navigation Mode: 'hub' | 'editor'
   const [viewMode, setViewMode] = useState('hub');
-  const [activeCategory, setActiveCategory] = useState(() => isProcurementRole ? 'po' : 'pi');
+  const [activeCategory, setActiveCategory] = useState(() => isDispatchRole ? 'bom' : isProcurementRole ? 'po' : 'pi');
   const [activeTemplateId, setActiveTemplateId] = useState(() => {
+    if (isDispatchRole) return 'bom_std';
     if (isProcurementRole) return 'po_std';
     if (isBillingRole) return 'pi_tax_inv';
     return 'pi_std';
@@ -601,7 +604,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
 
   // Current working settings for the active template
   const [currentSettings, setCurrentSettings] = useState(() => {
-    const initialCat = isProcurementRole ? 'po' : 'pi';
+    const initialCat = isDispatchRole ? 'bom' : isProcurementRole ? 'po' : 'pi';
     const list = templatesStore[initialCat] || [];
     const def = list.find(t => t.isDefault) || list[0];
     const s = def ? { ...def.settings } : { ...DEFAULT_PI_TEMPLATE_SETTINGS };
@@ -982,11 +985,13 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
       }
     ];
 
-    const categories = isProcurementRole
-      ? allCategories.filter(c => c.key === 'po')
-      : isBillingRole 
-        ? allCategories.filter(c => c.key === 'pi') 
-        : allCategories.filter(c => c.key !== 'po');
+    const categories = isDispatchRole
+      ? allCategories.filter(c => c.key === 'bom')
+      : isProcurementRole
+        ? allCategories.filter(c => c.key === 'po')
+        : isBillingRole 
+          ? allCategories.filter(c => c.key === 'pi') 
+          : allCategories.filter(c => c.key !== 'po');
 
     const totalCount = categories.reduce((sum, c) => sum + c.templates.length, 0);
 
@@ -1029,14 +1034,16 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
               </div>
               <div>
                 <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.3px' }}>
-                  {isProcurementRole ? 'Purchase Order Templates' : 'Templates Studio'}
+                  {isDispatchRole ? 'BOM Templates Studio' : isProcurementRole ? 'Purchase Order Templates' : 'Templates Studio'}
                 </h1>
                 <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#64748B' }}>
-                  {isProcurementRole
-                    ? 'Manage, customize, and save executive print layouts for Purchase Orders.'
-                    : isBillingRole
-                      ? 'Manage, customize, and save executive print layouts for Invoices.'
-                      : 'Manage, customize, and save executive print layouts for Proforma Invoices, Quotations, and Bill of Materials.'}
+                  {isDispatchRole
+                    ? 'Manage, customize, and save executive print layouts for Bill of Materials (BOM).'
+                    : isProcurementRole
+                      ? 'Manage, customize, and save executive print layouts for Purchase Orders.'
+                      : isBillingRole
+                        ? 'Manage, customize, and save executive print layouts for Invoices.'
+                        : 'Manage, customize, and save executive print layouts for Proforma Invoices, Quotations, and Bill of Materials.'}
                 </p>
               </div>
             </div>
@@ -1061,7 +1068,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
         {/* Category Cards Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: (isBillingRole || isProcurementRole) ? 'minmax(360px, 720px)' : 'repeat(auto-fit, minmax(360px, 1fr))',
+          gridTemplateColumns: (isBillingRole || isProcurementRole || isDispatchRole) ? 'minmax(360px, 720px)' : 'repeat(auto-fit, minmax(360px, 1fr))',
           gap: '24px'
         }}>
           {categories.map((cat) => {
@@ -1253,7 +1260,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                     }}
                   >
                     <Sliders size={14} />
-                    Customize {cat.title.split(' ')[0]}
+                    Customize {cat.key === 'bom' ? 'BOM' : cat.title.split(' ')[0]}
                   </button>
 
                   <button
@@ -1263,7 +1270,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                       setActiveCategory(cat.key);
                       setActiveTemplateId(defaultTmpl.id);
                       setCurrentSettings({ ...defaultTmpl.settings });
-                      setNewTemplateName(`${cat.title.split(' ')[0]} Variant`);
+                      setNewTemplateName(cat.key === 'bom' ? 'BOM Variant' : `${cat.title.split(' ')[0]} Variant`);
                       setNewTemplateModalOpen(true);
                     }}
                     style={{
@@ -1840,7 +1847,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                       Logo Dimensions:
                     </span>
                     <span style={{ fontSize: '12px', fontWeight: '800', color: activeAccent, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      🔒 Fixed Standard (56px)
+                      <Lock size={12} style={{ flexShrink: 0 }} /> Fixed Standard (56px)
                     </span>
                   </div>
 
@@ -1934,7 +1941,7 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                       Stamp Dimensions:
                     </span>
                     <span style={{ fontSize: '12px', fontWeight: '800', color: activeAccent, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      🔒 Fixed Standard (230px)
+                      <Lock size={12} style={{ flexShrink: 0 }} /> Fixed Standard (230px)
                     </span>
                   </div>
 
@@ -1944,8 +1951,8 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
                       <label style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>
                         Official Company Stamp
                       </label>
-                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '10px' }}>
-                        Active 🔒
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        Active <Lock size={11} style={{ flexShrink: 0 }} />
                       </span>
                     </div>
 

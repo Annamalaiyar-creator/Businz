@@ -3,7 +3,7 @@ import {
   Plus, Check, Trash2, Eye, Search, X, CheckCircle, ArrowLeft,
   Calendar, Edit3, Filter, RotateCcw, UploadCloud, ChevronDown,
   Package, Info, Upload, Receipt, Image, Pause, Save, RefreshCw,
-  ClipboardList, Clock
+  ClipboardList, Clock, User
 } from "lucide-react";
 import WorkOrdersView from './WorkOrdersView';
 import { prodModuleEngine } from '../../utils/productionModuleEngine';
@@ -3175,9 +3175,13 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                                   borderRadius: '4px',
                                   backgroundColor: '#ECFEFF',
                                   color: '#0E7490',
-                                  border: '1px solid #CFFAFE'
+                                  border: '1px solid #CFFAFE',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
                                 }}>
-                                  <span>👤 Sales Person:</span>
+                                  <User size={12} style={{ color: '#0E7490' }} />
+                                  <span>Sales Person:</span>
                                   <strong style={{ color: '#155E75' }}>{log.salesPersonFull || log.salesPerson}</strong>
                                 </span>
                               )}
@@ -3233,7 +3237,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                             {log.salesPerson ? (
                               <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <span style={{ fontSize: '12px' }}>👤</span>
+                                  <User size={13} style={{ color: '#0E7490' }} />
                                   <span style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px' }}>
                                     {log.salesPerson}
                                   </span>
@@ -3402,7 +3406,10 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                               alignItems: 'center',
                               gap: '5px'
                             }}>
-                              <span>👤 Sales Person:</span>
+                              <span>
+                                <User size={12} style={{ color: '#0E7490', display: 'inline', verticalAlign: '-1px', marginRight: '3px' }} />
+                                Sales Person:
+                              </span>
                               <strong style={{ color: '#155E75' }}>{log.salesPersonFull || log.salesPerson}</strong>
                             </span>
                           ) : (
@@ -3466,8 +3473,8 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B', paddingTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
                         <span>Customer / Order: <strong style={{ color: '#0F172A' }}>{log.source || 'Warehouse Inventory Store'}</strong></span>
                         {log.salesPerson && (
-                          <span style={{ backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #CFFAFE', color: '#0E7490', fontWeight: '700' }}>
-                            👤 Sales Person: <strong>{log.salesPersonFull || log.salesPerson}</strong>
+                          <span style={{ backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #CFFAFE', color: '#0E7490', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <User size={12} style={{ color: '#0E7490' }} /> Sales Person: <strong>{log.salesPersonFull || log.salesPerson}</strong>
                           </span>
                         )}
                         <span>Bay: <strong style={{ color: '#0E7490' }}>{log.location || selectedMat.store || 'Finished Goods Bay'}</strong></span>

@@ -3,7 +3,7 @@ import {
   Plus, Check, Trash2, Eye, FileText, Search, AlertCircle, AlertTriangle, X, XCircle,
   CheckCircle, Clock, Calendar, Edit3, RotateCcw, UploadCloud, ChevronDown, ChevronUp,
   Truck, ShoppingCart, Upload, Printer, Download, Layers, CreditCard, Bell, MoreHorizontal, FileCheck, CheckSquare,
-  Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes
+  Camera, Video, LayoutGrid, List, Layout, Sparkles, PackageCheck, Image, Image as ImageIcon, FileSpreadsheet, Loader, Lock, Save, Boxes, User
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -392,10 +392,14 @@ export default function BomOrdersView(props) {
       });
     }
 
-    // 2. Delivery Date (auto-populate default if missing)
+    // 2. Delivery Date (mandatory - sales person must enter it)
     if (!isDraft && (!newBomDeliveryDate || !newBomDeliveryDate.trim())) {
-      const defaultDelivery = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
-      setNewBomDeliveryDate(defaultDelivery);
+      errors.deliveryDate = 'Delivery Date is required';
+      missingList.push({
+        field: 'Delivery Date',
+        message: 'Please select an expected delivery date.',
+        targetId: 'field-newBomDeliveryDate'
+      });
     }
 
     // 3. Materials / Items List
@@ -1102,8 +1106,7 @@ export default function BomOrdersView(props) {
       setNewBomRemarks('');
       const effectivePiPaymentTerm = pendingPi.paymentTerms || pendingPi.paymentType || pendingPi.payment_terms || pendingPi.terms || '100% Paid';
       setNewBomPaymentType(normalizePaymentTerm(effectivePiPaymentTerm));
-      const defaultDelivery = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
-      setNewBomDeliveryDate(pendingPi.deliveryDate || defaultDelivery);
+      setNewBomDeliveryDate(pendingPi.deliveryDate || '');
       if (pendingPi.creditDays) setNewBomCreditDays(pendingPi.creditDays);
       if (pendingPi.partialAmount) setNewBomPartialAmount(String(pendingPi.partialAmount));
       if (pendingPi.paymentProofDoc || pendingPi.proofDoc) setNewBomPaymentProofDoc(pendingPi.paymentProofDoc || pendingPi.proofDoc);
@@ -5556,8 +5559,8 @@ export default function BomOrdersView(props) {
               <label style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', display: 'block', marginBottom: '6px' }}>
                 SALES PERSON / CREATOR
               </label>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F0FDFA', padding: '0 12px', borderRadius: '8px', border: '1px solid #CCFBF1' }}>
-                👤 {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', height: '40px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDFA', padding: '0 12px', borderRadius: '8px', border: '1px solid #CCFBF1' }}>
+                <User size={14} style={{ color: '#0E7490', flexShrink: 0 }} /> {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
               </div>
             </div>
           </div>
@@ -6964,7 +6967,7 @@ export default function BomOrdersView(props) {
                       <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
                       <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
                         <span style={{ backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          👤 {(row.salesPerson || row.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
+                          <User size={13} style={{ color: '#0E7490', flexShrink: 0 }} /> {(row.salesPerson || row.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
@@ -7156,36 +7159,50 @@ export default function BomOrdersView(props) {
             );
           })()}
 
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
-              const targetRow = codeVal
-                ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
-                : (filteredRows && filteredRows[0] ? filteredRows[0] : null);
-              setSelectedRows([]);
-              setQuickPreviewRecord(targetRow);
-            }}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-            }}
-          >
-            <Eye size={14} style={{ color: '#0E7490' }} /> View Details
-          </button>
+          {(() => {
+            const isEligibleForDetails = (selectedRows || []).some(codeVal => {
+              const b = (bomStore || []).find(x => (x.bomCode || x.code || x.id) === codeVal) ||
+                        (filteredRows || []).find(r => (r.bomCode || r.code || r.id) === codeVal);
+              if (!b) return false;
+              const st = String(b.status || '').toLowerCase();
+              const isPartiallyPacked = b.dispatchPackingStatus === 'Partially Packed' || st.includes('partially packed');
+              const isCompleted = st.includes('completed') || st.includes('fully dispatched');
+              return isPartiallyPacked || isCompleted;
+            });
+            if (!isEligibleForDetails) return null;
+            return (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+                  const targetRow = codeVal
+                    ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
+                    : (filteredRows && filteredRows[0] ? filteredRows[0] : null);
+                  setSelectedRows([]);
+                  setQuickPreviewRecord(targetRow);
+                }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#1E293B',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+              >
+                <Eye size={14} style={{ color: '#0E7490' }} /> View Details
+              </button>
+            );
+          })()}
 
           <button
             onClick={() => {
@@ -7510,8 +7527,8 @@ export default function BomOrdersView(props) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', backgroundColor: '#FFFFFF', padding: '14px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
                     <div>
                       <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block' }}>Sales Creator</span>
-                      <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800' }}>
-                        👤 {(quickPreviewRecord.salesPerson || quickPreviewRecord.createdBy || sourcePi?.salesPerson || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
+                      <strong style={{ fontSize: '13px', color: '#0E7490', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <User size={13} style={{ color: '#0E7490', flexShrink: 0 }} /> {(quickPreviewRecord.salesPerson || quickPreviewRecord.createdBy || sourcePi?.salesPerson || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
                       </strong>
                     </div>
                     <div>

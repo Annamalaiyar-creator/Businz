@@ -104,7 +104,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           }
         }
       }
-    } catch (_) {}
+    } catch {}
   }
 
   // Extract clean addresses
@@ -148,7 +148,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           }
         }
       }
-    } catch (_) {}
+    } catch {}
   }
 
   const billingLines = formatAddressLines(rawBAddr, bCity, bState, bPin);
@@ -188,9 +188,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         backgroundColor: '#FFFFFF',
         color: '#0F172A',
         fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif",
-        fontSize: '11.5px',
-        lineHeight: '1.45',
-        padding: '24px 30px',
+        fontSize: '10.5px',
+        lineHeight: '1.35',
+        padding: '16px 20px',
         overflow: 'visible'
       }}
     >
@@ -198,7 +198,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         {`
           @page {
             size: A4 portrait;
-            margin: 10mm 12mm !important;
+            margin: 6mm 8mm !important;
           }
 
           @media print {
@@ -207,6 +207,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               height: auto !important;
               min-height: 0 !important;
               overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
               background: #ffffff !important;
               margin: 0 !important;
               padding: 0 !important;
@@ -242,10 +244,17 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               backdrop-filter: none !important;
               -webkit-backdrop-filter: none !important;
               overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
               height: auto !important;
               min-height: 0 !important;
+              max-height: none !important;
               width: 100% !important;
               max-width: 100% !important;
+              top: auto !important;
+              bottom: auto !important;
+              left: auto !important;
+              right: auto !important;
             }
 
             .vrm-bom-modal-card {
@@ -256,8 +265,11 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               box-shadow: none !important;
               border-radius: 0 !important;
               overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
               height: auto !important;
               min-height: 0 !important;
+              max-height: none !important;
               background: transparent !important;
               margin: 0 !important;
               padding: 0 !important;
@@ -270,7 +282,20 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               print-color-adjust: exact !important;
             }
 
-            /* Natural flow layout: begins at top of Page 1 and paginates cleanly onto Page 2 */
+            #${id} div,
+            #${id} table,
+            #${id} tbody,
+            #${id} thead,
+            #${id} tfoot,
+            #${id} tr,
+            #${id} td,
+            #${id} th {
+              overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
+            }
+
+            /* Natural flow layout: begins at top of Page 1 and paginates cleanly onto subsequent pages */
             #${id} {
               visibility: visible !important;
               position: relative !important;
@@ -286,12 +311,16 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
               padding: 0 !important;
               margin: 0 !important;
               overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
               background: #ffffff !important;
               display: block !important;
             }
 
             table {
               page-break-inside: auto !important;
+              break-inside: auto !important;
+              width: 100% !important;
             }
 
             thead {
@@ -315,62 +344,81 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         `}
       </style>
 
-      {/* 1. VRM OFFICIAL HEADER & COMPANY ADDRESS */}
-      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderBottom: '2px solid #0E7490', paddingBottom: '12px', marginBottom: '14px', boxSizing: 'border-box' }}>
-        <tbody>
-          <tr>
-            <td style={{ width: '56%', verticalAlign: 'top', paddingRight: '16px', boxSizing: 'border-box' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                <img
-                  src={branding.logoUrl || VRM_OFFICIAL_LOGO}
-                  alt="VRM Structures Logo"
-                  style={{ height: '42px', maxWidth: '180px', objectFit: 'contain' }}
-                  onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_LOGO; }}
-                />
-                <div>
-                  <h2 style={{ margin: 0, fontSize: '15.5px', fontWeight: '900', color: '#0E7490', letterSpacing: '-0.2px' }}>
-                    VRM STRUCTURES INDIA PVT LTD
-                  </h2>
-                </div>
-              </div>
-              <div style={{ fontSize: '10.5px', color: '#334155', lineHeight: '1.4', marginTop: '3px' }}>
-                1427, GNT Road, Nagappa Industrial Estate, Puzhal, Chennai, Tamil Nadu - 600066<br />
-                <strong>GSTIN:</strong> 33AAGCV4262N1ZZ &nbsp;|&nbsp; <strong>Phone:</strong> +91 98847 20789 &nbsp;|&nbsp; <strong>Email:</strong> sales@vrmstructures.com
-              </div>
-            </td>
-            <td style={{ width: '44%', verticalAlign: 'top', textAlign: 'right', boxSizing: 'border-box' }}>
-              <div style={{ fontSize: '17px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                BILL OF MATERIALS (BOM)
-              </div>
-              <table style={{ marginLeft: 'auto', borderCollapse: 'collapse', border: '1px solid #CBD5E1', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#F8FAFC', fontSize: '11px', width: '240px' }}>
-                <tbody>
-                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                    <td style={{ padding: '5px 10px', color: '#64748B', fontWeight: '700', textAlign: 'left', backgroundColor: '#F1F5F9' }}>BOM Number</td>
-                    <td style={{ padding: '5px 12px', color: '#0E7490', fontWeight: '800', textAlign: 'right' }}>{bomNumber}</td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                    <td style={{ padding: '5px 10px', color: '#64748B', fontWeight: '700', textAlign: 'left', backgroundColor: '#F1F5F9' }}>BOM Date</td>
-                    <td style={{ padding: '5px 12px', color: '#0F172A', fontWeight: '700', textAlign: 'right' }}>{bomDate}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '5px 10px', color: '#64748B', fontWeight: '700', textAlign: 'left', backgroundColor: '#F1F5F9' }}>Sales Person</td>
-                    <td style={{ padding: '5px 12px', color: '#0F172A', fontWeight: '700', textAlign: 'right' }}>{salesPersonName}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      {/* 1. CLEAN OFFICIAL HEADER (LEFT: LOGO + INFO | RIGHT: TITLE) */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        borderBottom: '2px solid #0E7490',
+        paddingBottom: '8px',
+        marginBottom: '8px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        {/* Left: Logo & Company Information */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0, paddingRight: '12px' }}>
+          <img
+            src={branding.logoUrl || VRM_OFFICIAL_LOGO}
+            alt="VRM Structures Logo"
+            style={{ height: '36px', maxWidth: '140px', objectFit: 'contain', flexShrink: 0 }}
+            onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_LOGO; }}
+          />
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ margin: 0, fontSize: '13.5px', fontWeight: '900', color: '#0E7490', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
+              VRM STRUCTURES INDIA PVT LTD
+            </h2>
+            <div style={{ fontSize: '9.5px', color: '#334155', lineHeight: '1.3', marginTop: '2px' }}>
+              1427, GNT Road, Nagappa Industrial Estate, Puzhal, Chennai, Tamil Nadu - 600066<br />
+              <strong>GSTIN:</strong> 33AAGCV4262N1ZZ &nbsp;|&nbsp; <strong>Phone:</strong> +91 98847 20789 &nbsp;|&nbsp; <strong>Email:</strong> sales@vrmstructures.com
+            </div>
+          </div>
+        </div>
 
-      {/* 2. BILLING ADDRESS & SHIPPING ADDRESS (STRUCTURED CSS GRID: NEVER OVERFLOWS) */}
+        {/* Right: Document Title */}
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '1.2' }}>
+            BILL OF MATERIALS
+          </div>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', marginTop: '2px' }}>
+            Official Material Specification
+          </div>
+        </div>
+      </div>
+
+      {/* 2. DEDICATED METADATA BAR (NEVER OVERLAPS) */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        border: '1px solid #CBD5E1',
+        borderRadius: '4px',
+        backgroundColor: '#F8FAFC',
+        marginBottom: '8px',
+        fontSize: '10px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ padding: '4px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
+          <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Number: </span>
+          <span style={{ color: '#0E7490', fontWeight: '800' }}>{bomNumber}</span>
+        </div>
+        <div style={{ padding: '4px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
+          <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Date: </span>
+          <span style={{ color: '#0F172A', fontWeight: '700' }}>{bomDate}</span>
+        </div>
+        <div style={{ padding: '4px 10px', whiteSpace: 'nowrap' }}>
+          <span style={{ color: '#64748B', fontWeight: '700' }}>Sales Person: </span>
+          <span style={{ color: '#0F172A', fontWeight: '700' }}>{salesPersonName}</span>
+        </div>
+      </div>
+
+      {/* 3. BILLING ADDRESS & SHIPPING ADDRESS */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         border: '1px solid #CBD5E1',
-        borderRadius: '6px',
-        overflow: 'hidden',
-        marginBottom: '14px',
+        borderRadius: '4px',
+        overflow: 'visible',
+        marginBottom: '8px',
         backgroundColor: '#FFFFFF',
         width: '100%',
         boxSizing: 'border-box'
@@ -380,42 +428,42 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           <div style={{
             backgroundColor: '#ECFEFF',
             borderBottom: '1px solid #CBD5E1',
-            padding: '6px 12px',
+            padding: '4px 8px',
             color: '#0E7490',
-            fontSize: '10.5px',
+            fontSize: '9.5px',
             fontWeight: '800',
             textTransform: 'uppercase',
-            letterSpacing: '0.4px'
+            letterSpacing: '0.3px'
           }}>
             Customer &amp; Billing Address (Bill To)
           </div>
-          <div style={{ padding: '8px 12px', fontSize: '11px', lineHeight: '1.45', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
-            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px', marginBottom: '2px' }}>
+          <div style={{ padding: '5px 8px', fontSize: '10px', lineHeight: '1.35', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '11px', marginBottom: '1px' }}>
               {resolvedCustomer}
             </div>
             {b.companyName && b.companyName !== resolvedCustomer && (
-              <div style={{ color: '#475569', fontWeight: '600', marginBottom: '2px', fontSize: '10.5px' }}>{b.companyName}</div>
+              <div style={{ color: '#475569', fontWeight: '600', marginBottom: '1px', fontSize: '9.5px' }}>{b.companyName}</div>
             )}
             {b.contactPerson && (
-              <div style={{ color: '#475569', fontSize: '10.5px', marginBottom: '2px' }}>
+              <div style={{ color: '#475569', fontSize: '9.5px' }}>
                 <strong>Contact:</strong> {b.contactPerson}
               </div>
             )}
             {b.gstNo && b.gstNo !== '—' && (
-              <div style={{ color: '#0E7490', fontSize: '10.5px', fontWeight: '700', marginBottom: '3px' }}>
+              <div style={{ color: '#0E7490', fontSize: '9.5px', fontWeight: '700' }}>
                 <strong>GSTIN:</strong> {b.gstNo}
               </div>
             )}
-            <div style={{ color: '#334155', marginTop: '2px' }}>
+            <div style={{ color: '#334155', marginTop: '1px' }}>
               {billingLines.map((line, idx) => (
-                <div key={idx} style={{ lineHeight: '1.35' }}>{line}</div>
+                <div key={idx} style={{ lineHeight: '1.25' }}>{line}</div>
               ))}
             </div>
             {b.mobile && b.mobile !== '—' && (
-              <div style={{ marginTop: '4px', fontSize: '10.5px', color: '#334155' }}><strong>Phone:</strong> {b.mobile}</div>
+              <div style={{ marginTop: '2px', fontSize: '9.5px', color: '#334155' }}><strong>Phone:</strong> {b.mobile}</div>
             )}
             {b.email && b.email !== '—' && (
-              <div style={{ fontSize: '10.5px', color: '#334155' }}><strong>Email:</strong> {b.email}</div>
+              <div style={{ fontSize: '9.5px', color: '#334155' }}><strong>Email:</strong> {b.email}</div>
             )}
           </div>
         </div>
@@ -425,26 +473,26 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           <div style={{
             backgroundColor: '#F8FAFC',
             borderBottom: '1px solid #CBD5E1',
-            padding: '6px 12px',
+            padding: '4px 8px',
             color: '#475569',
-            fontSize: '10.5px',
+            fontSize: '9.5px',
             fontWeight: '800',
             textTransform: 'uppercase',
-            letterSpacing: '0.4px'
+            letterSpacing: '0.3px'
           }}>
             Delivery Destination &amp; Consignee (Ship To)
           </div>
-          <div style={{ padding: '8px 12px', fontSize: '11px', lineHeight: '1.45', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
-            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px', marginBottom: '2px' }}>
+          <div style={{ padding: '5px 8px', fontSize: '10px', lineHeight: '1.35', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '11px', marginBottom: '1px' }}>
               {resolvedCustomer} — Delivery Site
             </div>
-            <div style={{ color: '#334155', marginTop: '2px' }}>
+            <div style={{ color: '#334155', marginTop: '1px' }}>
               {deliveryLines.map((line, idx) => (
-                <div key={idx} style={{ lineHeight: '1.35' }}>{line}</div>
+                <div key={idx} style={{ lineHeight: '1.25' }}>{line}</div>
               ))}
             </div>
             {(b.siteContact || b.contactPerson || b.mobile) && (b.siteContact !== '—' && b.mobile !== '—') && (
-              <div style={{ marginTop: '4px', fontSize: '10.5px', color: '#334155' }}>
+              <div style={{ marginTop: '2px', fontSize: '9.5px', color: '#334155' }}>
                 <strong>Site Contact:</strong> {b.siteContact || b.contactPerson || b.mobile}
               </div>
             )}
@@ -452,30 +500,27 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         </div>
       </div>
 
-      {/* 3. MATERIAL SPECIFICATIONS TABLE (PRODUCT, UOM, QUANTITY ONLY) */}
+      {/* 4. MATERIAL SPECIFICATIONS TABLE (PRODUCT, UOM, QUANTITY ONLY) */}
       <table style={{
         width: '100%',
-        tableLayout: 'fixed',
         borderCollapse: 'collapse',
         border: '1px solid #CBD5E1',
-        borderRadius: '6px',
-        overflow: 'hidden',
-        marginBottom: '14px',
-        fontSize: '11px',
+        marginBottom: '8px',
+        fontSize: '10px',
         boxSizing: 'border-box'
       }}>
         <thead>
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
-            <th style={{ padding: '7px 8px', width: '40px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '10.5px', boxSizing: 'border-box' }}>#</th>
-            <th style={{ padding: '7px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '10.5px', boxSizing: 'border-box' }}>Product / Material Name</th>
-            <th style={{ padding: '7px 10px', width: '80px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.25)', fontSize: '10.5px', boxSizing: 'border-box' }}>UOM</th>
-            <th style={{ padding: '7px 10px', width: '85px', textAlign: 'center', fontSize: '10.5px', boxSizing: 'border-box' }}>Quantity</th>
+            <th style={{ padding: '4px 6px', width: '32px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>#</th>
+            <th style={{ padding: '4px 8px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>Product / Material Name</th>
+            <th style={{ padding: '4px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>UOM</th>
+            <th style={{ padding: '4px 6px', width: '70px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>Quantity</th>
           </tr>
         </thead>
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
+              <td colSpan={4} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8', fontSize: '10.5px' }}>
                 No itemized materials in this BOM record.
               </td>
             </tr>
@@ -490,26 +535,26 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                   key={idx}
                   style={{
                     borderBottom: '1px solid #E2E8F0',
-                    backgroundColor: idx % 2 === 1 ? '#FAFBFC' : '#FFFFFF',
+                    backgroundColor: idx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
                     pageBreakInside: 'avoid',
                     breakInside: 'avoid'
                   }}
                 >
-                  <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748B', borderRight: '1px solid #E2E8F0' }}>
+                  <td style={{ padding: '3.5px 6px', textAlign: 'center', color: '#64748B', borderRight: '1px solid #E2E8F0' }}>
                     {idx + 1}
                   </td>
-                  <td style={{ padding: '6px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
-                    <strong style={{ color: '#0F172A', fontSize: '11.5px' }}>{itemName}</strong>
+                  <td style={{ padding: '3.5px 8px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
+                    <strong style={{ color: '#0F172A', fontSize: '10.5px' }}>{itemName}</strong>
                     {description && (
-                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px', lineHeight: '1.3' }}>
-                        {description}
-                      </div>
+                      <span style={{ fontSize: '9px', color: '#64748B', marginLeft: '6px', fontWeight: '500' }}>
+                        ({description})
+                      </span>
                     )}
                   </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
+                  <td style={{ padding: '3.5px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
                     {item.uom || item.unit || 'NOS'}
                   </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '11.5px' }}>
+                  <td style={{ padding: '3.5px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '10.5px' }}>
                     {qty}
                   </td>
                 </tr>
@@ -519,11 +564,11 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         </tbody>
         {items.length > 0 && (
           <tfoot>
-            <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #CBD5E1', fontWeight: '800' }}>
-              <td colSpan={3} style={{ padding: '7px 12px', textAlign: 'right', color: '#64748B', fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            <tr style={{ backgroundColor: '#F1F5F9', borderTop: '1.5px solid #CBD5E1', fontWeight: '800' }}>
+              <td colSpan={3} style={{ padding: '5px 8px', textAlign: 'right', color: '#475569', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 Total Quantity:
               </td>
-              <td style={{ padding: '7px 10px', textAlign: 'center', color: '#0E7490', fontSize: '12.5px', fontWeight: '900' }}>
+              <td style={{ padding: '5px 6px', textAlign: 'center', color: '#0E7490', fontSize: '11.5px', fontWeight: '900' }}>
                 {totalQuantity}
               </td>
             </tr>
@@ -531,29 +576,19 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         )}
       </table>
 
-      {/* 4. CLEAN AUTHORIZED SIGNATORY (NO STAMP / NO SEAL) */}
-      <div className="print-avoid-break" style={{ borderTop: '1.5px solid #CBD5E1', paddingTop: '12px', marginTop: '16px', display: 'flex', justifyContent: 'flex-end', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-        <div style={{ textAlign: 'center', minWidth: '200px' }}>
-          <div style={{ height: '35px' }}></div>
-          <div style={{ borderTop: '1.5px dashed #94A3B8', paddingTop: '5px', width: '100%' }}>
-            <strong style={{ color: '#0F172A', fontSize: '11px', display: 'block' }}>For VRM Structures India Pvt Ltd</strong>
-            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>Authorized Signatory</div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
 
 export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true }) {
-  if (!bomData) return null;
-  const b = bomData;
+  const b = bomData || {};
 
   const handlePrint = () => {
     window.print();
   };
 
   useEffect(() => {
+    if (!bomData) return;
     if (typeof document !== 'undefined') {
       document.body.classList.add('vrm-bom-print-active');
     }
@@ -562,15 +597,17 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
         document.body.classList.remove('vrm-bom-print-active');
       }
     };
-  }, []);
+  }, [bomData]);
 
   useEffect(() => {
-    if (!autoPrint) return;
+    if (!bomData || !autoPrint) return;
     const timer = setTimeout(() => {
       window.print();
     }, 400);
     return () => clearTimeout(timer);
-  }, [autoPrint]);
+  }, [bomData, autoPrint]);
+
+  if (!bomData) return null;
 
   const bomNumber = b.bomCode || b.code || b.piNo || b.id || 'BOM Order';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, Lock } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -2116,9 +2116,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    if (validUntilDate && validUntilDate < todayStr) {
+    if (!validUntilDate || !validUntilDate.trim()) {
       missingList.push({
-        field: 'Payment Due / Valid Until Date',
+        field: 'Valid Until Date',
+        message: 'Please select a Valid Until Date.',
+        targetId: 'pi-field-validUntil'
+      });
+    } else if (validUntilDate < todayStr) {
+      missingList.push({
+        field: 'Valid Until Date',
         message: 'Valid Until date cannot be in the past or a finished date.',
         targetId: 'pi-field-validUntil'
       });
@@ -3850,11 +3856,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label htmlFor="pi-field-validUntil" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Payment Due / Valid Until Date
+                    Valid Until Date <span style={{ color: '#EF4444' }}>*</span>
                   </label>
-                  <input name="validUntilDate" aria-label="Payment Due / Valid Until Date"
+                  <input name="validUntilDate" aria-label="Valid Until Date"
                     id="pi-field-validUntil"
                     type="date"
+                    required
                     value={validUntilDate}
                     min={new Date().toISOString().split('T')[0]}
                     onChange={(e) => {
@@ -4172,7 +4179,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   {name}
                                 </div>
                                 <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                  {contact && <span>👤 {contact}</span>}
+                                  {contact && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><User size={11} style={{ color: '#64748B' }} /> {contact}</span>}
                                   {phone && <span>📞 {phone}</span>}
                                   {city && <span>📍 {city}</span>}
                                 </div>
@@ -6829,7 +6836,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
             {/* Notice badge */}
             <div style={{ backgroundColor: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: '8px', padding: '10px 12px', fontSize: '11.5px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '15px' }}>🔒</span>
+              <Lock size={15} style={{ color: '#64748B', flexShrink: 0 }} />
               <span>This custom set exists <strong>only in this PI</strong> and will not be added to the master preset dropdown.</span>
             </div>
 

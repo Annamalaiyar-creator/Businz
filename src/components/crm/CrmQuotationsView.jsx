@@ -329,7 +329,7 @@ export default function CrmQuotationsView({
   const [quoteCode, setQuoteCode] = useState('');
   const [quoteDate, setQuoteDate] = useState(new Date().toISOString().split('T')[0]);
   const [validUntilDate, setValidUntilDate] = useState(new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
-  const [deliveryDate, setDeliveryDate] = useState(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
+  const [deliveryDate, setDeliveryDate] = useState('');
   const [salesPerson, setSalesPerson] = useState(getActiveUserName());
 
   // Customer Info
@@ -770,7 +770,7 @@ export default function CrmQuotationsView({
       .catch(() => {});
     setQuoteDate(new Date().toISOString().split('T')[0]);
     setValidUntilDate(new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]);
-    setDeliveryDate(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
+    setDeliveryDate('');
     setCustomerName('');
     setContactPerson('');
     setPhone('');

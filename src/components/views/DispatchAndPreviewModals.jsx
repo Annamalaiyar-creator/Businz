@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail
+  Check, X, FileText, Download, CheckCircle, CheckSquare, Printer, Receipt, FileCheck, AlertTriangle, XCircle, MessageSquare, Mail, User
 } from "lucide-react";
 import { getMediaFromCache } from "../../utils/otherViewsShared";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -22,7 +22,7 @@ import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
                 Order & BOM Flow Successfully Completed!
               </h2>
               <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0' }}>
-                BOM Reference: <strong style={{ color: '#2563EB' }}>{completedBomSummaryModal.bomCode}</strong> • Sales Creator: <strong style={{ color: '#0E7490' }}>👤 {(completedBomSummaryModal.salesPerson || completedBomSummaryModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Customer: <strong>{completedBomSummaryModal.customer}</strong>
+                BOM Reference: <strong style={{ color: '#2563EB' }}>{completedBomSummaryModal.bomCode}</strong> • Sales Creator: <strong style={{ color: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><User size={13} style={{ color: '#0E7490' }} /> {(completedBomSummaryModal.salesPerson || completedBomSummaryModal.createdBy || 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}</strong> • Customer: <strong>{completedBomSummaryModal.customer}</strong>
               </p>
             </div>
 

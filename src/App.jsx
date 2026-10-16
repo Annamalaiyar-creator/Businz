@@ -686,7 +686,7 @@ function App() {
             (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) ? (
               <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (
-              <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : 'Proforma Invoice')} />
+              <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : (String(userRole || '').toLowerCase().includes('dispatch') ? 'Dispatch Orders' : 'Proforma Invoice'))} />
             )
           ) : activeTab === 'Purchase Orders' ? (
             <PurchaseOrdersView 

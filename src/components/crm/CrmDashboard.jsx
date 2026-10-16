@@ -4,7 +4,7 @@ import {
   FileText, Calendar, ArrowUpRight, Clock, Sparkles,
   Layers, ChevronRight, X, ArrowRight, Check, Eye,
   BarChart3, Plus, MessageSquare, Building2, Award,
-  IndianRupee, Zap, Target, LayoutGrid, Kanban, Filter
+  IndianRupee, Zap, Target, LayoutGrid, Kanban, Filter, User
 } from 'lucide-react';
 import { STAGE_PROBABILITIES } from '../../services/crmStore';
 
@@ -777,8 +777,8 @@ export default function CrmDashboard({
                             <span style={{ fontSize: '13px', fontWeight: '900', color: '#0E7490' }}>
                               ₹ {parseFloat(opp.dealValue || 0).toLocaleString('en-IN')}
                             </span>
-                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>
-                              👤 {(opp.salesperson || 'Rep').replace(/\s*\([^)]*\)/g, '').trim()}
+                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <User size={12} style={{ color: '#64748B' }} /> {(opp.salesperson || 'Rep').replace(/\s*\([^)]*\)/g, '').trim()}
                             </span>
                           </div>
 

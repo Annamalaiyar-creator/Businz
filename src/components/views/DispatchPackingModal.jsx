@@ -14,6 +14,24 @@ import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomSto
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
 /**
+ * Helper to deduplicate repeated address segments so delivery address is never printed multiple times
+ */
+function cleanDisplayAddress(addr) {
+  if (!addr || typeof addr !== 'string') return addr || '';
+  const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+  const seen = new Set();
+  const unique = [];
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      unique.push(part);
+    }
+  }
+  return unique.join(', ');
+}
+
+/**
  * Async Dispatch Photo Thumbnail Component
  * Resolves signed URLs, local caches, and fallback server uploads asynchronously
  * so photos never show a black or broken preview.
@@ -167,6 +185,7 @@ export default function DispatchPackingModal({
 }) {
   const [showDispatchCameraModal, setShowDispatchCameraModal] = useState(false);
   const [showAddPhotoMenu, setShowAddPhotoMenu] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [dispatchCameraError, setDispatchCameraError] = useState('');
   const [localActiveMediaPreview, setLocalActiveMediaPreview] = useState(null);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -328,14 +347,34 @@ export default function DispatchPackingModal({
   const rawItems = (dispatchPackingModal.items || []).map(it => {
     const nameStr = (it.name || it.c2 || 'Item').toLowerCase().trim();
     const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (it.code || it.itemCode || it.productCode || it.c1 || null));
-    return { name: it.name || it.c2 || 'Item', code, bomQty: it.qty || 1, packed: (isAccountsLocked || isAlreadySentToAccounts) ? true : false };
+    return {
+      name: it.name || it.c2 || 'Item',
+      code,
+      bomQty: it.qty || 1,
+      packed: (isAccountsLocked || isAlreadySentToAccounts) ? true : false,
+      isPresetItem: Boolean(it.isPresetItem),
+      presetGroupId: it.presetGroupId || null,
+      presetName: it.presetName || null,
+      category: it.category || null,
+      cutLengthMm: it.cutLengthMm || it.lengthMm || null
+    };
   });
   const itemsToPack = (dispatchPackingModal.dispatchPacking && Array.isArray(dispatchPackingModal.dispatchPacking) && dispatchPackingModal.dispatchPacking.length > 0)
-    ? dispatchPackingModal.dispatchPacking.map(p => {
+    ? dispatchPackingModal.dispatchPacking.map((p, idx) => {
+        const rawMatch = (dispatchPackingModal.items || [])[idx] || (dispatchPackingModal.items || []).find(it => (it.name && p.name && it.name.toLowerCase().trim() === p.name.toLowerCase().trim()) || (it.code && p.code && it.code === p.code)) || {};
         const nameStr = (p.name || p.itemName || '').toLowerCase().trim();
-        const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || null));
+        const code = nameStr.includes('mid 30') ? 'MC30' : (nameStr.includes('mini rail') ? 'MR100N' : (p.code || rawMatch.code || null));
         const isPacked = isAccountsLocked ? (p.packed !== false) : Boolean(p.packed || p.scanned || p.packedQty > 0 || isAlreadySentToAccounts);
-        return { ...p, code, packed: isPacked };
+        return {
+          ...p,
+          code,
+          packed: isPacked,
+          isPresetItem: Boolean(p.isPresetItem || rawMatch.isPresetItem),
+          presetGroupId: p.presetGroupId || rawMatch.presetGroupId || null,
+          presetName: p.presetName || rawMatch.presetName || null,
+          category: p.category || rawMatch.category || null,
+          cutLengthMm: p.cutLengthMm || p.lengthMm || rawMatch.cutLengthMm || rawMatch.lengthMm || null
+        };
       })
     : rawItems;
 
@@ -632,20 +671,9 @@ export default function DispatchPackingModal({
         createdBy: resolvedSalesPerson,
         createdById: resolvedSalesPersonCode
       });
-
-      setTimeout(() => {
-        if (isWhileDispatch) {
-          alert(`📦 Dispatch packing completed for BOM (${targetBomCode})!\n🔔 Notification sent to Salesperson (${resolvedSalesPerson || 'Sales Creator'}) to attach Dispatch Payment Receipt before Accounts verification.`);
-        } else {
-          alert(`📦 Dispatch packing verified & completed for BOM (${targetBomCode})!\nOrder is now forwarded to Accounts for payment & document verification.`);
-        }
-      }, 350);
-    } else {
-      alert(`📦 Dispatch packing progress saved as Partially Packed.`);
     }
   } catch (saveErr) {
     console.error('Error during savePackingData:', saveErr);
-    alert(`Could not confirm packing: ${saveErr.message}`);
   }
 };
 
@@ -894,7 +922,7 @@ export default function DispatchPackingModal({
         }}>
           <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Delivery Address</div>
           <div style={{ fontSize: '12px', color: '#1E293B', fontWeight: '600', lineHeight: '1.5' }}>
-            {dispatchPackingModal.deliveryAddress || 'Plot 14, Phase II, Nagappa Estate, Puzhal, Chennai – 600066.'}
+            {cleanDisplayAddress(dispatchPackingModal.deliveryAddress || 'Plot 14, Phase II, Nagappa Estate, Puzhal, Chennai – 600066.')}
           </div>
         </div>
       </div>
@@ -983,89 +1011,253 @@ export default function DispatchPackingModal({
           )}
         </div>
 
-        {/* Table */}
+        {/* Table Grouped by Sets / Kits (Matching PI View Design) */}
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '13px 20px', width: '60px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Check</th>
-                <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Code</th>
-                <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Description</th>
-                <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
-                <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itemsToPack.map((pItem, idx) => {
-                const cutLenMm = pItem.cutLengthMm || pItem.lengthMm || (pItem.name && pItem.name.includes('300') ? '300' : (pItem.name && pItem.name.includes('100') ? '100' : (pItem.name && pItem.name.includes('mm') ? pItem.name.match(/\d+\s*mm/i)?.[0]?.replace(/mm/i, '').trim() : '300')));
+          {(() => {
+            const rawPresetGroups = dispatchPackingModal.presetGroups || {};
+            const presetGroupsMap = typeof rawPresetGroups === 'object' && !Array.isArray(rawPresetGroups)
+              ? rawPresetGroups
+              : (Array.isArray(rawPresetGroups)
+                  ? rawPresetGroups.reduce((acc, g) => { if (g.groupId || g.presetGroupId) acc[g.groupId || g.presetGroupId] = g; return acc; }, {})
+                  : {});
 
-                return (
-                  <tr
-                    key={idx}
-                    onClick={isPackedAndReady ? undefined : () => {
-                      const updatedPacking = itemsToPack.map((pi, i) => i === idx ? { ...pi, packed: !pi.packed } : pi);
-                      setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
-                    }}
-                    style={{
-                      borderBottom: '1px solid #F1F5F9',
-                      backgroundColor: pItem.packed ? '#F0FDF4' : '#FFFFFF',
-                      cursor: isPackedAndReady ? 'default' : 'pointer',
-                      transition: 'background-color 0.15s ease'
-                    }}
-                    onMouseEnter={e => (!isPackedAndReady && !pItem.packed) && (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                    onMouseLeave={e => (!isPackedAndReady && !pItem.packed) && (e.currentTarget.style.backgroundColor = '#FFFFFF')}
-                  >
-                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                      <div style={{
-                        width: '22px', height: '22px', borderRadius: '6px', margin: '0 auto',
-                        backgroundColor: pItem.packed ? '#166534' : '#FFFFFF',
-                        border: pItem.packed ? '2px solid #166534' : '2px solid #CBD5E1',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.15s ease',
-                        boxShadow: pItem.packed ? '0 2px 6px rgba(22,101,52,0.25)' : '0 1px 2px rgba(0,0,0,0.05)'
-                      }}>
-                        {pItem.packed && <CheckCircle style={{ width: '14px', height: '14px', color: '#FFFFFF' }} />}
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 16px', fontWeight: '700', color: '#2563EB', fontSize: '13px', textAlign: 'left' }}>
-                      {(() => {
-                        const nameStr = (pItem.name || '').toLowerCase().trim();
-                        if (nameStr.includes('mid 30') || nameStr.includes('mid30') || nameStr.includes('mc30')) return 'MC30';
-                        if (nameStr.includes('mid 35') || nameStr.includes('mid35') || nameStr.includes('mc35')) return 'MC35';
-                        if (nameStr.includes('end 30') || nameStr.includes('end30') || nameStr.includes('ec30')) return 'EC30';
-                        if (nameStr.includes('end 35') || nameStr.includes('end35') || nameStr.includes('ec35')) return 'EC35';
-                        if (nameStr.includes('mini rail') || nameStr.includes('mr100')) return 'MR100N';
-                        if (pItem.code && pItem.code !== 'MR100N') return pItem.code;
-                        if (pItem.itemCode && pItem.itemCode !== 'MR100N') return pItem.itemCode;
-                        const matchedProduct = VRM_PRODUCTS.find(vp => vp.name && pItem.name && vp.name.toLowerCase().trim() === nameStr);
-                        if (matchedProduct) return matchedProduct.code;
-                        return pItem.code || 'PROD-CODE';
-                      })()}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontWeight: pItem.packed ? '700' : '600', color: pItem.packed ? '#166534' : '#1E293B', fontSize: '13px', textAlign: 'left' }}>
-                      {pItem.name}
-                    </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
-                      {pItem.bomQty || pItem.qty || 1} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
-                    </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '5px',
-                        padding: '5px 14px', borderRadius: '20px',
-                        fontSize: '11px', fontWeight: '800',
-                        backgroundColor: pItem.packed ? '#DCFCE7' : '#FFF7ED',
-                        color: pItem.packed ? '#166534' : '#C2410C',
-                        border: `1px solid ${pItem.packed ? '#BBF7D0' : '#FED7AA'}`
-                      }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: pItem.packed ? '#22C55E' : '#F97316' }}></span>
-                        {pItem.packed ? 'Packed' : 'Pending'}
-                      </span>
-                    </td>
+            // Collect distinct group IDs present in items
+            const distinctGroupIds = [];
+            itemsToPack.forEach(it => {
+              const gid = it.presetGroupId;
+              if (gid && !distinctGroupIds.includes(gid)) {
+                distinctGroupIds.push(gid);
+              }
+            });
+
+            // If items don't have presetGroupId directly, but presetGroups exists and items are marked preset
+            if (distinctGroupIds.length === 0 && Object.keys(presetGroupsMap).length > 0) {
+              Object.keys(presetGroupsMap).forEach(gid => distinctGroupIds.push(gid));
+            }
+
+            const PRESET_THEMES = [
+              { primary: '#0E7490', bg: '#ECFEFF', border: '#A5F3FC', tagBg: '#CFFAFE', tagText: '#155E75', badge: 'SET 1' },
+              { primary: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE', tagBg: '#E0E7FF', tagText: '#3730A3', badge: 'SET 2' },
+              { primary: '#D97706', bg: '#FFFBEB', border: '#FDE68A', tagBg: '#FEF3C7', tagText: '#92400E', badge: 'SET 3' },
+              { primary: '#059669', bg: '#ECFDF5', border: '#A7F3D0', tagBg: '#D1FAE5', tagText: '#065F46', badge: 'SET 4' },
+              { primary: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', tagBg: '#EDE9FE', tagText: '#5B21B6', badge: 'SET 5' },
+            ];
+
+            const renderRow = (pItem, origIdx, itemNumberStr) => {
+              return (
+                <tr
+                  key={origIdx}
+                  onClick={isPackedAndReady ? undefined : () => {
+                    const updatedPacking = itemsToPack.map((pi, i) => i === origIdx ? { ...pi, packed: !pi.packed } : pi);
+                    setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                  }}
+                  style={{
+                    borderBottom: '1px solid #F1F5F9',
+                    backgroundColor: pItem.packed ? '#F0FDF4' : '#FFFFFF',
+                    cursor: isPackedAndReady ? 'default' : 'pointer',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={e => (!isPackedAndReady && !pItem.packed) && (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                  onMouseLeave={e => (!isPackedAndReady && !pItem.packed) && (e.currentTarget.style.backgroundColor = '#FFFFFF')}
+                >
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '6px', margin: '0 auto',
+                      backgroundColor: pItem.packed ? '#166534' : '#FFFFFF',
+                      border: pItem.packed ? '2px solid #166534' : '2px solid #CBD5E1',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.15s ease',
+                      boxShadow: pItem.packed ? '0 2px 6px rgba(22,101,52,0.25)' : '0 1px 2px rgba(0,0,0,0.05)'
+                    }}>
+                      {pItem.packed && <CheckCircle style={{ width: '14px', height: '14px', color: '#FFFFFF' }} />}
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px', fontWeight: '700', color: '#2563EB', fontSize: '13px', textAlign: 'left' }}>
+                    {(() => {
+                      const nameStr = (pItem.name || '').toLowerCase().trim();
+                      if (nameStr.includes('mid 30') || nameStr.includes('mid30') || nameStr.includes('mc30')) return 'MC30';
+                      if (nameStr.includes('mid 35') || nameStr.includes('mid35') || nameStr.includes('mc35')) return 'MC35';
+                      if (nameStr.includes('end 30') || nameStr.includes('end30') || nameStr.includes('ec30')) return 'EC30';
+                      if (nameStr.includes('end 35') || nameStr.includes('end35') || nameStr.includes('ec35')) return 'EC35';
+                      if (nameStr.includes('mini rail') || nameStr.includes('mr100')) return 'MR100N';
+                      if (pItem.code && pItem.code !== 'MR100N') return pItem.code;
+                      if (pItem.itemCode && pItem.itemCode !== 'MR100N') return pItem.itemCode;
+                      const matchedProduct = VRM_PRODUCTS.find(vp => vp.name && pItem.name && vp.name.toLowerCase().trim() === nameStr);
+                      if (matchedProduct) return matchedProduct.code;
+                      return pItem.code || 'PROD-CODE';
+                    })()}
+                  </td>
+                  <td style={{ padding: '14px 16px', fontWeight: pItem.packed ? '700' : '600', color: pItem.packed ? '#166534' : '#1E293B', fontSize: '13px', textAlign: 'left' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {itemNumberStr && (
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', backgroundColor: '#F1F5F9', padding: '2px 6px', borderRadius: '4px' }}>
+                          #{itemNumberStr}
+                        </span>
+                      )}
+                      <span>{pItem.name}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
+                    {pItem.bomQty || pItem.qty || 1} <span style={{ fontSize: '11px', color: '#94A3B8' }}>Nos</span>
+                  </td>
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      padding: '5px 14px', borderRadius: '20px',
+                      fontSize: '11px', fontWeight: '800',
+                      backgroundColor: pItem.packed ? '#DCFCE7' : '#FFF7ED',
+                      color: pItem.packed ? '#166534' : '#C2410C',
+                      border: `1px solid ${pItem.packed ? '#BBF7D0' : '#FED7AA'}`
+                    }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: pItem.packed ? '#22C55E' : '#F97316' }}></span>
+                      {pItem.packed ? 'Packed' : 'Pending'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            };
+
+            return (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                    <th style={{ padding: '13px 20px', width: '60px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Check</th>
+                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Code</th>
+                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Product Description</th>
+                    <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                    <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Status</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {distinctGroupIds.length > 0 ? (
+                    <>
+                      {/* Render Sets/Kits */}
+                      {distinctGroupIds.map((gid, gIdx) => {
+                        const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
+                        const grp = presetGroupsMap[gid] || {};
+                        const grpName = grp.presetName || grp.name || `Set / Kit ${gIdx + 1}`;
+                        const setCount = parseInt(grp.setCount) || 1;
+
+                        const setIndices = [];
+                        itemsToPack.forEach((it, idx) => {
+                          if (it.presetGroupId === gid || (!it.presetGroupId && it.isPresetItem && gIdx === 0)) {
+                            setIndices.push(idx);
+                          }
+                        });
+
+                        if (setIndices.length === 0) return null;
+
+                        const allSetPacked = setIndices.every(i => itemsToPack[i]?.packed);
+                        const packedCountInSet = setIndices.filter(i => itemsToPack[i]?.packed).length;
+
+                        return (
+                          <React.Fragment key={`set-grp-${gid}`}>
+                            {/* Set Header Row */}
+                            <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
+                              <td colSpan={5} style={{ padding: '10px 18px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{
+                                      padding: '3px 10px',
+                                      borderRadius: '6px',
+                                      backgroundColor: theme.primary,
+                                      color: '#FFFFFF',
+                                      fontSize: '11px',
+                                      fontWeight: '900',
+                                      letterSpacing: '0.5px'
+                                    }}>
+                                      {theme.badge}
+                                    </span>
+                                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                                      {grpName} {setCount > 1 ? `(${setCount} Sets)` : '(1 Set)'}
+                                    </span>
+                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: theme.tagText, backgroundColor: theme.tagBg, padding: '2px 8px', borderRadius: '4px' }}>
+                                      {packedCountInSet} / {setIndices.length} Items Packed
+                                    </span>
+                                  </div>
+                                  {!isPackedAndReady && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const shouldPack = !allSetPacked;
+                                        const updatedPacking = itemsToPack.map((pi, i) => setIndices.includes(i) ? { ...pi, packed: shouldPack } : pi);
+                                        setDispatchPackingModal({ ...dispatchPackingModal, dispatchPacking: updatedPacking });
+                                      }}
+                                      style={{
+                                        border: `1px solid ${theme.primary}`,
+                                        backgroundColor: allSetPacked ? '#FFFFFF' : theme.primary,
+                                        color: allSetPacked ? theme.primary : '#FFFFFF',
+                                        padding: '4px 12px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: '800',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {allSetPacked ? 'Unpack Set' : 'Pack Whole Set'}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            {/* Component items in this Set */}
+                            {setIndices.map((origIdx, sItemIdx) => {
+                              const pItem = itemsToPack[origIdx];
+                              return renderRow(pItem, origIdx, `${gIdx + 1}.${sItemIdx + 1}`);
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
+
+                      {/* Render Loose / Non-Preset Items */}
+                      {(() => {
+                        const looseIndices = [];
+                        itemsToPack.forEach((it, idx) => {
+                          const isPartOfGroup = it.presetGroupId || (it.isPresetItem && distinctGroupIds.length > 0);
+                          if (!isPartOfGroup) {
+                            looseIndices.push(idx);
+                          }
+                        });
+
+                        if (looseIndices.length === 0) return null;
+
+                        return (
+                          <React.Fragment key="loose-items-group">
+                            <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
+                              <td colSpan={5} style={{ padding: '10px 18px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{
+                                    padding: '3px 10px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#475569',
+                                    color: '#FFFFFF',
+                                    fontSize: '11px',
+                                    fontWeight: '900',
+                                    letterSpacing: '0.5px'
+                                  }}>
+                                    INDIVIDUAL PRODUCTS
+                                  </span>
+                                  <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#334155' }}>
+                                    Additional Non-Kit Products ({looseIndices.length} items)
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                            {looseIndices.map((origIdx, lIdx) => {
+                              const pItem = itemsToPack[origIdx];
+                              return renderRow(pItem, origIdx, `C.${lIdx + 1}`);
+                            })}
+                          </React.Fragment>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    itemsToPack.map((pItem, idx) => renderRow(pItem, idx, String(idx + 1)))
+                  )}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
 
         {/* ─── PACKED ITEMS PHOTOS VERIFICATION SECTION ─── */}
@@ -1327,44 +1519,84 @@ export default function DispatchPackingModal({
                 Save Proof Photos
               </button>
             )}
-            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && isPartial && (
+            {/* Case 1: 0 items selected -> cannot proceed */}
+            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount === 0 && (
+              <button
+                type="button"
+                disabled
+                style={{
+                  border: 'none',
+                  background: '#CBD5E1',
+                  color: '#64748B',
+                  height: '40px',
+                  padding: '0 20px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+                title="Please select at least 1 product to proceed"
+              >
+                Select Products to Proceed
+              </button>
+            )}
+
+            {/* Case 2: Partial packing -> show ONLY Packed Partially */}
+            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount > 0 && packedItemsCount < totalItemsCount && (
               <button
                 type="button"
                 onClick={() => savePackingData(true)}
                 disabled={uploadingCount > 0}
                 style={{
-                  border: '1px solid #CBD5E1',
-                  background: '#F8FAFC',
-                  color: '#1E293B', height: '40px', padding: '0 18px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '700',
+                  border: 'none',
+                  background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #D97706, #B45309)',
+                  color: '#FFFFFF',
+                  height: '40px',
+                  padding: '0 20px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '800',
                   cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  transition: 'all 0.15s ease'
+                  boxShadow: '0 4px 12px rgba(217,119,6,0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
+                title="Save partial packing progress"
               >
-                <Save style={{ width: '15px', height: '15px', color: '#2563EB' }} />
-                Save Partial Progress
+                <Save style={{ width: '15px', height: '15px' }} />
+                Packed Partially ({packedItemsCount}/{totalItemsCount})
               </button>
             )}
-            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && (
+
+            {/* Case 3: 100% Packed -> show Packing Confirmed (opens confirmation modal) */}
+            {!isAccountsLocked && !isCancelled && !dispatchPackingModal.isReadOnly && packedItemsCount === totalItemsCount && (
               <button
                 type="button"
-                onClick={() => savePackingData(false)}
+                onClick={() => setShowConfirmModal(true)}
                 disabled={uploadingCount > 0}
                 style={{
                   border: 'none',
                   background: uploadingCount > 0 ? '#94A3B8' : 'linear-gradient(135deg, #059669, #10B981)',
-                  color: '#FFFFFF', height: '40px', padding: '0 22px',
-                  borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+                  color: '#FFFFFF',
+                  height: '40px',
+                  padding: '0 22px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '800',
                   cursor: uploadingCount > 0 ? 'not-allowed' : 'pointer',
                   boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
-                  display: 'flex', alignItems: 'center', gap: '8px'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
-                title="Confirm goods packing and send to Accounts verification"
+                title="Confirm all goods packing and forward to Accounts"
               >
                 <CheckCircle style={{ width: '16px', height: '16px' }} />
-                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed (Send to Accounts)')}
+                {uploadingCount > 0 ? `Uploading Proof (${uploadingCount} in progress)...` : (isAlreadySentToAccounts ? 'Packing Confirmed (Update Accounts)' : 'Packing Confirmed')}
               </button>
             )}
           </div>
@@ -1551,6 +1783,72 @@ export default function DispatchPackingModal({
           activeMediaPreviewModal={localActiveMediaPreview}
           onClose={() => setLocalActiveMediaPreview(null)}
         />
+      )}
+
+      {/* DISPATCH PACKING CONFIRMATION POPUP MODAL */}
+      {showConfirmModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px',
+            maxWidth: '480px', width: '100%', padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '12px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0F172A' }}>
+                  Confirm Goods Packing
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  BOM Code: <strong>{targetCode}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              Are you sure all <strong>{totalItemsCount} items</strong> and accessories are fully packed and verified?
+              <br /><br />
+              This will mark packing as confirmed and forward the order to <strong>Accounts</strong> for payment & document verification.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                style={{
+                  padding: '10px 18px', borderRadius: '8px', border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  savePackingData(false);
+                }}
+                style={{
+                  padding: '10px 22px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#059669', color: '#FFFFFF', fontSize: '13px', fontWeight: '800',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                  boxShadow: '0 4px 12px rgba(5,150,105,0.3)'
+                }}
+              >
+                <CheckCircle size={16} /> Yes, Confirm Packing
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
