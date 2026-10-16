@@ -86,26 +86,154 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           ? b.materials
           : [];
 
-  // Fallback to source PI if items are still empty
-  if (items.length === 0) {
-    try {
-      const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
-      const bCode = b.bomCode || b.code || b.id;
-      const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
-      if (rawPi) {
-        const pis = JSON.parse(rawPi);
-        if (Array.isArray(pis)) {
-          const matchedPi = pis.find(p => p && (
-            (piNum && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum)) ||
-            (bCode && (p.convertedBomCode === bCode || p.convertedBomNo === bCode))
-          ));
-          if (matchedPi && Array.isArray(matchedPi.items) && matchedPi.items.length > 0) {
-            items = matchedPi.items;
-          }
+  // Fallback to source PI if items are still empty, and extract preset kit metadata
+  let matchedPi = null;
+  try {
+    const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
+    const bCode = b.bomCode || b.code || b.id;
+    const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
+    if (rawPi) {
+      const pis = JSON.parse(rawPi);
+      if (Array.isArray(pis)) {
+        matchedPi = pis.find(p => p && (
+          (piNum && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum)) ||
+          (bCode && (p.convertedBomCode === bCode || p.convertedBomNo === bCode))
+        ));
+        if (items.length === 0 && matchedPi && Array.isArray(matchedPi.items) && matchedPi.items.length > 0) {
+          items = matchedPi.items;
         }
       }
-    } catch {}
+    }
+  } catch {}
+
+  // 1. Build preset groups dictionary from BOM or matched PI
+  let presetGroupsObj = {};
+  if (b.presetGroups) {
+    if (Array.isArray(b.presetGroups)) {
+      b.presetGroups.forEach((g, idx) => {
+        if (g && (g.groupId || g.presetId || g.presetName)) {
+          const gid = g.groupId || g.presetId || `grp_${idx}`;
+          presetGroupsObj[gid] = g;
+        }
+      });
+    } else if (typeof b.presetGroups === 'object') {
+      presetGroupsObj = { ...b.presetGroups };
+    }
   }
+  if (Object.keys(presetGroupsObj).length === 0 && matchedPi?.presetGroups) {
+    if (Array.isArray(matchedPi.presetGroups)) {
+      matchedPi.presetGroups.forEach((g, idx) => {
+        if (g && (g.groupId || g.presetId || g.presetName)) {
+          const gid = g.groupId || g.presetId || `grp_${idx}`;
+          presetGroupsObj[gid] = g;
+        }
+      });
+    } else if (typeof matchedPi.presetGroups === 'object') {
+      presetGroupsObj = { ...matchedPi.presetGroups };
+    }
+  }
+
+  // 2. Enrich items with preset kit names and group IDs
+  const piItems = (matchedPi && Array.isArray(matchedPi.items)) ? matchedPi.items : [];
+  const enrichedItems = items.map((it, idx) => {
+    let pName = it.presetName || it.kitName;
+    let pGroupId = it.presetGroupId;
+    let isPreset = Boolean(it.isPresetItem || pGroupId || pName);
+    let itemBaseQty = it.baseQty;
+
+    // If missing on item, lookup from matched PI item by code or name or index
+    if (piItems.length > 0) {
+      const itCode = (it.code || '').trim().toUpperCase();
+      const itName = (it.name || it.itemName || '').trim().toLowerCase();
+      const matchedPiItem = piItems.find(piIt => 
+        (piIt.id && it.id && piIt.id === it.id) ||
+        (itCode && piIt.code && piIt.code.trim().toUpperCase() === itCode) ||
+        (itName && piIt.name && piIt.name.trim().toLowerCase() === itName)
+      ) || (!pName && !pGroupId ? piItems[idx] : null);
+
+      if (matchedPiItem) {
+        if (!pName) pName = matchedPiItem.presetName || matchedPiItem.kitName;
+        if (!pGroupId) pGroupId = matchedPiItem.presetGroupId;
+        if (!isPreset) isPreset = Boolean(matchedPiItem.isPresetItem || pGroupId || pName);
+        if ((itemBaseQty == null || itemBaseQty === '') && matchedPiItem.baseQty != null && matchedPiItem.baseQty !== '') {
+          itemBaseQty = matchedPiItem.baseQty;
+        }
+      }
+    }
+
+    // If still missing, check if BOM has a global presetName
+    if (!pName && !pGroupId && (b.presetName || matchedPi?.presetName)) {
+      if (it.isPresetItem || (parseFloat(it.rate || 0) === 0 && (b.unitValue || b.orderValue)) || Object.keys(presetGroupsObj).length <= 1) {
+        pName = b.presetName || matchedPi?.presetName;
+        pGroupId = Object.keys(presetGroupsObj)[0] || 'default_kit';
+        isPreset = true;
+      }
+    }
+
+    // Resolve name from presetGroupsObj if groupId is present
+    if (pGroupId && presetGroupsObj[pGroupId]?.presetName && !pName) {
+      pName = presetGroupsObj[pGroupId].presetName;
+    }
+
+    return {
+      ...it,
+      originalIndex: idx,
+      presetName: pName,
+      presetGroupId: pGroupId,
+      isPresetItem: isPreset,
+      baseQty: itemBaseQty
+    };
+  });
+
+  // 3. Group into Distinct Kits and Standalone Items
+  const kitGroupsMap = new Map();
+  const standaloneItems = [];
+
+  enrichedItems.forEach(item => {
+    if (item.isPresetItem || item.presetGroupId || item.presetName) {
+      const key = item.presetGroupId || item.presetName || 'default_kit';
+      if (!kitGroupsMap.has(key)) {
+        const grpMeta = (item.presetGroupId && presetGroupsObj[item.presetGroupId]) || {};
+        const pName = grpMeta.presetName || item.presetName || b.presetName || matchedPi?.presetName || 'Preset Kit';
+        const sCount = grpMeta.setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1;
+        kitGroupsMap.set(key, {
+          groupId: key,
+          presetName: pName,
+          setCount: sCount,
+          items: []
+        });
+      }
+      const currentGroup = kitGroupsMap.get(key);
+      if ((!currentGroup.setCount || Number(currentGroup.setCount) <= 1) && item.setCount && Number(item.setCount) > 1) {
+        currentGroup.setCount = item.setCount;
+      }
+      currentGroup.items.push(item);
+    } else {
+      standaloneItems.push(item);
+    }
+  });
+
+  const kitGroups = Array.from(kitGroupsMap.values());
+  const hasMultipleKits = kitGroups.length > 1;
+  const hasAnyKits = kitGroups.length > 0;
+
+  // Helper to determine the 1-set quantity for BOM printout (1 set is enough in printout)
+  const getItemOneSetQty = (item, groupSetCount) => {
+    const rawQty = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
+    const sCount = parseInt(groupSetCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1) || 1;
+
+    // If explicit baseQty is defined on the item (e.g. from PI or BOM creation)
+    if (item.baseQty != null && item.baseQty !== '' && !isNaN(parseFloat(item.baseQty)) && parseFloat(item.baseQty) > 0) {
+      return parseFloat(item.baseQty);
+    }
+
+    // If setCount is greater than 1, divide the total raw quantity by the setCount
+    if (sCount > 1 && rawQty > 0) {
+      return Math.round((rawQty / sCount) * 100) / 100;
+    }
+
+    return rawQty;
+  };
 
   // Extract clean addresses
   const bObj = b.billingAddressObj || {};
@@ -121,34 +249,18 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   let dPin = dObj.pincode || b.shippingPincode || (b.sameAsBilling ? bPin : '');
 
   // Fallback to source PI addresses if missing
-  if (!rawBAddr && !bCity) {
-    try {
-      const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
-      const bCode = b.bomCode || b.code || b.id;
-      const rawPi = (typeof localStorage !== 'undefined') && (localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('sales_pi_store') || localStorage.getItem('proforma_invoices'));
-      if (rawPi) {
-        const pis = JSON.parse(rawPi);
-        if (Array.isArray(pis)) {
-          const matchedPi = pis.find(p => p && (
-            (piNum && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum)) ||
-            (bCode && (p.convertedBomCode === bCode || p.convertedBomNo === bCode))
-          ));
-          if (matchedPi) {
-            const piBObj = matchedPi.billingAddressObj || {};
-            rawBAddr = rawBAddr || piBObj.address || matchedPi.billingAddress || matchedPi.billingStreet || '';
-            bCity = bCity || piBObj.city || matchedPi.billingCity || '';
-            bState = bState || piBObj.state || matchedPi.billingState || '';
-            bPin = bPin || piBObj.pincode || matchedPi.billingPincode || '';
+  if (!rawBAddr && !bCity && matchedPi) {
+    const piBObj = matchedPi.billingAddressObj || {};
+    rawBAddr = rawBAddr || piBObj.address || matchedPi.billingAddress || matchedPi.billingStreet || '';
+    bCity = bCity || piBObj.city || matchedPi.billingCity || '';
+    bState = bState || piBObj.state || matchedPi.billingState || '';
+    bPin = bPin || piBObj.pincode || matchedPi.billingPincode || '';
 
-            const piDObj = matchedPi.deliveryAddressObj || {};
-            rawDAddr = rawDAddr || piDObj.address || matchedPi.deliveryAddress || matchedPi.shippingStreet || (matchedPi.sameAsBilling ? rawBAddr : '');
-            dCity = dCity || piDObj.city || matchedPi.shippingCity || (matchedPi.sameAsBilling ? bCity : '');
-            dState = dState || piDObj.state || matchedPi.shippingState || (matchedPi.sameAsBilling ? bState : '');
-            dPin = dPin || piDObj.pincode || matchedPi.shippingPincode || (matchedPi.sameAsBilling ? bPin : '');
-          }
-        }
-      }
-    } catch {}
+    const piDObj = matchedPi.deliveryAddressObj || {};
+    rawDAddr = rawDAddr || piDObj.address || matchedPi.deliveryAddress || matchedPi.shippingStreet || (matchedPi.sameAsBilling ? rawBAddr : '');
+    dCity = dCity || piDObj.city || matchedPi.shippingCity || (matchedPi.sameAsBilling ? bCity : '');
+    dState = dState || piDObj.state || matchedPi.shippingState || (matchedPi.sameAsBilling ? bState : '');
+    dPin = dPin || piDObj.pincode || matchedPi.shippingPincode || (matchedPi.sameAsBilling ? bPin : '');
   }
 
   const billingLines = formatAddressLines(rawBAddr, bCity, bState, bPin);
@@ -177,7 +289,16 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
     resolvedCustomer = 'Valued Customer';
   }
 
-  const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0), 0);
+  const totalQuantity = Math.round((hasAnyKits
+    ? (kitGroups.reduce((acc, kg) => acc + kg.items.reduce((kAcc, it) => kAcc + getItemOneSetQty(it, kg.setCount), 0), 0) +
+       standaloneItems.reduce((acc, it) => acc + (parseFloat(it.qty || it.bomQty || it.quantity || it.targetQty || 0) || 0), 0))
+    : enrichedItems.reduce((sum, it) => sum + getItemOneSetQty(it, it.setCount || b.presetSetCount || 1), 0)
+  ) * 100) / 100;
+  const totalQuantityTaken = items.reduce((sum, item) => sum + (parseFloat(item.quantityTaken || item.qtyTaken || item.takenQty || 0) || 0), 0);
+
+  const boxesVal = b.noOfBoxes || b.boxesCount || b.boxes || b.no_of_boxes || '';
+  const bundlesVal = b.noOfBundles || b.bundlesCount || b.bundles || b.no_of_bundles || '';
+  const bagsVal = b.noOfBags || b.bagsCount || b.bags || b.no_of_bags || '';
 
   return (
     <div
@@ -329,7 +450,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
             }
 
             tfoot {
-              display: table-footer-group !important;
+              display: table-row-group !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
             }
@@ -384,7 +505,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           <div style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '1.2' }}>
             BILL OF MATERIALS
           </div>
-          <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', marginTop: '2px' }}>
+          <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#64748B', marginTop: '2px' }}>
             Official Material Specification
           </div>
         </div>
@@ -397,24 +518,24 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         border: '1px solid #CBD5E1',
         borderRadius: '4px',
         backgroundColor: '#F8FAFC',
-        marginBottom: '8px',
-        fontSize: '10px',
+        marginBottom: '10px',
+        fontSize: '11.5px',
         width: '100%',
         boxSizing: 'border-box',
         pageBreakInside: 'avoid',
         breakInside: 'avoid'
       }}>
-        <div style={{ padding: '4px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
           <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Number: </span>
-          <span style={{ color: '#0E7490', fontWeight: '800' }}>{bomNumber}</span>
+          <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '12px' }}>{bomNumber}</span>
         </div>
-        <div style={{ padding: '4px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
           <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Date: </span>
-          <span style={{ color: '#0F172A', fontWeight: '700' }}>{bomDate}</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '12px' }}>{bomDate}</span>
         </div>
-        <div style={{ padding: '4px 10px', whiteSpace: 'nowrap' }}>
+        <div style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>
           <span style={{ color: '#64748B', fontWeight: '700' }}>Sales Person: </span>
-          <span style={{ color: '#0F172A', fontWeight: '700' }}>{salesPersonName}</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '12px' }}>{salesPersonName}</span>
         </div>
       </div>
 
@@ -425,7 +546,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         border: '1px solid #CBD5E1',
         borderRadius: '4px',
         overflow: 'visible',
-        marginBottom: '8px',
+        marginBottom: '10px',
         backgroundColor: '#FFFFFF',
         width: '100%',
         boxSizing: 'border-box',
@@ -437,42 +558,42 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           <div style={{
             backgroundColor: '#ECFEFF',
             borderBottom: '1px solid #CBD5E1',
-            padding: '4px 8px',
+            padding: '5px 10px',
             color: '#0E7490',
-            fontSize: '9.5px',
+            fontSize: '11px',
             fontWeight: '800',
             textTransform: 'uppercase',
             letterSpacing: '0.3px'
           }}>
             Customer &amp; Billing Address (Bill To)
           </div>
-          <div style={{ padding: '5px 8px', fontSize: '10px', lineHeight: '1.35', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
-            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '11px', marginBottom: '1px' }}>
+          <div style={{ padding: '7px 10px', fontSize: '11px', lineHeight: '1.4', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px', marginBottom: '2px' }}>
               {resolvedCustomer}
             </div>
             {b.companyName && b.companyName !== resolvedCustomer && (
-              <div style={{ color: '#475569', fontWeight: '600', marginBottom: '1px', fontSize: '9.5px' }}>{b.companyName}</div>
+              <div style={{ color: '#475569', fontWeight: '600', marginBottom: '2px', fontSize: '11px' }}>{b.companyName}</div>
             )}
             {b.contactPerson && (
-              <div style={{ color: '#475569', fontSize: '9.5px' }}>
+              <div style={{ color: '#475569', fontSize: '11px' }}>
                 <strong>Contact:</strong> {b.contactPerson}
               </div>
             )}
             {b.gstNo && b.gstNo !== '—' && (
-              <div style={{ color: '#0E7490', fontSize: '9.5px', fontWeight: '700' }}>
+              <div style={{ color: '#0E7490', fontSize: '11px', fontWeight: '700' }}>
                 <strong>GSTIN:</strong> {b.gstNo}
               </div>
             )}
-            <div style={{ color: '#334155', marginTop: '1px' }}>
+            <div style={{ color: '#334155', marginTop: '2px' }}>
               {billingLines.map((line, idx) => (
-                <div key={idx} style={{ lineHeight: '1.25' }}>{line}</div>
+                <div key={idx} style={{ lineHeight: '1.3' }}>{line}</div>
               ))}
             </div>
             {b.mobile && b.mobile !== '—' && (
-              <div style={{ marginTop: '2px', fontSize: '9.5px', color: '#334155' }}><strong>Phone:</strong> {b.mobile}</div>
+              <div style={{ marginTop: '2px', fontSize: '11px', color: '#334155' }}><strong>Phone:</strong> {b.mobile}</div>
             )}
             {b.email && b.email !== '—' && (
-              <div style={{ fontSize: '9.5px', color: '#334155' }}><strong>Email:</strong> {b.email}</div>
+              <div style={{ fontSize: '11px', color: '#334155' }}><strong>Email:</strong> {b.email}</div>
             )}
           </div>
         </div>
@@ -482,26 +603,26 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           <div style={{
             backgroundColor: '#F8FAFC',
             borderBottom: '1px solid #CBD5E1',
-            padding: '4px 8px',
+            padding: '5px 10px',
             color: '#475569',
-            fontSize: '9.5px',
+            fontSize: '11px',
             fontWeight: '800',
             textTransform: 'uppercase',
             letterSpacing: '0.3px'
           }}>
             Delivery Destination &amp; Consignee (Ship To)
           </div>
-          <div style={{ padding: '5px 8px', fontSize: '10px', lineHeight: '1.35', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
-            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '11px', marginBottom: '1px' }}>
+          <div style={{ padding: '7px 10px', fontSize: '11px', lineHeight: '1.4', wordBreak: 'break-word', flex: 1, boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: '800', color: '#0F172A', fontSize: '12.5px', marginBottom: '2px' }}>
               {resolvedCustomer} — Delivery Site
             </div>
-            <div style={{ color: '#334155', marginTop: '1px' }}>
+            <div style={{ color: '#334155', marginTop: '2px' }}>
               {deliveryLines.map((line, idx) => (
-                <div key={idx} style={{ lineHeight: '1.25' }}>{line}</div>
+                <div key={idx} style={{ lineHeight: '1.3' }}>{line}</div>
               ))}
             </div>
             {(b.siteContact || b.contactPerson || b.mobile) && (b.siteContact !== '—' && b.mobile !== '—') && (
-              <div style={{ marginTop: '2px', fontSize: '9.5px', color: '#334155' }}>
+              <div style={{ marginTop: '2px', fontSize: '11px', color: '#334155' }}>
                 <strong>Site Contact:</strong> {b.siteContact || b.contactPerson || b.mobile}
               </div>
             )}
@@ -509,62 +630,366 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         </div>
       </div>
 
-      {/* 4. MATERIAL SPECIFICATIONS TABLE (PRODUCT, UOM, QUANTITY ONLY) */}
+      {/* 4. MATERIAL SPECIFICATIONS TABLE (LARGER TEXT, SET COLUMN IN MIDDLE, QUANTITY TAKEN) */}
       <table style={{
         width: '100%',
         borderCollapse: 'collapse',
         border: '1px solid #CBD5E1',
-        marginBottom: '8px',
-        fontSize: '10px',
+        marginBottom: '14px',
+        fontSize: '13px',
         boxSizing: 'border-box'
       }}>
         <thead>
           <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
-            <th style={{ padding: '4px 6px', width: '32px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>#</th>
-            <th style={{ padding: '4px 8px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>Product / Material Name</th>
-            <th style={{ padding: '4px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>UOM</th>
-            <th style={{ padding: '4px 6px', width: '70px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '9.5px', boxSizing: 'border-box' }}>Quantity</th>
+            <th style={{ padding: '8px 6px', width: '38px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>#</th>
+            <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
+            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>Set</th>
+            <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
+            <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box', lineHeight: '1.2' }}>
+              {hasAnyKits ? (
+                <div>
+                  <div>Quantity</div>
+                  <div style={{ fontSize: '10.5px', fontWeight: '700', opacity: 0.9 }}>(1 Set)</div>
+                </div>
+              ) : (
+                'Quantity'
+              )}
+            </th>
+            <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
         </thead>
         <tbody>
-          {items.length === 0 ? (
+          {enrichedItems.length === 0 ? (
             <tr>
-              <td colSpan={4} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8', fontSize: '10.5px' }}>
+              <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
                 No itemized materials in this BOM record.
               </td>
             </tr>
+          ) : hasAnyKits ? (
+            <React.Fragment>
+              {kitGroups.map((kg, kIdx) => {
+                const kitColor = kIdx % 2 === 0 ? '#0E7490' : '#4F46E5';
+                const kitBg = kIdx % 2 === 0 ? '#ECFEFF' : '#EEF2FF';
+                const kitBorder = kIdx % 2 === 0 ? '#A5F3FC' : '#C7D2FE';
+
+                return (
+                  <React.Fragment key={`kit_${kg.groupId}_${kIdx}`}>
+                    {/* Kit Section Header Banner */}
+                    <tr
+                      style={{
+                        backgroundColor: kitBg,
+                        borderTop: `2.5px solid ${kitColor}`,
+                        borderBottom: `1.5px solid ${kitBorder}`,
+                        pageBreakInside: 'avoid',
+                        breakInside: 'avoid',
+                        pageBreakAfter: 'avoid',
+                        breakAfter: 'avoid'
+                      }}
+                    >
+                      <td
+                        colSpan={6}
+                        style={{
+                          padding: '8px 12px',
+                          backgroundColor: kitBg
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                backgroundColor: kitColor,
+                                color: '#FFFFFF',
+                                padding: '3px 10px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                fontWeight: '900',
+                                letterSpacing: '0.4px',
+                                textTransform: 'uppercase'
+                              }}
+                            >
+                              KIT {kIdx + 1}
+                            </span>
+                            <span style={{ color: '#0F172A', fontSize: '14px', fontWeight: '800' }}>
+                              {kg.presetName}
+                            </span>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                backgroundColor: '#FFFFFF',
+                                color: kitColor,
+                                border: `1.5px solid ${kitBorder}`,
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '11.5px',
+                                fontWeight: '800'
+                              }}
+                            >
+                              {kg.setCount || 1} {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#475569', fontWeight: '700' }}>
+                            {kg.items.length} {kg.items.length === 1 ? 'Component' : 'Components'}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Items in this kit */}
+                    {kg.items.map((item, itemIdx) => {
+                      const qty = getItemOneSetQty(item, kg.setCount);
+                      const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
+                        ? item.quantityTaken
+                        : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
+                          ? item.qtyTaken
+                          : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
+                      const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
+                      const description = item.specs || (item.name ? item.description : '') || item.category;
+
+                      const midIdx = Math.floor(kg.items.length / 2);
+                      const isMiddle = itemIdx === midIdx;
+                      const isFirst = itemIdx === 0;
+                      const isLast = itemIdx === kg.items.length - 1;
+
+                      return (
+                        <tr
+                          key={`kit_item_${item.id || itemIdx}`}
+                          style={{
+                            borderBottom: '1px solid #CBD5E1',
+                            backgroundColor: itemIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
+                            pageBreakInside: 'avoid',
+                            breakInside: 'avoid'
+                          }}
+                        >
+                          <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                            {hasMultipleKits ? `${kIdx + 1}.${itemIdx + 1}` : itemIdx + 1}
+                          </td>
+                          <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
+                              {hasMultipleKits && (
+                                <span style={{ fontSize: '10.5px', padding: '1px 6px', borderRadius: '4px', backgroundColor: kitBg, color: kitColor, fontWeight: '800', border: `1px solid ${kitBorder}` }}>
+                                  Kit {kIdx + 1}
+                                </span>
+                              )}
+                            </div>
+                            {description && (
+                              <div style={{ fontSize: '12px', color: '#475569', marginTop: '1px', fontWeight: '500' }}>
+                                {description}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* SET COLUMN: Displayed once in the center of the column alone for this kit, without rowSpan to avoid page-break bugs */}
+                          <td
+                            style={{
+                              padding: isMiddle ? '4px 6px' : '0',
+                              textAlign: 'center',
+                              verticalAlign: 'middle',
+                              color: '#0E7490',
+                              backgroundColor: '#FFFFFF',
+                              borderRight: '1px solid #CBD5E1',
+                              borderLeft: '1px solid #CBD5E1',
+                              borderTop: isFirst ? '1px solid #CBD5E1' : 'none',
+                              borderBottom: isLast ? '1px solid #CBD5E1' : 'none',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {isMiddle ? (
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
+                                  {kg.setCount || 1}
+                                </span>
+                                <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                  {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                                </span>
+                              </div>
+                            ) : null}
+                          </td>
+
+                          <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                            {item.uom || item.unit || 'NOS'}
+                          </td>
+                          <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', fontSize: '14.5px' }}>
+                            {qty}
+                          </td>
+                          <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '14.5px' }}>
+                            {qtyTaken !== '' ? qtyTaken : ''}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
+
+              {/* Standalone Items if any */}
+              {standaloneItems.length > 0 && (
+                <React.Fragment>
+                  <tr
+                    style={{
+                      backgroundColor: '#F1F5F9',
+                      borderTop: '2px solid #64748B',
+                      borderBottom: '1.5px solid #CBD5E1',
+                      pageBreakInside: 'avoid',
+                      breakInside: 'avoid',
+                      pageBreakAfter: 'avoid',
+                      breakAfter: 'avoid'
+                    }}
+                  >
+                    <td
+                      colSpan={6}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#F1F5F9'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              backgroundColor: '#475569',
+                              color: '#FFFFFF',
+                              padding: '3px 10px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: '900',
+                              letterSpacing: '0.4px',
+                              textTransform: 'uppercase'
+                            }}
+                          >
+                            ADDITIONAL MATERIALS
+                          </span>
+                          <span style={{ color: '#0F172A', fontSize: '14px', fontWeight: '800' }}>
+                            Individual / Loose Components
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: '700' }}>
+                          {standaloneItems.length} {standaloneItems.length === 1 ? 'Component' : 'Components'}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  {standaloneItems.map((item, sIdx) => {
+                    const qty = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
+                    const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
+                      ? item.quantityTaken
+                      : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
+                        ? item.qtyTaken
+                        : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
+                    const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
+                    const description = item.specs || (item.name ? item.description : '') || item.category;
+
+                    return (
+                      <tr
+                        key={`standalone_item_${item.id || sIdx}`}
+                        style={{
+                          borderBottom: '1px solid #CBD5E1',
+                          backgroundColor: sIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
+                          pageBreakInside: 'avoid',
+                          breakInside: 'avoid'
+                        }}
+                      >
+                        <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                          {hasAnyKits ? `A.${sIdx + 1}` : sIdx + 1}
+                        </td>
+                        <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
+                          <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
+                          {description && (
+                            <div style={{ fontSize: '12px', color: '#475569', marginTop: '1px', fontWeight: '500' }}>
+                              {description}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '7px 6px', textAlign: 'center', color: '#64748B', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '600' }}>
+                          —
+                        </td>
+                        <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                          {item.uom || item.unit || 'NOS'}
+                        </td>
+                        <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', fontSize: '14.5px' }}>
+                          {qty}
+                        </td>
+                        <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '14.5px' }}>
+                          {qtyTaken !== '' ? qtyTaken : ''}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              )}
+            </React.Fragment>
           ) : (
-            items.map((item, idx) => {
-              const qty = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
+            enrichedItems.map((item, idx) => {
+              const qty = getItemOneSetQty(item, item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1);
+              const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
+                ? item.quantityTaken
+                : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
+                  ? item.qtyTaken
+                  : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
               const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
-              const description = item.specs || (item.name ? item.description : '') || item.category || (item.isPresetItem && item.presetName ? `Kit: ${item.presetName}` : '');
+              const description = item.specs || (item.name ? item.description : '') || item.category;
+
+              const fallbackMid = Math.floor(enrichedItems.length / 2);
+              const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
 
               return (
                 <tr
                   key={idx}
                   style={{
-                    borderBottom: '1px solid #E2E8F0',
+                    borderBottom: '1px solid #CBD5E1',
                     backgroundColor: idx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
                     pageBreakInside: 'avoid',
                     breakInside: 'avoid'
                   }}
                 >
-                  <td style={{ padding: '3.5px 6px', textAlign: 'center', color: '#64748B', borderRight: '1px solid #E2E8F0' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
                     {idx + 1}
                   </td>
-                  <td style={{ padding: '3.5px 8px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
-                    <strong style={{ color: '#0F172A', fontSize: '10.5px' }}>{itemName}</strong>
+                  <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
+                    <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
                     {description && (
-                      <span style={{ fontSize: '9px', color: '#64748B', marginLeft: '6px', fontWeight: '500' }}>
+                      <span style={{ fontSize: '12px', color: '#475569', marginLeft: '8px', fontWeight: '500' }}>
                         ({description})
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: '3.5px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0' }}>
+                  <td
+                    style={{
+                      padding: (idx === fallbackMid && fallbackSetVal) ? '4px 6px' : '0',
+                      textAlign: 'center',
+                      verticalAlign: 'middle',
+                      color: '#0E7490',
+                      backgroundColor: '#FFFFFF',
+                      borderRight: '1px solid #CBD5E1',
+                      borderLeft: '1px solid #CBD5E1',
+                      borderTop: idx === 0 ? '1px solid #CBD5E1' : 'none',
+                      borderBottom: idx === enrichedItems.length - 1 ? '1px solid #CBD5E1' : 'none',
+                      fontSize: '13px',
+                      fontWeight: '800',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {idx === fallbackMid && fallbackSetVal ? (
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
+                          {fallbackSetVal}
+                        </span>
+                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          {Number(fallbackSetVal) === 1 ? 'Set' : 'Sets'}
+                        </span>
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
                     {item.uom || item.unit || 'NOS'}
                   </td>
-                  <td style={{ padding: '3.5px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '10.5px' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', fontSize: '14.5px' }}>
                     {qty}
+                  </td>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '14.5px' }}>
+                    {qtyTaken !== '' ? qtyTaken : ''}
                   </td>
                 </tr>
               );
@@ -572,20 +997,161 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           )}
         </tbody>
         {items.length > 0 && (
-          <tfoot>
-            <tr style={{ backgroundColor: '#F1F5F9', borderTop: '1.5px solid #CBD5E1', fontWeight: '800' }}>
-              <td colSpan={3} style={{ padding: '5px 8px', textAlign: 'right', color: '#475569', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Total Quantity:
+          <tfoot style={{ display: 'table-row-group' }}>
+            <tr style={{ backgroundColor: '#F1F5F9', borderTop: '2px solid #0E7490', fontWeight: '800', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+              <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right', color: '#475569', fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                {hasAnyKits ? 'Total Quantity (1 Set):' : 'Total Quantity:'}
               </td>
-              <td style={{ padding: '5px 6px', textAlign: 'center', color: '#0E7490', fontSize: '11.5px', fontWeight: '900' }}>
+              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900', borderRight: '1px solid #CBD5E1' }}>
                 {totalQuantity}
+              </td>
+              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900' }}>
+                {totalQuantityTaken > 0 ? totalQuantityTaken : ''}
               </td>
             </tr>
           </tfoot>
         )}
       </table>
 
-      {/* 5. OFFICIAL AUTHORIZED SIGNATORY BLOCK */}
+      {/* 5. PACKAGING CONTAINERS (NO. OF BOXES, NO. OF BUNDLES, NO. OF BAGS) */}
+      <div
+        className="print-avoid-break"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '12px',
+          marginTop: '14px',
+          marginBottom: '16px',
+          pageBreakInside: 'avoid',
+          breakInside: 'avoid'
+        }}
+      >
+        <div style={{
+          border: '1.5px solid #CBD5E1',
+          borderRadius: '6px',
+          backgroundColor: '#F8FAFC',
+          padding: '10px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          minHeight: '60px',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            No. of Boxes
+          </div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', marginTop: '5px' }}>
+            {boxesVal ? `${boxesVal} Boxes` : <span style={{ color: '#94A3B8', fontWeight: '400' }}>____________________</span>}
+          </div>
+        </div>
+
+        <div style={{
+          border: '1.5px solid #CBD5E1',
+          borderRadius: '6px',
+          backgroundColor: '#F8FAFC',
+          padding: '10px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          minHeight: '60px',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            No. of Bundles
+          </div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', marginTop: '5px' }}>
+            {bundlesVal ? `${bundlesVal} Bundles` : <span style={{ color: '#94A3B8', fontWeight: '400' }}>____________________</span>}
+          </div>
+        </div>
+
+        <div style={{
+          border: '1.5px solid #CBD5E1',
+          borderRadius: '6px',
+          backgroundColor: '#F8FAFC',
+          padding: '10px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          minHeight: '60px',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            No. of Bags
+          </div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', marginTop: '5px' }}>
+            {bagsVal ? `${bagsVal} Bags` : <span style={{ color: '#94A3B8', fontWeight: '400' }}>____________________</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* 6. INSPECTION CRITERIA & PACKING VERIFICATION TABLE */}
+      <table
+        className="print-avoid-break"
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          border: '1.5px solid #CBD5E1',
+          marginBottom: '16px',
+          fontSize: '13px',
+          boxSizing: 'border-box',
+          pageBreakInside: 'avoid',
+          breakInside: 'avoid'
+        }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontWeight: '800' }}>
+            <th style={{ padding: '8px 8px', width: '50px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px' }}>S.No</th>
+            <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px' }}>Inspection Criteria</th>
+            <th style={{ padding: '8px 8px', width: '90px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px' }}>Tested</th>
+            <th style={{ padding: '8px 12px', width: '160px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px' }}>Packed By</th>
+            <th style={{ padding: '8px 12px', width: '160px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '12.5px' }}>Confirmed By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            { sno: 1, criteria: 'Materials Packed & Counted' },
+            { sno: 2, criteria: 'Accessories Packed' },
+            { sno: 3, criteria: 'Quality Check Done' }
+          ].map((row, idx) => (
+            <tr
+              key={idx}
+              style={{
+                borderBottom: '1px solid #CBD5E1',
+                backgroundColor: idx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
+                height: '44px'
+              }}
+            >
+              <td style={{ padding: '8px 8px', textAlign: 'center', color: '#475569', fontWeight: '700', borderRight: '1px solid #CBD5E1', fontSize: '13px' }}>
+                {row.sno}
+              </td>
+              <td style={{ padding: '8px 12px', borderRight: '1px solid #CBD5E1', color: '#0F172A', fontWeight: '700', fontSize: '13.5px' }}>
+                {row.criteria}
+              </td>
+              <td style={{ padding: '8px 8px', textAlign: 'center', borderRight: '1px solid #CBD5E1' }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '18px',
+                    height: '18px',
+                    border: '2px solid #1E293B',
+                    borderRadius: '4px',
+                    backgroundColor: '#FFFFFF',
+                    verticalAlign: 'middle'
+                  }}
+                />
+              </td>
+              <td style={{ padding: '8px 12px', borderRight: '1px solid #CBD5E1', textAlign: 'center' }}>
+                {/* Empty cell for Packed By signature/name */}
+              </td>
+              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                {/* Empty cell for Confirmed By signature/name */}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* 7. OFFICIAL AUTHORIZED SIGNATORY BLOCK */}
       <div 
         className="print-avoid-break" 
         style={{ 
@@ -601,8 +1167,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         <div style={{ textAlign: 'center', minWidth: '220px' }}>
           <div style={{ height: '36px' }}></div>
           <div style={{ borderTop: '1.5px dashed #94A3B8', paddingTop: '5px', width: '100%' }}>
-            <strong style={{ color: '#0F172A', fontSize: '11px', display: 'block' }}>For VRM Structures India Pvt Ltd</strong>
-            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>Authorized Signatory</div>
+            <strong style={{ color: '#0F172A', fontSize: '13px', display: 'block' }}>For VRM Structures India Pvt Ltd</strong>
+            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: '600' }}>Authorized Signatory</div>
           </div>
         </div>
       </div>
