@@ -272,8 +272,8 @@ export function getPorterVoiceCue(titleOrMessage, metadata = {}) {
 
   // 2. Determine Status cleanly
   let status = 'New Order';
-  if (step.includes('BOM_SENT_TO_DISPATCH') || upperText.includes('RECEIVED TO PACK') || upperText.includes('NEW BOM RECEIVED') || upperText.includes('RECEIVED TO DISPATCH')) {
-    status = 'New Order to Pack';
+  if (step.includes('BOM_SENT_TO_DISPATCH') || upperText.includes('RECEIVED FOR DISPATCH') || upperText.includes('RECEIVED TO PACK') || upperText.includes('NEW BOM RECEIVED') || upperText.includes('RECEIVED TO DISPATCH')) {
+    status = 'You have received a BOM for dispatch';
   } else if (step.includes('BOM_PACKED') || upperText.includes('PACKED AND SENT') || upperText.includes('PACKED & SENT') || upperText.includes('BOM PACKED') || upperText.includes('ORDER PACKED') || upperText.includes('PACKING COMPLETED')) {
     status = 'Order Packed';
   } else if (step.includes('ACCOUNTS_VERIFIED') || step.includes('BILLING_NOTIF') || upperText.includes('ACCOUNTS APPROVED') || upperText.includes('PAYMENT APPROVED')) {
@@ -432,9 +432,21 @@ if (typeof window !== 'undefined') {
  * System administrators and Executives always receive all notifications.
  */
 export function isRoleTargeted(userRole, targetRoles, metadata = {}) {
-  if (!userRole) return true;
+  if (!userRole) return false;
   
-  // Executive Leadership & Tech Admins have global visibility
+  const roleList = Array.isArray(targetRoles) ? targetRoles : (targetRoles ? [targetRoles] : []);
+  const normUserRole = (userRole || '').toLowerCase().trim();
+
+  // STRICT USER REQUIREMENT: Dispatch operational alert ("You have received a BOM for dispatch")
+  // MUST appear ONLY on the Dispatch login, and NOT on any other login (not Sales, not Admin/CEO, not Accounts, etc.)
+  const isDispatchExclusive = metadata?.step === 'BOM_SENT_TO_DISPATCH' || metadata?.isDispatchOnly || 
+    (roleList.length > 0 && roleList.every(r => (r || '').toLowerCase().includes('dispatch')));
+
+  if (isDispatchExclusive) {
+    return normUserRole.includes('dispatch') || normUserRole === 'dh' || normUserRole === 'dispatch head' || normUserRole === 'dispatch executive';
+  }
+
+  // Executive Leadership & Tech Admins have global visibility for general system notifications
   const adminRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Developer'];
   if (adminRoles.includes(userRole) || (userRole || '').startsWith('TA')) {
     return true;
@@ -443,8 +455,6 @@ export function isRoleTargeted(userRole, targetRoles, metadata = {}) {
   if (!targetRoles || targetRoles === 'All' || targetRoles === '*' || targetRoles.length === 0) {
     return true;
   }
-
-  const roleList = Array.isArray(targetRoles) ? targetRoles : [targetRoles];
 
   // Resolve active logged in user name and employee ID
   let currentUserName = '';
@@ -627,8 +637,8 @@ export function sendWorkflowNotification({
     }, 320);
   }
 
-  // 3. Emit local event for current tab toast
-  if (typeof window !== 'undefined') {
+  // 3. Emit local event for current tab toast ONLY if current user is targeted
+  if (typeof window !== 'undefined' && isTargetedToCurrentSession) {
     window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: notification }));
     window.dispatchEvent(new Event('vrm_notifications_updated'));
   }
@@ -705,17 +715,18 @@ export function clearAllLiveNotifications() {
 export function notifyBomSentToDispatch({ bomCode, customerName, salesPerson }) {
   const safeCustomer = customerName || 'Customer';
   return sendWorkflowNotification({
-    title: `📦 New BOM Received to Pack`,
-    message: `You have received BOM ${bomCode} (${safeCustomer}) to pack. Click to open and begin packing.`,
+    title: `📦 New BOM Received for Dispatch`,
+    message: `You have received BOM ${bomCode} (${safeCustomer}) for dispatch. Click to open and begin packing.`,
     targetTab: 'Dispatch Orders',
-    targetRoles: ['Dispatch Head', 'Production Head', 'Production Admin', 'Dispatch Executive', 'Floor Supervisor'],
+    targetRoles: ['Dispatch Head', 'Dispatch Executive', 'Dispatch'],
     type: 'info',
     soundType: 'chime',
     metadata: {
       bomCode,
       customerName: safeCustomer,
       salesPerson: salesPerson || 'Sales Executive',
-      step: 'BOM_SENT_TO_DISPATCH'
+      step: 'BOM_SENT_TO_DISPATCH',
+      isDispatchOnly: true
     }
   });
 }

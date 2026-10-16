@@ -1,70 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, ArrowRight, X, Package, CreditCard, Receipt, CheckCircle, Truck, AlertCircle } from 'lucide-react';
-import { isRoleTargeted, playWorkflowNotificationSound, markNotificationAsRead, speakNotificationVoice, playPorterOrderAlert, getPorterVoiceCue } from '../services/notificationService';
+import { X } from 'lucide-react';
+import { isRoleTargeted, markNotificationAsRead, speakNotificationVoice, playPorterOrderAlert, getPorterVoiceCue } from '../services/notificationService';
 
 export default function WorkflowNotificationBanner({ userRole, onNavigate }) {
   const [activeToast, setActiveToast] = useState(null);
-  const [progress, setProgress] = useState(100);
   const timerRef = useRef(null);
-  const progressIntervalRef = useRef(null);
-
+  const seenToastIds = useRef(new Set());
 
   useEffect(() => {
     const handleWorkflowToast = (event) => {
       const notif = event.detail;
       if (!notif) return;
 
-      // Filter by role unless Admin or All
+      // 1. Role-based targeting filter: Only show if matches user's active role
       if (!isRoleTargeted(userRole, notif.targetRoles, notif.metadata)) {
         return;
       }
 
-      // If received from another tab via BroadcastChannel, play chime & voice in this tab for the targeted sales person
+      // Deduplicate rapid repeat events
+      if (notif.id && seenToastIds.current.has(notif.id)) {
+        return;
+      }
+      if (notif.id) {
+        seenToastIds.current.add(notif.id);
+        if (seenToastIds.current.size > 30) {
+          const [first] = seenToastIds.current;
+          seenToastIds.current.delete(first);
+        }
+      }
+
+      // 2. Voice Message: Play sound alert & speech cue
       if (notif.fromBroadcast) {
         playPorterOrderAlert();
         setTimeout(() => {
           const cue = getPorterVoiceCue(notif, notif.metadata);
           speakNotificationVoice(cue, { rate: 1.12, pitch: 1.05 });
-        }, 320);
+        }, 300);
       }
 
-      // Clear any previous timers
+      // Clear any previous timer
       if (timerRef.current) clearTimeout(timerRef.current);
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
 
       setActiveToast(notif);
-      setProgress(100);
 
-      // 8-second countdown timer with visual progress bar
-      const durationMs = 8000;
-      const stepMs = 50;
-      const stepPct = (stepMs / durationMs) * 100;
-
-      progressIntervalRef.current = setInterval(() => {
-        setProgress((prev) => {
-          if (prev <= 0) {
-            clearInterval(progressIntervalRef.current);
-            return 0;
-          }
-          return Math.max(0, prev - stepPct);
-        });
-      }, stepMs);
-
+      // Auto-dismiss cleanly after 5 seconds
       timerRef.current = setTimeout(() => {
-        // Automatically mark as read once acknowledged on screen
         if (notif && notif.id) {
           markNotificationAsRead(notif.id);
         }
         setActiveToast(null);
-        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-      }, durationMs);
+      }, 5000);
     };
 
     window.addEventListener('vrm_workflow_toast', handleWorkflowToast);
     return () => {
       window.removeEventListener('vrm_workflow_toast', handleWorkflowToast);
       if (timerRef.current) clearTimeout(timerRef.current);
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     };
   }, [userRole]);
 
@@ -73,13 +64,11 @@ export default function WorkflowNotificationBanner({ userRole, onNavigate }) {
   const handleActionClick = (e) => {
     if (e) e.stopPropagation();
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    
+
     const targetTab = activeToast.targetTab;
     const notifId = activeToast.id;
     setActiveToast(null);
 
-    // Mark as read in storage so it never persists unread on page reload
     if (notifId) {
       markNotificationAsRead(notifId);
     }
@@ -92,52 +81,24 @@ export default function WorkflowNotificationBanner({ userRole, onNavigate }) {
   const handleDismiss = (e) => {
     if (e) e.stopPropagation();
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     const notifId = activeToast.id;
     setActiveToast(null);
 
-    // Mark as read in storage so it never persists unread on page reload
     if (notifId) {
       markNotificationAsRead(notifId);
     }
   };
 
-  // Icon mapping
-  let IconComponent = Bell;
-  let accentColor = '#0E7490';
-  let iconBg = '#ECFEFF';
-
-  const titleLower = (activeToast.title || '').toLowerCase();
-  const tabLower = (activeToast.targetTab || '').toLowerCase();
-
-  if (tabLower.includes('dispatch') || titleLower.includes('pack')) {
-    IconComponent = Package;
-    accentColor = '#0891B2';
-    iconBg = '#ECFEFF';
-  } else if (tabLower.includes('account') || titleLower.includes('account')) {
-    IconComponent = CreditCard;
-    accentColor = '#059669';
-    iconBg = '#ECFDF5';
-  } else if (tabLower.includes('invoice') || titleLower.includes('invoice')) {
-    IconComponent = Receipt;
-    accentColor = '#2563EB';
-    iconBg = '#EFF6FF';
-  } else if (titleLower.includes('cleared') || titleLower.includes('completed')) {
-    IconComponent = Truck;
-    accentColor = '#16A34A';
-    iconBg = '#F0FDF4';
-  }
-
-  const roleBadge = Array.isArray(activeToast.targetRoles) && activeToast.targetRoles.length > 0 && activeToast.targetRoles[0] !== 'All'
-    ? activeToast.targetRoles[0]
-    : 'Workflow Alert';
+  // Clean title (strip leading emoji if any for modern iOS look matching reference image)
+  const rawTitle = activeToast.title || 'Notification';
+  const cleanTitle = rawTitle.replace(/^[\p{Emoji}\p{Extended_Pictographic}\s]+/u, '').trim() || rawTitle;
 
   return (
     <>
       <style>{`
-        @keyframes toastBannerSlideDown {
+        @keyframes iosNotificationSlide {
           0% {
-            transform: translateY(-20px) scale(0.96);
+            transform: translateY(-24px) scale(0.96);
             opacity: 0;
           }
           100% {
@@ -145,169 +106,133 @@ export default function WorkflowNotificationBanner({ userRole, onNavigate }) {
             opacity: 1;
           }
         }
-        @keyframes audioPulse {
-          0% { transform: scale(1); opacity: 0.9; }
-          50% { transform: scale(1.15); opacity: 1; }
-          100% { transform: scale(1); opacity: 0.9; }
-        }
       `}</style>
       <div 
         onClick={handleActionClick}
         style={{
           position: 'fixed',
-          top: '20px',
-          right: '24px',
+          top: '16px',
+          right: '20px',
           zIndex: 9999999,
-          maxWidth: '430px',
-          width: 'calc(100vw - 48px)',
-          backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
-          boxShadow: '0 20px 40px -8px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.08)',
-          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-          animation: 'toastBannerSlideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-          cursor: 'pointer',
-          overflow: 'hidden',
+          maxWidth: '360px',
+          width: 'calc(100vw - 40px)',
+          backgroundColor: 'rgba(255, 255, 255, 0.96)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: '18px',
+          boxShadow: '0 12px 32px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.06)',
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          animation: 'iosNotificationSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          cursor: activeToast.targetTab ? 'pointer' : 'default',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '12px',
           transition: 'transform 0.15s ease, box-shadow 0.15s ease'
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 24px 48px -8px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.12)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+          e.currentTarget.style.boxShadow = '0 16px 36px -4px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(15, 23, 42, 0.08)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 20px 40px -8px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.08)';
+          e.currentTarget.style.boxShadow = '0 12px 32px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.06)';
         }}
       >
-        {/* Top Accent Gradient Bar */}
+        {/* Businz App Icon (iOS squircle matching user reference image) */}
         <div style={{
-          height: '4px',
-          width: '100%',
-          background: `linear-gradient(90deg, ${accentColor} 0%, #38BDF8 100%)`
-        }} />
-
-        <div style={{ padding: '14px 16px 14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {/* Header Row: Role Tag, Audio Ping Indicator, Close Button */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{
-                backgroundColor: iconBg,
-                color: accentColor,
-                fontSize: '10.5px',
-                fontWeight: '800',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                border: `1px solid ${accentColor}25`
-              }}>
-                {roleBadge}
-              </span>
-              
-
-            </div>
-
-            <button
-              onClick={handleDismiss}
-              title="Dismiss notification"
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: '#94A3B8',
-                cursor: 'pointer',
-                padding: '4px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'color 0.15s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#0F172A'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#94A3B8'}
-            >
-              <X size={16} />
-            </button>
-          </div>
-
-          {/* Main Body: Icon + Title + Message */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '12px',
-              backgroundColor: iconBg,
-              color: accentColor,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: `0 2px 8px ${accentColor}20`
-            }}>
-              <IconComponent size={20} />
-            </div>
-
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: '13.5px',
-                fontWeight: '800',
-                color: '#0F172A',
-                lineHeight: '1.3',
-                marginBottom: '4px'
-              }}>
-                {activeToast.title}
-              </div>
-              <div style={{
-                fontSize: '12px',
-                color: '#475569',
-                lineHeight: '1.45',
-                wordBreak: 'break-word'
-              }}>
-                {activeToast.message}
-              </div>
-            </div>
-          </div>
-
-          {/* Action CTA Button */}
-          {activeToast.targetTab && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-              <button
-                onClick={handleActionClick}
-                style={{
-                  backgroundColor: accentColor,
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '7px 14px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: `0 2px 6px ${accentColor}35`,
-                  transition: 'opacity 0.15s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-              >
-                <span>Open {activeToast.targetTab}</span>
-                <ArrowRight size={13} />
-              </button>
-            </div>
-          )}
+          width: '38px',
+          height: '38px',
+          borderRadius: '10px',
+          backgroundColor: '#FFFFFF',
+          boxShadow: '0 2px 6px rgba(14, 116, 144, 0.18), 0 0 0 1px rgba(14, 116, 144, 0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          overflow: 'hidden'
+        }}>
+          <img 
+            src="/businz_icon.png" 
+            alt="Businz" 
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onError={(e) => {
+              e.currentTarget.src = '/businz_logo_clean.png';
+            }}
+          />
         </div>
 
-        {/* Bottom Progress Bar Countdown */}
-        <div style={{
-          height: '3px',
-          width: '100%',
-          backgroundColor: '#F1F5F9'
-        }}>
+        {/* Content: Title + NOW on row 1, Message on row 2 */}
+        <div style={{ flex: 1, minWidth: 0, paddingTop: '1px' }}>
+          {/* Header Row: Title on Left, NOW + Close on Right */}
           <div style={{
-            height: '100%',
-            width: `${progress}%`,
-            backgroundColor: accentColor,
-            transition: 'width 0.05s linear'
-          }} />
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            marginBottom: '2px'
+          }}>
+            <span style={{
+              fontSize: '14px',
+              fontWeight: '700',
+              color: '#0F172A',
+              letterSpacing: '-0.2px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {cleanTitle}
+            </span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: '600',
+                color: '#64748B',
+                letterSpacing: '0.4px',
+                textTransform: 'uppercase'
+              }}>
+                NOW
+              </span>
+
+              <button
+                type="button"
+                onClick={handleDismiss}
+                title="Dismiss"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#0F172A'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#94A3B8'}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Subtitle / Message Text */}
+          <div style={{
+            fontSize: '12.5px',
+            color: '#334155',
+            lineHeight: '1.38',
+            fontWeight: '400',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical'
+          }}>
+            {activeToast.message}
+          </div>
         </div>
       </div>
     </>

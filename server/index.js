@@ -1363,6 +1363,9 @@ const saveDatabaseStore = async (key, storeData) => {
       broadcastRealtimeEvent('vendor_store_updated', { vendors: storeData });
     } else if (cleanKey === 'bom_store') {
       broadcastRealtimeEvent('bom_updated', { bomList: storeData });
+    } else if (cleanKey === 'notifications_store') {
+      const latestNotif = Array.isArray(storeData) ? storeData[0] : storeData;
+      broadcastRealtimeEvent('workflow_notification', { notification: latestNotif, storeData });
     }
   } catch (_) {}
 

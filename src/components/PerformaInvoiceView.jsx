@@ -666,8 +666,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
 
     updatePiList(updatedList);
-    setSelectedPi(null);
-    showTopToast(`✅ Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been completed and released!`, 'success', 5000);
+    notifyPiCreated({
+      piNo: cleanPiNo,
+      customerName: safeCustomer,
+      salesPerson: cleanSalesPerson,
+      amount: amtStr
+    });
 
     // Push to backend /api/estimates
     try {
@@ -2374,15 +2378,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       resetForm();
       setViewMode('list');
 
-      // In-app top message notification (Self-dismissing, NO browser alert modal or OK button)
-      const safeCustomer = (vendorName || customerName || 'Customer').trim();
-      showTopToast(
-        isDraft
-          ? `📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`
-          : `✅ You have completed the PI (${cleanPiNo}) for ${safeCustomer}!`,
-        'success',
-        6000
-      );
+      if (isDraft) {
+        const safeCustomer = (vendorName || customerName || 'Customer').trim();
+        showTopToast(`📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`, 'info', 5000);
+      }
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
       showTopToast('Error creating Proforma Invoice: ' + (err?.message || 'Please check your connection and try again.'), 'error', 6000);

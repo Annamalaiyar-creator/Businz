@@ -117,6 +117,15 @@ export const initRealtimeSync = () => {
             window.dispatchEvent(new CustomEvent('controlroom_whatsapp_message', { detail: payload }));
           }
 
+          // 10. Real-time Workflow Notifications (Instant push across different logins / machines)
+          if (type === 'workflow_notification' || (type === 'store_updated' && payload?.key === 'notifications_store')) {
+            const notif = payload?.notification || (Array.isArray(payload?.storeData) ? payload.storeData[0] : null);
+            if (notif) {
+              window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: { ...notif, fromBroadcast: true } }));
+              window.dispatchEvent(new Event('vrm_notifications_updated'));
+            }
+          }
+
           // Global broadcast for any custom listeners
           window.dispatchEvent(new CustomEvent('controlroom_realtime_event', { detail: data }));
         } catch (parseErr) {
