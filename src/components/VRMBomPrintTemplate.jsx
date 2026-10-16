@@ -755,16 +755,15 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                         <tr
                           key={`kit_item_${item.id || itemIdx}`}
                           style={{
-                            borderBottom: '1px solid #CBD5E1',
                             backgroundColor: itemIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
                             pageBreakInside: 'avoid',
                             breakInside: 'avoid'
                           }}
                         >
-                          <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                          <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '13px', fontWeight: '700' }}>
                             {hasMultipleKits ? `${kIdx + 1}.${itemIdx + 1}` : itemIdx + 1}
                           </td>
-                          <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
+                          <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', wordBreak: 'break-word' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                               <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
                               {hasMultipleKits && (
@@ -780,7 +779,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                             )}
                           </td>
 
-                          {/* SET COLUMN: Displayed once in the center of the column alone for this kit, without rowSpan to avoid page-break bugs */}
+                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
                           <td
                             style={{
                               padding: isMiddle ? '4px 6px' : '0',
@@ -790,8 +789,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                               backgroundColor: '#FFFFFF',
                               borderRight: '1px solid #CBD5E1',
                               borderLeft: '1px solid #CBD5E1',
-                              borderTop: isFirst ? '1px solid #CBD5E1' : 'none',
-                              borderBottom: isLast ? '1px solid #CBD5E1' : 'none',
+                              borderTop: isFirst ? '1px solid #CBD5E1' : '1px hidden transparent',
+                              borderBottom: isLast ? '1px solid #CBD5E1' : '1px hidden transparent',
                               whiteSpace: 'nowrap'
                             }}
                           >
@@ -807,13 +806,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                             ) : null}
                           </td>
 
-                          <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                          <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '13px', fontWeight: '700' }}>
                             {item.uom || item.unit || 'NOS'}
                           </td>
-                          <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', fontSize: '14.5px' }}>
+                          <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '14.5px' }}>
                             {qty}
                           </td>
-                          <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '14.5px' }}>
+                          <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', borderBottom: '1px solid #CBD5E1', fontSize: '14.5px' }}>
                             {qtyTaken !== '' ? qtyTaken : ''}
                           </td>
                         </tr>
@@ -938,16 +937,15 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                 <tr
                   key={idx}
                   style={{
-                    borderBottom: '1px solid #CBD5E1',
                     backgroundColor: idx % 2 === 1 ? '#F8FAFC' : '#FFFFFF',
                     pageBreakInside: 'avoid',
                     breakInside: 'avoid'
                   }}
                 >
-                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '13px', fontWeight: '700' }}>
                     {idx + 1}
                   </td>
-                  <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
+                  <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', wordBreak: 'break-word' }}>
                     <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
                     {description && (
                       <span style={{ fontSize: '12px', color: '#475569', marginLeft: '8px', fontWeight: '500' }}>
@@ -964,8 +962,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                       backgroundColor: '#FFFFFF',
                       borderRight: '1px solid #CBD5E1',
                       borderLeft: '1px solid #CBD5E1',
-                      borderTop: idx === 0 ? '1px solid #CBD5E1' : 'none',
-                      borderBottom: idx === enrichedItems.length - 1 ? '1px solid #CBD5E1' : 'none',
+                      borderTop: idx === 0 ? '1px solid #CBD5E1' : '1px hidden transparent',
+                      borderBottom: idx === enrichedItems.length - 1 ? '1px solid #CBD5E1' : '1px hidden transparent',
                       fontSize: '13px',
                       fontWeight: '800',
                       whiteSpace: 'nowrap'
@@ -982,13 +980,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                       </div>
                     ) : null}
                   </td>
-                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '700' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#334155', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '13px', fontWeight: '700' }}>
                     {item.uom || item.unit || 'NOS'}
                   </td>
-                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', fontSize: '14.5px' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '900', color: '#0F172A', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', fontSize: '14.5px' }}>
                     {qty}
                   </td>
-                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', fontSize: '14.5px' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#0F172A', borderBottom: '1px solid #CBD5E1', fontSize: '14.5px' }}>
                     {qtyTaken !== '' ? qtyTaken : ''}
                   </td>
                 </tr>
