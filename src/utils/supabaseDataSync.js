@@ -847,6 +847,7 @@ export function toConsumerBom(row) {
     transportMode: row.transport_mode || 'Transport',
     transportScope: row.transport_scope || 'VRM Structures',
     transporterName: row.transporter_name || '',
+    destination: row.destination || extraData.destination || '',
     vehicleNo: row.vehicle_no || '',
     lrNo: row.lr_no || '',
     paymentType: row.payment_type || '100% Paid',
@@ -994,6 +995,7 @@ export function toDatabaseBomRow(item) {
   if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
   if (item.invoiceNo) mergedExtra.invoiceNo = item.invoiceNo;
+  if (item.destination) mergedExtra.destination = item.destination;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }
@@ -1042,11 +1044,11 @@ export function toDatabaseBomRow(item) {
     delivery_address: item.deliveryAddress || item.c7 || '',
     delivery_address_obj: item.deliveryAddressObj || {},
     delivery_address_proof_doc: serializeDoc(item.deliveryAddressProofDoc),
-    transport_mode: item.transportMode || 'Transport',
+    transport_mode: item.transportMode || item.vehicleLoading?.deliveryMode || 'Transport',
     transport_scope: item.transportScope || item.transport_scope || 'VRM Structures',
-    transporter_name: item.transporterName || '',
-    vehicle_no: item.vehicleNo || '',
-    lr_no: item.lrNo || '',
+    transporter_name: item.transporterName || item.transporter || item.vehicleLoading?.transporter || '',
+    vehicle_no: item.vehicleNo || item.vehicle_no || item.vehicleLoading?.vehicleNo || '',
+    lr_no: item.lrNo || item.lr_no || item.vehicleLoading?.lrNo || '',
     payment_type: item.paymentType || '100% Paid',
     partial_amount: sanitizeNumber(item.partialAmount, 0),
     balance_amount: sanitizeNumber(item.balanceAmount, 0),

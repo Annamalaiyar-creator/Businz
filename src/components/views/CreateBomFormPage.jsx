@@ -29,7 +29,7 @@ export default function CreateBomFormPage(props) {
     newBomCreditDays, setNewBomCreditDays, sameAsBilling, setSameAsBilling,
     newBomDeliveryProofDoc, setNewBomDeliveryProofDoc, newBomPaymentProofDoc, setNewBomPaymentProofDoc,
     newBomRemarks, setNewBomRemarks, newBomTransportMode, setNewBomTransportMode,
-    newBomTransporterName, setNewBomTransporterName, newBomVehicleNo, setNewBomVehicleNo,
+    newBomTransporterName, setNewBomTransporterName, newBomDestination, setNewBomDestination, newBomVehicleNo, setNewBomVehicleNo,
     newBomLrNo, setNewBomLrNo, newBomGstRate, setNewBomGstRate, activePresetsMap,
     selectedPreset, setSelectedPreset, presetSetCount, setPresetSetCount,
     presetKitPrice, setPresetKitPrice, setPreviewDocModal,
@@ -1279,7 +1279,6 @@ export default function CreateBomFormPage(props) {
             onClick={handleAddMaterialRow}
             style={{ border: '1px solid #E0E7FF', background: '#EEF2FF', color: '#4F46E5', padding: '9px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            <Plus style={{ width: '15px', height: '15px' }} />
             Add Product / Item
           </button>
         </div>
@@ -1296,7 +1295,7 @@ export default function CreateBomFormPage(props) {
           </h3>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           <div>
             <label htmlFor="create-bom-form-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
               Mode of Transport <span style={{ color: '#EF4444' }}>*</span>
@@ -1331,6 +1330,20 @@ export default function CreateBomFormPage(props) {
               onChange={(e) => setNewBomTransporterName(e.target.value)}
               placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
               style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
+             />
+          </div>
+
+          <div>
+            <label htmlFor="create-bom-form-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              Destination <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <input id="create-bom-form-destination" name="destination" aria-label="Destination"
+              type="text"
+              required
+              value={newBomDestination || ''}
+              onChange={(e) => setNewBomDestination && setNewBomDestination(e.target.value)}
+              placeholder="e.g. Coimbatore, Hyderabad, Site Location..."
+              style={{ width: '100%', height: '42px', borderRadius: '10px', border: (!newBomDestination?.trim() && (bomFormErrors?.destination || false)) ? '1.5px solid #EF4444' : '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
              />
           </div>
         </div>
@@ -1903,6 +1916,7 @@ export default function CreateBomFormPage(props) {
                       deliveryAddressProofDoc: sameAsBilling ? null : (newBomDeliveryProofDoc || null),
                       transportMode: newBomTransportMode || 'Transport',
                       transporterName: newBomTransporterName || '',
+                      destination: (newBomDestination || '').trim(),
                       vehicleNo: newBomVehicleNo || '',
                       lrNo: newBomLrNo || '',
                       paymentType: normalizePaymentTerm(newBomPaymentType),
@@ -2160,6 +2174,7 @@ export default function CreateBomFormPage(props) {
                     setNewBomDeliveryProofDoc(null);
                     setNewBomRemarks('');
                     setNewBomTransporterName('');
+                    if (typeof setNewBomDestination === 'function') setNewBomDestination('');
                     setNewBomVehicleNo('');
                     setNewBomLrNo('');
                     setNewBomCreditDays(7);

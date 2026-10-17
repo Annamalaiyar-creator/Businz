@@ -344,6 +344,7 @@ export default function BomOrdersView(props) {
   const [newBomRemarks, setNewBomRemarks] = useState('');
   const [newBomTransportMode, setNewBomTransportMode] = useState('Transport');
   const [newBomTransporterName, setNewBomTransporterName] = useState('');
+  const [newBomDestination, setNewBomDestination] = useState('');
   const [newBomVehicleNo, setNewBomVehicleNo] = useState('');
   const [newBomTransportScope, setNewBomTransportScope] = useState('VRM Structures');
   const [newBomLrNo, setNewBomLrNo] = useState('');
@@ -461,6 +462,16 @@ export default function BomOrdersView(props) {
           targetId: 'field-newBomDeliveryStreet'
         });
       }
+    }
+
+    // 4b. Mandatory Destination
+    if (!isDraft && (!newBomDestination || !newBomDestination.trim())) {
+      errors.destination = 'Destination is required';
+      missingList.push({
+        field: 'Destination *',
+        message: 'Destination is mandatory. Please enter delivery destination.',
+        targetId: 'bom-orders-destination'
+      });
     }
 
     // 5. Payment Proof for 100% Paid / Partial Paid Orders (Mandatory per policy)
@@ -651,7 +662,7 @@ export default function BomOrdersView(props) {
     rows.push(['Billing Address', bStr]);
     rows.push(['Delivery Address', dStr]);
     rows.push(['Transport Mode', transportMode, 'Transport Scope', transportScope]);
-    rows.push(['Transporter Name', transporterName, 'Vehicle Number', vehicleNo, 'LR / Docket No', lrNo]);
+    rows.push(['Transporter Name', transporterName, 'Destination', record.destination || record.deliveryCity || '-', 'Vehicle Number', vehicleNo, 'LR / Docket No', lrNo]);
     rows.push([]);
     rows.push(['LINE ITEMS BREAKDOWN']);
     rows.push(['#', 'Item Description', 'Category', 'Quantity', 'UOM', 'Unit Rate (INR)', 'Taxable Amount (INR)', 'GST Rate', 'GST Amount (INR)', 'Total (INR)']);
@@ -1115,6 +1126,7 @@ export default function BomOrdersView(props) {
       if (pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc) setNewBomDeliveryProofDoc(pendingPi.deliveryProofDoc || pendingPi.deliveryAddressProofDoc);
       setNewBomTransportMode(pendingPi.transportMode || 'Transport');
       setNewBomTransporterName(pendingPi.transporterName || pendingPi.transporter || '');
+      setNewBomDestination(pendingPi.destination || pendingPi.deliveryCity || pendingPi.city || '');
       setNewBomVehicleNo(pendingPi.vehicleNo || '');
       setNewBomTransportScope(pendingPi.transportScope || 'VRM Structures');
       setNewBomLrNo(pendingPi.lrNo || '');
@@ -1605,26 +1617,27 @@ export default function BomOrdersView(props) {
     const docName = typeof rawDoc === 'string' ? rawDoc : (rawDoc?.name || 'Uploaded File');
 
     let resolvedData = null;
+    const isCleanStr = (s) => typeof s === 'string' && s && !s.startsWith('blob:');
     if (typeof rawDoc === 'string') {
       if (rawDoc.startsWith('blob:')) {
         resolvedData = null;
-      } else if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('blob:') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
+      } else if (rawDoc.startsWith('data:') || rawDoc.startsWith('http://') || rawDoc.startsWith('https://') || rawDoc.startsWith('/uploads/') || rawDoc.startsWith('/api/uploads/')) {
         resolvedData = rawDoc;
       } else {
         const cached = getMediaFromCache(rawDoc);
         resolvedData = cached || null;
       }
     } else if (rawDoc && typeof rawDoc === 'object') {
-      const u = rawDoc.url || null;
-      const d = rawDoc.dataUrl || null;
-      const prevUrl = rawDoc.previewUrl || null;
-      const f = rawDoc.fileData || null;
-      const p = rawDoc.proofDocData || null;
+      const u = isCleanStr(rawDoc.url) ? rawDoc.url : null;
+      const d = isCleanStr(rawDoc.dataUrl) ? rawDoc.dataUrl : null;
+      const prevUrl = (isCleanStr(rawDoc.previewUrl) || (rawDoc._rawFile && rawDoc.previewUrl)) ? rawDoc.previewUrl : null;
+      const f = isCleanStr(rawDoc.fileData) ? rawDoc.fileData : null;
+      const p = isCleanStr(rawDoc.proofDocData) ? rawDoc.proofDocData : null;
       const c1 = rawDoc.name ? getMediaFromCache(rawDoc.name) : null;
       const c2 = rawDoc.id ? getMediaFromCache(rawDoc.id) : null;
       const cacheVal = c1 || c2 || null;
 
-      resolvedData = prevUrl || u || d || f || p || cacheVal;
+      resolvedData = d || u || prevUrl || f || p || cacheVal;
       if (!resolvedData && rawDoc._rawFile && (rawDoc._rawFile instanceof Blob || rawDoc._rawFile instanceof File)) {
         try {
           resolvedData = URL.createObjectURL(rawDoc._rawFile);
@@ -1640,7 +1653,7 @@ export default function BomOrdersView(props) {
     // Resolve private Supabase Storage documents via secure signed URLs
     if (!resolvedData && rawDoc && typeof rawDoc === 'object' && (rawDoc.storageBucket || rawDoc.storagePath) && !rawDoc._fetchingStorage) {
       if (typeof rawDoc === 'object') rawDoc._fetchingStorage = true;
-      const bCode = previewDocModal.bomCode || rawDoc.bomCode;
+      const bCode = previewDocModal.bomCode || rawDoc.bomCode || (rawDoc.storagePath ? rawDoc.storagePath.split('/')[0] : null);
       resolveDocumentUrlAsync(rawDoc, bCode)
         .then(url => {
           if (url) {
@@ -3613,7 +3626,7 @@ export default function BomOrdersView(props) {
                 {bomMaterialsList.length === 0 ? (
                   <tr>
                     <td colSpan={bomMaterialsList.some(it => it.isPresetItem) ? 10 : 9} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
-                      No items added yet. Pick a preset above or click <strong>+ Add Product / Item</strong> below.
+                      No items added yet. Pick a preset above or click <strong>Add Product / Item</strong> below.
                     </td>
                   </tr>
                 ) : (
@@ -4049,7 +4062,6 @@ export default function BomOrdersView(props) {
                 onClick={handleAddMaterialRow}
                 style={{ border: '1px solid #A5F3FC', background: '#ECFEFF', color: '#0E7490', padding: '9px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                <Plus style={{ width: '15px', height: '15px' }} />
                 Add Product / Item
               </button>
             </div>
@@ -4068,7 +4080,7 @@ export default function BomOrdersView(props) {
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             <div>
               <label htmlFor="bom-orders-mode-of-transport" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Mode of Transport <span style={{ color: '#EF4444' }}>*</span>
@@ -4091,6 +4103,18 @@ export default function BomOrdersView(props) {
                 onChange={(e) => setNewBomTransporterName(e.target.value)}
                 placeholder="e.g. VRL Logistics / TCI Freight / Local Transport"
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
+               />
+            </div>
+            <div>
+              <label htmlFor="bom-orders-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Destination <span style={{ color: '#EF4444' }}>*</span>
+              </label>
+              <input id="bom-orders-destination" name="destination" aria-label="Destination"
+                type="text"
+                value={newBomDestination}
+                onChange={(e) => setNewBomDestination(e.target.value)}
+                placeholder="e.g. Chennai / Coimbatore / Site Location"
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: (!newBomDestination?.trim() && (formErrors?.destination || false)) ? '1.5px solid #EF4444' : '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none' }}
                />
             </div>
             <div>
@@ -4507,6 +4531,7 @@ export default function BomOrdersView(props) {
                       setPresetGroups({});
                       setNewBomTransportMode('Transport');
                       setNewBomTransporterName('');
+                      setNewBomDestination('');
                       setNewBomVehicleNo('');
                       setNewBomTransportScope('VRM Structures');
                       setNewBomSourcePiNo('');
@@ -4608,6 +4633,7 @@ export default function BomOrdersView(props) {
                           transportMode: newBomTransportMode || 'Transport',
                           transportScope: newBomTransportScope || 'VRM Structures',
                           transporterName: newBomTransporterName || '',
+                          destination: (newBomDestination || '').trim(),
                           vehicleNo: newBomVehicleNo || '',
                           lrNo: newBomLrNo || '',
                           paymentType: normalizePaymentTerm(newBomPaymentType),
@@ -4906,6 +4932,7 @@ export default function BomOrdersView(props) {
                         setNewBomRemarks('');
                         setNewBomTransportMode('Transport');
                         setNewBomTransporterName('');
+                        setNewBomDestination('');
                         setNewBomVehicleNo('');
                         setNewBomTransportScope('VRM Structures');
                         setNewBomLrNo('');
@@ -6120,6 +6147,190 @@ export default function BomOrdersView(props) {
               </div>
             );
           })()}
+
+          {/* VEHICLE LOADING, LR COPY & FINAL DISPATCH PROOF FOR SALES */}
+          {(() => {
+            const vLoading = confirmingBomModal.vehicleLoading || {};
+            const finalPhotos = (Array.isArray(vLoading.photos) && vLoading.photos.length > 0)
+              ? vLoading.photos
+              : (Array.isArray(confirmingBomModal.loadingPhotos) && confirmingBomModal.loadingPhotos.length > 0)
+                ? confirmingBomModal.loadingPhotos
+                : (Array.isArray(confirmingBomModal.photos) && confirmingBomModal.photos.length > 0)
+                  ? confirmingBomModal.photos : [];
+            const lrDoc = confirmingBomModal.lrCopyDoc || vLoading.lrCopyDoc || null;
+            const vehicleNo = confirmingBomModal.vehicleNo || vLoading.vehicleNo || '—';
+            const lrNo = confirmingBomModal.lrNo || vLoading.lrNo || '—';
+            const transporter = confirmingBomModal.transporterName || confirmingBomModal.transporter || vLoading.transporter || vLoading.transporterName || '—';
+            const destination = confirmingBomModal.destination || vLoading.destination || confirmingBomModal.deliveryCity || '—';
+            const driverName = confirmingBomModal.driverName || vLoading.driverName || '';
+            const driverPhone = confirmingBomModal.driverPhone || vLoading.driverPhone || '';
+
+            const hasLoadingData = finalPhotos.length > 0 || Boolean(lrDoc) || vehicleNo !== '—' || lrNo !== '—' || transporter !== '—';
+
+            if (!hasLoadingData) return null;
+
+            return (
+              <div style={{
+                marginTop: '16px',
+                backgroundColor: 'white',
+                padding: '18px 22px',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Truck size={16} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                        Vehicle Loading & Final Dispatch Proof ({finalPhotos.length} Loading Photo{finalPhotos.length === 1 ? '' : 's'}{lrDoc ? ', LR Copy Attached' : ''})
+                      </h4>
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        Vehicle loading photos and transporter Lorry Receipt (LR) uploaded by Dispatch Team
+                      </span>
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    backgroundColor: '#DCFCE7',
+                    color: '#166534',
+                    border: '1px solid #BBF7D0'
+                  }}>
+                    ✓ Dispatch Proof Recorded
+                  </span>
+                </div>
+
+                {/* Logistics Key Details */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '11.5px' }}>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Transporter</span>
+                    <strong style={{ color: '#0E7490' }}>{transporter}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Destination</span>
+                    <strong style={{ color: '#0F172A' }}>{destination}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Vehicle Number</span>
+                    <strong style={{ color: '#0F172A' }}>{vehicleNo}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>LR / Docket No</span>
+                    <strong style={{ color: '#0F172A' }}>{lrNo}</strong>
+                  </div>
+                  {(driverName || driverPhone) && (
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Driver Details</span>
+                      <strong style={{ color: '#0F172A' }}>{[driverName, driverPhone].filter(Boolean).join(' • ')}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {/* LR Document & Loading Photos Row */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {lrDoc && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '10px 14px', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <FileText size={18} style={{ color: '#16A34A' }} />
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: '800', color: '#166534' }}>
+                            Transporter Lorry Receipt (LR) Document
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#15803D' }}>
+                            {lrDoc.name || 'LR_Document.pdf'} {lrDoc.size ? `(${Math.round(lrDoc.size / 1024)} KB)` : ''}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                          setPreviewDocModal({
+                            title: `Lorry Receipt (LR) — ${lrNo !== '—' ? lrNo : confirmingBomModal.bomCode}`,
+                            doc: { ...lrDoc, url: docUrl, dataUrl: docUrl }
+                          });
+                        }}
+                        style={{ border: 'none', backgroundColor: '#16A34A', color: 'white', padding: '6px 14px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                      >
+                        <Eye size={12} /> View LR Document
+                      </button>
+                    </div>
+                  )}
+
+                  {finalPhotos.length > 0 && (
+                    <div>
+                      <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                        Final Vehicle Loading Proof Photos ({finalPhotos.length})
+                      </span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
+                        {finalPhotos.map((ph, pIdx) => {
+                          const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                            ? ph.url
+                            : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
+                          return (
+                            <div
+                              key={pIdx}
+                              onClick={() => setPreviewDocModal({ title: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, dataUrl: photoUrl, url: ph.url || photoUrl } })}
+                              style={{
+                                height: '84px',
+                                borderRadius: '10px',
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                border: '1.5px solid #CBD5E1',
+                                backgroundColor: '#0F172A',
+                                position: 'relative',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                                transition: 'transform 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                            >
+                              <img
+                                src={photoUrl || ph.dataUrl}
+                                alt={ph.name || `Loading photo ${pIdx + 1}`}
+                                onError={(e) => {
+                                  if (!e.currentTarget.dataset.retried && ph.name) {
+                                    e.currentTarget.dataset.retried = 'true';
+                                    fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                                      .then(r => r.json())
+                                      .then(data => {
+                                        if (data?.found && data?.url) {
+                                          e.currentTarget.src = data.url;
+                                          saveMediaToCache(ph.name, data.url);
+                                        }
+                                      }).catch(() => {});
+                                  }
+                                }}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                              <div style={{
+                                position: 'absolute', bottom: 0, left: 0, right: 0,
+                                backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
+                                padding: '2px 6px', fontSize: '10px', fontWeight: '700',
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                              }}>
+                                <span>📷 View Photo</span>
+                                <span>›</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* PRODUCT ITEMS TABLE */}
@@ -6975,10 +7186,59 @@ export default function BomOrdersView(props) {
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
                       <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{row.c5}</td>
                       <td style={{ padding: '12px 14px', textAlign: 'left' }}>
-                        <span style={{ backgroundColor: row.stBg, color: row.stFg, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px', border: row.stBorder }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.stFg }}></span>
-                          {row.status}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          <span style={{ backgroundColor: row.stBg, color: row.stFg, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px', border: row.stBorder }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.stFg }}></span>
+                            {row.status}
+                          </span>
+                          {/* Quick access badges for LR photo & Final Loading photos if present */}
+                          {(() => {
+                            const vl = row.vehicleLoading || {};
+                            const hasLr = Boolean(row.lrCopyDoc || vl.lrCopyDoc);
+                            const photos = (Array.isArray(vl.photos) && vl.photos.length > 0) ? vl.photos : (Array.isArray(row.loadingPhotos) && row.loadingPhotos.length > 0 ? row.loadingPhotos : (Array.isArray(row.photos) && row.photos.length > 0 ? row.photos : []));
+                            if (!hasLr && photos.length === 0) return null;
+                            return (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                {photos.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const p0 = photos[0];
+                                      const photoUrl = (p0.url && !p0.url.startsWith('blob:')) ? p0.url : ((p0.dataUrl && !p0.dataUrl.startsWith('blob:')) ? p0.dataUrl : (getMediaFromCache(p0.name) || getMediaFromCache(p0.id) || (p0.name ? `/api/uploads/${p0.name}` : '')));
+                                      setPreviewDocModal({
+                                        title: `Loading Photos (${photos.length}) — ${row.c1}`,
+                                        doc: { ...p0, dataUrl: photoUrl, url: photoUrl }
+                                      });
+                                    }}
+                                    style={{ border: '1px solid #BAE6FD', background: '#F0F9FF', color: '#0369A1', fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                    title="View Vehicle Loading Photos"
+                                  >
+                                    📷 {photos.length} Photo{photos.length > 1 ? 's' : ''}
+                                  </button>
+                                )}
+                                {hasLr && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const lr = row.lrCopyDoc || vl.lrCopyDoc;
+                                      const lrUrl = (lr.url && !lr.url.startsWith('blob:')) ? lr.url : ((lr.dataUrl && !lr.dataUrl.startsWith('blob:')) ? lr.dataUrl : (getMediaFromCache(lr.name) || (lr.name ? `/api/uploads/${lr.name}` : '')));
+                                      setPreviewDocModal({
+                                        title: `LR Copy — ${row.c1} (${row.lrNo || vl.lrNo || 'Document'})`,
+                                        doc: { ...lr, dataUrl: lrUrl, url: lrUrl }
+                                      });
+                                    }}
+                                    style={{ border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                    title="View Transporter LR Copy"
+                                  >
+                                    📄 LR Copy
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -7495,17 +7755,37 @@ export default function BomOrdersView(props) {
                 || numVal(quickPreviewRecord.subTotal);
 
               // Transporter & Logistics
+              const existingLoading = quickPreviewRecord.vehicleLoading || {};
               const transporter = [
                 cleanVal(quickPreviewRecord.transporterName),
                 cleanVal(quickPreviewRecord.transporter),
+                cleanVal(existingLoading.transporter),
+                cleanVal(existingLoading.transporterName),
                 cleanVal(sourcePi?.transporterName),
                 cleanVal(sourcePi?.transporter)
               ].find(Boolean) || '—';
 
-              const transportMode = quickPreviewRecord.transportMode || sourcePi?.transportMode || 'Transport';
+              const destination = [
+                cleanVal(quickPreviewRecord.destination),
+                cleanVal(existingLoading.destination),
+                cleanVal(sourcePi?.destination),
+                cleanVal(quickPreviewRecord.deliveryCity),
+                cleanVal(sourcePi?.deliveryCity)
+              ].find(Boolean) || '—';
+
+              const transportMode = quickPreviewRecord.transportMode || existingLoading.deliveryMode || sourcePi?.transportMode || 'Transport';
               const transportScope = quickPreviewRecord.transportScope || sourcePi?.transportScope || 'VRM Structures';
-              const vehicleNo = quickPreviewRecord.vehicleNo || sourcePi?.vehicleNo || '—';
-              const lrNo = quickPreviewRecord.lrNo || sourcePi?.lrNo || '—';
+              const vehicleNo = quickPreviewRecord.vehicleNo || existingLoading.vehicleNo || sourcePi?.vehicleNo || '—';
+              const lrNo = quickPreviewRecord.lrNo || existingLoading.lrNo || sourcePi?.lrNo || '—';
+              const driverName = quickPreviewRecord.driverName || existingLoading.driverName || '';
+              const driverPhone = quickPreviewRecord.driverPhone || existingLoading.driverPhone || '';
+              const lrDoc = quickPreviewRecord.lrCopyDoc || existingLoading.lrCopyDoc || null;
+              const loadingPhotos = (Array.isArray(existingLoading.photos) && existingLoading.photos.length > 0)
+                ? existingLoading.photos
+                : (Array.isArray(quickPreviewRecord.loadingPhotos) && quickPreviewRecord.loadingPhotos.length > 0)
+                  ? quickPreviewRecord.loadingPhotos
+                  : (Array.isArray(quickPreviewRecord.photos) && quickPreviewRecord.photos.length > 0)
+                    ? quickPreviewRecord.photos : [];
 
               // Addresses
               const bObj = quickPreviewRecord.billingAddressObj || sourcePi?.billingAddressObj || {};
@@ -7671,6 +7951,10 @@ export default function BomOrdersView(props) {
                         <strong style={{ color: transporter !== '—' ? '#0E7490' : '#0F172A' }}>{transporter}</strong>
                       </div>
                       <div>
+                        <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Destination</span>
+                        <strong style={{ color: destination !== '—' ? '#0E7490' : '#0F172A' }}>{destination}</strong>
+                      </div>
+                      <div>
                         <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Vehicle No</span>
                         <strong>{vehicleNo}</strong>
                       </div>
@@ -7678,7 +7962,33 @@ export default function BomOrdersView(props) {
                         <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>LR / Docket</span>
                         <strong>{lrNo}</strong>
                       </div>
+                      {(driverName || driverPhone) && (
+                        <div>
+                          <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Driver</span>
+                          <strong>{[driverName, driverPhone].filter(Boolean).join(' • ')}</strong>
+                        </div>
+                      )}
                     </div>
+                    {lrDoc && (
+                      <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11px', color: '#166534', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          📄 LR Document Attached ({lrDoc.name || 'Lorry Receipt'})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                            setPreviewDocModal({
+                              title: `Lorry Receipt (LR) — ${lrNo !== '—' ? lrNo : quickPreviewRecord.bomCode}`,
+                              doc: { ...lrDoc, url: docUrl, dataUrl: docUrl }
+                            });
+                          }}
+                          style={{ border: 'none', backgroundColor: '#16A34A', color: 'white', padding: '3px 8px', borderRadius: '5px', fontSize: '10px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                        >
+                          <Eye size={10} /> View LR Photo
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               );
@@ -7808,6 +8118,86 @@ export default function BomOrdersView(props) {
                       No packing photos or videos attached yet for this order.
                     </div>
                   )}
+                </div>
+              );
+            })()}
+
+            {/* VEHICLE LOADING PROOF PHOTOS IN QUICK PREVIEW */}
+            {(() => {
+              const existingLoading = quickPreviewRecord.vehicleLoading || {};
+              const loadingPhotos = (Array.isArray(existingLoading.photos) && existingLoading.photos.length > 0)
+                ? existingLoading.photos
+                : (Array.isArray(quickPreviewRecord.loadingPhotos) && quickPreviewRecord.loadingPhotos.length > 0)
+                  ? quickPreviewRecord.loadingPhotos
+                  : (Array.isArray(quickPreviewRecord.photos) && quickPreviewRecord.photos.length > 0)
+                    ? quickPreviewRecord.photos : [];
+
+              if (loadingPhotos.length === 0) return null;
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Truck size={15} />
+                      </div>
+                      <div>
+                        <h4 style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                          Vehicle Loading Proof Photos ({loadingPhotos.length})
+                        </h4>
+                        <span style={{ fontSize: '11px', color: '#64748B' }}>Captured by Dispatch Team during final lorry loading</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0' }}>
+                      ✓ {loadingPhotos.length} Photo{loadingPhotos.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
+                    {loadingPhotos.map((ph, pIdx) => {
+                      const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                        ? ph.url
+                        : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
+                      return (
+                        <div
+                          key={pIdx}
+                          onClick={() => setPreviewDocModal({ title: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, doc: { ...ph, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`, dataUrl: photoUrl, url: photoUrl } })}
+                          style={{
+                            height: '76px',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            border: '1px solid #CBD5E1',
+                            backgroundColor: '#0F172A',
+                            position: 'relative'
+                          }}
+                        >
+                          <img
+                            src={photoUrl || ph.dataUrl}
+                            alt={ph.name || `Loading photo ${pIdx + 1}`}
+                            onError={(e) => {
+                              if (!e.currentTarget.dataset.retried && ph.name) {
+                                e.currentTarget.dataset.retried = 'true';
+                                fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    if (data?.found && data?.url) {
+                                      e.currentTarget.src = data.url;
+                                      saveMediaToCache(ph.name, data.url);
+                                    }
+                                  }).catch(() => {});
+                              }
+                            }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>📷 View</span>
+                            <span>›</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })()}

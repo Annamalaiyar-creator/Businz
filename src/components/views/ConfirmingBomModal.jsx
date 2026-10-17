@@ -1043,6 +1043,196 @@ export default function ConfirmingBomModal({
             </div>
           );
         })()}
+
+        {/* VEHICLE LOADING, LR COPY & FINAL DISPATCH PROOF FOR SALES */}
+        {(() => {
+          const vLoading = confirmingBomModal.vehicleLoading || {};
+          const finalPhotos = (Array.isArray(vLoading.photos) && vLoading.photos.length > 0)
+            ? vLoading.photos
+            : (Array.isArray(confirmingBomModal.loadingPhotos) && confirmingBomModal.loadingPhotos.length > 0)
+              ? confirmingBomModal.loadingPhotos
+              : (Array.isArray(confirmingBomModal.photos) && confirmingBomModal.photos.length > 0)
+                ? confirmingBomModal.photos : [];
+          const lrDoc = confirmingBomModal.lrCopyDoc || vLoading.lrCopyDoc || null;
+          const vehicleNo = confirmingBomModal.vehicleNo || vLoading.vehicleNo || '—';
+          const lrNo = confirmingBomModal.lrNo || vLoading.lrNo || '—';
+          const transporter = confirmingBomModal.transporterName || confirmingBomModal.transporter || vLoading.transporter || vLoading.transporterName || '—';
+          const destination = confirmingBomModal.destination || vLoading.destination || confirmingBomModal.deliveryCity || '—';
+          const driverName = confirmingBomModal.driverName || vLoading.driverName || '';
+          const driverPhone = confirmingBomModal.driverPhone || vLoading.driverPhone || '';
+
+          const hasLoadingData = finalPhotos.length > 0 || Boolean(lrDoc) || vehicleNo !== '—' || lrNo !== '—' || transporter !== '—';
+
+          if (!hasLoadingData) return null;
+
+          return (
+            <div style={{
+              marginTop: '16px',
+              backgroundColor: 'white',
+              padding: '18px 22px',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Truck size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+                      Vehicle Loading & Final Dispatch Proof ({finalPhotos.length} Loading Photo{finalPhotos.length === 1 ? '' : 's'}{lrDoc ? ', LR Copy Attached' : ''})
+                    </h4>
+                    <span style={{ fontSize: '11px', color: '#64748B' }}>
+                      Vehicle loading photos and transporter Lorry Receipt (LR) uploaded by Dispatch Team
+                    </span>
+                  </div>
+                </div>
+
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  backgroundColor: '#DCFCE7',
+                  color: '#166534',
+                  border: '1px solid #BBF7D0'
+                }}>
+                  ✓ Dispatch Proof Recorded
+                </span>
+              </div>
+
+              {/* Logistics Key Details */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '11.5px' }}>
+                <div>
+                  <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Transporter</span>
+                  <strong style={{ color: '#0E7490' }}>{transporter}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Destination</span>
+                  <strong style={{ color: '#0F172A' }}>{destination}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Vehicle Number</span>
+                  <strong style={{ color: '#0F172A' }}>{vehicleNo}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>LR / Docket No</span>
+                  <strong style={{ color: '#0F172A' }}>{lrNo}</strong>
+                </div>
+                {(driverName || driverPhone) && (
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '10px' }}>Driver Details</span>
+                    <strong style={{ color: '#0F172A' }}>{[driverName, driverPhone].filter(Boolean).join(' • ')}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* LR Document & Loading Photos Row */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {lrDoc && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '10px 14px', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <FileText size={18} style={{ color: '#16A34A' }} />
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: '800', color: '#166534' }}>
+                          Transporter Lorry Receipt (LR) Document
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#15803D' }}>
+                          {lrDoc.name || 'LR_Document.pdf'} {lrDoc.size ? `(${Math.round(lrDoc.size / 1024)} KB)` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                        const isPdf = lrDoc.type === 'application/pdf' || (lrDoc.name && lrDoc.name.toLowerCase().endsWith('.pdf'));
+                        setActiveMediaPreviewModal({
+                          type: isPdf ? 'pdf' : 'image',
+                          url: docUrl,
+                          name: `Lorry Receipt (LR) — ${lrNo !== '—' ? lrNo : confirmingBomModal.bomCode}`
+                        });
+                      }}
+                      style={{ border: 'none', backgroundColor: '#16A34A', color: 'white', padding: '6px 14px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Eye size={12} /> View LR Document
+                    </button>
+                  </div>
+                )}
+
+                {finalPhotos.length > 0 && (
+                  <div>
+                    <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Final Vehicle Loading Proof Photos ({finalPhotos.length})
+                    </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
+                      {finalPhotos.map((ph, pIdx) => {
+                        const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                          ? ph.url
+                          : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
+                        return (
+                          <div
+                            key={pIdx}
+                            onClick={() => setActiveMediaPreviewModal({
+                              type: 'image',
+                              url: photoUrl || ph.dataUrl,
+                              name: ph.name || `Vehicle Loading Photo ${pIdx + 1}`
+                            })}
+                            style={{
+                              height: '84px',
+                              borderRadius: '10px',
+                              overflow: 'hidden',
+                              cursor: 'pointer',
+                              border: '1.5px solid #CBD5E1',
+                              backgroundColor: '#0F172A',
+                              position: 'relative',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                              transition: 'transform 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                            <img
+                              src={photoUrl || ph.dataUrl}
+                              alt={ph.name || `Loading photo ${pIdx + 1}`}
+                              onError={(e) => {
+                                if (!e.currentTarget.dataset.retried && ph.name) {
+                                  e.currentTarget.dataset.retried = 'true';
+                                  fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                                    .then(r => r.json())
+                                    .then(data => {
+                                      if (data?.found && data?.url) {
+                                        e.currentTarget.src = data.url;
+                                        saveMediaToCache(ph.name, data.url);
+                                      }
+                                    }).catch(() => {});
+                                }
+                              }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <div style={{
+                              position: 'absolute', bottom: 0, left: 0, right: 0,
+                              backgroundColor: 'rgba(15,23,42,0.75)', color: '#FFFFFF',
+                              padding: '2px 6px', fontSize: '10px', fontWeight: '700',
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                            }}>
+                              <span>📷 View Photo</span>
+                              <span>›</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* PRODUCT ITEMS TABLE */}

@@ -66,14 +66,17 @@ async function compressImageForUpload(file, maxDimension = 1280, quality = 0.82)
 }
 
 function VehicleMediaImg({ photo, bomCode, onClick }) {
-  const initial = photo.url || photo.dataUrl || photo.previewUrl || '';
+  const isClean = (s) => typeof s === 'string' && s && !s.startsWith('blob:');
+  const cached = photo?.name ? getMediaFromCache(photo.name) : null;
+  const initial = isClean(photo.url) ? photo.url : (isClean(photo.dataUrl) ? photo.dataUrl : (cached || ''));
   const [resolvedSrc, setResolvedSrc] = useState(initial);
   const [loading, setLoading] = useState(!initial && Boolean(photo.storageBucket || photo.storagePath));
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let active = true;
-    const current = photo.url || photo.dataUrl || photo.previewUrl || '';
+    const currentCached = photo?.name ? getMediaFromCache(photo.name) : null;
+    const current = isClean(photo.url) ? photo.url : (isClean(photo.dataUrl) ? photo.dataUrl : (currentCached || ''));
     if (current) {
       setResolvedSrc(current);
       setLoading(false);
@@ -100,17 +103,28 @@ function VehicleMediaImg({ photo, bomCode, onClick }) {
             setLoading(false);
           }
         });
+    } else if (photo.name) {
+      fetch(`/api/media/find/${encodeURIComponent(photo.name)}`)
+        .then(r => r.json())
+        .then(d => {
+          if (active && d && d.found && d.url) {
+            setResolvedSrc(d.url);
+            saveMediaToCache(photo.name, d.url);
+            setLoadError(false);
+          }
+        })
+        .catch(() => {});
     }
     return () => { active = false; };
   }, [photo, bomCode]);
 
   const handleClick = async () => {
-    let src = resolvedSrc || photo.url || photo.dataUrl || photo.previewUrl || '';
+    let src = resolvedSrc || (isClean(photo.url) ? photo.url : '') || (isClean(photo.dataUrl) ? photo.dataUrl : '') || (photo?.name ? getMediaFromCache(photo.name) : '') || '';
     if (!src && (photo.storageBucket || photo.storagePath)) {
       src = await resolveDocumentUrlAsync(photo, bomCode);
       if (src) setResolvedSrc(src);
     }
-    if (onClick) onClick(src || photo.url || photo.dataUrl || photo.previewUrl || '');
+    if (onClick) onClick(src || '');
   };
 
   return (
@@ -189,8 +203,8 @@ export default function VehicleLoadingModal({
   const salesTransportMode = (() => {
     const raw = bom.transportMode || bom.deliveryMode || existingLoading.deliveryMode || '';
     const str = String(raw).trim().toLowerCase();
-    if (str.includes('own') || str.includes('porter')) return 'Own Vehicle';
-    if (str.includes('portal') || str.includes('self') || str.includes('direct') || str.includes('pickup') || str.includes('customer')) return 'Portal';
+    if (str.includes('own')) return 'Own Vehicle';
+    if (str.includes('porter') || str.includes('portal') || str.includes('self') || str.includes('direct') || str.includes('pickup') || str.includes('customer')) return 'Porter';
     return 'Transport';
   })();
   const isTransport = salesTransportMode === 'Transport';
@@ -263,15 +277,18 @@ export default function VehicleLoadingModal({
         const now = new Date();
         const uploadTimestamp = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
         const uploadDateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (fileName && dataUrl) {
+          saveMediaToCache(fileName, dataUrl);
+        }
         const newPhoto = {
           id: `photo_cam_${Date.now()}`,
           name: fileName,
           size: `${(blob.size / 1024 / 1024).toFixed(1)} MB`,
-          storageBucket: metadata.storageBucket,
-          storagePath: metadata.storagePath,
-          url: metadata.url || canvas.toDataURL('image/jpeg', 0.85),
-          dataUrl: metadata.dataUrl || canvas.toDataURL('image/jpeg', 0.85),
-          previewUrl: URL.createObjectURL(blob),
+          storageBucket: metadata.storageBucket || 'bom-documents',
+          storagePath: metadata.storagePath || `${bCode}/dispatch/images/${fileName}`,
+          url: (metadata.url && !metadata.url.startsWith('blob:')) ? metadata.url : null,
+          dataUrl: dataUrl,
           mimeType: 'image/jpeg',
           uploadedAt: now.toISOString(),
           capturedAt: `${uploadDateStr}, ${uploadTimestamp}`
@@ -375,23 +392,27 @@ export default function VehicleLoadingModal({
         const file = (rawFile.type && rawFile.type.startsWith('image/'))
           ? await compressImageForUpload(rawFile)
           : rawFile;
-        const localPreview = URL.createObjectURL(file);
         const localDataUrl = await readFileAsDataUrl(file);
+        if (file.name && localDataUrl) {
+          saveMediaToCache(file.name, localDataUrl);
+        }
         const metadata = await uploadBomDocumentFile({
           file,
           bomCode: bCode,
           category: 'dispatch/images'
         });
+        if (metadata.originalName && localDataUrl) {
+          saveMediaToCache(metadata.originalName, localDataUrl);
+        }
         const newPhoto = {
           id: `photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           name: metadata.originalName || file.name,
           size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-          storageBucket: metadata.storageBucket,
-          storagePath: metadata.storagePath,
-          url: metadata.url || localPreview,
-          dataUrl: metadata.dataUrl || localDataUrl,
-          previewUrl: localPreview,
-          mimeType: metadata.mimeType || file.type,
+          storageBucket: metadata.storageBucket || 'bom-documents',
+          storagePath: metadata.storagePath || `${bCode}/dispatch/images/${file.name}`,
+          url: (metadata.url && !metadata.url.startsWith('blob:')) ? metadata.url : null,
+          dataUrl: localDataUrl,
+          mimeType: metadata.mimeType || file.type || 'image/jpeg',
           uploadedAt: metadata.uploadedAt || new Date().toISOString(),
           capturedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
         };
@@ -490,7 +511,16 @@ export default function VehicleLoadingModal({
       fullyCompleted: willCloseBom,
       stockDeducted: true,
       vehicleLoading: loadingPayload,
+      vehicleNo: effectiveVehicleNo,
+      driverName: dName,
+      driverPhone: dPhone,
+      transporter: effectiveTransporter,
+      transporterName: effectiveTransporter,
+      lrNo: isTransport ? effectiveLrNo : (effectiveLrNo || 'N/A (Own Vehicle / Direct)'),
       lrCopyDoc: activeLrDoc || bom.lrCopyDoc || null,
+      photos: finalizedPhotos,
+      loadingPhotos: finalizedPhotos,
+      vehiclePhotos: finalizedPhotos,
       salesPerson: authenticSalesPerson,
       salesPersonCode: authenticSalesPersonCode,
       dispatchedAt: bom.dispatchedAt || new Date().toISOString(),

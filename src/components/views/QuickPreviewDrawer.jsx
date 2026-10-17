@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, X, XCircle, ChevronDown, ChevronUp, Receipt, Camera, Video } from "lucide-react";
+import { Plus, X, XCircle, ChevronDown, ChevronUp, Receipt, Camera, Video, Truck, FileText, Eye } from "lucide-react";
 import StatusBadge from "../StatusBadge";
 import { getMediaFromCache } from "../../utils/otherViewsShared";
 
@@ -378,22 +378,37 @@ export default function QuickPreviewDrawer({
             <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Mode of Transport</span>
             <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.transportMode || quickPreviewRecord.c4 || '—'}</strong>
           </div>
-          <div>
-            <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Transport Name</span>
-            <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.transporterName || quickPreviewRecord.c5 || '—'}</strong>
-          </div>
-          {quickPreviewRecord.vehicleNo ? (
-            <div>
-              <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Vehicle Number</span>
-              <strong style={{ color: '#0284C7' }}>{quickPreviewRecord.vehicleNo}</strong>
-            </div>
-          ) : null}
-          {quickPreviewRecord.lrNo || quickPreviewRecord.lrNumber ? (
-            <div>
-              <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>LR / Docket No.</span>
-              <strong style={{ color: '#0284C7' }}>{quickPreviewRecord.lrNo || quickPreviewRecord.lrNumber}</strong>
-            </div>
-          ) : null}
+          {(() => {
+            const vl = quickPreviewRecord.vehicleLoading || {};
+            const transporter = quickPreviewRecord.transporterName || quickPreviewRecord.transporter || vl.transporter || vl.transporterName || quickPreviewRecord.c5 || '—';
+            const destination = quickPreviewRecord.destination || vl.destination || quickPreviewRecord.deliveryCity || '—';
+            const vNo = quickPreviewRecord.vehicleNo || vl.vehicleNo;
+            const lNo = quickPreviewRecord.lrNo || quickPreviewRecord.lrNumber || vl.lrNo;
+            return (
+              <>
+                <div>
+                  <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Transport Name</span>
+                  <strong style={{ color: '#0F172A' }}>{transporter}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Destination</span>
+                  <strong style={{ color: '#0E7490' }}>{destination}</strong>
+                </div>
+                {vNo ? (
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Vehicle Number</span>
+                    <strong style={{ color: '#0284C7' }}>{vNo}</strong>
+                  </div>
+                ) : null}
+                {lNo ? (
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>LR / Docket No.</span>
+                    <strong style={{ color: '#0284C7' }}>{lNo}</strong>
+                  </div>
+                ) : null}
+              </>
+            );
+          })()}
           <div>
             <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Accounts Approval</span>
             <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: '10px', fontSize: '10.5px', fontWeight: '800' }}>
@@ -545,6 +560,137 @@ export default function QuickPreviewDrawer({
             ) : (
               <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '10px', border: '1px dashed #E2E8F0' }}>
                 No packing photos or videos attached yet for this order.
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* VEHICLE LOADING & FINAL DISPATCH PROOF FOR SALES */}
+      {(() => {
+        const vl = quickPreviewRecord.vehicleLoading || {};
+        const loadingPhotos = (Array.isArray(vl.photos) && vl.photos.length > 0)
+          ? vl.photos
+          : (Array.isArray(quickPreviewRecord.loadingPhotos) && quickPreviewRecord.loadingPhotos.length > 0)
+            ? quickPreviewRecord.loadingPhotos
+            : (Array.isArray(quickPreviewRecord.photos) && quickPreviewRecord.photos.length > 0)
+              ? quickPreviewRecord.photos : [];
+        const lrDoc = quickPreviewRecord.lrCopyDoc || vl.lrCopyDoc;
+        const lrNo = quickPreviewRecord.lrNo || quickPreviewRecord.lrNumber || vl.lrNo || '—';
+
+        if (loadingPhotos.length === 0 && !lrDoc) return null;
+
+        return (
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '16px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Truck size={15} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                    Final Vehicle Loading & LR Proof
+                  </h4>
+                  <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                    Uploaded by Dispatch Team during final lorry dispatch
+                  </span>
+                </div>
+              </div>
+              <span style={{ fontSize: '10.5px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0' }}>
+                ✓ Dispatch Proof
+              </span>
+            </div>
+
+            {lrDoc && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '10px 12px', borderRadius: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileText size={16} style={{ color: '#16A34A' }} />
+                  <div>
+                    <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#166534' }}>
+                      Transporter Lorry Receipt (LR)
+                    </div>
+                    <span style={{ fontSize: '10px', color: '#15803D' }}>
+                      {lrDoc.name || 'LR_Document.pdf'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                    const isPdf = lrDoc.type === 'application/pdf' || (lrDoc.name && lrDoc.name.toLowerCase().endsWith('.pdf'));
+                    if (typeof setActiveMediaPreviewModal === 'function') {
+                      setActiveMediaPreviewModal({ type: isPdf ? 'pdf' : 'image', url: docUrl, name: `LR Document — ${lrNo}` });
+                    } else if (docUrl) {
+                      window.open(docUrl, '_blank');
+                    }
+                  }}
+                  style={{ border: 'none', backgroundColor: '#16A34A', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Eye size={11} /> View LR
+                </button>
+              </div>
+            )}
+
+            {loadingPhotos.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
+                {loadingPhotos.map((ph, pIdx) => {
+                  const photoUrl = (ph.url && !ph.url.startsWith('blob:'))
+                    ? ph.url
+                    : ((ph.dataUrl && !ph.dataUrl.startsWith('blob:')) ? ph.dataUrl : (getMediaFromCache(ph.name) || getMediaFromCache(ph.id) || (ph.name ? `/api/uploads/${ph.name}` : '')));
+                  return (
+                    <div
+                      key={pIdx}
+                      onClick={() => {
+                        if (typeof setActiveMediaPreviewModal === 'function') {
+                          setActiveMediaPreviewModal({ type: 'image', url: photoUrl || ph.dataUrl, name: ph.name || `Vehicle Loading Photo ${pIdx + 1}` });
+                        } else if (photoUrl || ph.dataUrl) {
+                          window.open(photoUrl || ph.dataUrl, '_blank');
+                        }
+                      }}
+                      style={{
+                        height: '76px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#0F172A',
+                        position: 'relative'
+                      }}
+                    >
+                      <img
+                        src={photoUrl || ph.dataUrl}
+                        alt={ph.name || `Loading photo ${pIdx + 1}`}
+                        onError={(e) => {
+                          if (!e.currentTarget.dataset.retried && ph.name) {
+                            e.currentTarget.dataset.retried = 'true';
+                            fetch(`/api/media/find/${encodeURIComponent(ph.name)}`)
+                              .then(r => r.json())
+                              .then(data => {
+                                if (data?.found && data?.url) {
+                                  e.currentTarget.src = data.url;
+                                }
+                              }).catch(() => {});
+                          }
+                        }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '2px 6px', fontSize: '9px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>📷 View</span>
+                        <span>›</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

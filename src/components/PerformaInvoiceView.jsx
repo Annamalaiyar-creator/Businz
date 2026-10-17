@@ -791,6 +791,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       sameAsBilling: isSameAddr,
       transportMode: pi.transportMode || 'Transport',
       transporterName: pi.transporterName || pi.transporter || '',
+      destination: pi.destination || pi.deliveryCity || (typeof pi.deliveryAddress === 'string' ? pi.deliveryAddress : '') || '',
       vehicleNo: pi.vehicleNo || '',
       transportScope: pi.transportScope || 'VRM Structures',
       lrNo: pi.lrNo || '',
@@ -1374,6 +1375,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   // Transport & Logistics
   const [transportMode, setTransportMode] = useState('Transport');
   const [transporterName, setTransporterName] = useState('');
+  const [destination, setDestination] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [transportScope, setTransportScope] = useState('VRM Structures');
 
@@ -1750,6 +1752,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       sameAsBilling,
       transportMode,
       transporterName,
+      destination,
       vehicleNo,
       transportScope,
       paymentTerms,
@@ -1977,6 +1980,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setSameAsBilling(true);
     setTransportMode('Transport');
     setTransporterName('');
+    setDestination('');
     setVehicleNo('');
     setTransportScope('VRM Structures');
     setPaymentTerms('100% Paid');
@@ -2074,6 +2078,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           targetId: 'pi-field-deliveryCity'
         });
       }
+    }
+
+    // 4.5 Mandatory Destination
+    if (!destination || !destination.trim()) {
+      missingList.push({
+        field: 'Destination',
+        message: 'Destination is mandatory. Please enter the delivery destination.',
+        targetId: 'performa-invoice-destination'
+      });
     }
 
     // 5. Line items
@@ -2265,6 +2278,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         sameAsBilling,
         transportMode,
         transporterName,
+        destination: destination.trim(),
         vehicleNo,
         transportScope,
         paymentTerms,
@@ -2407,9 +2421,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     setSalesPerson(pi.salesPerson || getActiveUserName());
     setPaymentTerms(normalizePaymentTerm(pi.paymentTerms || pi.paymentType || '100% Paid'));
     setCreditDays(pi.creditDays || '');
-    setRemarks(pi.remarks || '');
     setTransportMode(pi.transportMode || 'Transport');
     setTransporterName(pi.transporterName || '');
+    setDestination(pi.destination || pi.deliveryCity || '');
     setVehicleNo(pi.vehicleNo || '');
     setTransportScope(pi.transportScope || 'VRM Structures');
 
@@ -3963,7 +3977,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   >
                     <option value="Transport">Transport</option>
                     <option value="Own Vehicle">Own Vehicle</option>
-                    <option value="Portal">Portal</option>
+                    <option value="Porter">Porter</option>
                   </select>
                 </div>
 
@@ -3976,6 +3990,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     value={transporterName}
                     placeholder="e.g. VRL Logistics, SafeXpress..."
                     onChange={(e) => setTransporterName(e.target.value)}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
+                   />
+                </div>
+
+                <div>
+                  <label htmlFor="performa-invoice-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Destination <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input id="performa-invoice-destination" name="destination" aria-label="Destination"
+                    type="text"
+                    required
+                    value={destination}
+                    placeholder="e.g. Coimbatore, Hyderabad, Site Location..."
+                    onChange={(e) => setDestination(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                    />
                 </div>
@@ -4612,7 +4640,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
-                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>Select an engineering Preset above or click "+ Add Product / Item" to author PI line items</span>
+                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>Select an engineering Preset above or click "Add Product / Item" to author PI line items</span>
                           </div>
                         </td>
                       </tr>
@@ -5175,7 +5203,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   onClick={handleAddMaterialRow}
                   style={{ border: '1px solid #A5F3FC', background: '#ECFEFF', color: '#0E7490', padding: '9px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <Plus style={{ width: '15px', height: '15px' }} />
                   {hasAnyPreset ? 'Add Standalone Item' : 'Add Product / Item'}
                 </button>
 
@@ -5208,7 +5235,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   title="Create a custom ad-hoc Set / Kit for this PI alone (does not alter preset dropdown)"
                 >
                   <Layers style={{ width: '15px', height: '15px', color: '#7C3AED' }} />
-                  + Create Set
+                  Create Set
                 </button>
 
                 {Object.values(presetGroups).map(grp => (
@@ -5879,6 +5906,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <div>
                     <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Transporter / Vehicle</span>
                     <span style={{ fontSize: '12.5px', color: '#334155' }}>{[selectedPi.transporterName, selectedPi.vehicleNo].filter(Boolean).join(' - ') || 'To be arranged'}</span>
+                  </div>
+                  <div>
+                    <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Destination</span>
+                    <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{selectedPi.destination || selectedPi.deliveryCity || '—'}</strong>
                   </div>
                   <div>
                     <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748B' }}>Transport Scope</span>

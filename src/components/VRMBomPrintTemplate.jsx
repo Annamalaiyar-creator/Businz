@@ -737,7 +737,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                           ? item.qtyTaken
                           : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
                       const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
-                      const description = item.specs || (item.name ? item.description : '') || item.category;
 
                       const midIdx = Math.floor(kg.items.length / 2);
                       const isMiddle = itemIdx === midIdx;
@@ -765,11 +764,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                                 </span>
                               )}
                             </div>
-                            {description && (
-                              <div style={{ fontSize: '12px', color: '#475569', marginTop: '1px', fontWeight: '500' }}>
-                                {description}
-                              </div>
-                            )}
                           </td>
 
                           {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
@@ -871,7 +865,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                         ? item.qtyTaken
                         : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
                     const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
-                    const description = item.specs || (item.name ? item.description : '') || item.category;
 
                     return (
                       <tr
@@ -888,11 +881,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                         </td>
                         <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', wordBreak: 'break-word' }}>
                           <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
-                          {description && (
-                            <div style={{ fontSize: '12px', color: '#475569', marginTop: '1px', fontWeight: '500' }}>
-                              {description}
-                            </div>
-                          )}
                         </td>
                         <td style={{ padding: '7px 6px', textAlign: 'center', color: '#64748B', borderRight: '1px solid #E2E8F0', fontSize: '13px', fontWeight: '600' }}>
                           —
@@ -921,7 +909,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                   ? item.qtyTaken
                   : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
               const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
-              const description = item.specs || (item.name ? item.description : '') || item.category;
 
               const fallbackMid = Math.floor(enrichedItems.length / 2);
               const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
@@ -940,11 +927,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                   </td>
                   <td style={{ padding: '7px 12px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1', wordBreak: 'break-word' }}>
                     <strong style={{ color: '#0F172A', fontSize: '13.5px' }}>{itemName}</strong>
-                    {description && (
-                      <span style={{ fontSize: '12px', color: '#475569', marginLeft: '8px', fontWeight: '500' }}>
-                        ({description})
-                      </span>
-                    )}
                   </td>
                   <td
                     style={{

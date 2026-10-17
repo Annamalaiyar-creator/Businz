@@ -107,18 +107,18 @@ export default function LrUploadPopupModal({
         category: 'dispatch/lr_copy'
       });
 
-      setLrDoc({
+      const newLrDoc = {
         id: `lr_${Date.now()}`,
         name: metadata.originalName || fileToUpload.name,
         size: `${(fileToUpload.size / 1024).toFixed(1)} KB`,
-        storageBucket: metadata.storageBucket,
-        storagePath: metadata.storagePath,
-        url: metadata.url || localPreview,
-        dataUrl: metadata.dataUrl || localDataUrl,
-        previewUrl: localPreview,
+        storageBucket: metadata.storageBucket || 'bom-documents',
+        storagePath: metadata.storagePath || `${bCode}/dispatch/lr_copy/${fileToUpload.name}`,
+        url: (metadata.url && !metadata.url.startsWith('blob:')) ? metadata.url : null,
+        dataUrl: localDataUrl,
         mimeType: metadata.mimeType || fileToUpload.type,
         uploadedAt: new Date().toISOString()
-      });
+      };
+      setLrDoc(newLrDoc);
     } catch (err) {
       console.error('LR upload error:', err);
       setErrorMsg(err.message || 'Failed to upload LR Copy file.');
@@ -130,7 +130,7 @@ export default function LrUploadPopupModal({
   const handlePreview = () => {
     if (!lrDoc) return;
     const isPdf = lrDoc.mimeType === 'application/pdf' || (lrDoc.name && lrDoc.name.toLowerCase().endsWith('.pdf'));
-    const url = lrDoc.url || lrDoc.dataUrl || lrDoc.previewUrl;
+    const url = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : (lrDoc.dataUrl || (lrDoc.name ? getMediaFromCache(lrDoc.name) : ''));
     if (typeof setActiveMediaPreviewModal === 'function') {
       setActiveMediaPreviewModal({
         type: isPdf ? 'pdf' : 'image',
@@ -179,6 +179,11 @@ export default function LrUploadPopupModal({
         vehicleLoading: updatedLoading,
         lrCopyDoc: lrDoc,
         lrNo: lrNo.trim() || bom.lrNo || existingLoading.lrNo || '',
+        vehicleNo: bom.vehicleNo || existingLoading.vehicleNo || '',
+        transporter: bom.transporter || existingLoading.transporter || '',
+        transporterName: bom.transporterName || bom.transporter || existingLoading.transporter || '',
+        photos: existingLoading.photos || bom.photos || [],
+        loadingPhotos: existingLoading.photos || bom.loadingPhotos || [],
         completedAt: new Date().toISOString()
       };
 

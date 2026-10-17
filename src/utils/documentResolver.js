@@ -67,6 +67,7 @@ export function resolveDocumentUrl(doc) {
 
   // 1. Raw string dataUrl or HTTP URL
   if (typeof doc === 'string') {
+    if (doc.startsWith('blob:')) return null;
     if (doc.startsWith('data:') || doc.startsWith('http://') || doc.startsWith('https://') || doc.startsWith('/')) {
       return doc;
     }
@@ -83,19 +84,19 @@ export function resolveDocumentUrl(doc) {
     }
   }
 
-  // 3. Backward compatibility: check embedded dataUrl / fileData
-  if (doc.dataUrl && typeof doc.dataUrl === 'string') {
+  // 3. Backward compatibility: check embedded dataUrl / fileData (ignore transient blob: URLs)
+  if (doc.dataUrl && typeof doc.dataUrl === 'string' && !doc.dataUrl.startsWith('blob:')) {
     return doc.dataUrl;
   }
-  if (doc.fileData && typeof doc.fileData === 'string') {
+  if (doc.fileData && typeof doc.fileData === 'string' && !doc.fileData.startsWith('blob:')) {
     return doc.fileData;
   }
-  if (doc.proofDocData && typeof doc.proofDocData === 'string') {
+  if (doc.proofDocData && typeof doc.proofDocData === 'string' && !doc.proofDocData.startsWith('blob:')) {
     return doc.proofDocData;
   }
 
-  // 4. Backward compatibility: check direct url
-  if (doc.url && typeof doc.url === 'string') {
+  // 4. Backward compatibility: check direct url (must be permanent, ignore blob:)
+  if (doc.url && typeof doc.url === 'string' && !doc.url.startsWith('blob:')) {
     return doc.url;
   }
 

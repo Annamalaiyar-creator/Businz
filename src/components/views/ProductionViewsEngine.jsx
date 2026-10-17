@@ -768,6 +768,15 @@ export default function ProductionViewsEngine(props) {
       }
     }
 
+    if (!isDraft && (!newBomDestination || !newBomDestination.trim())) {
+      errors.destination = 'Destination is required';
+      missingList.push({
+        field: 'Destination *',
+        message: 'Destination is mandatory. Please enter delivery destination.',
+        targetId: 'create-bom-form-destination'
+      });
+    }
+
     setBomFormErrors(errors);
     return { isValid: missingList.length === 0, missingList, errors };
   };
@@ -788,6 +797,7 @@ export default function ProductionViewsEngine(props) {
   const [newBomRemarks, setNewBomRemarks] = useState('');
   const [newBomTransportMode, setNewBomTransportMode] = useState('Transport');
   const [newBomTransporterName, setNewBomTransporterName] = useState('');
+  const [newBomDestination, setNewBomDestination] = useState('');
   const [newBomVehicleNo, setNewBomVehicleNo] = useState('');
   const [newBomLrNo, setNewBomLrNo] = useState('');
   const [newBomGstRate, setNewBomGstRate] = useState('18%');
@@ -1482,6 +1492,8 @@ export default function ProductionViewsEngine(props) {
                 setNewBomTransportMode={setNewBomTransportMode}
                 newBomTransporterName={newBomTransporterName}
                 setNewBomTransporterName={setNewBomTransporterName}
+                newBomDestination={newBomDestination}
+                setNewBomDestination={setNewBomDestination}
                 newBomVehicleNo={newBomVehicleNo}
                 setNewBomVehicleNo={setNewBomVehicleNo}
                 newBomLrNo={newBomLrNo}
