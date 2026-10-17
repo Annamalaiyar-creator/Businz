@@ -217,22 +217,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   const hasMultipleKits = kitGroups.length > 1;
   const hasAnyKits = kitGroups.length > 0;
 
-  // Helper to determine the 1-set quantity for BOM printout (1 set is enough in printout)
-  const getItemOneSetQty = (item, groupSetCount) => {
-    const rawQty = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
-    const sCount = parseInt(groupSetCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1) || 1;
-
-    // If explicit baseQty is defined on the item (e.g. from PI or BOM creation)
-    if (item.baseQty != null && item.baseQty !== '' && !isNaN(parseFloat(item.baseQty)) && parseFloat(item.baseQty) > 0) {
-      return parseFloat(item.baseQty);
-    }
-
-    // If setCount is greater than 1, divide the total raw quantity by the setCount
-    if (sCount > 1 && rawQty > 0) {
-      return Math.round((rawQty / sCount) * 100) / 100;
-    }
-
-    return rawQty;
+  // Helper to determine the actual total quantity for BOM printout
+  const getItemQty = (item) => {
+    return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
   };
 
   // Extract clean addresses
@@ -289,11 +276,9 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
     resolvedCustomer = 'Valued Customer';
   }
 
-  const totalQuantity = Math.round((hasAnyKits
-    ? (kitGroups.reduce((acc, kg) => acc + kg.items.reduce((kAcc, it) => kAcc + getItemOneSetQty(it, kg.setCount), 0), 0) +
-       standaloneItems.reduce((acc, it) => acc + (parseFloat(it.qty || it.bomQty || it.quantity || it.targetQty || 0) || 0), 0))
-    : enrichedItems.reduce((sum, it) => sum + getItemOneSetQty(it, it.setCount || b.presetSetCount || 1), 0)
-  ) * 100) / 100;
+  const totalQuantity = Math.round(
+    enrichedItems.reduce((sum, it) => sum + getItemQty(it), 0) * 100
+  ) / 100;
   const totalQuantityTaken = items.reduce((sum, item) => sum + (parseFloat(item.quantityTaken || item.qtyTaken || item.takenQty || 0) || 0), 0);
 
   const boxesVal = b.noOfBoxes || b.boxesCount || b.boxes || b.no_of_boxes || '';
@@ -645,15 +630,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
             <th style={{ padding: '8px 12px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Product / Material Name</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>Set</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
-            <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box', lineHeight: '1.2' }}>
-              {hasAnyKits ? (
-                <div>
-                  <div>Quantity</div>
-                  <div style={{ fontSize: '10.5px', fontWeight: '700', opacity: 0.9 }}>(1 Set)</div>
-                </div>
-              ) : (
-                'Quantity'
-              )}
+            <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
+              Quantity
             </th>
             <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
@@ -737,7 +715,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
 
                     {/* Items in this kit */}
                     {kg.items.map((item, itemIdx) => {
-                      const qty = getItemOneSetQty(item, kg.setCount);
+                      const qty = getItemQty(item);
                       const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                         ? item.quantityTaken
                         : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -871,7 +849,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
                     </td>
                   </tr>
                   {standaloneItems.map((item, sIdx) => {
-                    const qty = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
+                    const qty = getItemQty(item);
                     const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                       ? item.quantityTaken
                       : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -921,7 +899,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
             </React.Fragment>
           ) : (
             enrichedItems.map((item, idx) => {
-              const qty = getItemOneSetQty(item, item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1);
+              const qty = getItemQty(item);
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
                 : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -998,7 +976,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           <tfoot style={{ display: 'table-row-group' }}>
             <tr style={{ backgroundColor: '#F1F5F9', borderTop: '2px solid #0E7490', fontWeight: '800', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
               <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right', color: '#475569', fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                {hasAnyKits ? 'Total Quantity (1 Set):' : 'Total Quantity:'}
+                Total Quantity:
               </td>
               <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900', borderRight: '1px solid #CBD5E1' }}>
                 {totalQuantity}
