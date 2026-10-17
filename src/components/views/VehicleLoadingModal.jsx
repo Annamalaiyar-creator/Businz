@@ -23,6 +23,48 @@ function readFileAsDataUrl(file) {
   });
 }
 
+// Fast client-side image compression helper to avoid multi-MB uploads and make upload instantaneous
+async function compressImageForUpload(file, maxDimension = 1280, quality = 0.82) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        let width = img.width || 1280;
+        let height = img.height || 720;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(file);
+          const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      } catch (_) {
+        resolve(file);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 function VehicleMediaImg({ photo, bomCode, onClick }) {
   const initial = photo.url || photo.dataUrl || photo.previewUrl || '';
   const [resolvedSrc, setResolvedSrc] = useState(initial);
@@ -153,12 +195,7 @@ export default function VehicleLoadingModal({
   })();
   const isTransport = salesTransportMode === 'Transport';
   const deliveryMode = isTransport ? 'transport' : (salesTransportMode === 'Own Vehicle' ? 'own_vehicle' : 'direct');
-  const [lrCopyDoc, setLrCopyDoc] = useState(
-    bom.lrCopyDoc || existingLoading.lrCopyDoc || null
-  );
-  const [uploadingLr, setUploadingLr] = useState(false);
-  const [showLrPopup, setShowLrPopup] = useState(false);
-  const [popupLrNo, setPopupLrNo] = useState('');
+  const lrCopyDoc = bom.lrCopyDoc || existingLoading.lrCopyDoc || null;
 
   const [vehicleLoadingData, setVehicleLoadingData] = useState({
     vehicleNo: existingLoading.vehicleNo || "",
@@ -258,72 +295,6 @@ export default function VehicleLoadingModal({
   const isAwaitingLr = bom.status === 'Dispatched - Awaiting LR Copy';
   const isReadOnly = Boolean((bom.isReadOnly || bom.status === 'Completed' || bom.status === 'Fully Dispatched & BOM Flow Completed' || bom.status === 'Fully Dispatched & Delivered') && !isAwaitingLr);
 
-  const handleUploadLrCopy = async (file) => {
-    if (!file) return;
-    setUploadingLr(true);
-    try {
-      validateClientFile(file);
-      const localPreview = URL.createObjectURL(file);
-      const localDataUrl = await readFileAsDataUrl(file);
-      const metadata = await uploadBomDocumentFile({
-        file,
-        bomCode: bCode,
-        category: 'dispatch/lr_copy'
-      });
-      setLrCopyDoc({
-        id: `lr_${Date.now()}`,
-        name: metadata.originalName || file.name,
-        size: `${(file.size / 1024).toFixed(1)} KB`,
-        storageBucket: metadata.storageBucket,
-        storagePath: metadata.storagePath,
-        url: metadata.url || localPreview,
-        dataUrl: metadata.dataUrl || localDataUrl,
-        previewUrl: localPreview,
-        mimeType: metadata.mimeType || file.type,
-        uploadedAt: new Date().toISOString()
-      });
-    } catch (err) {
-      alert(`LR Copy upload error: ${err.message}`);
-    } finally {
-      setUploadingLr(false);
-    }
-  };
-
-  const handlePreviewLrCopy = async () => {
-    if (!lrCopyDoc) return;
-    let targetUrl = lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.previewUrl;
-    if (!targetUrl && lrCopyDoc.name) {
-      targetUrl = getMediaFromCache(lrCopyDoc.name);
-    }
-    if (!targetUrl && (lrCopyDoc.storageBucket || lrCopyDoc.storagePath)) {
-      targetUrl = await resolveDocumentUrlAsync(lrCopyDoc, bCode);
-    }
-    if (!targetUrl && lrCopyDoc.name) {
-      try {
-        const r = await fetch(`/api/media/find/${encodeURIComponent(lrCopyDoc.name)}`);
-        const d = await r.json();
-        if (d && d.found && d.url) {
-          targetUrl = d.url;
-          saveMediaToCache(lrCopyDoc.name, d.url);
-        }
-      } catch (_) {}
-    }
-    const isPdf = lrCopyDoc.mimeType === 'application/pdf' ||
-                  (lrCopyDoc.name && lrCopyDoc.name.toLowerCase().endsWith('.pdf'));
-    const modalPayload = {
-      type: isPdf ? 'pdf' : 'image',
-      url: targetUrl || '',
-      dataUrl: targetUrl || '',
-      previewUrl: targetUrl || '',
-      title: `LR Copy - ${lrCopyDoc.name || bCode}`,
-      name: lrCopyDoc.name || `LR Copy - ${bCode}`,
-      bomCode: bCode,
-      storageBucket: lrCopyDoc.storageBucket,
-      storagePath: lrCopyDoc.storagePath
-    };
-    setLocalMediaPreviewModal(modalPayload);
-    setActiveMediaPreviewModal(modalPayload);
-  };
 
   const openPhotoPreview = async (photo) => {
     if (!photo) return;
@@ -398,8 +369,12 @@ export default function VehicleLoadingModal({
     setUploadingMedia(true);
     setUploadError('');
     try {
-      for (const file of Array.from(files)) {
-        validateClientFile(file);
+      for (const rawFile of Array.from(files)) {
+        validateClientFile(rawFile);
+        // Fast client-side compression reduces 5-15MB phone images to ~100KB instantly
+        const file = (rawFile.type && rawFile.type.startsWith('image/'))
+          ? await compressImageForUpload(rawFile)
+          : rawFile;
         const localPreview = URL.createObjectURL(file);
         const localDataUrl = await readFileAsDataUrl(file);
         const metadata = await uploadBomDocumentFile({
@@ -432,32 +407,27 @@ export default function VehicleLoadingModal({
   };
 
   const handleInitiateConfirm = () => {
-    if (uploadingMedia || uploadingLr) {
-      alert('Media or LR document is currently uploading to secure storage. Please wait until upload completes.');
+    if (uploadingMedia) {
+      alert('Photos are currently uploading to secure storage. Please wait until upload completes.');
       return;
     }
 
-    // If own vehicle or customer portal / self-pickup -> complete immediately, NO POPUP!
-    if (!isTransport) {
-      handleFinalizeVehicleLoading({ forceStatus: 'Completed', overrideLrDoc: null });
+    if (currentPhotos.length === 0) {
+      alert('Please upload at least one vehicle loading proof photo before dispatch.');
       return;
     }
 
-    // If 3rd-party transport:
-    // If LR copy is already attached, complete immediately
-    if (lrCopyDoc && (lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.name)) {
-      handleFinalizeVehicleLoading({ forceStatus: 'Completed', overrideLrDoc: lrCopyDoc });
-      return;
-    }
-
-    // If no LR copy attached, open the dedicated LR Copy Upload Popup Menu
-    setPopupLrNo(vehicleLoadingData.lrNo || existingLoading.lrNo || '');
-    setShowLrPopup(true);
+    // Strictly separate vehicle loading photos from LR receipt upload:
+    // If 3rd-party transport -> departs on road, status moves to 'Dispatched - Awaiting LR Copy'.
+    // Transporter LR copy can then be uploaded from the floating bottom action bar popup menu.
+    // If own vehicle or customer pickup -> completed immediately.
+    const nextStatus = isTransport ? 'Dispatched - Awaiting LR Copy' : 'Completed';
+    handleFinalizeVehicleLoading({ forceStatus: nextStatus });
   };
 
   const handleFinalizeVehicleLoading = async (options = {}) => {
-    if (uploadingMedia || uploadingLr) {
-      alert('Media or LR document is currently uploading to secure storage. Please wait until upload completes.');
+    if (uploadingMedia) {
+      alert('Photos are currently uploading to secure storage. Please wait until upload completes.');
       return;
     }
 
@@ -469,7 +439,7 @@ export default function VehicleLoadingModal({
     const effectiveVehicleNo = vNo || (isTransport ? '' : isOwnVehicle ? 'Own Vehicle / Porter' : 'Customer Pickup');
     const effectiveTransporter = transp || (isTransport ? '' : isOwnVehicle ? 'Own Vehicle / Porter' : 'Self-Pickup / Direct Delivery');
     const activeLrDoc = overrideLrDoc !== undefined ? overrideLrDoc : lrCopyDoc;
-    const effectiveLrNo = overrideLrNo !== undefined ? overrideLrNo : (lr || popupLrNo || '');
+    const effectiveLrNo = overrideLrNo !== undefined ? overrideLrNo : (lr || '');
 
     const hasLrCopy = Boolean(activeLrDoc && (activeLrDoc.url || activeLrDoc.dataUrl || activeLrDoc.name));
     const willCloseBom = forceStatus ? (forceStatus === 'Completed') : (!isTransport || hasLrCopy);
@@ -605,7 +575,6 @@ export default function VehicleLoadingModal({
       status: nextBomStatus
     };
 
-    setShowLrPopup(false);
     onClose();
     setLoadingPhotos([]);
 
@@ -912,131 +881,6 @@ return (
         </div>
       </div>
 
-      {/* LR Copy Attachment (shown ONLY when Transport is selected by Sales) */}
-      {isTransport && (
-        <div style={{
-          padding: '18px 24px',
-          backgroundColor: '#FFFFFF',
-          borderBottom: '1px solid #E2E8F0',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={18} style={{ color: '#0E7490' }} />
-              <div>
-                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
-                  Transporter LR Copy / Bilty Attachment
-                </h4>
-                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
-                  Transport Mode: <strong style={{ color: '#0E7490' }}>Transport</strong> {transp ? `(${transp})` : ''}. Attach lorry receipt / bilty for 3rd-party logistics.
-                </p>
-              </div>
-            </div>
-            {!isReadOnly && !lrCopyDoc && (
-              <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 16px', borderRadius: '8px',
-                backgroundColor: '#0E7490', color: '#FFFFFF',
-                fontSize: '12px', fontWeight: '700', cursor: uploadingLr ? 'not-allowed' : 'pointer'
-              }}>
-                <Upload size={14} /> {uploadingLr ? 'Uploading...' : 'Attach LR Copy (PDF / Image)'}
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  disabled={uploadingLr}
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      handleUploadLrCopy(e.target.files[0]);
-                    }
-                  }}
-                  style={{ display: 'none' }}
-                />
-              </label>
-            )}
-          </div>
-
-          {lrCopyDoc ? (
-            <div style={{
-              backgroundColor: '#F0FDF4',
-              border: '1px solid #86EFAC',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '10px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <CheckCircle size={20} style={{ color: '#16A34A' }} />
-                <div>
-                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>
-                    Transporter LR Copy Attached: {lrCopyDoc.name || 'Lorry_Receipt.pdf'}
-                  </span>
-                  <span style={{ fontSize: '11.5px', color: '#64748B', marginLeft: '8px' }}>
-                    ({lrCopyDoc.size || 'Attached'})
-                  </span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={handlePreviewLrCopy}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #0E7490',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
-                    fontSize: '11.5px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <Eye size={13} /> View LR
-                </button>
-                {!isReadOnly && (
-                  <button
-                    type="button"
-                    onClick={() => setLrCopyDoc(null)}
-                    style={{
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #FCA5A5',
-                      backgroundColor: '#FEF2F2',
-                      color: '#EF4444',
-                      fontSize: '11.5px',
-                      fontWeight: '700',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ✕ Remove
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div style={{
-              padding: '12px 16px',
-              borderRadius: '10px',
-              border: '1.5px dashed #CBD5E1',
-              backgroundColor: '#F8FAFC',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '600' }}>
-                No LR Copy attached yet. You can attach it here or when confirming dispatch departure.
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ─── VEHICLE LOADING PROOF PHOTOS SECTION ─── */}
       <div style={{
         padding: '20px 24px',
@@ -1238,293 +1082,24 @@ return (
             <button
               type="button"
               onClick={handleInitiateConfirm}
-              disabled={uploadingMedia || uploadingLr}
+              disabled={uploadingMedia}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '8px 22px', borderRadius: '8px', border: 'none',
-                backgroundColor: (uploadingMedia || uploadingLr) ? '#94A3B8' : '#0E7490',
+                backgroundColor: uploadingMedia ? '#94A3B8' : '#0E7490',
                 color: '#FFFFFF', fontSize: '13px', fontWeight: '800',
-                cursor: (uploadingMedia || uploadingLr) ? 'not-allowed' : 'pointer',
+                cursor: uploadingMedia ? 'not-allowed' : 'pointer',
                 boxShadow: '0 2px 6px rgba(14,116,144,0.3)',
                 transition: 'all 0.15s ease'
               }}
             >
               <Truck size={16} />
-              {isAwaitingLr
-                ? 'Upload LR Copy & Close BOM'
-                : 'Confirm Loading & Dispatch'}
+              {uploadingMedia ? 'Uploading Photos...' : 'Confirm Loading & Dispatch'}
             </button>
           )}
         </div>
       </div>
     </div>
-
-    {/* Dedicated LR Copy Upload Popup Modal for 3rd-Party Transport */}
-    {showLrPopup && (
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.75)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 99999, padding: '20px'
-      }}>
-        <div style={{
-          backgroundColor: '#FFFFFF', borderRadius: '18px',
-          width: '100%', maxWidth: '540px', overflow: 'hidden',
-          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
-          border: '1px solid #CBD5E1', display: 'flex', flexDirection: 'column'
-        }}>
-          {/* Header */}
-          <div style={{
-            padding: '18px 22px',
-            backgroundColor: '#0F172A',
-            color: '#FFFFFF',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={18} style={{ color: '#38BDF8' }} />
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>
-                  Upload Transporter LR Copy / Bilty
-                </h3>
-              </div>
-              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#94A3B8' }}>
-                Order Ref: <strong style={{ color: '#E2E8F0' }}>{bCode}</strong> • {transp || '3rd-Party Transport'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowLrPopup(false)}
-              style={{
-                background: 'rgba(255,255,255,0.1)', border: 'none',
-                color: '#FFFFFF', width: '32px', height: '32px', borderRadius: '8px',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '16px', fontWeight: 'bold'
-              }}
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Body */}
-          <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* LR Docket Number input */}
-            <div>
-              <label htmlFor="vehicle-loading-lr-docket-bilty" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                LR / Docket / Bilty Number
-              </label>
-              <input id="vehicle-loading-lr-docket-bilty" name="lRDocketBilty" aria-label="LR / Docket / Bilty Number"
-                type="text"
-                value={popupLrNo}
-                onChange={(e) => {
-                  setPopupLrNo(e.target.value);
-                  setVehicleLoadingData(prev => ({ ...prev, lrNo: e.target.value }));
-                }}
-                placeholder="e.g. LR-2026-8812"
-                style={{
-                  width: '100%', height: '42px', borderRadius: '10px',
-                  border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px',
-                  fontWeight: '700', color: '#0F172A', outline: 'none', boxSizing: 'border-box'
-                }}
-               />
-            </div>
-
-            {/* Upload Zone */}
-            <div style={{
-              backgroundColor: lrCopyDoc ? '#F0FDF4' : '#F8FAFC',
-              border: `2px dashed ${lrCopyDoc ? '#86EFAC' : '#CBD5E1'}`,
-              borderRadius: '12px',
-              padding: '20px',
-              textAlign: 'center',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'
-            }}>
-              {lrCopyDoc ? (
-                <>
-                  <div style={{
-                    width: '44px', height: '44px', borderRadius: '10px',
-                    backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <FileText size={24} style={{ color: '#16A34A' }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                      {lrCopyDoc.name}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                      {lrCopyDoc.size || 'Attached'} • Ready to Complete
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={handlePreviewLrCopy}
-                      style={{
-                        padding: '6px 12px', borderRadius: '6px',
-                        border: '1px solid #0E7490', backgroundColor: '#0E7490',
-                        color: '#FFFFFF', fontSize: '11.5px', fontWeight: '700',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                      }}
-                    >
-                      <Eye size={13} /> View
-                    </button>
-                    <label style={{
-                      padding: '6px 12px', borderRadius: '6px',
-                      border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF',
-                      color: '#0F172A', fontSize: '11.5px', fontWeight: '700',
-                      cursor: uploadingLr ? 'not-allowed' : 'pointer'
-                    }}>
-                      Replace
-                      <input id="vehicle-loading-input-2" name="input2" aria-label="Input 2"
-                        type="file"
-                        accept="image/*,application/pdf"
-                        disabled={uploadingLr}
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleUploadLrCopy(e.target.files[0]);
-                          }
-                        }}
-                       />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setLrCopyDoc(null)}
-                      style={{
-                        padding: '6px 10px', borderRadius: '6px',
-                        border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2',
-                        color: '#EF4444', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer'
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{
-                    width: '48px', height: '48px', borderRadius: '12px',
-                    backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <UploadCloud size={24} style={{ color: '#0284C7' }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                      Upload Physical LR / Bilty Receipt
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                      Supports PNG, JPG, or PDF from driver or transporter
-                    </div>
-                  </div>
-                  <label style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    backgroundColor: '#0E7490', color: '#FFFFFF',
-                    padding: '8px 18px', borderRadius: '8px',
-                    fontSize: '12.5px', fontWeight: '800',
-                    cursor: uploadingLr ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 6px rgba(14,116,144,0.3)',
-                    marginTop: '4px'
-                  }}>
-                    {uploadingLr ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
-                    {uploadingLr ? 'Uploading LR Copy...' : 'Choose File to Upload'}
-                    <input id="vehicle-loading-input-3" name="input3" aria-label="Input 3"
-                      type="file"
-                      accept="image/*,application/pdf"
-                      disabled={uploadingLr}
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleUploadLrCopy(e.target.files[0]);
-                        }
-                      }}
-                     />
-                  </label>
-                </>
-              )}
-            </div>
-
-            {/* Explanatory note */}
-            <div style={{
-              backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
-              borderRadius: '10px', padding: '10px 14px',
-              fontSize: '11.5px', color: '#92400E', lineHeight: '1.4',
-              display: 'flex', alignItems: 'flex-start', gap: '8px'
-            }}>
-              <Info size={15} style={{ color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <strong>LR Copy Requirement:</strong> If the LR copy is available now, upload it and click <strong>"Upload & Complete Dispatch"</strong>. If the driver has not yet provided the LR copy, you can click <strong>"Skip & Dispatch (Awaiting LR Copy)"</strong> so the vehicle can depart on road; the BOM will remain open until the receipt is uploaded later.
-              </div>
-            </div>
-          </div>
-
-          {/* Footer buttons */}
-          <div style={{
-            padding: '14px 22px', backgroundColor: '#F8FAFC',
-            borderTop: '1px solid #E2E8F0',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px'
-          }}>
-            <button
-              type="button"
-              onClick={() => setShowLrPopup(false)}
-              style={{
-                padding: '8px 16px', borderRadius: '8px',
-                border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF',
-                color: '#475569', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  handleFinalizeVehicleLoading({
-                    forceStatus: 'Dispatched - Awaiting LR Copy',
-                    overrideLrDoc: null,
-                    overrideLrNo: popupLrNo || lr
-                  });
-                }}
-                disabled={uploadingLr}
-                style={{
-                  padding: '8px 16px', borderRadius: '8px',
-                  border: '1px solid #F59E0B', backgroundColor: '#FEF3C7',
-                  color: '#92400E', fontSize: '12.5px', fontWeight: '800',
-                  cursor: uploadingLr ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Skip & Dispatch (Awaiting LR)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!lrCopyDoc) {
-                    alert('Please choose an LR Copy file to upload, or click "Skip & Dispatch (Awaiting LR)" if the document is not yet received.');
-                    return;
-                  }
-                  handleFinalizeVehicleLoading({
-                    forceStatus: 'Completed',
-                    overrideLrDoc: lrCopyDoc,
-                    overrideLrNo: popupLrNo || lr
-                  });
-                }}
-                disabled={!lrCopyDoc || uploadingLr}
-                style={{
-                  padding: '8px 20px', borderRadius: '8px', border: 'none',
-                  backgroundColor: (!lrCopyDoc || uploadingLr) ? '#94A3B8' : '#0E7490',
-                  color: '#FFFFFF', fontSize: '12.5px', fontWeight: '800',
-                  cursor: (!lrCopyDoc || uploadingLr) ? 'not-allowed' : 'pointer',
-                  boxShadow: (!lrCopyDoc || uploadingLr) ? 'none' : '0 2px 6px rgba(14,116,144,0.3)',
-                  display: 'flex', alignItems: 'center', gap: '6px'
-                }}
-              >
-                <CheckCircle size={15} /> Upload & Complete Dispatch
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
 
     {/* Live Camera Modal (like DispatchPackingModal) */}
     {showLiveCameraModal && (

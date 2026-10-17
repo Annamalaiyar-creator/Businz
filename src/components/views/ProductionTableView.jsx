@@ -768,9 +768,44 @@ export default function ProductionTableView({
                 const targetCode = selectedRows[0];
                 const fullBom = (bomStore || []).find(b => b && (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.piNo === targetCode));
                 const rowRec = (filteredRows || []).find(r => r && (r.code === targetCode || r.id === targetCode || r.bomCode === targetCode));
-                const targetRow = { ...(rowRec || {}), ...(fullBom || {}) };
-                if (!targetRow.customerName && rowRec?.customerName) targetRow.customerName = rowRec.customerName;
-                if (!targetRow.salesPerson && rowRec?.salesPerson) targetRow.salesPerson = rowRec.salesPerson;
+
+                const resolvedCustomerName = (() => {
+                  const list = [rowRec?.customerName, fullBom?.customerName, rowRec?.companyName, fullBom?.companyName, rowRec?.c2];
+                  return list.find(s => s && typeof s === 'string' && s.trim() && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(s.trim())) || rowRec?.customerName || fullBom?.customerName || 'Valued Customer';
+                })();
+
+                const resolvedSalesPerson = (() => {
+                  const isDisp = (s) => {
+                    const l = String(s || '').toLowerCase();
+                    return l === 'anu' || l.includes('dispatch') || l.includes('fulfillment');
+                  };
+                  const list = [rowRec?.salesPerson, fullBom?.salesPerson, rowRec?.c4, rowRec?.createdBy, fullBom?.createdBy];
+                  return list.find(s => s && typeof s === 'string' && s.trim() && !['Sales Department', 'Sales', '—', '-'].includes(s.trim()) && !isDisp(s)) || rowRec?.salesPerson || fullBom?.salesPerson || 'Annamalaiyar';
+                })();
+
+                const targetRow = {
+                  ...(fullBom || {}),
+                  ...(rowRec || {}),
+                  customerName: resolvedCustomerName,
+                  companyName: resolvedCustomerName,
+                  salesPerson: resolvedSalesPerson,
+                  items: (Array.isArray(fullBom?.items) && fullBom.items.length > 0)
+                    ? fullBom.items
+                    : (Array.isArray(rowRec?.items) && rowRec.items.length > 0)
+                      ? rowRec.items
+                      : (Array.isArray(fullBom?.lineItems) && fullBom.lineItems.length > 0)
+                        ? fullBom.lineItems
+                        : (Array.isArray(fullBom?.materials) && fullBom.materials.length > 0)
+                          ? fullBom.materials
+                          : (Array.isArray(fullBom?.dispatchPacking) && fullBom.dispatchPacking.length > 0)
+                            ? fullBom.dispatchPacking
+                            : (rowRec?.dispatchPacking || []),
+                  presetGroups: (Array.isArray(fullBom?.presetGroups) && fullBom.presetGroups.length > 0)
+                    ? fullBom.presetGroups
+                    : (rowRec?.presetGroups || []),
+                  presetName: fullBom?.presetName || rowRec?.presetName || '',
+                  presetSetCount: fullBom?.presetSetCount || rowRec?.presetSetCount || null
+                };
 
                 setSelectedRows([]);
                 if (onPrintBom) {

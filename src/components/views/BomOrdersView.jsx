@@ -20,6 +20,7 @@ import TypeableProductSelect from '../TypeableProductSelect';
 import ModernDateRangePicker from '../ModernDateRangePicker';
 import { is5PctSolarProduct } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
+import LrUploadPopupModal from './LrUploadPopupModal';
 import { notifyBomSentToDispatch, notifyBomCancelledByDispatch } from '../../services/notificationService';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 
@@ -47,6 +48,7 @@ export default function BomOrdersView(props) {
   const [bomCancelPromptModal, setBomCancelPromptModal] = useState(null);
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
   const [uploadingPayment, setUploadingPayment] = useState(false);
+  const [lrUploadModal, setLrUploadModal] = useState(null);
 
   // Safe localStorage saver that catches QuotaExceededError and trims cache to top 50 recent records per Rule 5
   const safeSaveBomStoreToLocal = (list) => {
@@ -7118,6 +7120,47 @@ export default function BomOrdersView(props) {
             <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedRows.length}</strong> Selected
           </span>
 
+          {/* View Details - Always accessible across all logins (Sales, Admin, etc.) and statuses */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (selectedRows.length > 1) {
+                alert("You can't open details for multiple BOM orders at once. Please select a single item to view details.");
+                return;
+              }
+              const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+              const targetRow = codeVal
+                ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
+                : (filteredRows && filteredRows[0] ? filteredRows[0] : null);
+              setSelectedRows([]);
+              if (targetRow) {
+                setQuickPreviewRecord(targetRow);
+              }
+            }}
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              color: '#1E293B',
+              borderRadius: '10px',
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+          >
+            <Eye size={14} style={{ color: '#0E7490' }} /> View Details
+          </button>
+
           {userRole !== 'CEO' && userRole !== 'MD' && userRole !== 'Managing Director' && (() => {
             const isOnlyDraft = (selectedRows || []).every(codeVal => {
               const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
@@ -7159,51 +7202,6 @@ export default function BomOrdersView(props) {
             );
           })()}
 
-          {(() => {
-            const isEligibleForDetails = (selectedRows || []).some(codeVal => {
-              const b = (bomStore || []).find(x => (x.bomCode || x.code || x.id) === codeVal) ||
-                        (filteredRows || []).find(r => (r.bomCode || r.code || r.id) === codeVal);
-              if (!b) return false;
-              const st = String(b.status || '').toLowerCase();
-              const isPartiallyPacked = b.dispatchPackingStatus === 'Partially Packed' || st.includes('partially packed');
-              const isCompleted = st.includes('completed') || st.includes('fully dispatched');
-              return isPartiallyPacked || isCompleted;
-            });
-            if (!isEligibleForDetails) return null;
-            return (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
-                  const targetRow = codeVal
-                    ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || { code: codeVal, name: `Record #${codeVal}` })
-                    : (filteredRows && filteredRows[0] ? filteredRows[0] : null);
-                  setSelectedRows([]);
-                  setQuickPreviewRecord(targetRow);
-                }}
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E2E8F0',
-                  color: '#1E293B',
-                  borderRadius: '10px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                }}
-              >
-                <Eye size={14} style={{ color: '#0E7490' }} /> View Details
-              </button>
-            );
-          })()}
-
           <button
             onClick={() => {
               const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
@@ -7235,6 +7233,45 @@ export default function BomOrdersView(props) {
           >
             <CreditCard size={14} style={{ color: '#2563EB' }} /> Payment Details
           </button>
+
+          {(() => {
+            const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+            if (!codeVal) return null;
+            const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
+            const isAwaitingLr = targetRow && (
+              targetRow.status === 'Dispatched - Awaiting LR Copy' ||
+              targetRow.status === 'Awaiting LR Copy' ||
+              targetRow.status === 'AWAITING LR COPY' ||
+              targetRow.tabGroup === 'AwaitingLrCopy'
+            );
+            if (!isAwaitingLr) return null;
+            return (
+              <button
+                onClick={() => {
+                  setSelectedRows([]);
+                  setLrUploadModal(targetRow);
+                }}
+                style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(245, 158, 11, 0.15)'
+                }}
+              >
+                <FileText size={14} style={{ color: '#D97706' }} /> Upload LR Copy
+              </button>
+            );
+          })()}
 
           {canCancelBom && (() => {
             const hasCancellable = (selectedRows || []).some(codeVal => {
@@ -7382,7 +7419,9 @@ export default function BomOrdersView(props) {
                   onClick={() => {
                     const rec = quickPreviewRecord;
                     setQuickPreviewRecord(null);
-                    setConfirmingBomModal({ ...rec, isEditMode: true });
+                    const isSentToDispatch = rec.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(rec.status);
+                    const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(rec.status);
+                    setConfirmingBomModal({ ...rec, isEditMode: isDraftOrPending });
                   }}
                   style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#1E293B', padding: '6px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
@@ -8323,6 +8362,15 @@ export default function BomOrdersView(props) {
 
       {/* FULL-SCREEN BOM CREATION LOADING OVERLAY */}
       {renderBomSubmittingOverlay()}
+
+      {/* ─── DEDICATED LR COPY UPLOAD POPUP MODAL ─── */}
+      {lrUploadModal && (
+        <LrUploadPopupModal
+          bom={lrUploadModal}
+          onClose={() => setLrUploadModal(null)}
+          setBomStore={setBomStore}
+        />
+      )}
     </div>
   );
 }

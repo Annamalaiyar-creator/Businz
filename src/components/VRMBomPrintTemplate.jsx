@@ -76,17 +76,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   if (!bomData) return null;
 
   const b = bomData;
-  let items = (Array.isArray(b.items) && b.items.length > 0)
-    ? b.items
-    : (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
-      ? b.dispatchPacking
-      : (Array.isArray(b.lineItems) && b.lineItems.length > 0)
-        ? b.lineItems
-        : (Array.isArray(b.materials) && b.materials.length > 0)
-          ? b.materials
-          : [];
 
-  // Fallback to source PI if items are still empty, and extract preset kit metadata
+  // Fallback to source PI for fallback data if BOM has missing fields, items, or kit metadata
   let matchedPi = null;
   try {
     const piNum = b.sourcePiNo || b.source_pi_no || b.piNo;
@@ -99,12 +90,26 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
           (piNum && (p.piNo === piNum || p.id === piNum || p.estimate_number === piNum)) ||
           (bCode && (p.convertedBomCode === bCode || p.convertedBomNo === bCode))
         ));
-        if (items.length === 0 && matchedPi && Array.isArray(matchedPi.items) && matchedPi.items.length > 0) {
-          items = matchedPi.items;
-        }
       }
     }
   } catch {}
+
+  let items = (Array.isArray(b.items) && b.items.length > 0)
+    ? b.items
+    : (Array.isArray(b.lineItems) && b.lineItems.length > 0)
+      ? b.lineItems
+      : (Array.isArray(b.materials) && b.materials.length > 0)
+        ? b.materials
+        : (matchedPi && Array.isArray(matchedPi.items) && matchedPi.items.length > 0)
+          ? matchedPi.items
+          : (Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0)
+            ? b.dispatchPacking
+            : [];
+
+  // If items only has bare dispatchPacking without codes/rates/presets, and matchedPi has rich items, prefer matchedPi.items
+  if (items.length > 0 && !items.some(it => it.code || it.rate || it.isPresetItem || it.presetName) && matchedPi && Array.isArray(matchedPi.items) && matchedPi.items.length > 0) {
+    items = matchedPi.items;
+  }
 
   // 1. Build preset groups dictionary from BOM or matched PI
   let presetGroupsObj = {};
@@ -219,7 +224,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
 
   // Helper to determine the actual total quantity for BOM printout
   const getItemQty = (item) => {
-    return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || 0) || 0;
+    return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
   };
 
   // Extract clean addresses
@@ -236,18 +241,20 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   let dPin = dObj.pincode || b.shippingPincode || (b.sameAsBilling ? bPin : '');
 
   // Fallback to source PI addresses if missing
-  if (!rawBAddr && !bCity && matchedPi) {
-    const piBObj = matchedPi.billingAddressObj || {};
-    rawBAddr = rawBAddr || piBObj.address || matchedPi.billingAddress || matchedPi.billingStreet || '';
-    bCity = bCity || piBObj.city || matchedPi.billingCity || '';
-    bState = bState || piBObj.state || matchedPi.billingState || '';
-    bPin = bPin || piBObj.pincode || matchedPi.billingPincode || '';
+  if ((!rawBAddr && !bCity) || (!rawDAddr && !dCity)) {
+    if (matchedPi) {
+      const piBObj = matchedPi.billingAddressObj || {};
+      rawBAddr = rawBAddr || piBObj.address || matchedPi.billingAddress || matchedPi.billingStreet || '';
+      bCity = bCity || piBObj.city || matchedPi.billingCity || '';
+      bState = bState || piBObj.state || matchedPi.billingState || '';
+      bPin = bPin || piBObj.pincode || matchedPi.billingPincode || '';
 
-    const piDObj = matchedPi.deliveryAddressObj || {};
-    rawDAddr = rawDAddr || piDObj.address || matchedPi.deliveryAddress || matchedPi.shippingStreet || (matchedPi.sameAsBilling ? rawBAddr : '');
-    dCity = dCity || piDObj.city || matchedPi.shippingCity || (matchedPi.sameAsBilling ? bCity : '');
-    dState = dState || piDObj.state || matchedPi.shippingState || (matchedPi.sameAsBilling ? bState : '');
-    dPin = dPin || piDObj.pincode || matchedPi.shippingPincode || (matchedPi.sameAsBilling ? bPin : '');
+      const piDObj = matchedPi.deliveryAddressObj || {};
+      rawDAddr = rawDAddr || piDObj.address || matchedPi.deliveryAddress || matchedPi.shippingStreet || (matchedPi.sameAsBilling ? rawBAddr : '');
+      dCity = dCity || piDObj.city || matchedPi.shippingCity || (matchedPi.sameAsBilling ? bCity : '');
+      dState = dState || piDObj.state || matchedPi.shippingState || (matchedPi.sameAsBilling ? bState : '');
+      dPin = dPin || piDObj.pincode || matchedPi.shippingPincode || (matchedPi.sameAsBilling ? bPin : '');
+    }
   }
 
   const billingLines = formatAddressLines(rawBAddr, bCity, bState, bPin);
@@ -263,16 +270,24 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   };
   let salesPersonName = b.salesPerson || b.salesPersonName || b.salesperson || b.c3 || '';
   if (!salesPersonName || salesPersonName.toLowerCase() === 'sales' || salesPersonName === 'Sales Department' || isDispatchUser(salesPersonName)) {
-    salesPersonName = (b.createdBy && !isDispatchUser(b.createdBy) && b.createdBy.toLowerCase() !== 'sales') ? b.createdBy : 'Annamalaiyar';
+    if (matchedPi && (matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy)) {
+      salesPersonName = matchedPi.salesPerson || matchedPi.salesperson || matchedPi.createdBy;
+    } else {
+      salesPersonName = (b.createdBy && !isDispatchUser(b.createdBy) && b.createdBy.toLowerCase() !== 'sales') ? b.createdBy : 'Annamalaiyar';
+    }
   }
 
-  let resolvedCustomer = (b.customerName && b.customerName !== 'Customer' && b.customerName !== '-')
+  let resolvedCustomer = (b.customerName && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(String(b.customerName).trim()))
     ? b.customerName
-    : (b.companyName && b.companyName !== '-')
+    : (b.companyName && !['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(String(b.companyName).trim()))
       ? b.companyName
       : (b.vendor || b.clientName || b.c2 || '');
 
-  if (!resolvedCustomer || resolvedCustomer === 'Customer' || resolvedCustomer === 'Customer Order') {
+  if ((!resolvedCustomer || ['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(String(resolvedCustomer).trim())) && matchedPi) {
+    resolvedCustomer = matchedPi.companyName || matchedPi.customerName || matchedPi.vendor || '';
+  }
+
+  if (!resolvedCustomer || ['Customer', 'Customer Order', 'Teorainn Solar Pvt Ltd', '—', '-'].includes(String(resolvedCustomer).trim())) {
     resolvedCustomer = 'Valued Customer';
   }
 

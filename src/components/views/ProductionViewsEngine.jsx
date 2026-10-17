@@ -21,6 +21,7 @@ import CustomerProfileView from './CustomerProfileView';
 import CustomerFormView from './CustomerFormView';
 import CreateBomFormPage from './CreateBomFormPage';
 import VehicleLoadingModal from './VehicleLoadingModal';
+import LrUploadPopupModal from './LrUploadPopupModal';
 import DeliveryChallanModal from './DeliveryChallanModal';
 import QuickPreviewDrawer from './QuickPreviewDrawer';
 import ProductionTableView from './ProductionTableView';
@@ -322,6 +323,16 @@ export default function ProductionViewsEngine(props) {
                 }
                 return custs;
               });
+            }
+          } catch (_) {}
+        }
+
+        // Ensure source PI store is available in localStorage for BOM print fallback & enrichment (one-time fetch if absent)
+        if (!localStorage.getItem('controlroom_sales_pi_store')) {
+          try {
+            const piData = await fetchCloudStore('sales_pi_store', []);
+            if (Array.isArray(piData) && piData.length > 0) {
+              localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(piData.map(stripDataUrlsFromRecord)));
             }
           } catch (_) {}
         }
@@ -811,6 +822,7 @@ export default function ProductionViewsEngine(props) {
 
   // Vehicle Loading & Final Dispatch State
   const [vehicleLoadingModal, setVehicleLoadingModal] = useState(null); // BOM object undergoing vehicle loading
+  const [lrUploadModal, setLrUploadModal] = useState(null); // BOM object awaiting LR Copy upload
   const [vehicleLoadingData, setVehicleLoadingData] = useState({
     vehicleNo: '',
     driverName: '',
@@ -1745,7 +1757,7 @@ export default function ProductionViewsEngine(props) {
                   } else if (targetRow.tabGroup === 'Closed' || targetRow.status === 'Completed' || targetRow.status === 'COMPLETED & DISPATCHED') {
                     setVehicleLoadingModal({ ...fullBomToLoad, isReadOnly: true });
                   } else if (targetRow.tabGroup === 'AwaitingLrCopy' || targetRow.status === 'Dispatched - Awaiting LR Copy' || targetRow.status === 'AWAITING LR COPY' || targetRow.status === 'Awaiting LR Copy') {
-                    setVehicleLoadingModal(fullBomToLoad);
+                    setLrUploadModal(fullBomToLoad);
                   } else if (isAwaitingLoad) {
                     setVehicleLoadingModal(fullBomToLoad);
                   } else {
@@ -1827,7 +1839,7 @@ export default function ProductionViewsEngine(props) {
               } else if (rec.tabGroup === 'Closed' || rec.status === 'Completed' || rec.status === 'COMPLETED & DISPATCHED') {
                 setVehicleLoadingModal({ ...fullRec, isReadOnly: true });
               } else if (rec.tabGroup === 'AwaitingLrCopy' || rec.status === 'Awaiting LR Copy' || rec.status === 'Dispatched - Awaiting LR Copy' || rec.status === 'AWAITING LR COPY') {
-                setVehicleLoadingModal(fullRec);
+                setLrUploadModal(fullRec);
               } else if (isRecAwaitingLoad) {
                 setVehicleLoadingModal(fullRec);
               } else {
@@ -1907,6 +1919,17 @@ export default function ProductionViewsEngine(props) {
         <ActiveMediaPreviewModal
           activeMediaPreviewModal={activeMediaPreviewModal}
           onClose={() => setActiveMediaPreviewModal(null)}
+        />
+      )}
+
+      {/* ─── DEDICATED LR COPY UPLOAD POPUP MODAL (ACCESSED VIA FLOATING ACTION BAR) ─── */}
+      {lrUploadModal && (
+        <LrUploadPopupModal
+          bom={lrUploadModal}
+          onClose={() => setLrUploadModal(null)}
+          setBomStore={setBomStore}
+          setInvoiceList={setInvoiceList}
+          setActiveMediaPreviewModal={setActiveMediaPreviewModal}
         />
       )}
 
