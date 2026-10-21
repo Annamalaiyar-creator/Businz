@@ -533,81 +533,90 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     } catch (e) {}
   };
 
-  // Direct manual or automatic one-click sync of a PI to Zoho Books (Quotes)
+  // Direct 1-way manual push of a PI to Zoho Books (Quotes / Estimates)
   const syncPiToZoho = async (targetPi) => {
     if (!targetPi || syncingPiNo) return;
     const cleanNo = String(targetPi.piNo || targetPi.id || '').trim();
     setSyncingPiNo(cleanNo);
+    showTopToast(`⏳ Pushing Proforma Invoice ${cleanNo} to Zoho Books Quotes...`, 'info', 4000);
+
     try {
       const sanitizedPi = stripDataUrlsFromRecord(targetPi);
       delete sanitizedPi.paymentProofDoc;
       delete sanitizedPi.deliveryProofDoc;
       delete sanitizedPi.deliveryAddressProofDoc;
 
-      const res = await fetch('/api/estimates', {
+      const res = await fetch('/api/zoho/push-pi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...sanitizedPi, piNo: cleanNo })
+        body: JSON.stringify({ piNo: cleanNo, pi: sanitizedPi })
       });
 
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
         throw new Error(
           res.status === 404
-            ? `Backend API server unreachable (HTTP 404). Please ensure the Node.js backend application is running in Plesk / hosting control panel.`
+            ? `Backend API server unreachable (HTTP 404). Please ensure the Node.js backend application is running.`
             : `Server returned HTTP ${res.status} (${res.statusText || 'Non-JSON response'}).`
         );
       }
 
       const data = await res.json();
-      const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
-      const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || data?.message || 'Zoho Books synchronization failed');
+      }
 
-      if (estId) {
-        const finalEstNo = data?.estimate?.piNo || cleanNo;
-        const updated = piList.map(p => {
-          const matchNo = String(p.piNo || '').trim().toLowerCase();
-          const matchId = String(p.id || '').trim().toLowerCase();
+      const est = data.estimate;
+      const estNo = est?.estimate_number || cleanNo;
+      const estId = String(est?.estimate_id || '').trim();
+
+      const updated = piList.map(p => {
+        const matchNo = String(p.piNo || '').trim().toLowerCase();
+        const matchId = String(p.id || '').trim().toLowerCase();
+        const targetKey = cleanNo.toLowerCase();
+        if (matchNo === targetKey || matchId === targetKey || matchNo === estNo.toLowerCase()) {
+          return {
+            ...p,
+            piNo: estNo,
+            zohoEstimateId: estId,
+            zohoEstimateNo: estNo,
+            zohoSynced: true,
+            zohoSyncedAt: new Date().toISOString(),
+            zohoSyncError: null,
+            zohoModule: 'Quotes'
+          };
+        }
+        return p;
+      });
+
+      updatePiList(updated);
+
+      if (selectedPi) {
+        setSelectedPi(prev => {
+          if (!prev) return null;
+          const pNo = String(prev.piNo || '').trim().toLowerCase();
+          const pId = String(prev.id || '').trim().toLowerCase();
           const targetKey = cleanNo.toLowerCase();
-          if (matchNo === targetKey || matchId === targetKey || matchNo === finalEstNo.toLowerCase()) {
+          if (pNo === targetKey || pId === targetKey || pNo === estNo.toLowerCase()) {
             return {
-              ...p,
-              piNo: finalEstNo,
+              ...prev,
+              piNo: estNo,
               zohoEstimateId: estId,
+              zohoEstimateNo: estNo,
               zohoSynced: true,
+              zohoSyncedAt: new Date().toISOString(),
               zohoSyncError: null,
               zohoModule: 'Quotes'
             };
           }
-          return p;
+          return prev;
         });
-        updatePiList(updated);
-        if (selectedPi) {
-          setSelectedPi(prev => {
-            if (!prev) return null;
-            const pNo = String(prev.piNo || '').trim().toLowerCase();
-            const pId = String(prev.id || '').trim().toLowerCase();
-            const targetKey = cleanNo.toLowerCase();
-            if (pNo === targetKey || pId === targetKey || pNo === finalEstNo.toLowerCase()) {
-              return {
-                ...prev,
-                piNo: finalEstNo,
-                zohoEstimateId: estId,
-                zohoSynced: true,
-                zohoSyncError: null,
-                zohoModule: 'Quotes'
-              };
-            }
-            return prev;
-          });
-        }
-        showTopToast(`✓ Proforma Invoice ${finalEstNo} successfully synced with Central Ledger!`, 'success');
-      } else {
-        const errMsg = data?.notice || data?.error || data?.message || (!res.ok ? `HTTP ${res.status} error` : 'Central synchronization could not be confirmed.');
-        showTopToast(`Notice: ${errMsg}`, 'error', 6000);
       }
+
+      showTopToast(`✅ Proforma Invoice ${cleanNo} successfully pushed to Zoho Books as Quote #${estNo}!`, 'success', 6000);
     } catch (err) {
-      showTopToast(`Notice syncing: ${err.message}`, 'error', 6000);
+      console.error('[Zoho Push Error]:', err);
+      showTopToast(`❌ Zoho Push Failed: ${err.message}`, 'error', 7000);
     } finally {
       setSyncingPiNo(null);
     }
@@ -3334,6 +3343,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     })}
                                   </div>
                                 )}
+                                {Boolean(pi.zohoSynced) && (
+                                  <span
+                                    title={`Synced to Zoho Books as Quote #${pi.zohoEstimateNo || pi.piNo}`}
+                                    style={{
+                                      fontSize: '10px',
+                                      fontWeight: '700',
+                                      color: '#047857',
+                                      backgroundColor: '#ECFDF5',
+                                      border: '1px solid #A7F3D0',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      marginTop: '2px'
+                                    }}
+                                  >
+                                    <CheckCircle size={10} style={{ color: '#10B981' }} /> Zoho Synced
+                                  </span>
+                                )}
                                 {!hasSavedBom && isConverted && (
                                   <button
                                     type="button"
@@ -3607,37 +3636,80 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                   if (isConverted) {
                     const firstBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
+                    const isPushed = Boolean(target.zohoSynced);
+                    const isCurrentlyPushing = syncingPiNo === target.piNo;
+
                     return (
-                      <button
-                        onClick={() => {
-                          setSelectedPIs([]);
-                          window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
-                            detail: { tab: 'Sales BOM', targetBom: firstBomCode } 
-                          }));
-                          if (typeof onNavigateTab === 'function') {
-                            onNavigateTab('Sales BOM');
-                          }
-                        }}
-                        style={{
-                          backgroundColor: '#059669',
-                          border: 'none',
-                          color: '#FFFFFF',
-                          borderRadius: '10px',
-                          padding: '6px 16px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 4px rgba(5, 150, 105, 0.3)',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Layers size={14} style={{ color: '#FFFFFF' }} /> View {firstBomCode} ↗
-                      </button>
+                      <React.Fragment key={target.piNo}>
+                        <button
+                          onClick={() => {
+                            setSelectedPIs([]);
+                            window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', { 
+                              detail: { tab: 'Sales BOM', targetBom: firstBomCode } 
+                            }));
+                            if (typeof onNavigateTab === 'function') {
+                              onNavigateTab('Sales BOM');
+                            }
+                          }}
+                          style={{
+                            backgroundColor: '#059669',
+                            border: 'none',
+                            color: '#FFFFFF',
+                            borderRadius: '10px',
+                            padding: '6px 16px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            boxShadow: '0 2px 4px rgba(5, 150, 105, 0.3)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <Layers size={14} style={{ color: '#FFFFFF' }} /> View {firstBomCode} ↗
+                        </button>
+
+                        <button
+                          onClick={() => syncPiToZoho(target)}
+                          disabled={isCurrentlyPushing}
+                          style={{
+                            backgroundColor: isPushed ? '#F0FDF4' : '#0E7490',
+                            border: isPushed ? '1px solid #86EFAC' : 'none',
+                            color: isPushed ? '#15803D' : '#FFFFFF',
+                            borderRadius: '10px',
+                            padding: '6px 16px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: isCurrentlyPushing ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            boxShadow: isPushed ? 'none' : '0 2px 4px rgba(14, 116, 144, 0.3)',
+                            transition: 'all 0.15s ease',
+                            opacity: isCurrentlyPushing ? 0.7 : 1
+                          }}
+                          title={isPushed ? `Already pushed to Zoho Books as Quote #${target.zohoEstimateNo || target.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                        >
+                          {isCurrentlyPushing ? (
+                            <>
+                              <RotateCcw size={14} className="animate-spin" style={{ color: isPushed ? '#15803D' : '#FFFFFF' }} /> Pushing to Zoho...
+                            </>
+                          ) : isPushed ? (
+                            <>
+                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({target.zohoEstimateNo || target.piNo})
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud size={14} style={{ color: '#FFFFFF' }} /> Push to Zoho
+                            </>
+                          )}
+                        </button>
+                      </React.Fragment>
                     );
                   }
 
@@ -5646,6 +5718,22 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         isDraft ? 'draft' : (isConverted ? 'converted' : selectedPi.status === 'Cancelled' ? 'cancelled' : 'issued'),
                         isDraft ? 'Draft' : (isConverted ? 'Converted to BOM' : selectedPi.status || 'Issued')
                       )}
+                      {Boolean(selectedPi.zohoSynced) && (
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          color: '#047857',
+                          backgroundColor: '#ECFDF5',
+                          border: '1px solid #A7F3D0',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <CheckCircle size={12} style={{ color: '#10B981' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
+                        </span>
+                      )}
                     </div>
                     <span style={{ fontSize: '12px', color: '#64748B' }}>
                       Created: <strong>{selectedPi.piDate || selectedPi.date || '—'}</strong>
@@ -5781,6 +5869,41 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           </button>
                         );
                       })}
+                      <button
+                        type="button"
+                        onClick={() => syncPiToZoho(selectedPi)}
+                        disabled={syncingPiNo === selectedPi.piNo}
+                        title={selectedPi.zohoSynced ? `Synced to Zoho Books as Quote #${selectedPi.zohoEstimateNo || selectedPi.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: selectedPi.zohoSynced ? '#F0FDF4' : '#0E7490',
+                          color: selectedPi.zohoSynced ? '#15803D' : '#FFFFFF',
+                          border: selectedPi.zohoSynced ? '1px solid #86EFAC' : 'none',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          cursor: syncingPiNo === selectedPi.piNo ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: selectedPi.zohoSynced ? 'none' : '0 2px 6px rgba(14,116,144,0.25)',
+                          opacity: syncingPiNo === selectedPi.piNo ? 0.7 : 1
+                        }}
+                      >
+                        {syncingPiNo === selectedPi.piNo ? (
+                          <>
+                            <RotateCcw size={14} className="animate-spin" /> Pushing to Zoho...
+                          </>
+                        ) : selectedPi.zohoSynced ? (
+                          <>
+                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({selectedPi.zohoEstimateNo || selectedPi.piNo})
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud size={14} /> Push to Zoho
+                          </>
+                        )}
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleRevertPiToIssued(selectedPi)}

@@ -5,8 +5,9 @@ import {
   Building2, Printer, X, DollarSign, Calendar, Tag, ChevronRight,
   RotateCcw, Edit3, Trash2, CheckCircle, Clock, AlertCircle, Layers,
   Truck, ArrowRight, Copy, RefreshCw, Send, Mail, Boxes, User, Landmark,
-  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode
+  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap
 } from 'lucide-react';
+import HdgStructureConfiguratorModal from './HdgStructureConfiguratorModal';
 import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
@@ -243,6 +244,7 @@ export default function CrmQuotationsView({
   const [selectedItemIndexes, setSelectedItemIndexes] = useState([]);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [quoteConfirmModal, setQuoteConfirmModal] = useState(null); // 'cancel' | 'draft' | 'create'
+  const [showHdgConfiguratorModal, setShowHdgConfiguratorModal] = useState(false);
 
   useEffect(() => {
     const handlePresetUpdate = (e) => {
@@ -669,6 +671,42 @@ export default function CrmQuotationsView({
     setQuoteItems(prev => [...(prev || []), ...newItems]);
     setSelectedPreset('');
     setPresetSetCount(1);
+  };
+
+  const handleApplyHdgStructure = ({ mode, groupId, groupTitle, kitPrice, setCount: multCount, items, result }) => {
+    if (!showBOMQuoteForm) {
+      handleOpenCreateForm();
+    }
+
+    if (mode === 'group' && groupId) {
+      setPresetGroups(prev => ({
+        ...prev,
+        [groupId]: {
+          groupId,
+          presetId: groupId,
+          presetName: groupTitle,
+          setCount: multCount || 1,
+          kitPrice: kitPrice || String(result.quotedPrice),
+          gstRate: '18%'
+        }
+      }));
+    }
+
+    setQuoteItems(prev => [...(prev || []), ...items]);
+
+    if (!structureType || structureType === 'Aluminium Rooftop Rails (6063 T6)') {
+      setStructureType(`Hot Dip Galvanized (HDG) Steel Structure — ${result.tableTitle}`);
+    }
+
+    const panelsPerTable = (result.rowModel ? parseInt(result.rowModel.charAt(0)) : 1) * (parseInt(result.tableSize) || 1);
+    const totalPanels = panelsPerTable * (parseInt(multCount) || 1);
+    const estKw = ((totalPanels * 550) / 1000).toFixed(1);
+    if (!capacityKw || String(capacityKw).trim() === '') {
+      setCapacityKw(estKw);
+    }
+
+    setShowBOMQuoteForm(true);
+    setToastMessage(`⚡ ${groupTitle} (${multCount} Table${multCount > 1 ? 's' : ''}) added to quotation! Total: ₹${result.totalQuotedPrice.toLocaleString('en-IN')}`);
   };
 
   const handleRemovePresetGroup = (groupId) => {
@@ -1708,6 +1746,32 @@ export default function CrmQuotationsView({
               }}
             />
 
+            {/* HDG / SHS Structure Configurator Button */}
+            <button
+              type="button"
+              onClick={() => setShowHdgConfiguratorModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                background: 'linear-gradient(135deg, #075985 0%, #0E7490 100%)',
+                color: 'white',
+                padding: '0 16px',
+                borderRadius: '20px',
+                height: '40px',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(14, 116, 144, 0.35)',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Zap size={15} style={{ color: '#FDE047' }} />
+              <span>HDG Configurator</span>
+            </button>
+
             {/* Clear Button */}
             <button
               type="button"
@@ -2636,6 +2700,13 @@ export default function CrmQuotationsView({
           </div>
         )}
 
+        {/* HDG Structure Configurator Modal */}
+        <HdgStructureConfiguratorModal
+          isOpen={showHdgConfiguratorModal}
+          onClose={() => setShowHdgConfiguratorModal(false)}
+          onApplyToQuote={handleApplyHdgStructure}
+        />
+
       </div>
     );
   }
@@ -2664,8 +2735,34 @@ export default function CrmQuotationsView({
             {pageConfig.subtitle}
           </span>
         </div>
-        <button
-          onClick={handleOpenCreateForm}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowHdgConfiguratorModal(true);
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #075985 0%, #0E7490 100%)',
+              border: 'none',
+              color: '#FFFFFF',
+              height: '40px',
+              padding: '0 18px',
+              borderRadius: '50px',
+              fontSize: '13px',
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(14, 116, 144, 0.25)',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Zap size={16} style={{ color: '#FDE047' }} />
+            <span>Structure Configurator</span>
+          </button>
+          <button
+            onClick={handleOpenCreateForm}
           style={{
             backgroundColor: '#0E7490',
             border: 'none',
@@ -2697,6 +2794,7 @@ export default function CrmQuotationsView({
             <Plus size={16} strokeWidth={3} />
           </div>
         </button>
+        </div>
       </div>
 
       {/* 2. FILTERS & SEARCH ROW MATCHING BOM PAGE */}
@@ -4066,6 +4164,13 @@ export default function CrmQuotationsView({
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
         onSessionChanged={(s) => setWaSession(s)}
+      />
+
+      {/* HDG Structure Configurator Modal */}
+      <HdgStructureConfiguratorModal
+        isOpen={showHdgConfiguratorModal}
+        onClose={() => setShowHdgConfiguratorModal(false)}
+        onApplyToQuote={handleApplyHdgStructure}
       />
     </div>
   );

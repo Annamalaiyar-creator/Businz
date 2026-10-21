@@ -50,6 +50,7 @@ export const ALL_STORE_FILENAMES = [
   'employees_store.json',
   'presets_store.json',
   'company_branding_store.json',
+  'zoho_config.json',
   'notifications_store.json',
   'ceo_target_store.json',
   'media_cache.json'

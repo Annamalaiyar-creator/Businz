@@ -40,6 +40,13 @@ import {
   extractMaxSequence,
   getNextSequence
 } from './sequenceService.js';
+import { pushPiToZoho } from './zohoPiService.js';
+import {
+  getZohoConfigInfo,
+  updateZohoConfig,
+  testZohoConnection,
+  getZohoAuthStats
+} from './zohoAuthService.js';
 import {
   getUserSessionStatus,
   getAllUserSessions,
@@ -5138,6 +5145,106 @@ app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
     estimate: newPI,
     pi: newPI
   });
+});
+
+// Fetch current Zoho Books ERP integration configuration & status
+app.get('/api/zoho/config', async (req, res) => {
+  try {
+    const config = getZohoConfigInfo(true);
+    const stats = getZohoAuthStats();
+    res.json({
+      success: true,
+      config,
+      stats
+    });
+  } catch (err) {
+    console.error('[Zoho Config Get Error]:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update Zoho Books ERP company account configuration
+app.post('/api/zoho/config', async (req, res) => {
+  try {
+    const { companyName, orgId, clientId, clientSecret, refreshToken, apiDomain, accountsDomain } = req.body || {};
+    if (!orgId || !clientId || !clientSecret || !refreshToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Organization ID, Client ID, Client Secret, and Refresh Token are required.'
+      });
+    }
+
+    const updated = await updateZohoConfig({
+      companyName,
+      orgId,
+      clientId,
+      clientSecret,
+      refreshToken,
+      apiDomain,
+      accountsDomain
+    });
+
+    res.json({
+      success: true,
+      message: 'Zoho Books company credentials updated and applied successfully!',
+      config: updated
+    });
+  } catch (err) {
+    console.error('[Zoho Config Save Error]:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Test connection to Zoho Books OAuth & API live
+app.post('/api/zoho/test-connection', async (req, res) => {
+  try {
+    const customCreds = req.body && Object.keys(req.body).length > 0 ? req.body : null;
+    const result = await testZohoConnection(customCreds);
+    res.json(result);
+  } catch (err) {
+    console.error('[Zoho Test Connection Error]:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 1-Way Push Proforma Invoice to Zoho Books as Estimate / Quote
+app.post(['/api/zoho/push-pi', '/api/estimates/push-to-zoho'], async (req, res) => {
+  try {
+    let piRecord = req.body.pi || req.body;
+    const piNo = String(req.body.piNo || piRecord.piNo || piRecord.id || '').trim();
+
+    if (!piNo) {
+      return res.status(400).json({ success: false, error: 'piNo is required to push to Zoho' });
+    }
+
+    // If full PI object wasn't supplied, load from local store
+    if (!piRecord.items || piRecord.items.length === 0) {
+      const pProforma = getStoreFilePath('proforma_invoice_store.json');
+      const pSales = getStoreFilePath('sales_pi_store.json');
+      let found = null;
+      try {
+        if (fs.existsSync(pProforma)) {
+          const list = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
+          found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+        }
+        if (!found && fs.existsSync(pSales)) {
+          const list = JSON.parse(fs.readFileSync(pSales, 'utf8'));
+          found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+        }
+      } catch (_) {}
+
+      if (found) {
+        piRecord = { ...found, ...piRecord };
+      }
+    }
+
+    piRecord.piNo = piNo;
+    const result = await pushPiToZoho(piRecord);
+    return res.json(result);
+  } catch (err) {
+    console.error('[Zoho Push Route Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Cancel / Decline Proforma Invoice (Estimate / Quote) in BUSINZ local stores (Native BUSINZ Store)

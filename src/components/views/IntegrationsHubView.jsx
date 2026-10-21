@@ -1,14 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Share2, MessageSquare, Mail, Sliders, CheckCircle2,
-  RefreshCw, ArrowRight, ShieldCheck, ExternalLink,
-  ChevronRight, Activity, Cpu, Check, AlertCircle, Copy
+  Share2, MessageSquare, Mail, Sliders,
+  RefreshCw, ArrowRight, ShieldCheck,
+  Check, Copy, Settings, Building2
 } from 'lucide-react';
+import ZohoConfigModal from './ZohoConfigModal';
 
-export default function IntegrationsHubView({ userRole = 'Tech Support', onNavigateTab }) {
+export default function IntegrationsHubView({ _userRole = 'Tech Support', onNavigateTab }) {
   const [copiedKey, setCopiedKey] = useState(null);
   const [testingChannel, setTestingChannel] = useState(null);
   const [testResult, setTestResult] = useState({});
+  const [zohoConfig, setZohoConfig] = useState(null);
+  const [isZohoModalOpen, setIsZohoModalOpen] = useState(false);
+  const [zohoVerifiedOrg, setZohoVerifiedOrg] = useState(null);
+
+  // Fetch live Zoho configuration on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchZohoConfig = async () => {
+      try {
+        const res = await fetch('/api/zoho/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.config) {
+            setZohoConfig(data.config);
+            if (data.config.lastVerifiedOrgName) {
+              setZohoVerifiedOrg({ name: data.config.lastVerifiedOrgName });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch Zoho config:', err.message);
+      }
+    };
+
+    fetchZohoConfig();
+    return () => { isMounted = false; };
+  }, []);
 
   const handleCopy = (key, text) => {
     navigator.clipboard?.writeText(text);
@@ -16,8 +44,31 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleTestConnection = (channel) => {
+  const handleTestConnection = async (channel) => {
     setTestingChannel(channel);
+
+    if (channel === 'zoho') {
+      try {
+        const res = await fetch('/api/zoho/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.success) {
+          setTestResult(prev => ({ ...prev, zoho: true }));
+          setZohoVerifiedOrg(data.organization);
+        } else {
+          setTestResult(prev => ({ ...prev, zoho: false }));
+        }
+      } catch (err) {
+        setTestResult(prev => ({ ...prev, zoho: false }));
+      } finally {
+        setTestingChannel(null);
+      }
+      return;
+    }
+
     setTimeout(() => {
       setTestResult(prev => ({ ...prev, [channel]: true }));
       setTestingChannel(null);
@@ -99,18 +150,20 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
       iconColor: '#0E7490',
       iconBg: '#ECFEFF',
       iconBorder: '#CFFAFE',
-      status: 'Synchronized',
-      statusColor: '#0E7490',
-      statusBg: '#ECFEFF',
-      statusBorder: '#CFFAFE',
+      status: testResult.zoho ? 'Connected & Verified' : 'Synchronized',
+      statusColor: testResult.zoho ? '#059669' : '#0E7490',
+      statusBg: testResult.zoho ? '#ECFDF5' : '#ECFEFF',
+      statusBorder: testResult.zoho ? '#A7F3D0' : '#CFFAFE',
       description: 'Official purchase order numbering sequence (PO-000XX), vendor catalog syncing, and dual disk/cloud persistence.',
-      endpoint: 'https://books.zoho.in/api/v3/purchaseorders',
+      endpoint: `${zohoConfig?.apiDomain || 'https://books.zoho.in'}/api/v3/purchaseorders`,
       authType: 'OAuth 2.0 / Refresh Token',
       targetTab: 'Purchase Orders',
+      companyName: zohoConfig?.companyName || 'VRM Structures India Private Limited',
+      orgId: zohoConfig?.orgId || '60082137608',
       metrics: [
-        { label: 'Numbering', value: 'PO-000XX' },
-        { label: 'Persistence', value: 'Disk & Supabase' },
-        { label: 'Payload Limiting', value: '<= 80 chars' }
+        { label: 'Company', value: (zohoConfig?.companyName || 'VRM Structures').slice(0, 16) },
+        { label: 'Org ID', value: zohoConfig?.orgId || '60082137608' },
+        { label: 'Numbering', value: 'PO-000XX' }
       ]
     }
   ];
@@ -208,6 +261,7 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
           const Icon = item.icon;
           const isTesting = testingChannel === item.id;
           const isTested = testResult[item.id];
+          const isZoho = item.id === 'zoho';
 
           return (
             <div
@@ -215,14 +269,15 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '16px',
-                border: '1px solid #E2E8F0',
+                border: isZoho ? '1.5px solid #CFFAFE' : '1px solid #E2E8F0',
                 padding: '20px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
                 gap: '16px',
-                boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                boxShadow: isZoho ? '0 4px 14px rgba(14, 116, 144, 0.08)' : '0 2px 10px rgba(15, 23, 42, 0.03)',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                background: isZoho ? 'linear-gradient(180deg, #FFFFFF 0%, #FAFEFF 100%)' : '#FFFFFF'
               }}
             >
               <div>
@@ -266,12 +321,81 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
                   </span>
                 </div>
 
+                {/* Zoho Company Details Highlight */}
+                {isZoho && (
+                  <div style={{
+                    marginTop: '12px',
+                    backgroundColor: '#ECFEFF',
+                    border: '1px solid #CFFAFE',
+                    borderRadius: '10px',
+                    padding: '9px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                      <Building2 size={15} color="#0E7490" style={{ flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <span style={{ fontSize: '10px', color: '#0E7490', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>
+                          Connected Company
+                        </span>
+                        <span style={{
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          color: '#0F172A',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: 'block'
+                        }}>
+                          {item.companyName}
+                        </span>
+                        {zohoVerifiedOrg?.name && (
+                          <span style={{
+                            fontSize: '10px',
+                            color: '#059669',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            marginTop: '1px'
+                          }}>
+                            <Check size={11} /> Verified: {zohoVerifiedOrg.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsZohoModalOpen(true)}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #0E7490',
+                        color: '#0E7490',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        fontSize: '10.5px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
+                      }}
+                    >
+                      <Settings size={11} />
+                      <span>Change</span>
+                    </button>
+                  </div>
+                )}
+
                 {/* Description */}
                 <p style={{
                   fontSize: '12px',
                   color: '#475569',
                   lineHeight: '1.5',
-                  margin: '14px 0 16px 0',
+                  margin: isZoho ? '10px 0 14px 0' : '14px 0 16px 0',
                   fontWeight: '500'
                 }}>
                   {item.description}
@@ -341,30 +465,55 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '10px',
+                flexWrap: 'wrap',
+                gap: '8px',
                 borderTop: '1px solid #F1F5F9',
                 paddingTop: '14px'
               }}>
-                <button
-                  onClick={() => handleTestConnection(item.id)}
-                  disabled={isTesting}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #CBD5E1',
-                    color: isTested ? '#059669' : '#475569',
-                    padding: '7px 12px',
-                    borderRadius: '8px',
-                    fontSize: '11.5px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                >
-                  <RefreshCw size={13} className={isTesting ? 'animate-spin' : ''} />
-                  <span>{isTesting ? 'Pinging...' : isTested ? 'Passed' : 'Test Ping'}</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => handleTestConnection(item.id)}
+                    disabled={isTesting}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      color: isTested ? '#059669' : '#475569',
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      fontSize: '11.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <RefreshCw size={13} className={isTesting ? 'animate-spin' : ''} />
+                    <span>{isTesting ? 'Testing...' : isTested ? 'Verified' : 'Test Connection'}</span>
+                  </button>
+
+                  {isZoho && (
+                    <button
+                      onClick={() => setIsZohoModalOpen(true)}
+                      style={{
+                        backgroundColor: '#ECFEFF',
+                        border: '1px solid #CFFAFE',
+                        color: '#0E7490',
+                        padding: '7px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11.5px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <Settings size={13} />
+                      <span>Configure</span>
+                    </button>
+                  )}
+                </div>
 
                 <button
                   onClick={() => onNavigateTab && onNavigateTab(item.targetTab)}
@@ -391,6 +540,19 @@ export default function IntegrationsHubView({ userRole = 'Tech Support', onNavig
           );
         })}
       </div>
+
+      {/* Zoho Configuration Modal */}
+      <ZohoConfigModal
+        isOpen={isZohoModalOpen}
+        onClose={() => setIsZohoModalOpen(false)}
+        initialConfig={zohoConfig}
+        onSaved={(updated) => {
+          setZohoConfig(updated);
+          if (updated.lastVerifiedOrgName) {
+            setZohoVerifiedOrg({ name: updated.lastVerifiedOrgName });
+          }
+        }}
+      />
     </div>
   );
 }
