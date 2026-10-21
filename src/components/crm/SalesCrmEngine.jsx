@@ -312,8 +312,8 @@ export default function SalesCrmEngine({
                 gstNo: c.gstNumber || c.gstNo || c.gst || '',
                 status: c.status || 'ACTIVE'
               }));
-              localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight.slice(0, 500)));
-              localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight.slice(0, 500)));
+              localStorage.setItem('controlroom_customer_store', JSON.stringify(lightweight));
+              localStorage.setItem('businz_crm_customers', JSON.stringify(lightweight));
             } catch (_) {}
           }
         }

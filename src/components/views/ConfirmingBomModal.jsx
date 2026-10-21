@@ -4,6 +4,8 @@ import {
   CheckSquare, Truck, Package, Upload, Camera, Video, Eye
 } from "lucide-react";
 import { normalizePaymentTerm, stripDataUrlsFromRecord, getMediaFromCache, saveMediaToCache, compressAndSaveFile } from "../../utils/otherViewsShared";
+import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
+import { resolveDocumentUrl } from "../../utils/documentResolver";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 
@@ -842,7 +844,7 @@ export default function ConfirmingBomModal({
                             type="button"
                             onClick={() => {
                               const doc = confirmingBomModal.deliveryAddressProofDoc;
-                              const url = doc.dataUrl || doc.previewUrl || doc.url || getMediaFromCache(doc.name);
+                              const url = resolveDocumentUrl(doc) || doc.dataUrl || doc.previewUrl || doc.url || getMediaFromCache(doc.name);
                               setActiveMediaPreviewModal({
                                 type: (doc.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(doc.name)) ? 'image' : 'document',
                                 url,
@@ -879,17 +881,45 @@ export default function ConfirmingBomModal({
                             onChange={(e) => {
                               const file = e.target.files && e.target.files[0];
                               if (file) {
-                                compressAndSaveFile(file, (meta) => {
-                                  if (meta) {
-                                    if (meta.name && meta.dataUrl) {
-                                      saveMediaToCache(meta.name, meta.dataUrl);
+                                try {
+                                  validateClientFile(file);
+                                  compressAndSaveFile(file, async (meta) => {
+                                    if (meta) {
+                                      if (meta.name && meta.dataUrl) {
+                                        saveMediaToCache(meta.name, meta.dataUrl);
+                                      }
+                                      setConfirmingBomModal(prev => ({
+                                        ...prev,
+                                        deliveryAddressProofDoc: meta
+                                      }));
+
+                                      // Upload to server storage so Accounts and Billing logins can access it immediately
+                                      const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
+                                      if (bCode) {
+                                        try {
+                                          const uploadedMeta = await uploadBomDocumentFile({
+                                            file,
+                                            bomCode: bCode,
+                                            category: 'delivery-proof'
+                                          });
+                                          if (uploadedMeta) {
+                                            setConfirmingBomModal(prev => ({
+                                              ...prev,
+                                              deliveryAddressProofDoc: {
+                                                ...meta,
+                                                ...uploadedMeta
+                                              }
+                                            }));
+                                          }
+                                        } catch (upErr) {
+                                          console.warn('[ConfirmingBOM] Server storage upload fallback:', upErr);
+                                        }
+                                      }
                                     }
-                                    setConfirmingBomModal(prev => ({
-                                      ...prev,
-                                      deliveryAddressProofDoc: meta
-                                    }));
-                                  }
-                                });
+                                  });
+                                } catch (err) {
+                                  alert(`⚠️ Cannot attach file: ${err.message}`);
+                                }
                               }
                             }}
                            />

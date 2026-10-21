@@ -1489,22 +1489,28 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     }
   }
 
-  // CANONICAL CUSTOMER WRITE PATH: Direct normalized upsert to public.customers table (Zero leaves table egress)
+  // CANONICAL CUSTOMER WRITE PATH: Direct normalized upsert (Rule #2: 1 record = 1 targeted write)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
     try {
       if (Array.isArray(storeData)) {
-        const rows = storeData.map(c => toDatabaseCustomerRow(c)).filter(Boolean);
-        if (rows.length > 0) {
-          for (let i = 0; i < rows.length; i += 20) {
-            const batch = rows.slice(i, i + 20);
-            await supabase.from('customers').upsert(batch, { onConflict: 'customer_code' });
-          }
+        // If an array is passed, perform a single fast batch call to the backend API instead of 130 sequential network requests
+        if (storeData.length > 0) {
+          fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(storeData)
+          }).catch(() => {});
         }
       } else if (storeData && typeof storeData === 'object') {
         const row = toDatabaseCustomerRow(storeData);
         if (row) {
           await supabase.from('customers').upsert(row, { onConflict: 'customer_code' });
         }
+        fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(storeData)
+        }).catch(() => {});
       }
 
       // Broadcast update locally to all listening React components in current window
@@ -1515,17 +1521,8 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
         detail: storeData
       }));
     } catch (err) {
-      console.warn('[SupabaseSync] Error persisting to public.customers:', err?.message || err);
+      console.warn('[SupabaseSync] Error persisting customer:', err?.message || err);
     }
-
-    // Keep lightweight async fallback to local server disk json backup
-    try {
-      fetch(`/api/store/${storeKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storeData)
-      }).catch(() => {});
-    } catch (_) {}
 
     return; // STOP! NEVER touch leaves table for customers!
   }

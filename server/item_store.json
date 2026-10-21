@@ -1716,7 +1716,7 @@
     "type": "Finished Product",
     "unit": "Pieces",
     "price": 0,
-    "stock": 2000,
+    "stock": 1800,
     "store": "Bay #4 - FG Store",
     "itemId": "MR300",
     "onHand": 2000,
@@ -1725,7 +1725,7 @@
     "location": "Finished Goods Bay",
     "maxLevel": 10000,
     "minLevel": 20,
-    "reserved": 0,
+    "reserved": 200,
     "stockAdj": 0,
     "unitRate": 0,
     "available": 2000,
@@ -1739,7 +1739,7 @@
     "goodsReceived": 0,
     "physicalStock": 2000,
     "reservedStock": 0,
-    "availableStock": 2000
+    "availableStock": 1800
   },
   {
     "cat": "Raw Material",

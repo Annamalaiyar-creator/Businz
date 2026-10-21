@@ -19,9 +19,62 @@ export default function ZohoConfigModal({ isOpen, onClose, initialConfig, onSave
   const [showSecret, setShowSecret] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [grantCode, setGrantCode] = useState('');
+  const [isExchanging, setIsExchanging] = useState(false);
   const [testFeedback, setTestFeedback] = useState(null); // { success: boolean, message: string, organization?: any }
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+
+  const handleExchangeGrantCode = async () => {
+    if (!grantCode.trim()) {
+      setSaveError('Please paste the generated Grant Code from Zoho API Console.');
+      return;
+    }
+    if (!formData.clientId.trim() || !formData.clientSecret.trim()) {
+      setSaveError('Please fill in Client ID and Client Secret before exchanging code.');
+      return;
+    }
+    setIsExchanging(true);
+    setSaveError(null);
+    setTestFeedback(null);
+    try {
+      const res = await fetch('/api/zoho/exchange-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: grantCode.trim(),
+          clientId: formData.clientId.trim(),
+          clientSecret: formData.clientSecret.trim(),
+          orgId: formData.orgId.trim(),
+          companyName: formData.companyName.trim(),
+          apiDomain: formData.apiDomain,
+          accountsDomain: formData.accountsDomain
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.refreshToken) {
+        setFormData(prev => ({
+          ...prev,
+          refreshToken: data.refreshToken
+        }));
+        setGrantCode('');
+        setTestFeedback({
+          success: true,
+          message: data.message || 'Refresh token generated successfully!',
+          organization: data.testResult?.organization
+        });
+        if (data.config && onSaved) {
+          onSaved(data.config);
+        }
+      } else {
+        setSaveError(data.error || 'Failed to exchange grant code. Note: Zoho codes expire in 3-10 minutes.');
+      }
+    } catch (err) {
+      setSaveError('Network error exchanging code: ' + err.message);
+    } finally {
+      setIsExchanging(false);
+    }
+  };
 
   useEffect(() => {
     if (initialConfig) {
@@ -388,6 +441,64 @@ export default function ZohoConfigModal({ isOpen, onClose, initialConfig, onSave
             <p style={{ fontSize: '11px', color: '#64748B', margin: '4px 0 0 0' }}>
               Requires scope: <code>ZohoBooks.fullaccess.all</code>.
             </p>
+
+            {/* Grant Code to Refresh Token Converter */}
+            <div style={{
+              marginTop: '10px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              backgroundColor: '#F8FAFC',
+              border: '1px dashed #CBD5E1',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#0F172A' }}>
+                  ⚡ Have a Self-Client Grant Code?
+                </span>
+                <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                  Expires in 3–10 mins
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={grantCode}
+                  onChange={(e) => setGrantCode(e.target.value)}
+                  placeholder="Paste generated grant code (1000.xxxx...)"
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '11.5px',
+                    fontFamily: 'monospace',
+                    color: '#0F172A',
+                    outline: 'none',
+                    backgroundColor: '#FFFFFF'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleExchangeGrantCode}
+                  disabled={isExchanging || !grantCode.trim()}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: isExchanging || !grantCode.trim() ? '#94A3B8' : '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '11.5px',
+                    fontWeight: '700',
+                    cursor: isExchanging || !grantCode.trim() ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {isExchanging ? 'Exchanging...' : 'Generate Refresh Token'}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Live Test Feedback Banner */}

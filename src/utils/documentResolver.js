@@ -82,6 +82,11 @@ export function resolveDocumentUrl(doc) {
     if (cached && cached.expiresAt > Date.now() + 60000) {
       return cached.signedUrl;
     }
+    // Direct static URL fallback for files stored in bom-documents
+    if (doc.storagePath && typeof doc.storagePath === 'string') {
+      const cleanPath = doc.storagePath.replace(/^\/+/, '');
+      return `/api/uploads/bom-documents/${cleanPath}`;
+    }
   }
 
   // 3. Backward compatibility: check embedded dataUrl / fileData (ignore transient blob: URLs)
@@ -97,10 +102,17 @@ export function resolveDocumentUrl(doc) {
 
   // 4. Backward compatibility: check direct url (must be permanent, ignore blob:)
   if (doc.url && typeof doc.url === 'string' && !doc.url.startsWith('blob:')) {
+    if (doc.url.startsWith('/uploads/')) return `/api${doc.url}`;
     return doc.url;
   }
 
-  // 5. Check local media cache by document name
+  // 5. Direct storage path fallback even without storageBucket
+  if (doc.storagePath && typeof doc.storagePath === 'string') {
+    const cleanPath = doc.storagePath.replace(/^\/+/, '');
+    return `/api/uploads/bom-documents/${cleanPath}`;
+  }
+
+  // 6. Check local media cache by document name
   if (doc.name) {
     const fromCache = getMediaFromCache(doc.name);
     if (fromCache) return fromCache;
@@ -115,8 +127,8 @@ export function resolveDocumentUrl(doc) {
  *
  * Resolution Priority:
  * 1. Storage Metadata -> Backend Signed URL (cached in-memory for session)
- * 2. Legacy dataUrl / fileData
- * 3. Existing URL
+ * 2. Direct static uploads path
+ * 3. Server media search (/api/media/find)
  * 4. Fallback: null
  *
  * @param {object|string} doc
@@ -129,6 +141,8 @@ export async function resolveDocumentUrlAsync(doc, bomCode = null) {
   // Check synchronous options first
   const immediate = resolveDocumentUrl(doc);
   if (immediate) return immediate;
+
+  const docName = typeof doc === 'string' ? doc : (doc?.name || doc?.originalName);
 
   // If it's a Storage document, fetch a signed URL from the backend
   if (isStorageDocument(doc)) {
@@ -147,17 +161,42 @@ export async function resolveDocumentUrlAsync(doc, bomCode = null) {
       if (res.ok) {
         const json = await res.json();
         if (json && json.signedUrl) {
+          let sUrl = json.signedUrl;
+          if (sUrl.startsWith('/uploads/')) sUrl = `/api${sUrl}`;
           const expiresIn = json.expiresIn || 900;
           signedUrlCache.set(doc.storagePath, {
-            signedUrl: json.signedUrl,
+            signedUrl: sUrl,
             expiresAt: Date.now() + expiresIn * 1000
           });
-          return json.signedUrl;
+          return sUrl;
         }
       }
     } catch (err) {
       console.warn('[DocumentResolver] Error fetching signed URL:', err);
     }
+
+    // Direct static path fallback
+    if (doc.storagePath) {
+      const cleanPath = doc.storagePath.replace(/^\/+/, '');
+      const directUrl = `/api/uploads/bom-documents/${cleanPath}`;
+      return directUrl;
+    }
+  }
+
+  // Check server media finder as resilient fallback
+  if (docName) {
+    try {
+      const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.found && data?.url) {
+          let u = data.url;
+          if (u.startsWith('/uploads/')) u = `/api${u}`;
+          saveMediaToCache(docName, u);
+          return u;
+        }
+      }
+    } catch (_) {}
   }
 
   return null;

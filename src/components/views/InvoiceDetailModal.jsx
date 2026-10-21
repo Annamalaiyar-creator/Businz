@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
-import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { addLiveNotification } from "../Header";
@@ -41,6 +41,8 @@ export default function InvoiceDetailModal({
   const [localDocPreviewModal, setLocalDocPreviewModal] = useState(null);
   const [printTaxInvoiceModal, setPrintTaxInvoiceModal] = useState(null);
   const [selectedProofVersionIdx, setSelectedProofVersionIdx] = useState(null);
+  const [resolvedAddressProofUrl, setResolvedAddressProofUrl] = useState(null);
+  const [resolvedPaymentProofUrl, setResolvedPaymentProofUrl] = useState(null);
 
   const rawBomRefText = inv.poNo || inv.bomCode || (inv.c3 !== 'BOM-001' ? inv.c3 : '') || '';
 
@@ -76,6 +78,34 @@ export default function InvoiceDetailModal({
 
   const targetBomRef = matchingBom?.bomCode || matchingBom?.code || rawBomRefText || 'VRM-BOM-2026-01';
   const bomRefText = targetBomRef;
+
+  useEffect(() => {
+    let isMounted = true;
+    const rawAddressProof = inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || null;
+    const rawPaymentProof = inv.paymentProofDoc || matchingBom?.paymentProofDoc || matchingBom?.paymentProof || null;
+
+    if (rawAddressProof) {
+      const syncUrl = resolveDocumentUrl(rawAddressProof, bomRefText);
+      if (syncUrl) setResolvedAddressProofUrl(syncUrl);
+      resolveDocumentUrlAsync(rawAddressProof, bomRefText).then(url => {
+        if (isMounted && url) setResolvedAddressProofUrl(url);
+      }).catch(() => {});
+    } else {
+      setResolvedAddressProofUrl(null);
+    }
+
+    if (rawPaymentProof) {
+      const syncUrl = resolveDocumentUrl(rawPaymentProof, bomRefText);
+      if (syncUrl) setResolvedPaymentProofUrl(syncUrl);
+      resolveDocumentUrlAsync(rawPaymentProof, bomRefText).then(url => {
+        if (isMounted && url) setResolvedPaymentProofUrl(url);
+      }).catch(() => {});
+    } else {
+      setResolvedPaymentProofUrl(null);
+    }
+
+    return () => { isMounted = false; };
+  }, [inv.deliveryAddressProofDoc, matchingBom?.deliveryAddressProofDoc, inv.paymentProofDoc, matchingBom?.paymentProofDoc, matchingBom?.paymentProof, bomRefText]);
 
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
   const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'VRM-INV-2026-01'));
@@ -1747,13 +1777,21 @@ export default function InvoiceDetailModal({
                       : addressProofDoc;
 
                     const proofName = typeof activeDoc === "string" ? activeDoc : (activeDoc?.originalName || activeDoc?.name || "Delivery Address Proof Document");
-                    let proofDataUrl = (typeof activeDoc === "string" && activeDoc.startsWith("data:"))
+                    let proofDataUrl = (typeof activeDoc === "string" && (activeDoc.startsWith("data:") || activeDoc.startsWith("http") || activeDoc.startsWith("/")))
                       ? activeDoc
                       : (activeDoc?.dataUrl || activeDoc?.fileData || activeDoc?.url || null);
 
+                    if (!proofDataUrl) {
+                      proofDataUrl = resolveDocumentUrl(activeDoc, bomRefText) || (selectedProofVersionIdx === null ? resolvedAddressProofUrl : null);
+                    }
                     if (!proofDataUrl && proofName) {
                       proofDataUrl = getMediaFromCache(proofName);
                     }
+
+                    const isPdf = Boolean(
+                      (proofName && proofName.toLowerCase().endsWith('.pdf')) ||
+                      (proofDataUrl && (proofDataUrl.startsWith('data:application/pdf') || proofDataUrl.includes('.pdf')))
+                    );
 
                     if (!addressProofDoc) {
                       return (
@@ -1781,13 +1819,28 @@ export default function InvoiceDetailModal({
                             <span>Delivery Address Proof Document ({proofName}):</span>
                           </div>
                           {proofDataUrl && (
-                            <a
-                              href={proofDataUrl}
-                              download={proofName}
-                              style={{ fontSize: '11px', fontWeight: '700', color: '#1D4ED8', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Download size={12} /> Download
-                            </a>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLocalDocPreviewModal({
+                                    title: `Delivery Address Proof — ${proofName}`,
+                                    doc: { name: proofName, dataUrl: proofDataUrl, url: proofDataUrl },
+                                    bomCode: bomRefText
+                                  });
+                                }}
+                                style={{ border: 'none', background: '#EFF6FF', color: '#1D4ED8', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Eye size={12} /> Inspect Full Screen
+                              </button>
+                              <a
+                                href={proofDataUrl}
+                                download={proofName}
+                                style={{ fontSize: '11px', fontWeight: '700', color: '#1D4ED8', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#F1F5F9', padding: '4px 10px', borderRadius: '6px' }}
+                              >
+                                <Download size={12} /> Download
+                              </a>
+                            </div>
                           )}
                         </div>
 
@@ -1800,11 +1853,47 @@ export default function InvoiceDetailModal({
 
                           <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', padding: '12px', textAlign: 'center' }}>
                             {proofDataUrl ? (
-                              <img
-                                src={proofDataUrl}
-                                alt="Delivery Address Proof"
-                                style={{ maxWidth: '100%', maxHeight: '420px', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                              />
+                              isPdf ? (
+                                <div style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{ width: '48px', height: '48px', borderRadius: '10px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FileText size={28} />
+                                  </div>
+                                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>{proofName}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setLocalDocPreviewModal({
+                                        title: `Delivery Address Proof (PDF) — ${proofName}`,
+                                        doc: { name: proofName, dataUrl: proofDataUrl, url: proofDataUrl },
+                                        bomCode: bomRefText
+                                      });
+                                    }}
+                                    style={{ border: 'none', backgroundColor: '#0E7490', color: 'white', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                  >
+                                    <Eye size={14} /> Open Verified PDF Document
+                                  </button>
+                                </div>
+                              ) : (
+                                <img
+                                  src={proofDataUrl}
+                                  alt="Delivery Address Proof"
+                                  onError={(e) => {
+                                    const fallback = activeDoc?.storagePath ? `/api/uploads/bom-documents/${activeDoc.storagePath}` : `/api/media/find/${encodeURIComponent(proofName)}`;
+                                    if (e.target.src !== fallback && !e.target.dataset.triedFallback) {
+                                      e.target.dataset.triedFallback = '1';
+                                      e.target.src = fallback;
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    setLocalDocPreviewModal({
+                                      title: `Delivery Address Proof — ${proofName}`,
+                                      doc: { name: proofName, dataUrl: proofDataUrl, url: proofDataUrl },
+                                      bomCode: bomRefText
+                                    });
+                                  }}
+                                  style={{ maxWidth: '100%', maxHeight: '420px', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', cursor: 'pointer' }}
+                                />
+                              )
                             ) : (
                               <div style={{ padding: '24px', color: '#64748B', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                 <FileCheck size={18} color="#0E7490" />
@@ -1913,74 +2002,175 @@ export default function InvoiceDetailModal({
               </div>
 
               {/* ADDRESS PROOF DOCUMENT PREVIEW CARD - ONLY IF DIFFERENT ADDRESS */}
-              {!isSame && addressProofDoc && (
-                <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '14px', padding: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FileCheck style={{ width: '20px', height: '20px' }} />
+              {!isSame && addressProofDoc && (() => {
+                const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.png");
+                const docUrl = resolvedAddressProofUrl || (typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || resolveDocumentUrl(addressProofDoc, bomRefText)));
+                const isPdf = Boolean((docName && docName.toLowerCase().endsWith('.pdf')) || (docUrl && (docUrl.startsWith('data:application/pdf') || docUrl.includes('.pdf'))));
+
+                return (
+                  <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '14px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FileCheck style={{ width: '20px', height: '20px' }} />
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#166534' }}>
+                            Delivery Address Proof Document
+                          </h4>
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>
+                            Mandatory proof attached for alternate delivery address: {docName}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#166534' }}>
-                          Delivery Address Proof Document
-                        </h4>
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>
-                          Mandatory proof attached for alternate delivery address: {addressProofDoc.name || 'Address_Proof.png'}
-                        </span>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {docUrl && (
+                          <a
+                            href={docUrl}
+                            download={docName}
+                            style={{ textDecoration: 'none', backgroundColor: '#FFFFFF', color: '#166534', border: '1px solid #BBF7D0', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <Download size={13} /> Download
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocalDocPreviewModal({
+                              title: `Delivery Address Proof — ${docName}`,
+                              doc: { name: docName, dataUrl: docUrl, url: docUrl },
+                              bomCode: bomRefText
+                            });
+                          }}
+                          style={{ border: 'none', backgroundColor: '#166534', color: 'white', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(22,101,52,0.2)' }}
+                        >
+                          <Eye style={{ width: '14px', height: '14px' }} /> Inspect Address Proof
+                        </button>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const docName = typeof addressProofDoc === "string" ? addressProofDoc : (addressProofDoc?.name || "Address_Proof_Document.png");
-                          let resolvedUrl = (typeof addressProofDoc === "string" && (addressProofDoc.startsWith("data:") || addressProofDoc.startsWith("http") || addressProofDoc.startsWith("/")))
-                            ? addressProofDoc
-                            : (addressProofDoc?.dataUrl || addressProofDoc?.fileData || addressProofDoc?.url || addressProofDoc?.proofDocData || null);
-
-                          if (!resolvedUrl && docName) {
-                            resolvedUrl = getMediaFromCache(docName) || await getMediaFromCacheAsync(docName);
-                          }
-                          if (!resolvedUrl && addressProofDoc?.id) {
-                            resolvedUrl = getMediaFromCache(addressProofDoc.id) || await getMediaFromCacheAsync(addressProofDoc.id);
-                          }
-                          if (!resolvedUrl && typeof resolveDocumentUrlAsync === 'function') {
-                            try {
-                              const asyncUrl = await resolveDocumentUrlAsync(addressProofDoc, bomRefText);
-                              if (asyncUrl) resolvedUrl = asyncUrl;
-                            } catch (_) {}
-                          }
-                          if (!resolvedUrl && docName) {
-                            try {
-                              const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
-                              const data = await res.json();
-                              if (data?.found && data?.url) resolvedUrl = data.url;
-                            } catch (_) {}
-                          }
-
-                          const docObj = {
-                            ...(typeof addressProofDoc === 'object' ? addressProofDoc : {}),
-                            name: docName,
-                            dataUrl: resolvedUrl,
-                            url: resolvedUrl,
-                            previewUrl: resolvedUrl
-                          };
-
-                          setLocalDocPreviewModal({
-                            title: 'Delivery Address Proof Document',
-                            doc: docObj,
-                            bomCode: bomRefText
-                          });
-                        }}
-                        style={{ border: 'none', backgroundColor: '#166534', color: 'white', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(22,101,52,0.2)' }}
-                      >
-                        <Eye style={{ width: '14px', height: '14px' }} /> View Address Proof
-                      </button>
-                    </div>
+                    {docUrl && (
+                      <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: '280px', overflow: 'hidden' }}>
+                        {isPdf ? (
+                          <div style={{ padding: '16px', textAlign: 'center' }}>
+                            <FileText size={32} color="#DC2626" style={{ margin: '0 auto 8px' }} />
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: '#1E293B' }}>{docName}</div>
+                            <span style={{ fontSize: '11px', color: '#166534' }}>PDF Document Attached</span>
+                          </div>
+                        ) : (
+                          <img
+                            src={docUrl}
+                            alt="Address Proof Thumbnail"
+                            onError={(e) => {
+                              const fallback = addressProofDoc?.storagePath ? `/api/uploads/bom-documents/${addressProofDoc.storagePath}` : `/api/media/find/${encodeURIComponent(docName)}`;
+                              if (e.target.src !== fallback && !e.target.dataset.triedFallback) {
+                                e.target.dataset.triedFallback = '1';
+                                e.target.src = fallback;
+                              }
+                            }}
+                            onClick={() => {
+                              setLocalDocPreviewModal({
+                                title: `Delivery Address Proof — ${docName}`,
+                                doc: { name: docName, dataUrl: docUrl, url: docUrl },
+                                bomCode: bomRefText
+                              });
+                            }}
+                            style={{ maxHeight: '250px', maxWidth: '100%', objectFit: 'contain', borderRadius: '6px', cursor: 'pointer' }}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
+
+              {/* PAYMENT / BILLING PROOF DOCUMENT CARD */}
+              {(() => {
+                const paymentProofDoc = inv.paymentProofDoc || matchingBom?.paymentProofDoc || matchingBom?.paymentProof || null;
+                if (!paymentProofDoc) return null;
+
+                const pName = typeof paymentProofDoc === "string" ? paymentProofDoc : (paymentProofDoc?.originalName || paymentProofDoc?.name || "Payment_Remittance_Slip.png");
+                const pUrl = resolvedPaymentProofUrl || (typeof paymentProofDoc === "string" ? paymentProofDoc : (paymentProofDoc?.dataUrl || paymentProofDoc?.fileData || paymentProofDoc?.url || resolveDocumentUrl(paymentProofDoc, bomRefText)));
+                const isPdf = Boolean((pName && pName.toLowerCase().endsWith('.pdf')) || (pUrl && (pUrl.startsWith('data:application/pdf') || pUrl.includes('.pdf'))));
+
+                return (
+                  <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '14px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Receipt style={{ width: '20px', height: '20px' }} />
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#166534' }}>
+                            Verified Payment &amp; Remittance Slip
+                          </h4>
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>
+                            Terms: <strong>{paymentTypeText}</strong> • Slip: {pName}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {pUrl && (
+                          <a
+                            href={pUrl}
+                            download={pName}
+                            style={{ textDecoration: 'none', backgroundColor: '#FFFFFF', color: '#166534', border: '1px solid #BBF7D0', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <Download size={13} /> Download
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocalDocPreviewModal({
+                              title: `Payment & Remittance Slip — ${pName}`,
+                              doc: { name: pName, dataUrl: pUrl, url: pUrl },
+                              bomCode: bomRefText
+                            });
+                          }}
+                          style={{ border: 'none', backgroundColor: '#166534', color: 'white', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 4px rgba(22,101,52,0.2)' }}
+                        >
+                          <Eye style={{ width: '14px', height: '14px' }} /> Inspect Payment Slip
+                        </button>
+                      </div>
+                    </div>
+
+                    {pUrl && (
+                      <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: '280px', overflow: 'hidden' }}>
+                        {isPdf ? (
+                          <div style={{ padding: '16px', textAlign: 'center' }}>
+                            <FileText size={32} color="#DC2626" style={{ margin: '0 auto 8px' }} />
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: '#1E293B' }}>{pName}</div>
+                            <span style={{ fontSize: '11px', color: '#166534' }}>PDF Document Attached</span>
+                          </div>
+                        ) : (
+                          <img
+                            src={pUrl}
+                            alt="Payment Slip Thumbnail"
+                            onError={(e) => {
+                              const fallback = paymentProofDoc?.storagePath ? `/api/uploads/bom-documents/${paymentProofDoc.storagePath}` : `/api/media/find/${encodeURIComponent(pName)}`;
+                              if (e.target.src !== fallback && !e.target.dataset.triedFallback) {
+                                e.target.dataset.triedFallback = '1';
+                                e.target.src = fallback;
+                              }
+                            }}
+                            onClick={() => {
+                              setLocalDocPreviewModal({
+                                title: `Payment & Remittance Slip — ${pName}`,
+                                doc: { name: pName, dataUrl: pUrl, url: pUrl },
+                                bomCode: bomRefText
+                              });
+                            }}
+                            style={{ maxHeight: '250px', maxWidth: '100%', objectFit: 'contain', borderRadius: '6px', cursor: 'pointer' }}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}

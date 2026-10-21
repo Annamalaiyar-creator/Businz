@@ -12,7 +12,7 @@ export const supabaseAdmin = {
     from() {
       return {
         upload: () => Promise.resolve({ data: {}, error: null }),
-        createSignedUrl: (path) => Promise.resolve({ data: { signedUrl: `/uploads/bom-documents/${path}` }, error: null }),
+        createSignedUrl: (path) => Promise.resolve({ data: { signedUrl: `/api/uploads/bom-documents/${path}` }, error: null }),
         remove: () => Promise.resolve({ data: [], error: null })
       };
     }

@@ -2,10 +2,10 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle, User
+  Loader2, ExternalLink, AlertTriangle, User, Truck
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
-import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
 import { supabase } from "../../supabaseClient";
@@ -30,10 +30,19 @@ export default function AccountsVerificationModal({
   const [viewingProofDocModal, setViewingProofDocModal] = useState(null);
   const [accountsBomViewMode, setAccountsBomViewMode] = useState('paper');
   const [resolvedProofDataUrl, setResolvedProofDataUrl] = useState(null);
+  const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
 
   useEffect(() => {
     let active = true;
-    if (!accountsVerificationModal) return;
+    if (!accountsVerificationModal) {
+      setResolvedProofDataUrl(null);
+      setResolvedAddressProofDataUrl(null);
+      return;
+    }
+
+    const bCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
+
+    // 1. Resolve Payment / Remittance Proof
     const rawProof = accountsVerificationModal.paymentProofDoc ||
       accountsVerificationModal.balancePaymentProofDoc ||
       accountsVerificationModal.balanceProofDoc ||
@@ -65,63 +74,64 @@ export default function AccountsVerificationModal({
       docName = accountsVerificationModal.payments.balanceProofDoc;
     }
 
-    let immediate = (typeof rawProof === 'string' && rawProof.startsWith('data:'))
-      ? rawProof
-      : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null);
+    let immediate = resolveDocumentUrl(rawProof) ||
+      ((typeof rawProof === 'string' && rawProof.startsWith('data:')) ? rawProof : null) ||
+      (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || accountsVerificationModal.proofDocData || accountsVerificationModal.payments?.proofDocData || null);
 
     if (!immediate && docName) {
       immediate = getMediaFromCache(docName);
     }
 
     if (immediate && !immediate.startsWith('blob:')) {
+      if (immediate.startsWith('/uploads/')) immediate = `/api${immediate}`;
       setResolvedProofDataUrl(immediate);
-      return;
+    } else if (rawProof || docName) {
+      resolveDocumentUrlAsync(rawProof || docName, bCode).then(sUrl => {
+        if (active && sUrl) {
+          const cleanUrl = sUrl.startsWith('/uploads/') ? `/api${sUrl}` : sUrl;
+          setResolvedProofDataUrl(cleanUrl);
+          if (docName) saveMediaToCache(docName, cleanUrl);
+        }
+      });
     }
 
-    const bCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
-    const resolveAsync = async () => {
-      // 1. Try Supabase storage signed URL
-      if (rawProof && (rawProof.storageBucket || rawProof.storagePath)) {
-        try {
-          const sUrl = await resolveDocumentUrlAsync(rawProof, bCode);
-          if (active && sUrl) {
-            setResolvedProofDataUrl(sUrl);
-            if (docName) saveMediaToCache(docName, sUrl);
-            return;
-          }
-        } catch (_) {}
+    // 2. Resolve Delivery Address Proof
+    const rawAddressProof = accountsVerificationModal.deliveryAddressProofDoc ||
+      accountsVerificationModal.addressProofDoc ||
+      accountsVerificationModal.deliveryProofDoc ||
+      null;
+
+    let addrDocName = null;
+    if (rawAddressProof) {
+      if (typeof rawAddressProof === 'string' && !rawAddressProof.startsWith('data:')) {
+        addrDocName = rawAddressProof;
+      } else if (rawAddressProof.name) {
+        addrDocName = rawAddressProof.name;
+      } else if (rawAddressProof.originalName) {
+        addrDocName = rawAddressProof.originalName;
       }
+    }
 
-      // 2. Try async media cache
-      if (docName) {
-        try {
-          const cUrl = await getMediaFromCacheAsync(docName);
-          if (active && cUrl) {
-            setResolvedProofDataUrl(cUrl);
-            saveMediaToCache(docName, cUrl);
-            return;
-          }
-        } catch (_) {}
+    let immediateAddr = resolveDocumentUrl(rawAddressProof) ||
+      ((typeof rawAddressProof === 'string' && rawAddressProof.startsWith('data:')) ? rawAddressProof : null) ||
+      (rawAddressProof?.dataUrl || rawAddressProof?.fileData || rawAddressProof?.url || null);
 
-        // 3. Try server media finder
-        try {
-          const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
-          const data = await res.json();
-          if (active && data?.found && data?.url) {
-            setResolvedProofDataUrl(data.url);
-            saveMediaToCache(docName, data.url);
-            return;
-          }
-        } catch (_) {}
+    if (!immediateAddr && addrDocName) {
+      immediateAddr = getMediaFromCache(addrDocName);
+    }
 
-        // 4. Try direct upload URL
-        if (active) {
-          setResolvedProofDataUrl(`/api/uploads/${encodeURIComponent(docName)}`);
+    if (immediateAddr && !immediateAddr.startsWith('blob:')) {
+      if (immediateAddr.startsWith('/uploads/')) immediateAddr = `/api${immediateAddr}`;
+      setResolvedAddressProofDataUrl(immediateAddr);
+    } else if (rawAddressProof || addrDocName) {
+      resolveDocumentUrlAsync(rawAddressProof || addrDocName, bCode).then(aUrl => {
+        if (active && aUrl) {
+          const cleanUrl = aUrl.startsWith('/uploads/') ? `/api${aUrl}` : aUrl;
+          setResolvedAddressProofDataUrl(cleanUrl);
+          if (addrDocName) saveMediaToCache(addrDocName, cleanUrl);
         }
-      }
-    };
-
-    resolveAsync();
+      });
+    }
 
     return () => { active = false; };
   }, [accountsVerificationModal]);
@@ -1106,6 +1116,224 @@ export default function AccountsVerificationModal({
               </div>
             );
           })()}
+
+          {/* Delivery Address Proof Document & Destination Verification Card */}
+          {(() => {
+            const rawAddressProof = accountsVerificationModal.deliveryAddressProofDoc ||
+              accountsVerificationModal.addressProofDoc ||
+              accountsVerificationModal.deliveryProofDoc ||
+              null;
+
+            const bAddr = (accountsVerificationModal.billingAddress || '').trim();
+            const dAddr = (accountsVerificationModal.deliveryAddress || bAddr).trim();
+            const isSameAddress = Boolean(
+              accountsVerificationModal.sameAsBilling ||
+              (bAddr && dAddr && bAddr.toLowerCase() === dAddr.toLowerCase())
+            );
+
+            let addrDocName = null;
+            if (rawAddressProof) {
+              if (typeof rawAddressProof === 'string' && !rawAddressProof.startsWith('data:')) {
+                addrDocName = rawAddressProof;
+              } else if (rawAddressProof.name) {
+                addrDocName = rawAddressProof.name;
+              } else if (rawAddressProof.originalName) {
+                addrDocName = rawAddressProof.originalName;
+              }
+            }
+
+            let aDocDataUrl = resolvedAddressProofDataUrl ||
+              resolveDocumentUrl(rawAddressProof) ||
+              ((typeof rawAddressProof === 'string' && rawAddressProof.startsWith('data:')) ? rawAddressProof : null) ||
+              (rawAddressProof?.dataUrl || rawAddressProof?.fileData || rawAddressProof?.url || null);
+
+            if (!aDocDataUrl && addrDocName) {
+              aDocDataUrl = getMediaFromCache(addrDocName);
+            }
+
+            if (aDocDataUrl && aDocDataUrl.startsWith('/uploads/')) {
+              aDocDataUrl = `/api${aDocDataUrl}`;
+            }
+
+            const isAddrDocPdf = Boolean(
+              (addrDocName && addrDocName.toLowerCase().endsWith('.pdf')) ||
+              (rawAddressProof && (rawAddressProof.type === 'application/pdf' || rawAddressProof.mimeType === 'application/pdf')) ||
+              (aDocDataUrl && (aDocDataUrl.toLowerCase().includes('.pdf') || aDocDataUrl.startsWith('data:application/pdf')))
+            );
+
+            return (
+              <div style={{
+                marginTop: '16px',
+                paddingTop: '16px',
+                borderTop: '1px solid #F1F5F9'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                    <Truck size={15} style={{ color: '#0E7490' }} /> Delivery Address Proof Document & Destination Verification
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {(aDocDataUrl || addrDocName) && (
+                      <button
+                        type="button"
+                        onClick={() => setViewingProofDocModal({
+                          ...accountsVerificationModal,
+                          targetDoc: rawAddressProof,
+                          docTitle: 'Delivery Address Proof Document'
+                        })}
+                        style={{
+                          backgroundColor: '#ECFEFF',
+                          border: '1px solid #A5F3FC',
+                          color: '#0E7490',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          padding: '4px 12px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Eye size={12} /> View Document
+                      </button>
+                    )}
+                    {(aDocDataUrl || addrDocName) && (
+                      <a
+                        href={aDocDataUrl || (addrDocName ? `/api/uploads/${encodeURIComponent(addrDocName)}` : '#')}
+                        download={addrDocName || 'address_proof.jpg'}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          backgroundColor: '#F8FAFC',
+                          border: '1px solid #CBD5E1',
+                          color: '#334155',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          textDecoration: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Download size={12} /> Download
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Address match status or proof preview */}
+                {isSameAddress ? (
+                  <div style={{
+                    backgroundColor: '#F0FDF4',
+                    border: '1px solid #BBF7D0',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontSize: '12px',
+                    color: '#166534'
+                  }}>
+                    <CheckCircle size={18} style={{ color: '#16A34A', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: '800' }}>Delivery address matches registered billing address</div>
+                      <div style={{ fontSize: '11px', color: '#15803D', marginTop: '2px' }}>
+                        Goods destination is identical to registered billing office ({dAddr || bAddr}). No separate consignee address proof required.
+                      </div>
+                    </div>
+                  </div>
+                ) : (aDocDataUrl || rawAddressProof) ? (
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1.5px dashed #CBD5E1',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div
+                      onClick={() => setViewingProofDocModal({
+                        ...accountsVerificationModal,
+                        targetDoc: rawAddressProof,
+                        docTitle: 'Delivery Address Proof Document'
+                      })}
+                      style={{
+                        cursor: 'pointer',
+                        width: '140px',
+                        height: '95px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid #E2E8F0',
+                        backgroundColor: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                        flexShrink: 0,
+                        padding: '4px'
+                      }}
+                      title="Click to view full address proof"
+                    >
+                      {isAddrDocPdf ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
+                          <FileText size={32} />
+                          <span style={{ fontSize: '10px', fontWeight: '800' }}>PDF Document</span>
+                          <span style={{ fontSize: '9px', color: '#64748B' }}>Click to View</span>
+                        </div>
+                      ) : aDocDataUrl ? (
+                        <img
+                          src={aDocDataUrl}
+                          alt="Address Proof"
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          onError={(e) => {
+                            if (addrDocName && !e.currentTarget.src.includes('/api/uploads/')) {
+                              e.currentTarget.src = `/api/uploads/${encodeURIComponent(addrDocName)}`;
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#0E7490' }}>
+                          <Loader2 className="animate-spin" size={20} />
+                          <span style={{ fontSize: '10px', fontWeight: '700' }}>Loading Proof...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span>{addrDocName || 'Delivery Address Proof Document'}</span>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                          ✓ Address Proof Attached
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', lineHeight: '1.4' }}>
+                        Delivery address differs from billing address. Address proof verified by Sales team for consignee destination: <strong>{dAddr}</strong>.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    backgroundColor: '#FFFBEB',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <AlertTriangle size={18} style={{ color: '#D97706', flexShrink: 0 }} />
+                    <div style={{ fontSize: '11.5px', color: '#92400E' }}>
+                      <strong>Alternate Destination Alert:</strong> Delivery address ({dAddr}) is different from billing address ({bAddr}), but no address proof document was attached by Sales.
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -1401,7 +1629,10 @@ function RecordedProofViewerModal({
   const [docUrl, setDocUrl] = useState(initialResolvedUrl || null);
   const [loading, setLoading] = useState(!initialResolvedUrl);
 
-  const rawProof = viewingProofDocModal.balancePaymentProofDoc ||
+  const rawProof = viewingProofDocModal.targetDoc ||
+    viewingProofDocModal.deliveryAddressProofDoc ||
+    viewingProofDocModal.addressProofDoc ||
+    viewingProofDocModal.balancePaymentProofDoc ||
     viewingProofDocModal.balanceProofDoc ||
     viewingProofDocModal.payments?.balanceProofDocObj ||
     viewingProofDocModal.payments?.balanceProofDoc ||
@@ -1418,6 +1649,8 @@ function RecordedProofViewerModal({
       docName = rawProof;
     } else if (rawProof.name) {
       docName = rawProof.name;
+    } else if (rawProof.originalName) {
+      docName = rawProof.originalName;
     }
   }
   if (!docName && viewingProofDocModal.balancePaymentProofDocName) {
@@ -1560,7 +1793,7 @@ function RecordedProofViewerModal({
             </div>
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#FFFFFF' }}>
-                Recorded Payment Proof Document
+                {viewingProofDocModal.docTitle || 'Recorded Document Proof'}
               </h2>
               <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>
                 {docName || 'Payment Proof Attachment'} • {bCode} • {cName}

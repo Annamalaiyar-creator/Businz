@@ -201,7 +201,7 @@ export async function createBomDocumentSignedUrl({ bomCode, storagePath, expires
   const expirySeconds = Math.max(60, Math.min(Number(expiresIn) || DEFAULT_SIGNED_URL_EXPIRY, 3600));
 
   return {
-    signedUrl: `/uploads/${BUCKET_NAME}/${validatedPath}`,
+    signedUrl: `/api/uploads/${BUCKET_NAME}/${validatedPath}`,
     storagePath: validatedPath,
     expiresIn: expirySeconds,
     expiresAt: new Date(Date.now() + expirySeconds * 1000).toISOString()
@@ -263,7 +263,7 @@ export async function validateBusinzSession(sessionId) {
     return { valid: false, error: 'Missing session ID' };
   }
   const cleanId = sessionId.trim();
-  if (!cleanId.startsWith('SES-')) {
+  if (cleanId.length < 3) {
     return { valid: false, error: 'Invalid session ID format' };
   }
 

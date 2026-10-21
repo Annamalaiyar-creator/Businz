@@ -45,7 +45,8 @@ import {
   getZohoConfigInfo,
   updateZohoConfig,
   testZohoConnection,
-  getZohoAuthStats
+  getZohoAuthStats,
+  exchangeAuthorizationCode
 } from './zohoAuthService.js';
 import {
   getUserSessionStatus,
@@ -80,11 +81,36 @@ initRuntimeStorage();
 // In-memory active cache for server stores
 let supabaseMemoryStore = {};
 
+// Synchronously pre-warm in-memory active cache from persistent disk storage for instant sub-millisecond responses
+try {
+  const custDisk = getStoreFilePath('customer_store.json');
+  if (fs.existsSync(custDisk)) {
+    const list = JSON.parse(fs.readFileSync(custDisk, 'utf8'));
+    if (Array.isArray(list) && list.length > 0) {
+      supabaseMemoryStore.customer_store = list;
+      supabaseMemoryStore.crm_customers = list;
+    }
+  }
+} catch (_) {}
+
+try {
+  const bomDisk = getStoreFilePath('bom_store.json');
+  if (fs.existsSync(bomDisk)) {
+    const list = JSON.parse(fs.readFileSync(bomDisk, 'utf8'));
+    if (Array.isArray(list) && list.length > 0) {
+      supabaseMemoryStore.bom_store = list;
+    }
+  }
+} catch (_) {}
+
 // Initialize self-hosted PostgreSQL database on Hostinger VPS
 initPostgresDatabase().then(() => {
   loadDatabaseCustomers(true).then(list => {
     console.log(`✅ [Database Customers] Loaded ${list?.length || 0} authoritative customers from PostgreSQL.`);
   }).catch(err => console.warn('[Customers Init Notice]:', err.message));
+  loadDatabaseBoms(true).then(list => {
+    console.log(`✅ [Database BOMs] Pre-warmed ${list?.length || 0} authoritative BOM orders.`);
+  }).catch(err => console.warn('[BOMs Init Notice]:', err.message));
   setTimeout(() => {
     syncMissingRelationalBoms().catch(err => console.warn('[BOM Sync Notice]:', err.message));
   }, 2000);
@@ -390,12 +416,14 @@ const loadLocalCustomers = () => {
     }
   });
 
-  // Deduplicate strictly by company name
+  // Deduplicate by unique customer code or company name (preserves all distinct registered accounts)
   const finalMap = new Map();
   for (const val of custMap.values()) {
-    const k = (val.companyName || val.name || '').toLowerCase().trim();
-    if (k && !finalMap.has(k)) {
-      finalMap.set(k, val);
+    const codeKey = (val.customerCode || val.id || val.code || '').toLowerCase().trim();
+    const nameKey = (val.companyName || val.name || '').toLowerCase().trim();
+    const primaryKey = codeKey || nameKey;
+    if (primaryKey && !finalMap.has(primaryKey)) {
+      finalMap.set(primaryKey, val);
     }
   }
   const result = Array.from(finalMap.values());
@@ -1677,22 +1705,42 @@ app.get('/api/media/find/:name', (req, res) => {
       } catch (_) {}
     }
 
-    // 2. Check uploadsDir
+    // 2. Check uploadsDir recursively (including bom-documents subdirectories)
     if (fs.existsSync(uploadsDir)) {
-      const files = fs.readdirSync(uploadsDir);
+      const findFilesRecursively = (dir) => {
+        let results = [];
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              results = results.concat(findFilesRecursively(fullPath));
+            } else if (entry.isFile()) {
+              results.push(fullPath);
+            }
+          }
+        } catch (_) {}
+        return results;
+      };
+
+      const allFiles = findFilesRecursively(uploadsDir);
       // Exact filename match
-      const exact = files.find(f => f.toLowerCase() === rawSearch);
+      const exact = allFiles.find(f => path.basename(f).toLowerCase() === rawSearch);
       if (exact) {
-        return res.json({ found: true, url: `/api/uploads/${exact}`, filename: exact });
+        const rel = path.relative(uploadsDir, exact).replace(/\\/g, '/');
+        return res.json({ found: true, url: `/api/uploads/${rel}`, filename: path.basename(exact) });
       }
       // Base slug match (ignoring timestamps and special characters)
-      const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '');
-      const matched = files.find(f => {
-        const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
-        return searchBase && (fBase.includes(searchBase) || searchBase.includes(fBase));
-      });
-      if (matched) {
-        return res.json({ found: true, url: `/api/uploads/${matched}`, filename: matched });
+      const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '').toLowerCase();
+      if (searchBase) {
+        const matched = allFiles.find(f => {
+          const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
+          return fBase && (fBase.includes(searchBase) || searchBase.includes(fBase));
+        });
+        if (matched) {
+          const rel = path.relative(uploadsDir, matched).replace(/\\/g, '/');
+          return res.json({ found: true, url: `/api/uploads/${rel}`, filename: path.basename(matched) });
+        }
       }
     }
 
@@ -5204,6 +5252,29 @@ app.post('/api/zoho/test-connection', async (req, res) => {
   } catch (err) {
     console.error('[Zoho Test Connection Error]:', err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Exchange temporary grant token (authorization code) for permanent refresh token
+app.post('/api/zoho/exchange-code', async (req, res) => {
+  try {
+    const { code, clientId, clientSecret, orgId, apiDomain, accountsDomain, companyName } = req.body || {};
+    if (!code || !code.trim()) {
+      return res.status(400).json({ success: false, error: 'Authorization code is required.' });
+    }
+    const result = await exchangeAuthorizationCode({
+      code,
+      clientId,
+      clientSecret,
+      orgId,
+      apiDomain,
+      accountsDomain,
+      companyName
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[Zoho Code Exchange Error]:', err.message);
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 

@@ -988,12 +988,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const custMap = new Map();
         const register = (c) => {
           if (!c || typeof c !== 'object') return;
-          const name = (c.companyName || c.name || c.c2 || c.customerName || '').trim();
           const code = (c.customerCode || c.code || c.id || '').trim();
-          const k = (name || code).toLowerCase();
-          if (!k) return;
+          const name = (c.companyName || c.name || c.c2 || c.customerName || '').trim();
+          const primaryKey = (code || name).toLowerCase();
+          if (!primaryKey) return;
 
-          const existing = custMap.get(k) || (code ? custMap.get(code.toLowerCase()) : null) || {};
+          const existing = custMap.get(primaryKey) || (code ? custMap.get(code.toLowerCase()) : null) || {};
 
           const gstVal = (c.gstNo && c.gstNo !== '—' ? c.gstNo : '') ||
                          (c.gstNumber && c.gstNumber !== '—' ? c.gstNumber : '') ||
@@ -1091,8 +1091,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             dispatchPincode: dPinVal
           };
 
-          custMap.set(k, merged);
-          if (name) custMap.set(name.toLowerCase(), merged);
+          custMap.set(primaryKey, merged);
           if (code) custMap.set(code.toLowerCase(), merged);
         };
 
@@ -1122,7 +1121,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (isMounted && unified.length > 0) {
           setCustomerList(unified);
           try {
-            const lightweight = unified.slice(0, 500).map(c => {
+            const lightweight = unified.map(c => {
               const pContact = c.primaryContact || {};
               const cPerson = (c.contactPerson && c.contactPerson !== '—' ? c.contactPerson : '') ||
                               (c.contact && c.contact !== '—' ? c.contact : '') ||
@@ -1411,14 +1410,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const map = new Map();
     (customerList || []).forEach(c => {
       if (!c) return;
-      const name = (c.companyName || c.name || c.c2 || c.customerName || c.code || '').trim();
-      const k = name.toLowerCase();
-      if (!k) return;
-      const existing = map.get(k);
+      const codeKey = (c.customerCode || c.code || c.id || '').trim().toLowerCase();
+      const nameKey = (c.companyName || c.name || c.c2 || c.customerName || '').trim().toLowerCase();
+      const primaryKey = codeKey || nameKey;
+      if (!primaryKey) return;
+      const existing = map.get(primaryKey);
       if (!existing) {
-        map.set(k, c);
+        map.set(primaryKey, c);
       } else {
-        map.set(k, {
+        map.set(primaryKey, {
           ...existing,
           ...c,
           gst: c.gst || c.gstNumber || c.gstNo || existing.gst || existing.gstNumber || existing.gstNo || '',
@@ -1457,11 +1457,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     for (let i = 0; i < uniqueCustomerList.length; i++) {
       const c = uniqueCustomerList[i];
       const name = (c.companyName || c.name || c.c2 || c.code || '').toLowerCase();
+      const code = (c.customerCode || c.code || c.id || '').toLowerCase();
       const gst = (c.gst || c.gstNumber || c.gstNo || c.gstin || '').toLowerCase();
       const city = (c.city || '').toLowerCase();
       const contact = (c.contact || c.contactPerson || c.primaryContact?.name || '').toLowerCase();
       const phone = (c.phone || c.mobile || c.primaryContact?.phone || '').toLowerCase();
-      if (name.includes(q) || gst.includes(q) || city.includes(q) || contact.includes(q) || phone.includes(q)) {
+      if (name.includes(q) || code.includes(q) || gst.includes(q) || city.includes(q) || contact.includes(q) || phone.includes(q)) {
         matches.push(c);
         if (matches.length >= 50) break;
       }

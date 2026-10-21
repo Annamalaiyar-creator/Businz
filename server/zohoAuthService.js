@@ -1,4 +1,5 @@
 import https from 'https';
+import querystring from 'querystring';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -592,5 +593,110 @@ export function getZohoAuthStats() {
     expiresInSeconds: tokenExpiresAt > now ? Math.round((tokenExpiresAt - now) / 1000) : 0,
     isTokenValid: Boolean(cachedAccessToken && tokenExpiresAt > now + SAFETY_BUFFER_MS),
     isRefreshInFlight: Boolean(refreshPromise)
+  };
+}
+
+/**
+ * Exchanges a temporary grant token (authorization code from Self Client) for a permanent Refresh Token.
+ */
+export async function exchangeAuthorizationCode({ code, clientId, clientSecret, orgId, apiDomain, accountsDomain, companyName }) {
+  const cId = (clientId || activeConfig.clientId || '').trim();
+  const cSec = (clientSecret || activeConfig.clientSecret || '').trim();
+  const oId = (orgId || activeConfig.orgId || '').trim();
+  const accDomain = (accountsDomain || activeConfig.accountsDomain || 'https://accounts.zoho.in').trim().replace(/\/+$/, '');
+
+  if (!code || !code.trim()) {
+    throw new Error('Authorization code (Grant Code) is required.');
+  }
+  if (!cId || !cSec) {
+    throw new Error('Client ID and Client Secret are required.');
+  }
+
+  let accountsHostname = 'accounts.zoho.in';
+  try {
+    const url = new URL(accDomain.startsWith('http') ? accDomain : `https://${accDomain}`);
+    accountsHostname = url.hostname;
+  } catch (_) {}
+
+  const postData = querystring.stringify({
+    code: code.trim(),
+    client_id: cId,
+    client_secret: cSec,
+    grant_type: 'authorization_code'
+  });
+
+  const tokenRes = await new Promise((resolve, reject) => {
+    const options = {
+      hostname: accountsHostname,
+      port: 443,
+      path: '/oauth/v2/token',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          if (res.statusCode >= 400 || parsed.error) {
+            const errMsg = parsed.error_description || parsed.error || `HTTP ${res.statusCode}`;
+            return reject(new Error(`OAuth Error [${res.statusCode}]: ${errMsg}`));
+          }
+          if (parsed.refresh_token || parsed.access_token) {
+            resolve(parsed);
+          } else {
+            reject(new Error('Zoho did not return a refresh_token or access_token.'));
+          }
+        } catch (e) {
+          reject(new Error(`Failed to parse OAuth response: ${e.message}`));
+        }
+      });
+    });
+
+    req.on('error', (e) => reject(new Error(`Network error contacting ${accountsHostname}: ${e.message}`)));
+    req.setTimeout(12000, () => {
+      try { req.destroy(); } catch (_) {}
+      reject(new Error(`Request timed out contacting ${accountsHostname}`));
+    });
+    req.write(postData);
+    req.end();
+  });
+
+  const newRefreshToken = tokenRes.refresh_token || activeConfig.refreshToken;
+  const updated = await updateZohoConfig({
+    clientId: cId,
+    clientSecret: cSec,
+    orgId: oId || activeConfig.orgId,
+    refreshToken: newRefreshToken,
+    companyName: companyName || activeConfig.companyName,
+    apiDomain: apiDomain || activeConfig.apiDomain,
+    accountsDomain: accDomain
+  });
+
+  if (tokenRes.access_token) {
+    await persistToken(tokenRes.access_token, tokenRes.expires_in || 3600);
+  }
+
+  let testResult = null;
+  if (oId) {
+    try {
+      testResult = await testZohoConnection();
+    } catch (_) {}
+  }
+
+  return {
+    success: true,
+    message: tokenRes.refresh_token 
+      ? 'Successfully exchanged grant code and generated permanent Refresh Token!' 
+      : 'Access token generated successfully.',
+    refreshToken: newRefreshToken,
+    accessToken: tokenRes.access_token,
+    config: updated,
+    testResult
   };
 }

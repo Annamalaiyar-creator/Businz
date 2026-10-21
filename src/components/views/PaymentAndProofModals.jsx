@@ -6,7 +6,7 @@ import {
 import { saveMediaToCache, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { uploadBomDocumentFile } from "../../utils/bomStorageClient";
-import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
 export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore }) {
   const [paymentProofFile, setPaymentProofFile] = useState(null);
@@ -50,13 +50,14 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
           const proofObj = uploadPaymentModal.paymentProofDoc || uploadPaymentModal.payments?.proofDocObj;
           const hasProof = Boolean(proofObj || uploadPaymentModal.payments?.proofDoc);
           const proofName = typeof proofObj === 'object' ? proofObj?.name : (uploadPaymentModal.payments?.proofDoc || proofObj);
-          const proofData = typeof proofObj === 'object' ? proofObj?.dataUrl : uploadPaymentModal.payments?.proofDocData;
-          const isImage = proofData && proofData.startsWith('data:image/');
+          const proofData = resolveDocumentUrl(proofObj, uploadPaymentModal.bomCode) || (typeof proofObj === 'object' ? proofObj?.dataUrl : uploadPaymentModal.payments?.proofDocData);
+          const isImage = proofData && (proofData.startsWith('data:image/') || /\.(jpe?g|png|webp|gif|svg)($|\?)/i.test(proofData) || /\.(jpe?g|png|webp|gif|svg)$/i.test(proofName || ''));
 
           const balanceDocObj = uploadPaymentModal.balancePaymentProofDoc || uploadPaymentModal.payments?.balanceProofDocObj;
           const hasBalanceDoc = Boolean(balanceDocObj || uploadPaymentModal.balanceProofDoc);
           const balanceDocName = typeof balanceDocObj === 'object' ? balanceDocObj?.name : (uploadPaymentModal.balanceProofDoc || balanceDocObj);
-          const balanceDocData = typeof balanceDocObj === 'object' ? balanceDocObj?.dataUrl : null;
+          const balanceDocData = resolveDocumentUrl(balanceDocObj, uploadPaymentModal.bomCode) || (typeof balanceDocObj === 'object' ? balanceDocObj?.dataUrl : null);
+          const isBalanceImage = balanceDocData && (balanceDocData.startsWith('data:image/') || /\.(jpe?g|png|webp|gif|svg)($|\?)/i.test(balanceDocData) || /\.(jpe?g|png|webp|gif|svg)$/i.test(balanceDocName || ''));
 
           return (
             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -201,9 +202,13 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
 
                   {hasBalanceDoc ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '10px', padding: '12px 14px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#CCFBF1', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FileText size={20} />
-                      </div>
+                      {isBalanceImage ? (
+                        <img src={balanceDocData} alt="Balance Proof" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #99F6E4' }} />
+                      ) : (
+                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#CCFBF1', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FileText size={20} />
+                        </div>
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#0F172A', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                           {balanceDocName || 'Balance_Settlement_Proof.pdf'}

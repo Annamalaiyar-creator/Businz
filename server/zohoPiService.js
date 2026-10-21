@@ -32,7 +32,8 @@ function cleanZohoAddress(addr) {
  * Resolve or dynamically provision a customer contact in Zoho Books.
  */
 async function resolveZohoCustomerId(pi) {
-  const customerName = String(pi.customerName || pi.vendor || 'Direct Customer').trim();
+  const customerName = String(pi.customerName || pi.companyName || pi.vendor || 'Direct Customer').trim();
+  let lastZohoError = null;
 
   // 1. Search existing contact by exact name
   try {
@@ -46,7 +47,11 @@ async function resolveZohoCustomerId(pi) {
       ) || searchRes.data.contacts[0];
       if (match?.contact_id) return match.contact_id;
     }
+    if (searchRes.data?.message && searchRes.data?.code !== 0) {
+      lastZohoError = searchRes.data.message;
+    }
   } catch (err) {
+    lastZohoError = err.message;
     console.warn('[Zoho Contact Search Error]:', err.message);
   }
 
@@ -60,6 +65,9 @@ async function resolveZohoCustomerId(pi) {
         c.contact_name?.toLowerCase() === customerName.toLowerCase()
       ) || textSearchRes.data.contacts[0];
       if (match?.contact_id) return match.contact_id;
+    }
+    if (textSearchRes.data?.message && textSearchRes.data?.code !== 0) {
+      lastZohoError = textSearchRes.data.message;
     }
   } catch (_) {}
 
@@ -110,7 +118,11 @@ async function resolveZohoCustomerId(pi) {
       console.log(`[Zoho Contact Created]: ${customerName} -> ${createRes.data.contact.contact_id}`);
       return createRes.data.contact.contact_id;
     }
+    if (createRes.data?.message && createRes.data?.code !== 0) {
+      lastZohoError = createRes.data.message;
+    }
   } catch (err) {
+    lastZohoError = err.message;
     console.warn('[Zoho Contact Creation Error]:', err.message);
   }
 
@@ -120,9 +132,12 @@ async function resolveZohoCustomerId(pi) {
     if (firstRes.ok && firstRes.data?.contacts?.[0]?.contact_id) {
       return firstRes.data.contacts[0].contact_id;
     }
+    if (firstRes.data?.message && firstRes.data?.code !== 0) {
+      lastZohoError = firstRes.data.message;
+    }
   } catch (_) {}
 
-  throw new Error('Unable to resolve or create Customer Contact in Zoho Books.');
+  throw new Error(lastZohoError ? `Zoho Error: ${lastZohoError}` : 'Unable to resolve or create Customer Contact in Zoho Books.');
 }
 
 /**
