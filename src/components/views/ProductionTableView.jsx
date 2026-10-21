@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle
+  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle, Clock, RotateCw
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import ModernDateRangePicker from '../ModernDateRangePicker';
@@ -296,41 +296,52 @@ export default function ProductionTableView({
                           {activeTab === 'Dispatch Orders' && (
                             row.dispatchPrinted ? (
                               <span
-                                title={`BOM printed on ${row.dispatchPrintedDateStr || ''} at ${row.dispatchPrintTimeStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}${row.dispatchPrintCount ? ` (Print Count: ${row.dispatchPrintCount})` : ''}`}
+                                title={`BOM printed ${row.dispatchPrintCount > 1 ? `${row.dispatchPrintCount} times` : 'once'} — Latest: ${row.dispatchPrintedDateStr || ''} at ${row.dispatchPrintTimeStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`}
                                 style={{
-                                  backgroundColor: '#DCFCE7',
-                                  color: '#15803D',
-                                  border: '1px solid #86EFAC',
+                                  backgroundColor: row.dispatchPrintCount > 1 ? '#EFF6FF' : '#F0FDF4',
+                                  color: row.dispatchPrintCount > 1 ? '#1D4ED8' : '#15803D',
+                                  border: `1px solid ${row.dispatchPrintCount > 1 ? '#BFDBFE' : '#BBF7D0'}`,
                                   borderRadius: '4px',
-                                  padding: '1.5px 6px',
-                                  fontSize: '10px',
+                                  padding: '2px 7px',
+                                  fontSize: '10.5px',
                                   fontWeight: '700',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
-                                  width: 'fit-content'
+                                  gap: '4.5px',
+                                  width: 'fit-content',
+                                  lineHeight: 1
                                 }}
                               >
-                                🖨️ Printed {row.dispatchPrintTimeStr ? `(${row.dispatchPrintTimeStr})` : ''}
+                                {row.dispatchPrintCount > 1 ? (
+                                  <RotateCw size={10} strokeWidth={2.5} />
+                                ) : (
+                                  <Printer size={10} strokeWidth={2.5} />
+                                )}
+                                <span>{row.dispatchPrintCount > 1 ? `Reprinted ×${row.dispatchPrintCount}` : 'Printed'}</span>
+                                {row.dispatchPrintTimeStr && (
+                                  <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
+                                )}
                               </span>
                             ) : (
                               <span
                                 title="BOM physical sheet has not been printed yet"
                                 style={{
-                                  backgroundColor: '#FEF3C7',
+                                  backgroundColor: '#FFFBEB',
                                   color: '#B45309',
                                   border: '1px solid #FDE68A',
                                   borderRadius: '4px',
-                                  padding: '1.5px 6px',
-                                  fontSize: '10px',
+                                  padding: '2px 7px',
+                                  fontSize: '10.5px',
                                   fontWeight: '700',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
-                                  width: 'fit-content'
+                                  gap: '4.5px',
+                                  width: 'fit-content',
+                                  lineHeight: 1
                                 }}
                               >
-                                ⚪ Pending Print
+                                <Clock size={10} strokeWidth={2.5} />
+                                <span>Pending Print</span>
                               </span>
                             )
                           )}
