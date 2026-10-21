@@ -296,7 +296,11 @@ export default function ProductionTableView({
                           {activeTab === 'Dispatch Orders' && (
                             row.dispatchPrinted ? (
                               <span
-                                title={`BOM printed ${row.dispatchPrintCount > 1 ? `${row.dispatchPrintCount} times` : 'once'} — Latest: ${row.dispatchPrintedDateStr || ''} at ${row.dispatchPrintTimeStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`}
+                                title={
+                                  row.dispatchPrintCount > 1
+                                    ? `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd Print: ${row.secondPrintTimeStr || row.dispatchPrintTimeStr}${row.dispatchPrintCount > 2 ? ` (Total Prints: ${row.dispatchPrintCount})` : ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`
+                                    : `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} on ${row.dispatchPrintedDateStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`
+                                }
                                 style={{
                                   backgroundColor: row.dispatchPrintCount > 1 ? '#EFF6FF' : '#F0FDF4',
                                   color: row.dispatchPrintCount > 1 ? '#1D4ED8' : '#15803D',
@@ -318,8 +322,14 @@ export default function ProductionTableView({
                                   <Printer size={10} strokeWidth={2.5} />
                                 )}
                                 <span>{row.dispatchPrintCount > 1 ? `Reprinted ×${row.dispatchPrintCount}` : 'Printed'}</span>
-                                {row.dispatchPrintTimeStr && (
-                                  <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
+                                {row.dispatchPrintCount > 1 ? (
+                                  <span style={{ opacity: 0.9, fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                    (1st: {row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd: {row.secondPrintTimeStr || row.dispatchPrintTimeStr})
+                                  </span>
+                                ) : (
+                                  row.dispatchPrintTimeStr && (
+                                    <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
+                                  )
                                 )}
                               </span>
                             ) : (

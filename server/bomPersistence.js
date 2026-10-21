@@ -381,9 +381,17 @@ export const toDatabaseBomRowServer = (item) => {
   if (item.packedAt) mergedExtra.packedAt = item.packedAt;
   if (item.packedBy) mergedExtra.packedBy = item.packedBy;
   if (item.packedById) mergedExtra.packedById = item.packedById;
-  if (item.packingCompletedAt) mergedExtra.packingCompletedAt = item.packingCompletedAt;
   if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
+  if (item.dispatchPrinted !== undefined) mergedExtra.dispatchPrinted = item.dispatchPrinted;
+  if (item.dispatchPrintedAt !== undefined) mergedExtra.dispatchPrintedAt = item.dispatchPrintedAt;
+  if (item.dispatchPrintTimeStr !== undefined) mergedExtra.dispatchPrintTimeStr = item.dispatchPrintTimeStr;
+  if (item.dispatchPrintedDateStr !== undefined) mergedExtra.dispatchPrintedDateStr = item.dispatchPrintedDateStr;
+  if (item.dispatchPrintedBy !== undefined) mergedExtra.dispatchPrintedBy = item.dispatchPrintedBy;
+  if (item.dispatchPrintCount !== undefined) mergedExtra.dispatchPrintCount = item.dispatchPrintCount;
+  if (item.firstPrintTimeStr !== undefined) mergedExtra.firstPrintTimeStr = item.firstPrintTimeStr;
+  if (item.secondPrintTimeStr !== undefined) mergedExtra.secondPrintTimeStr = item.secondPrintTimeStr;
+  if (item.dispatchPrintHistory !== undefined) mergedExtra.dispatchPrintHistory = item.dispatchPrintHistory;
 
   const accountsVerification = typeof item.accountsVerification === 'object' && item.accountsVerification !== null
     ? { ...item.accountsVerification, _extra_data: mergedExtra }

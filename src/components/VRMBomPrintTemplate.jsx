@@ -1159,8 +1159,10 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
       }}>
         <span>VRM BUSINZ DISPATCH SHEET • {bomNumber}</span>
         <span>
-          Printed: {new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
-          {b.dispatchPrintCount ? ` (Copy #${b.dispatchPrintCount})` : ''}
+          {b.dispatchPrintCount > 1 
+            ? `Printed: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #${b.dispatchPrintCount} • 1st Print: ${b.firstPrintTimeStr || 'Recorded'})`
+            : `Printed: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #1)`
+          }
         </span>
       </div>
 
@@ -1180,7 +1182,23 @@ function recordBomPrintStatus(targetBom) {
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
   const printedByName = storedUser || storedRole || 'Dispatch Executive';
 
-  const newPrintCount = (parseInt(targetBom.dispatchPrintCount, 10) || 0) + 1;
+  const prevCount = parseInt(targetBom.dispatchPrintCount, 10) || 0;
+  const newPrintCount = prevCount + 1;
+
+  const firstTime = targetBom.firstPrintTimeStr || (prevCount === 0 ? timeStr : (targetBom.dispatchPrintTimeStr || timeStr));
+  const secondTime = newPrintCount === 2 ? timeStr : (targetBom.secondPrintTimeStr || (newPrintCount > 2 ? targetBom.secondPrintTimeStr : null));
+
+  const existingHistory = Array.isArray(targetBom.dispatchPrintHistory) ? targetBom.dispatchPrintHistory : [];
+  const updatedHistory = [
+    ...existingHistory,
+    {
+      count: newPrintCount,
+      time: timeStr,
+      date: dateStr,
+      by: printedByName,
+      timestamp: now.toISOString()
+    }
+  ];
 
   const printPayload = {
     dispatchPrinted: true,
@@ -1188,7 +1206,10 @@ function recordBomPrintStatus(targetBom) {
     dispatchPrintTimeStr: timeStr,
     dispatchPrintedDateStr: dateStr,
     dispatchPrintedBy: printedByName,
-    dispatchPrintCount: newPrintCount
+    dispatchPrintCount: newPrintCount,
+    firstPrintTimeStr: firstTime,
+    secondPrintTimeStr: secondTime,
+    dispatchPrintHistory: updatedHistory
   };
 
   // Dispatch custom browser event for live synchronization across open views

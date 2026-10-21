@@ -900,6 +900,9 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const printDate = b.dispatchPrintedDateStr || (b.dispatchPrintedAt ? new Date(b.dispatchPrintedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
                   const printCount = parseInt(b.dispatchPrintCount, 10) || (isPrinted ? 1 : 0);
                   const printedBy = b.dispatchPrintedBy || 'Dispatch Team';
+                  const firstPrintTime = b.firstPrintTimeStr || (printCount > 1 ? (b.dispatchPrintHistory?.[0]?.time || printTime) : printTime);
+                  const secondPrintTime = b.secondPrintTimeStr || (b.dispatchPrintHistory?.[1]?.time || (printCount >= 2 ? printTime : ''));
+                  const printHistory = Array.isArray(b.dispatchPrintHistory) ? b.dispatchPrintHistory : [];
 
                   const rowObj = {
                     ...b,
@@ -928,7 +931,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     dispatchPrintTimeStr: printTime,
                     dispatchPrintedDateStr: printDate,
                     dispatchPrintCount: printCount,
-                    dispatchPrintedBy: printedBy
+                    dispatchPrintedBy: printedBy,
+                    firstPrintTimeStr: firstPrintTime,
+                    secondPrintTimeStr: secondPrintTime,
+                    dispatchPrintHistory: printHistory
                   };
                   return rowObj;
                 })
