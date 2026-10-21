@@ -161,6 +161,94 @@ function formatZohoDate(dStr) {
   return new Date().toISOString().split('T')[0];
 }
 
+// Active Zoho Tax ID mapping for VRM Structures India Pvt Ltd (Tamil Nadu State Code 33)
+const VERIFIED_ZOHO_TAXES = {
+  intra: {
+    18: '1264216000000016172', // GST18 (CGST 9% + SGST 9%)
+    5: '1264216000000016196',  // GST5 (CGST 2.5% + SGST 2.5%)
+    6: '1264216000000050655',  // GST6
+    3: '1264216000000050649',  // GST3
+    0.25: '1264216000000050625', // GST0.25
+    0: '1264216000000016190'   // GST0
+  },
+  inter: {
+    18: '1264216000000016088', // IGST18
+    5: '1264216000000016084',  // IGST5
+    6: '1264216000000050497',  // IGST6
+    3: '1264216000000050491',  // IGST3
+    0.25: '1264216000000050485', // IGST0.25
+    0: '1264216000000016082'   // IGST0
+  }
+};
+
+let cachedZohoTaxes = null;
+let lastTaxFetch = 0;
+
+async function fetchActiveZohoTaxes() {
+  const now = Date.now();
+  if (cachedZohoTaxes && (now - lastTaxFetch < 1000 * 60 * 30)) {
+    return cachedZohoTaxes;
+  }
+  try {
+    const res = await zohoRequest({ path: '/books/v3/settings/taxes' });
+    if (res.ok && Array.isArray(res.data?.taxes)) {
+      cachedZohoTaxes = res.data.taxes.filter(t => t.status === 'Active' && !t.is_inactive);
+      lastTaxFetch = now;
+      return cachedZohoTaxes;
+    }
+  } catch (err) {
+    console.warn('[Zoho Tax Cache Warning]:', err.message);
+  }
+  return cachedZohoTaxes || [];
+}
+
+function resolveZohoTaxId({ isIntraState, requestedRate, activeTaxes = [] }) {
+  const spec = isIntraState ? 'intra' : 'inter';
+  let numRate = parseFloat(requestedRate);
+  if (isNaN(numRate) || numRate <= 0) {
+    numRate = 18; // Standard GST for solar mounting structures
+  }
+
+  // If 12% is requested, note that GST12 is expired in Zoho Books; map to active 18%
+  if (Math.abs(numRate - 12) < 0.01) {
+    console.log('[Zoho Tax Resolution] Rate 12% requested, but GST12 is expired in Zoho Books. Mapping to active 18% standard.');
+    numRate = 18;
+  }
+
+  // Check dynamic active taxes from Zoho API
+  if (activeTaxes.length > 0) {
+    const match = activeTaxes.find(t => 
+      t.tax_specification === spec && 
+      Math.abs(parseFloat(t.tax_percentage) - numRate) < 0.01 &&
+      (isIntraState ? (t.tax_type === 'tax_group' || (t.tax_name && t.tax_name.startsWith('GST'))) : (t.tax_name && t.tax_name.startsWith('IGST')))
+    );
+    if (match?.tax_id) return match.tax_id;
+  }
+
+  // Fallback to verified static table
+  const specMap = VERIFIED_ZOHO_TAXES[spec] || VERIFIED_ZOHO_TAXES.intra;
+  return specMap[numRate] || specMap[18] || '1264216000000016172';
+}
+
+function determineIsIntraState(piData) {
+  const rawGst = String(piData.gstNo || piData.gstNumber || '').trim();
+  if (rawGst && rawGst.length >= 2) {
+    const code = rawGst.substring(0, 2);
+    return code === '33'; // 33 is Tamil Nadu
+  }
+  const stateStr = String(
+    piData.deliveryAddress?.state || 
+    piData.billingAddress?.state || 
+    piData.state || 
+    ''
+  ).toLowerCase();
+  if (stateStr.includes('tamil nadu') || stateStr.includes('tn') || stateStr.includes('tamilnadu')) {
+    return true;
+  }
+  // Default to true (Tamil Nadu intra-state) for VRM Structures
+  return true;
+}
+
 /**
  * Push a single Proforma Invoice to Zoho Books as an Estimate / Quote.
  */
@@ -175,7 +263,12 @@ export async function pushPiToZoho(piData) {
   // 1. Resolve Customer Contact ID in Zoho Books
   const customerId = await resolveZohoCustomerId(piData);
 
-  // 2. Build Line Items
+  // 2. Fetch Active Zoho Taxes and determine Tax Specification
+  const activeTaxes = await fetchActiveZohoTaxes();
+  const isIntraState = determineIsIntraState(piData);
+  const defaultRate = parseFloat(piData.taxRate || piData.gstRate) || 18;
+
+  // 3. Build Line Items
   const lineItems = [];
   const pGroups = piData.presetGroups || {};
   const groupEntries = Array.isArray(pGroups) ? pGroups : Object.values(pGroups);
@@ -188,10 +281,13 @@ export async function pushPiToZoho(piData) {
       const setCount = parseFloat(grp.setCount) || 1;
       const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
       const name = grp.presetName || grp.name || piData.presetName || 'Solar Mounting Structure Preset Kit';
+      const kitRate = parseFloat(grp.taxRate || grp.gstRate) || defaultRate;
+      const taxId = resolveZohoTaxId({ isIntraState, requestedRate: kitRate, activeTaxes });
       lineItems.push({
         name: String(name).slice(0, 100),
         rate: unitPrice,
         quantity: setCount,
+        tax_id: taxId,
         description: `Preset Kit Package (${setCount} Set)`.slice(0, 100)
       });
     });
@@ -204,10 +300,13 @@ export async function pushPiToZoho(piData) {
     const q = parseFloat(it.qty || it.quantity) || 1;
     let r = parseFloat(it.rate != null ? it.rate : it.unitValue);
     if (isNaN(r) || r < 0) r = 0;
+    const itemRate = parseFloat(it.taxRate || it.gstRate) || defaultRate;
+    const taxId = resolveZohoTaxId({ isIntraState, requestedRate: itemRate, activeTaxes });
     lineItems.push({
       name: String(it.name || it.productName || 'Solar Structure Component').slice(0, 100),
       rate: r,
       quantity: q,
+      tax_id: taxId,
       description: String(it.description || it.category || 'Product Scope').slice(0, 100)
     });
   });
@@ -215,15 +314,17 @@ export async function pushPiToZoho(piData) {
   // Fallback line item if empty
   if (lineItems.length === 0) {
     const fallbackRate = parseFloat(piData.grandTotal || piData.subtotal || piData.total || 1000);
+    const taxId = resolveZohoTaxId({ isIntraState, requestedRate: defaultRate, activeTaxes });
     lineItems.push({
       name: String(piData.productName || 'Solar Mounting Structure Scope').slice(0, 100),
       rate: fallbackRate,
       quantity: 1,
+      tax_id: taxId,
       description: 'Solar Structure Scope'
     });
   }
 
-  // 3. Build Zoho Books Estimate Payload
+  // 4. Build Zoho Books Estimate Payload
   const zohoPayload = {
     customer_id: customerId,
     estimate_number: cleanPiNo,
