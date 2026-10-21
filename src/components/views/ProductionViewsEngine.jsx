@@ -269,7 +269,13 @@ export default function ProductionViewsEngine(props) {
                   packingCompletedAt: prevItem.packingCompletedAt || item.packingCompletedAt || null,
                   fullyCompleted: (prevItem.fullyCompleted !== undefined && prevRank >= newRank) ? prevItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : prevItem.fullyCompleted),
                   salesPerson: prevItem.salesPerson || item.salesPerson,
-                  salesPersonCode: prevItem.salesPersonCode || item.salesPersonCode
+                  salesPersonCode: prevItem.salesPersonCode || item.salesPersonCode,
+                  dispatchPrinted: Boolean(item.dispatchPrinted || prevItem.dispatchPrinted),
+                  dispatchPrintedAt: item.dispatchPrintedAt || prevItem.dispatchPrintedAt || null,
+                  dispatchPrintTimeStr: item.dispatchPrintTimeStr || prevItem.dispatchPrintTimeStr || null,
+                  dispatchPrintedDateStr: item.dispatchPrintedDateStr || prevItem.dispatchPrintedDateStr || null,
+                  dispatchPrintCount: Math.max(item.dispatchPrintCount || 0, prevItem.dispatchPrintCount || 0),
+                  dispatchPrintedBy: item.dispatchPrintedBy || prevItem.dispatchPrintedBy || null
                 };
               });
 
@@ -383,9 +389,21 @@ export default function ProductionViewsEngine(props) {
       debouncedSyncFromCloud();
     };
 
+    const handleBomPrinted = (e) => {
+      const { bomCode, ...printPayload } = e.detail || {};
+      if (!bomCode) return;
+      setBomStore(prev => (prev || []).map(b => {
+        if (String(b.bomCode || b.code || b.id || '').trim().toLowerCase() === String(bomCode).trim().toLowerCase()) {
+          return { ...b, ...printPayload };
+        }
+        return b;
+      }));
+    };
+
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
     window.addEventListener('controlroom_customer_update', handleCustomerUpdate);
     window.addEventListener('controlroom_storage_update', debouncedSyncFromCloud);
+    window.addEventListener('vrm_bom_printed', handleBomPrinted);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
@@ -395,6 +413,7 @@ export default function ProductionViewsEngine(props) {
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
       window.removeEventListener('controlroom_customer_update', handleCustomerUpdate);
       window.removeEventListener('controlroom_storage_update', debouncedSyncFromCloud);
+      window.removeEventListener('vrm_bom_printed', handleBomPrinted);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };
@@ -1602,9 +1621,11 @@ export default function ProductionViewsEngine(props) {
               cleanSub === 'allboms' ||
               cleanSub === 'allorders' ||
               cleanSub === 'allaccountsorders' ||
+              (cleanSub === 'pendingprint' && (!r.dispatchPrinted && !r.isPrinted)) ||
+              (cleanSub === 'printed' && Boolean(r.dispatchPrinted || r.isPrinted)) ||
               cleanGroup === cleanSub ||
               rTabGroup === subTab ||
-              (cleanSub.includes('pending') && (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))) ||
+              (cleanSub.includes('pending') && cleanSub !== 'pendingprint' && (cleanStatus.includes('pending') || cleanGroup.includes('pending') || cleanStatus.includes('draft'))) ||
               (cleanSub.includes('partially') && (cleanStatus.includes('partial') || cleanGroup.includes('partial'))) ||
               (cleanSub.includes('packed') && (cleanStatus.includes('packed') || cleanGroup.includes('packed') || cleanStatus.includes('verified'))) ||
               (cleanSub.includes('loading') && (cleanStatus.includes('loading') || cleanGroup.includes('loading'))) ||

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
@@ -1146,14 +1146,95 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         </div>
       </div>
 
+      {/* 8. SYSTEM PRINT AUDIT WATERMARK */}
+      <div style={{
+        marginTop: '12px',
+        paddingTop: '6px',
+        borderTop: '1px solid #E2E8F0',
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontSize: '9.5px',
+        color: '#64748B',
+        fontFamily: 'monospace'
+      }}>
+        <span>VRM BUSINZ DISPATCH SHEET • {bomNumber}</span>
+        <span>
+          Printed: {new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+          {b.dispatchPrintCount ? ` (Copy #${b.dispatchPrintCount})` : ''}
+        </span>
+      </div>
+
     </div>
   );
 }
 
+function recordBomPrintStatus(targetBom) {
+  if (!targetBom) return;
+  const bomId = String(targetBom.bomCode || targetBom.code || targetBom.id || '').trim();
+  if (!bomId) return;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
+  const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
+  const printedByName = storedUser || storedRole || 'Dispatch Executive';
+
+  const newPrintCount = (parseInt(targetBom.dispatchPrintCount, 10) || 0) + 1;
+
+  const printPayload = {
+    dispatchPrinted: true,
+    dispatchPrintedAt: now.toISOString(),
+    dispatchPrintTimeStr: timeStr,
+    dispatchPrintedDateStr: dateStr,
+    dispatchPrintedBy: printedByName,
+    dispatchPrintCount: newPrintCount
+  };
+
+  // Dispatch custom browser event for live synchronization across open views
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
+      detail: { bomCode: bomId, ...printPayload }
+    }));
+  }
+
+  // Update local browser stores safely
+  if (typeof localStorage !== 'undefined') {
+    ['controlroom_bom_store', 'bom_store'].forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const updated = list.map(item => {
+              if (String(item.bomCode || item.code || item.id || '').trim() === bomId) {
+                return { ...item, ...printPayload };
+              }
+              return item;
+            });
+            localStorage.setItem(k, JSON.stringify(updated));
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  // Non-blocking persist to backend
+  try {
+    fetch(`/api/boms/${encodeURIComponent(bomId)}/print-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printData: printPayload })
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true }) {
   const b = bomData || {};
+  const hasTrackedRef = useRef(false);
 
   const handlePrint = () => {
+    recordBomPrintStatus(b);
     window.print();
   };
 
@@ -1170,7 +1251,9 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   }, [bomData]);
 
   useEffect(() => {
-    if (!bomData || !autoPrint) return;
+    if (!bomData || !autoPrint || hasTrackedRef.current) return;
+    hasTrackedRef.current = true;
+    recordBomPrintStatus(b);
     const timer = setTimeout(() => {
       window.print();
     }, 400);

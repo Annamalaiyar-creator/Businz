@@ -644,6 +644,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 searchPlaceholder: 'Filter Dispatch Orders (BOM Code, Customer Name, Logistics)...',
                 tabs: [
                   { id: 'All', label: 'All Orders', count: allDispatchBoms.length, bg: '#F1F5F9', fg: '#334155' },
+                  { id: 'PendingPrint', label: 'Pending Print', count: allDispatchBoms.filter(b => (!b.dispatchPrinted && !b.isPrinted) && !isClosedOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
+                  { id: 'Printed', label: 'Print Taken', count: allDispatchBoms.filter(b => (b.dispatchPrinted || b.isPrinted) && !isClosedOrder(b) && !b.cancelled).length, bg: '#DCFCE7', fg: '#166534' },
                   { id: 'PendingPacking', label: 'Pending Packing', count: allDispatchBoms.filter(b => b && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b) && !isPackedOrder(b) && !isPartiallyPackedOrder(b)).length, bg: '#FFEDD5', fg: '#C2410C' },
                   { id: 'PartiallyPacked', label: 'Partially Packed', count: allDispatchBoms.filter(b => isPartiallyPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'Packed', label: 'Packing Verified', count: allDispatchBoms.filter(b => isPackedOrder(b) && !isClosedOrder(b) && !isAwaitingLrOrder(b) && !b.cancelled && !isOrderAwaitingLoading(b)).length, bg: '#DCFCE7', fg: '#166534' },
@@ -833,14 +835,41 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const formattedAmt = `₹ ${Number(totalAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
                   const resolveDateTime = (order, fallbackPi) => {
-                    const rawTs = order?.salesConfirmedAt || order?.createdAt || order?.timestamp || fallbackPi?.salesConfirmedAt || fallbackPi?.createdAt || order?.date || fallbackPi?.date;
+                    let rawTs = order?.salesConfirmedAt || order?.createdAt || order?.timestamp || fallbackPi?.salesConfirmedAt || fallbackPi?.createdAt;
+                    let s = rawTs ? String(rawTs).trim() : '';
+
+                    const isDateOnlySeed = !s || /^\d{4}-\d{2}-\d{2}$/.test(s) || /T00:00:00(?:\.000)?Z?$/i.test(s) || /T05:30:00(?:\.\d+)?Z?$/i.test(s);
+
+                    // If missing or date-only seed, look for fallback with real time (updatedAt, fallbackPi, etc.)
+                    if (isDateOnlySeed) {
+                      const candidate = order?.updatedAt || order?.updated_at || fallbackPi?.updatedAt || fallbackPi?.createdAt;
+                      if (candidate) {
+                        const candStr = String(candidate).trim();
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(candStr) && !/T00:00:00(?:\.000)?Z?$/i.test(candStr) && !/T05:30:00(?:\.\d+)?Z?$/i.test(candStr)) {
+                          rawTs = candidate;
+                          s = candStr;
+                        }
+                      }
+                    }
+
+                    if (!rawTs) {
+                      rawTs = order?.date || fallbackPi?.date;
+                      s = rawTs ? String(rawTs).trim() : '';
+                    }
+
                     if (!rawTs) {
                       return { date: '—', time: '', combined: '—' };
                     }
 
-                    const s = String(rawTs).trim();
+                    // Base date preference: if order explicitly has a calendar date like 2026-10-21
+                    const explicitDateStr = order?.date || fallbackPi?.date;
+                    let explicitDateObj = null;
+                    if (explicitDateStr && /^\d{4}-\d{2}-\d{2}$/.test(String(explicitDateStr).trim())) {
+                      const parts = String(explicitDateStr).trim().split('-');
+                      explicitDateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                    }
 
-                    // 1. If it's strictly a date format YYYY-MM-DD without any time portion, show ONLY the real date
+                    // If it's strictly a date format YYYY-MM-DD without any time portion anywhere
                     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
                       const parts = s.split('-');
                       const yr = parseInt(parts[0], 10);
@@ -851,32 +880,26 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                       return { date: dStr, time: '', combined: dStr };
                     }
 
-                    // 2. Check for midnight UTC or date-only automated seeds (T00:00:00 or T05:30:00)
-                    const isDateOnlySeed = /T00:00:00(?:\.000)?Z?$/i.test(s) || /T05:30:00(?:\.\d+)?Z?$/i.test(s);
-                    if (isDateOnlySeed) {
-                      const datePart = s.split('T')[0];
-                      const parts = datePart.split('-');
-                      const yr = parseInt(parts[0], 10);
-                      const mo = parseInt(parts[1], 10) - 1;
-                      const da = parseInt(parts[2], 10);
-                      const d = new Date(yr, mo, da);
-                      const dStr = isNaN(d.getTime()) ? datePart : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                      return { date: dStr, time: '', combined: dStr };
-                    }
-
-                    // 3. Real genuine timestamp recorded at order creation or confirmation
                     const d = new Date(rawTs);
                     if (isNaN(d.getTime())) {
                       return { date: s, time: '', combined: s };
                     }
 
-                    const dStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const dStr = (explicitDateObj && !isNaN(explicitDateObj.getTime()))
+                      ? explicitDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
                     const tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
                     return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
                   };
 
                   const dt = resolveDateTime(b, matchedPi);
+                  const isPrinted = Boolean(b.dispatchPrinted || b.isPrinted);
+                  const printTime = b.dispatchPrintTimeStr || (b.dispatchPrintedAt ? new Date(b.dispatchPrintedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '');
+                  const printDate = b.dispatchPrintedDateStr || (b.dispatchPrintedAt ? new Date(b.dispatchPrintedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+                  const printCount = parseInt(b.dispatchPrintCount, 10) || (isPrinted ? 1 : 0);
+                  const printedBy = b.dispatchPrintedBy || 'Dispatch Team';
 
                   const rowObj = {
                     ...b,
@@ -900,7 +923,12 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     stBg: stBg,
                     stFg: stFg,
                     stBorder: stBorder,
-                    tabGroup: tabGroup
+                    tabGroup: tabGroup,
+                    dispatchPrinted: isPrinted,
+                    dispatchPrintTimeStr: printTime,
+                    dispatchPrintedDateStr: printDate,
+                    dispatchPrintCount: printCount,
+                    dispatchPrintedBy: printedBy
                   };
                   return rowObj;
                 })

@@ -1905,6 +1905,7 @@ export default function CreateBomFormPage(props) {
                       code: finalCode,
                       sourcePiNo: props.newBomSourcePiNo || props.sourcePiNo || pendingPiFromStorage?.sourcePiNo || pendingPiFromStorage?.piNo || pendingPiFromStorage?.id || null,
                       date: new Date().toISOString().split('T')[0],
+                      createdAt: new Date().toISOString(),
                       customerName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || 'Customer Order',
                       companyName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || '-',
                       mobile: selCust?.c4 || selCust?.primaryContact?.phone || selCust?.phone || selCust?.primaryContact?.whatsapp || '-',

@@ -4370,6 +4370,80 @@ app.post('/api/boms', async (req, res) => {
   });
 });
 
+// Dedicated POST /api/boms/:id/print-status endpoint for Dispatch print tracking
+app.post('/api/boms/:id/print-status', async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const { printData } = req.body || {};
+    if (!rawId || !printData) {
+      return res.status(400).json({ success: false, message: 'bomId and printData required' });
+    }
+    const cleanId = String(rawId).trim().toLowerCase();
+
+    // 1. Update in-memory / disk store
+    const diskPath = getStoreFilePath('bom_store.json');
+    let fullList = [];
+    if (fs.existsSync(diskPath)) {
+      try {
+        fullList = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      } catch (_) {}
+    }
+    if (!Array.isArray(fullList) || fullList.length === 0) {
+      fullList = Array.isArray(supabaseMemoryStore.bom_store) ? supabaseMemoryStore.bom_store : [];
+    }
+
+    let updatedBom = null;
+    fullList = fullList.map(item => {
+      const match = String(item.bomCode || item.code || item.id || '').trim().toLowerCase();
+      if (match === cleanId) {
+        updatedBom = {
+          ...item,
+          ...printData,
+          updated_at: new Date().toISOString()
+        };
+        return updatedBom;
+      }
+      return item;
+    });
+
+    if (updatedBom) {
+      try {
+        fs.writeFileSync(diskPath, JSON.stringify(fullList, null, 2), 'utf8');
+      } catch (_) {}
+      supabaseMemoryStore.bom_store = fullList;
+      cachedBomsResult = fullList;
+      lastBomFetchTimestamp = Date.now();
+
+      // 2. Targeted 1-row DB update if connected
+      if (isDbConnected()) {
+        try {
+          await query(`
+            UPDATE public.controlroom_store
+            SET data = (
+              SELECT jsonb_agg(
+                CASE 
+                  WHEN LOWER(TRIM(elem->>'bomCode')) = $1 OR LOWER(TRIM(elem->>'code')) = $1 OR LOWER(TRIM(elem->>'id')) = $1
+                  THEN elem || $2::jsonb
+                  ELSE elem
+                END
+              )
+              FROM jsonb_array_elements(data::jsonb) AS elem
+            ),
+            updated_at = NOW()
+            WHERE key IN ('controlroom_bom_store', 'bom_store')
+          `, [cleanId, JSON.stringify(printData)]);
+        } catch (_) {}
+      }
+
+      return res.json({ success: true, bom: updatedBom });
+    }
+
+    return res.status(404).json({ success: false, message: 'BOM order not found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Dedicated DELETE /api/boms/:id endpoint
 app.delete('/api/boms/:id', async (req, res) => {
   const { id } = req.params;

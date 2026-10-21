@@ -291,7 +291,50 @@ export default function ProductionTableView({
                         onClick={() => onRowClick(row)}
                         style={{ padding: '14px 16px', fontWeight: '700', color: '#0E7490', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
-                        {row.code}
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px' }}>
+                          <span>{row.code}</span>
+                          {activeTab === 'Dispatch Orders' && (
+                            row.dispatchPrinted ? (
+                              <span
+                                title={`BOM printed on ${row.dispatchPrintedDateStr || ''} at ${row.dispatchPrintTimeStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}${row.dispatchPrintCount ? ` (Print Count: ${row.dispatchPrintCount})` : ''}`}
+                                style={{
+                                  backgroundColor: '#DCFCE7',
+                                  color: '#15803D',
+                                  border: '1px solid #86EFAC',
+                                  borderRadius: '4px',
+                                  padding: '1.5px 6px',
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  width: 'fit-content'
+                                }}
+                              >
+                                🖨️ Printed {row.dispatchPrintTimeStr ? `(${row.dispatchPrintTimeStr})` : ''}
+                              </span>
+                            ) : (
+                              <span
+                                title="BOM physical sheet has not been printed yet"
+                                style={{
+                                  backgroundColor: '#FEF3C7',
+                                  color: '#B45309',
+                                  border: '1px solid #FDE68A',
+                                  borderRadius: '4px',
+                                  padding: '1.5px 6px',
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  width: 'fit-content'
+                                }}
+                              >
+                                ⚪ Pending Print
+                              </span>
+                            )
+                          )}
+                        </div>
                       </td>
                       <td
                         onClick={() => onRowClick(row)}

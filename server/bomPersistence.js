@@ -474,7 +474,7 @@ export const toDatabaseBomRowServer = (item) => {
     sgst_amount: sanitizeNumber(item.sgstAmount, 0),
     grand_total: sanitizeNumber(item.grandTotal, 0),
     stock_deducted: Boolean(item.stockDeducted),
-    created_at: sanitizeTimestamp(item.createdAt || item.date) || new Date().toISOString(),
+    created_at: (item.createdAt && sanitizeTimestamp(item.createdAt)) || new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 };

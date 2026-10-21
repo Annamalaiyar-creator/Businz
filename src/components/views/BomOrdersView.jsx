@@ -4618,6 +4618,7 @@ export default function BomOrdersView(props) {
                           code: finalCode,
                           sourcePiNo: newBomSourcePiNo || null,
                           date: new Date().toISOString().split('T')[0],
+                          createdAt: new Date().toISOString(),
                           deliveryDate: newBomDeliveryDate || null,
                           customerName: (newBomCompanyName && newBomCompanyName !== '-') ? newBomCompanyName : (newBomProductName || selCust?.c2 || selCust?.companyName || selCust?.code || 'Customer Order'),
                           companyName: (newBomCompanyName && newBomCompanyName !== '-') ? newBomCompanyName : (newBomProductName || selCust?.c2 || selCust?.companyName || selCust?.code || '-'),
