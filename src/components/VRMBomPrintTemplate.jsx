@@ -56,6 +56,24 @@ function formatAddressLines(rawAddr, city, state, pin) {
   return lines.length > 0 ? lines : ['Address on file'];
 }
 
+// Helper to clean and format dates strictly to DD/MM/YYYY
+function formatDateDDMMYYYY(val) {
+  if (!val) return '—';
+  const s = String(val).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  return s;
+}
+
 export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   const [branding, setBranding] = useState(getCachedBranding);
 
@@ -261,7 +279,18 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
   const deliveryLines = formatAddressLines(rawDAddr, dCity, dState, dPin);
 
   const bomNumber = b.bomCode || b.code || b.piNo || b.id || 'BOM-001';
-  const bomDate = b.date || b.bomDate || b.piDate || b.salesConfirmedAt || (b.createdAt ? String(b.createdAt).substring(0, 10) : new Date().toISOString().split('T')[0]);
+  const rawBomDate = b.date || b.bomDate || b.piDate || b.salesConfirmedAt || (b.createdAt ? String(b.createdAt).substring(0, 10) : new Date().toISOString().split('T')[0]);
+  const orderDateFormatted = formatDateDDMMYYYY(rawBomDate);
+
+  const rawTransportMode = b.transportMode || b.transport_mode || 'Transport';
+  const transporterName = b.transporterName || b.transporter_name || '';
+  const transportDisplay = transporterName && !rawTransportMode.toLowerCase().includes(transporterName.toLowerCase())
+    ? `${rawTransportMode} (${transporterName})`
+    : rawTransportMode;
+
+  const destinationDisplay = (b.destination && String(b.destination).trim() && !['—', '-'].includes(String(b.destination).trim()))
+    ? String(b.destination).trim()
+    : (b.deliveryAddressObj?.city || b.billingAddressObj?.city || '—');
 
   const isDispatchUser = (name) => {
     if (!name) return false;
@@ -472,40 +501,40 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        borderBottom: '2px solid #0E7490',
-        paddingBottom: '8px',
-        marginBottom: '8px',
+        alignItems: 'center',
+        borderBottom: '2.5px solid #0E7490',
+        paddingBottom: '10px',
+        marginBottom: '10px',
         width: '100%',
         boxSizing: 'border-box',
         pageBreakInside: 'avoid',
         breakInside: 'avoid'
       }}>
         {/* Left: Logo & Company Information */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0, paddingRight: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0, paddingRight: '16px' }}>
           <img
             src={branding.logoUrl || VRM_OFFICIAL_LOGO}
             alt="VRM Structures Logo"
-            style={{ height: '36px', maxWidth: '140px', objectFit: 'contain', flexShrink: 0 }}
+            style={{ height: '48px', maxWidth: '170px', objectFit: 'contain', flexShrink: 0 }}
             onError={(e) => { e.currentTarget.src = VRM_OFFICIAL_LOGO; }}
           />
           <div style={{ minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: '13.5px', fontWeight: '900', color: '#0E7490', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '900', color: '#0E7490', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
               VRM STRUCTURES INDIA PVT LTD
             </h2>
-            <div style={{ fontSize: '9.5px', color: '#334155', lineHeight: '1.3', marginTop: '2px' }}>
+            <div style={{ fontSize: '10.5px', color: '#334155', lineHeight: '1.4', marginTop: '3px' }}>
               1427, GNT Road, Nagappa Industrial Estate, Puzhal, Chennai, Tamil Nadu - 600066<br />
-              <strong>GSTIN:</strong> 33AAGCV4262N1ZZ &nbsp;|&nbsp; <strong>Phone:</strong> +91 98847 20789 &nbsp;|&nbsp; <strong>Email:</strong> sales@vrmstructures.com
+              <strong style={{ color: '#0F172A' }}>GSTIN:</strong> 33AAGCV4262N1ZZ &nbsp;|&nbsp; <strong style={{ color: '#0F172A' }}>Phone:</strong> +91 98847 20789 &nbsp;|&nbsp; <strong style={{ color: '#0F172A' }}>Email:</strong> sales@vrmstructures.com
             </div>
           </div>
         </div>
 
         {/* Right: Document Title */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '1.2' }}>
-            BILL OF MATERIALS
+          <div style={{ fontSize: '20px', fontWeight: '900', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: '1.2' }}>
+            ORDER LIST
           </div>
-          <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#64748B', marginTop: '2px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', marginTop: '3px' }}>
             Official Material Specification
           </div>
         </div>
@@ -514,28 +543,36 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
       {/* 2. DEDICATED METADATA BAR (NEVER OVERLAPS) */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: '1.2fr 1fr 1.2fr 1.2fr 1.1fr',
         border: '1px solid #CBD5E1',
-        borderRadius: '4px',
+        borderRadius: '5px',
         backgroundColor: '#F8FAFC',
         marginBottom: '10px',
-        fontSize: '11.5px',
+        fontSize: '11px',
         width: '100%',
         boxSizing: 'border-box',
         pageBreakInside: 'avoid',
         breakInside: 'avoid'
       }}>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
-          <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Number: </span>
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Number</span>
           <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '12px' }}>{bomNumber}</span>
         </div>
-        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1', whiteSpace: 'nowrap' }}>
-          <span style={{ color: '#64748B', fontWeight: '700' }}>BOM Date: </span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '12px' }}>{bomDate}</span>
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Order Date</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{orderDateFormatted}</span>
         </div>
-        <div style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>
-          <span style={{ color: '#64748B', fontWeight: '700' }}>Sales Person: </span>
-          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '12px' }}>{salesPersonName}</span>
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Transport Mode</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{transportDisplay}</span>
+        </div>
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #CBD5E1' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Destination</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{destinationDisplay}</span>
+        </div>
+        <div style={{ padding: '6px 10px' }}>
+          <span style={{ color: '#64748B', fontWeight: '700', display: 'block', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sales Person</span>
+          <span style={{ color: '#0F172A', fontWeight: '700', fontSize: '11.5px' }}>{salesPersonName}</span>
         </div>
       </div>
 
@@ -1157,11 +1194,11 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         color: '#64748B',
         fontFamily: 'monospace'
       }}>
-        <span>VRM BUSINZ DISPATCH SHEET • {bomNumber}</span>
+        <span>VRM BUSINZ ORDER LIST • {bomNumber}</span>
         <span>
           {b.dispatchPrintCount > 1 
-            ? `Printed: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #${b.dispatchPrintCount} • 1st Print: ${b.firstPrintTimeStr || 'Recorded'})`
-            : `Printed: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #1)`
+            ? `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #${b.dispatchPrintCount} • 1st Print: ${b.firstPrintTimeStr || 'Recorded'})`
+            : `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #1)`
           }
         </span>
       </div>
@@ -1177,7 +1214,7 @@ function recordBomPrintStatus(targetBom) {
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const dateStr = formatDateDDMMYYYY(now);
   const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
   const printedByName = storedUser || storedRole || 'Dispatch Executive';
@@ -1338,7 +1375,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontWeight: '800', fontSize: '14.5px', letterSpacing: '-0.2px' }}>
-              Bill of Materials Document — {bomNumber}
+              Order List Document — {bomNumber}
             </span>
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
