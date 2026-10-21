@@ -12,28 +12,82 @@ function getStoreFilePath(filename) {
 }
 
 /**
- * Truncate address to maximum 80 characters to satisfy Zoho Books API constraint.
+ * Parse any raw address (object or string) into a structured Zoho Books address object.
  */
-function cleanZohoAddress(addr) {
-  if (!addr) return undefined;
-  if (typeof addr === 'string') {
-    return addr.trim().slice(0, 80);
+function parseToZohoAddress(rawAddr, fallbackContactAddr = {}) {
+  let street1 = '';
+  let street2 = '';
+  let city = '';
+  let state = '';
+  let zip = '';
+  let phone = '';
+
+  if (rawAddr && typeof rawAddr === 'object') {
+    street1 = rawAddr.street || rawAddr.address || rawAddr.address1 || '';
+    street2 = rawAddr.street2 || rawAddr.address2 || rawAddr.area || '';
+    city = rawAddr.city || '';
+    state = rawAddr.state || '';
+    zip = rawAddr.pincode || rawAddr.pin || rawAddr.zip || '';
+    phone = rawAddr.phone || '';
+  } else if (typeof rawAddr === 'string' && rawAddr.trim()) {
+    const s = rawAddr.trim();
+    const pinMatch = s.match(/\b(\d{6})\b/);
+    if (pinMatch) zip = pinMatch[1];
+
+    const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      street1 = parts[0] || '';
+      street2 = parts.slice(1, parts.length - 2).join(', ') || parts[1] || '';
+      city = parts[parts.length - 2] || '';
+      state = parts[parts.length - 1].replace(/\b\d{6}\b/, '').replace(/[-–]/g, '').trim();
+    } else if (parts.length === 2) {
+      street1 = parts[0] || '';
+      city = parts[1] || '';
+    } else {
+      street1 = s;
+    }
   }
-  const parts = [
-    addr.street || addr.address || '',
-    addr.city || '',
-    addr.state || '',
-    addr.pincode || addr.pin || ''
-  ].filter(Boolean);
-  return parts.join(', ').trim().slice(0, 80) || undefined;
+
+  // Fallback to contact's existing address fields if blank
+  if (!street1 && fallbackContactAddr?.address) street1 = fallbackContactAddr.address;
+  if (!street2 && fallbackContactAddr?.street2) street2 = fallbackContactAddr.street2;
+  if (!city && fallbackContactAddr?.city) city = fallbackContactAddr.city;
+  if (!state && fallbackContactAddr?.state) state = fallbackContactAddr.state;
+  if (!zip && (fallbackContactAddr?.zip || fallbackContactAddr?.pincode)) zip = fallbackContactAddr.zip || fallbackContactAddr.pincode;
+  if (!phone && fallbackContactAddr?.phone) phone = fallbackContactAddr.phone;
+
+  const result = {
+    address: String(street1 || '').slice(0, 100).trim(),
+    street2: String(street2 || '').slice(0, 100).trim(),
+    city: String(city || '').slice(0, 50).trim(),
+    state: String(state || '').slice(0, 50).trim(),
+    zip: String(zip || '').slice(0, 20).trim(),
+    country: 'India'
+  };
+
+  if (phone) {
+    result.phone = String(phone).slice(0, 30).trim();
+  }
+
+  return result;
 }
 
 /**
- * Resolve or dynamically provision a customer contact in Zoho Books.
+ * Resolve or dynamically provision a customer contact in Zoho Books, returning contactId and full contact details.
  */
 async function resolveZohoCustomerId(pi) {
   const customerName = String(pi.customerName || pi.companyName || pi.vendor || 'Direct Customer').trim();
   let lastZohoError = null;
+
+  const fetchContactDetail = async (contactId) => {
+    try {
+      const detailRes = await zohoRequest({ path: `/books/v3/contacts/${contactId}` });
+      if (detailRes.ok && detailRes.data?.contact) {
+        return detailRes.data.contact;
+      }
+    } catch (_) {}
+    return { contact_id: contactId };
+  };
 
   // 1. Search existing contact by exact name
   try {
@@ -45,7 +99,10 @@ async function resolveZohoCustomerId(pi) {
         c.contact_name?.toLowerCase() === customerName.toLowerCase() ||
         c.company_name?.toLowerCase() === customerName.toLowerCase()
       ) || searchRes.data.contacts[0];
-      if (match?.contact_id) return match.contact_id;
+      if (match?.contact_id) {
+        const fullContact = await fetchContactDetail(match.contact_id);
+        return { contactId: match.contact_id, contact: fullContact };
+      }
     }
     if (searchRes.data?.message && searchRes.data?.code !== 0) {
       lastZohoError = searchRes.data.message;
@@ -64,7 +121,10 @@ async function resolveZohoCustomerId(pi) {
       const match = textSearchRes.data.contacts.find(c =>
         c.contact_name?.toLowerCase() === customerName.toLowerCase()
       ) || textSearchRes.data.contacts[0];
-      if (match?.contact_id) return match.contact_id;
+      if (match?.contact_id) {
+        const fullContact = await fetchContactDetail(match.contact_id);
+        return { contactId: match.contact_id, contact: fullContact };
+      }
     }
     if (textSearchRes.data?.message && textSearchRes.data?.code !== 0) {
       lastZohoError = textSearchRes.data.message;
@@ -74,8 +134,8 @@ async function resolveZohoCustomerId(pi) {
   // 3. Create new customer contact in Zoho Books
   try {
     const rawGst = String(pi.gstNo || pi.gstNumber || '').trim();
-    const billingAddrStr = cleanZohoAddress(pi.billingAddress);
-    const shippingAddrStr = cleanZohoAddress(pi.deliveryAddress || pi.shippingAddress);
+    const billingAddrObj = parseToZohoAddress(pi.billingAddress || pi.deliveryAddress);
+    const shippingAddrObj = parseToZohoAddress(pi.deliveryAddress || pi.billingAddress);
 
     const newCustPayload = {
       contact_name: customerName,
@@ -89,24 +149,11 @@ async function resolveZohoCustomerId(pi) {
     if (pi.phone) newCustPayload.phone = String(pi.phone).trim().slice(0, 30);
     if (pi.email && pi.email.includes('@')) newCustPayload.email = String(pi.email).trim().slice(0, 50);
 
-    if (billingAddrStr) {
-      newCustPayload.billing_address = {
-        address: billingAddrStr,
-        city: (pi.billingAddress?.city || '').slice(0, 40),
-        state: (pi.billingAddress?.state || '').slice(0, 40),
-        zip: (pi.billingAddress?.pincode || '').slice(0, 20),
-        country: 'India'
-      };
+    if (billingAddrObj.address) {
+      newCustPayload.billing_address = billingAddrObj;
     }
-
-    if (shippingAddrStr) {
-      newCustPayload.shipping_address = {
-        address: shippingAddrStr,
-        city: (pi.deliveryAddress?.city || '').slice(0, 40),
-        state: (pi.deliveryAddress?.state || '').slice(0, 40),
-        zip: (pi.deliveryAddress?.pincode || '').slice(0, 20),
-        country: 'India'
-      };
+    if (shippingAddrObj.address) {
+      newCustPayload.shipping_address = shippingAddrObj;
     }
 
     const createRes = await zohoRequest({
@@ -116,7 +163,7 @@ async function resolveZohoCustomerId(pi) {
 
     if (createRes.ok && createRes.data?.contact?.contact_id) {
       console.log(`[Zoho Contact Created]: ${customerName} -> ${createRes.data.contact.contact_id}`);
-      return createRes.data.contact.contact_id;
+      return { contactId: createRes.data.contact.contact_id, contact: createRes.data.contact };
     }
     if (createRes.data?.message && createRes.data?.code !== 0) {
       lastZohoError = createRes.data.message;
@@ -130,7 +177,9 @@ async function resolveZohoCustomerId(pi) {
   try {
     const firstRes = await zohoRequest({ path: '/books/v3/contacts?per_page=1' });
     if (firstRes.ok && firstRes.data?.contacts?.[0]?.contact_id) {
-      return firstRes.data.contacts[0].contact_id;
+      const firstId = firstRes.data.contacts[0].contact_id;
+      const fullContact = await fetchContactDetail(firstId);
+      return { contactId: firstId, contact: fullContact };
     }
     if (firstRes.data?.message && firstRes.data?.code !== 0) {
       lastZohoError = firstRes.data.message;
@@ -260,8 +309,10 @@ export async function pushPiToZoho(piData) {
   const cleanPiNo = String(piData.piNo).trim();
   console.log(`[Zoho Push] Starting 1-way push for PI: ${cleanPiNo}...`);
 
-  // 1. Resolve Customer Contact ID in Zoho Books
-  const customerId = await resolveZohoCustomerId(piData);
+  // 1. Resolve Customer Contact in Zoho Books
+  const customerResolution = await resolveZohoCustomerId(piData);
+  const customerId = customerResolution.contactId || customerResolution;
+  const contactObj = customerResolution.contact || {};
 
   // 2. Fetch Active Zoho Taxes and determine Tax Specification
   const activeTaxes = await fetchActiveZohoTaxes();
@@ -324,21 +375,39 @@ export async function pushPiToZoho(piData) {
     });
   }
 
-  // 4. Build Zoho Books Estimate Payload
+  // 4. Resolve structured Billing & Shipping addresses with fallbacks
+  const rawBilling = piData.billingAddress || (piData.sameAsBilling ? piData.deliveryAddress : null) || piData.deliveryAddress;
+  const rawShipping = piData.deliveryAddress || (piData.sameAsBilling ? piData.billingAddress : null) || piData.billingAddress;
+
+  const parsedBilling = parseToZohoAddress(rawBilling, contactObj.billing_address);
+  const parsedShipping = parseToZohoAddress(rawShipping, contactObj.shipping_address || contactObj.billing_address || parsedBilling);
+
+  // If one of them has an address and the other is blank, cross-copy so neither Bill To nor Ship To is empty
+  if (!parsedBilling.address && parsedShipping.address) {
+    Object.assign(parsedBilling, parsedShipping);
+  }
+  if (!parsedShipping.address && parsedBilling.address) {
+    Object.assign(parsedShipping, parsedBilling);
+  }
+
+  // 5. Build Zoho Books Estimate Payload
   const zohoPayload = {
     customer_id: customerId,
     estimate_number: cleanPiNo,
     date: formatZohoDate(piData.piDate),
     expiry_date: (piData.expDate || piData.validUntilDate) ? formatZohoDate(piData.expDate || piData.validUntilDate) : undefined,
     line_items: lineItems,
-    notes: (piData.remarks || piData.notes || `Proforma Invoice ${cleanPiNo} generated via BUSINZ`).slice(0, 80)
+    notes: (piData.remarks || piData.notes || `Proforma Invoice ${cleanPiNo} generated via BUSINZ`).slice(0, 80),
+    billing_address: parsedBilling,
+    shipping_address: parsedShipping
   };
 
-  // Truncated addresses (Rule: <= 80 characters)
-  const billingAddr = cleanZohoAddress(piData.billingAddress);
-  const deliveryAddr = cleanZohoAddress(piData.deliveryAddress);
-  if (billingAddr) zohoPayload.billing_address = { address: billingAddr };
-  if (deliveryAddr) zohoPayload.shipping_address = { address: deliveryAddr };
+  if (contactObj.billing_address?.address_id) {
+    zohoPayload.billing_address_id = contactObj.billing_address.address_id;
+  }
+  if (contactObj.shipping_address?.address_id) {
+    zohoPayload.shipping_address_id = contactObj.shipping_address.address_id;
+  }
 
   let zohoEstimate = null;
   let actionTaken = 'created';
