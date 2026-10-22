@@ -12,7 +12,7 @@ import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsDa
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
-import { fetchCustomersDeduplicated } from '../services/customerService';
+import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../services/customerService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 import { getNextSequence } from '../utils/sequenceGenerator';
 
@@ -1107,9 +1107,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           }
         } catch (_) {}
 
-        // 2. Fetch authoritative customers from backend with deduplication & caching (Phase B1 & B2)
+        // 2. Fetch initial top-60 customers from backend with deduplication & caching (Phase B4)
         try {
-          const list = await fetchCustomersDeduplicated('/api/customers');
+          const list = await searchCustomers({ limit: 60 });
           if (Array.isArray(list) && list.length > 0) {
             list.forEach(register);
           }
@@ -4114,7 +4114,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           if (searchCustTimerRef.current) clearTimeout(searchCustTimerRef.current);
                           searchCustTimerRef.current = setTimeout(async () => {
                             try {
-                              const matches = await fetchCustomersDeduplicated(`/api/customers?q=${encodeURIComponent(q)}`);
+                              const matches = await searchCustomers({ query: q, limit: 50 });
                               if (Array.isArray(matches) && matches.length > 0) {
                                 setCustomerList(prev => {
                                   const map = new Map();

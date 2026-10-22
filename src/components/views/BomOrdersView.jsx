@@ -18,7 +18,7 @@ import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
 import ModernDateRangePicker from '../ModernDateRangePicker';
-import { fetchCustomersDeduplicated } from '../../services/customerService';
+import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../../services/customerService';
 import { is5PctSolarProduct } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import LrUploadPopupModal from './LrUploadPopupModal';
@@ -321,11 +321,12 @@ export default function BomOrdersView(props) {
 
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
+  const bomCustSearchTimerRef = useRef(null);
 
-  // Lazy-load customer list only when Create BOM Form is opened (zero impact on main table)
+  // Lazy-load initial 60 customers only when Create BOM Form is opened (Phase B4: ~34 KB instead of 4.42 MB)
   useEffect(() => {
     if (!showBOMForm || customerList.length > 0) return;
-    fetchCustomersDeduplicated('/api/customers')
+    searchCustomers({ limit: 60 })
       .then(custs => {
         if (Array.isArray(custs) && custs.length > 0) setCustomerList(custs);
       })
@@ -3079,9 +3080,33 @@ export default function BomOrdersView(props) {
                   const target = (val || '').toLowerCase().trim();
                   if (!target) return;
 
+                  // Phase B4: Debounced server search as user types
+                  if (target.length >= 2) {
+                    if (bomCustSearchTimerRef.current) clearTimeout(bomCustSearchTimerRef.current);
+                    bomCustSearchTimerRef.current = setTimeout(async () => {
+                      try {
+                        const matches = await searchCustomers({ query: val, limit: 50 });
+                        if (Array.isArray(matches) && matches.length > 0) {
+                          setCustomerList(prev => {
+                            const map = new Map();
+                            (prev || []).forEach(p => {
+                              const k = (p.customerCode || p.id || p.code || p.companyName || '').toLowerCase().trim();
+                              if (k) map.set(k, p);
+                            });
+                            matches.forEach(m => {
+                              const k = (m.customerCode || m.id || m.code || m.companyName || '').toLowerCase().trim();
+                              if (k && !map.has(k)) map.set(k, m);
+                            });
+                            return Array.from(map.values());
+                          });
+                        }
+                      } catch (_) {}
+                    }, 250);
+                  }
+
                   const chosen = customerList.find(c => {
-                    const code = (c.code || '').toLowerCase().trim();
-                    const c2 = (c.c2 || '').toLowerCase().trim();
+                    const code = (c.code || c.customerCode || '').toLowerCase().trim();
+                    const c2 = (c.c2 || c.companyName || '').toLowerCase().trim();
                     const cName = (c.customerName || '').toLowerCase().trim();
                     const comp = (c.companyName || '').toLowerCase().trim();
                     return code === target || c2 === target || cName === target || comp === target ||

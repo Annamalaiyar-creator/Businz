@@ -186,6 +186,47 @@ export async function getCustomers(context = {}) {
 }
 
 /**
+ * Phase B4: Server-Side Customer Search for Dropdowns & Autocomplete
+ * 
+ * - When query is empty, fetches initial top-50 recent customers (?limit=50, ~34 KB instead of 4.42 MB).
+ * - When query is provided, searches server-side with debounce (?q=query&limit=50, ~2-17 KB).
+ * - Supports AbortSignal to cancel outdated network queries.
+ * - Deduplicated and cached in memory.
+ * 
+ * @param {Object} [options={}]
+ * @param {string} [options.query=''] - Search term (matches name, code, gst, phone, contact, city)
+ * @param {number} [options.limit=50] - Result limit (default 50)
+ * @param {AbortSignal} [options.signal] - Abort controller signal
+ * @param {Object} [options.context={}] - User/Role context
+ * @returns {Promise<Array>} Matching customers
+ */
+export async function searchCustomers({ query = '', limit = 50, signal, context = {} } = {}) {
+  const q = String(query || '').trim();
+  const url = q 
+    ? `/api/customers?q=${encodeURIComponent(q)}&limit=${limit}`
+    : `/api/customers?limit=${limit}`;
+
+  return fetchCustomersDeduplicated(url, { signal }, context);
+}
+
+/**
+ * Phase B4: Fetch Complete Customer Details by code or ID
+ * Ensures all billing address, delivery address, GSTIN and contact details are available.
+ * 
+ * @param {string} customerCodeOrId
+ * @returns {Promise<Object|null>} Full customer record
+ */
+export async function getCustomerDetails(customerCodeOrId) {
+  if (!customerCodeOrId) return null;
+  const q = String(customerCodeOrId).trim();
+  const list = await fetchCustomersDeduplicated(`/api/customers?q=${encodeURIComponent(q)}&limit=1`);
+  if (Array.isArray(list) && list.length > 0) {
+    return list[0];
+  }
+  return null;
+}
+
+/**
  * Check active count of in-flight customer requests (for testing/telemetry)
  */
 export function getActiveInFlightCount() {
