@@ -18,6 +18,7 @@ import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
 import ModernDateRangePicker from '../ModernDateRangePicker';
+import { fetchCustomersDeduplicated } from '../../services/customerService';
 import { is5PctSolarProduct } from '../PerformaInvoiceView';
 import VRMBomPrintTemplate, { VRMBomPrintSheet } from '../VRMBomPrintTemplate';
 import LrUploadPopupModal from './LrUploadPopupModal';
@@ -324,8 +325,7 @@ export default function BomOrdersView(props) {
   // Lazy-load customer list only when Create BOM Form is opened (zero impact on main table)
   useEffect(() => {
     if (!showBOMForm || customerList.length > 0) return;
-    fetch('/api/customers')
-      .then(res => res.ok ? res.json() : [])
+    fetchCustomersDeduplicated('/api/customers')
       .then(custs => {
         if (Array.isArray(custs) && custs.length > 0) setCustomerList(custs);
       })

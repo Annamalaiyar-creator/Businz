@@ -1,6 +1,7 @@
 import { USER_ROLES_CONFIG } from '../components/LoginScreen';
 import { fetchCloudStore, saveCloudStore } from '../utils/supabaseDataSync';
 import { registerActiveSession, revokeSession } from './sessionService';
+import { clearCustomerCacheOnLogout } from './customerService';
 
 /**
  * ControlRoom Authentication & Login Service
@@ -236,6 +237,7 @@ export const logoutUser = () => {
     if (sesId) {
       revokeSession(sesId);
     }
+    clearCustomerCacheOnLogout();
     localStorage.removeItem('controlroom_is_authenticated');
     localStorage.removeItem('controlroom_user_role');
     localStorage.removeItem('controlroom_logged_user');

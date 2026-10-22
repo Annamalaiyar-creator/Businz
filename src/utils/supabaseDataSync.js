@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient.js';
 import { getFinancialYear, formatSequenceCode, extractMaxSequence } from './sequenceGenerator.js';
+import { fetchCustomersDeduplicated, invalidateCustomerCache } from '../services/customerService.js';
 
 // Canonical column projection for BOM list/table queries (includes accounts_verification JSON for full metadata & extra data retention)
 export const BOM_SUMMARY_COLUMNS = 'id, code, bom_code, source_pi_no, date, delivery_date, customer_name, company_name, contact_person, gst_no, mobile, email, billing_address, billing_address_obj, delivery_address, delivery_address_obj, delivery_address_proof_doc, payment_proof_doc, status, sales_confirmed, sales_confirmed_at, sales_person, sales_person_code, created_by, created_by_id, sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, balance_amount, partial_amount, credit_days, credit_due_date, payment_type, remarks, stock_blocked, stock_blocked_at, invoice_confirmed, invoice_deducted, stock_deducted, preset_name, preset_kit_price, preset_set_count, preset_groups, transport_mode, transport_scope, transporter_name, vehicle_no, lr_no, items, payments, dispatch_packing, accounts_verification, created_at, updated_at';
@@ -1247,17 +1248,11 @@ export async function fetchBomAccountsVerification(orderId) {
 export async function fetchCloudStore(storeKey, fallbackData = []) {
   // CANONICAL CUSTOMER READ PATH: Query local backend proxy first (Zero PostgREST egress)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
-    // 1. Try local server memory cache first (Zero Supabase PostgREST egress)
+    // 1. Try local server memory cache first with request deduplication and scoped in-memory caching (Phase B1 & B2)
     try {
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch('/api/customers', { signal: controller.signal }).catch(() => null);
-      clearTimeout(tId);
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        if (json && Array.isArray(json) && json.length > 0) {
-          return json;
-        }
+      const data = await fetchCustomersDeduplicated('/api/customers');
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
       }
     } catch (_) {}
 
@@ -1491,6 +1486,7 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
 
   // CANONICAL CUSTOMER WRITE PATH: Direct normalized upsert (Rule #2: 1 record = 1 targeted write)
   if (storeKey === 'customer_store' || storeKey === 'crm_customers') {
+    invalidateCustomerCache();
     try {
       if (Array.isArray(storeData)) {
         // If an array is passed, perform a single fast batch call to the backend API instead of 130 sequential network requests

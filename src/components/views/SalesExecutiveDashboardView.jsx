@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { fetchCustomersDeduplicated } from '../../services/customerService';
 
 // Fast shallow list equality check to prevent unnecessary React re-renders and visual data flickering
 function areItemListsEqual(prev, next, idKey = 'id') {
@@ -219,8 +220,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             return [];
           })
           .catch(() => fetchCloudStore('invoice_store', [])),
-        fetchWithTimeout('/api/customers', { timeout: 8000 })
-          .then(r => r.json())
+        fetchCustomersDeduplicated('/api/customers')
           .then(j => Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []))
           .catch(() => fetchCloudStore('customer_store', [])),
         fetchWithTimeout('/api/boms', { timeout: 5000 })

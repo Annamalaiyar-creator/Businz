@@ -12,6 +12,7 @@ import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsDa
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
+import { fetchCustomersDeduplicated } from '../services/customerService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 import { getNextSequence } from '../utils/sequenceGenerator';
 
@@ -1106,14 +1107,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           }
         } catch (_) {}
 
-        // 2. Fetch authoritative customers from backend
+        // 2. Fetch authoritative customers from backend with deduplication & caching (Phase B1 & B2)
         try {
-          const res = await fetch('/api/customers');
-          if (res.ok) {
-            const list = await res.json();
-            if (Array.isArray(list) && list.length > 0) {
-              list.forEach(register);
-            }
+          const list = await fetchCustomersDeduplicated('/api/customers');
+          if (Array.isArray(list) && list.length > 0) {
+            list.forEach(register);
           }
         } catch (_) {}
 
@@ -4116,23 +4114,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           if (searchCustTimerRef.current) clearTimeout(searchCustTimerRef.current);
                           searchCustTimerRef.current = setTimeout(async () => {
                             try {
-                              const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`);
-                              if (res.ok) {
-                                const matches = await res.json();
-                                if (Array.isArray(matches) && matches.length > 0) {
-                                  setCustomerList(prev => {
-                                    const map = new Map();
-                                    (prev || []).forEach(p => {
-                                      const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
-                                      if (k) map.set(k, p);
-                                    });
-                                    matches.forEach(m => {
-                                      const k = (m.customerCode || m.id || m.companyName || m.name || '').toLowerCase().trim();
-                                      if (k && !map.has(k)) map.set(k, m);
-                                    });
-                                    return Array.from(map.values());
+                              const matches = await fetchCustomersDeduplicated(`/api/customers?q=${encodeURIComponent(q)}`);
+                              if (Array.isArray(matches) && matches.length > 0) {
+                                setCustomerList(prev => {
+                                  const map = new Map();
+                                  (prev || []).forEach(p => {
+                                    const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
+                                    if (k) map.set(k, p);
                                   });
-                                }
+                                  matches.forEach(m => {
+                                    const k = (m.customerCode || m.id || m.companyName || m.name || '').toLowerCase().trim();
+                                    if (k && !map.has(k)) map.set(k, m);
+                                  });
+                                  return Array.from(map.values());
+                                });
                               }
                             } catch (_) {}
                           }, 250);

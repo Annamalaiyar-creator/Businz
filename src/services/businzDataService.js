@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, saveCloudInvoiceRow } from '../utils/supabaseDataSync';
+import { fetchCustomersDeduplicated, invalidateCustomerCache } from './customerService';
 
 /**
  * Universal Native Data Service for BUSINZ.
@@ -326,14 +327,11 @@ export async function saveVendor(vendor) {
 // 3. CUSTOMERS
 // ---------------------------
 export async function getCustomers() {
-  // 1. Try BUSINZ backend endpoint
+  // 1. Try BUSINZ backend endpoint with deduplication and in-memory cache (Phase B1 & B2)
   try {
-    const res = await fetch('/api/customers');
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (Array.isArray(data) && data.length > 0) {
-        return data;
-      }
+    const data = await fetchCustomersDeduplicated('/api/customers');
+    if (Array.isArray(data) && data.length > 0) {
+      return data;
     }
   } catch (_) {}
 
@@ -353,6 +351,9 @@ export async function getCustomers() {
 export async function saveCustomer(customer) {
   if (!customer) return;
   try {
+    // Invalidate in-memory cache on customer mutation (Phase B2)
+    invalidateCustomerCache();
+
     // Save single customer directly to public.customers (single-record upsert)
     saveCloudStore('customer_store', customer);
 
