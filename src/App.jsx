@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, Component, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import KPIGrid from './components/KPIGrid';
@@ -7,33 +7,69 @@ import POStatusOverview from './components/POStatusOverview';
 import RecentPurchaseOrders from './components/RecentPurchaseOrders';
 import SidebarRightColumn from './components/SidebarRightColumn';
 import MaterialReorderAlerts from './components/MaterialReorderAlerts';
-import PerformaInvoiceView from './components/PerformaInvoiceView';
-import PurchaseOrdersView from './components/PurchaseOrdersView';
-import OtherViews from './components/OtherViews';
-import DashboardFullReference from './components/DashboardFullReference';
-import InventoryAutoConversion from './components/InventoryAutoConversion';
-import CreateWorkOrderPage from './components/CreateWorkOrderPage';
-import VRMTemplateStudioView from './components/VRMTemplateStudioView';
-
-import ProductionAdminView from './components/ProductionAdminView';
-import SalesExecutiveDashboardView from './components/views/SalesExecutiveDashboardView';
-import AccountsFinanceDashboard from './components/views/AccountsFinanceDashboard';
-import BillingDashboardView from './components/views/BillingDashboardView';
-import CeoExecutiveDashboardView from './components/views/CeoExecutiveDashboardView';
-import TechSupportDashboardView from './components/views/TechSupportDashboardView';
 import LoginScreen from './components/LoginScreen';
-import DeveloperPortalView from './components/DeveloperPortalView';
 import NotificationToast from './components/NotificationToast';
 import WorkflowNotificationBanner from './components/WorkflowNotificationBanner';
 
+// Route/View-Level Code Splitting via React.lazy() (Preserves all behavior, isolates bundle weight)
+const PerformaInvoiceView = lazy(() => import('./components/PerformaInvoiceView'));
+const PurchaseOrdersView = lazy(() => import('./components/PurchaseOrdersView'));
+const OtherViews = lazy(() => import('./components/OtherViews'));
+const DashboardFullReference = lazy(() => import('./components/DashboardFullReference'));
+const InventoryAutoConversion = lazy(() => import('./components/InventoryAutoConversion'));
+const VRMTemplateStudioView = lazy(() => import('./components/VRMTemplateStudioView'));
+const ProductionAdminView = lazy(() => import('./components/ProductionAdminView'));
+const SalesExecutiveDashboardView = lazy(() => import('./components/views/SalesExecutiveDashboardView'));
+const AccountsFinanceDashboard = lazy(() => import('./components/views/AccountsFinanceDashboard'));
+const BillingDashboardView = lazy(() => import('./components/views/BillingDashboardView'));
+const CeoExecutiveDashboardView = lazy(() => import('./components/views/CeoExecutiveDashboardView'));
+const TechSupportDashboardView = lazy(() => import('./components/views/TechSupportDashboardView'));
+const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
+
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw } from 'lucide-react';
-import { useEffect, Component } from 'react';
 import { heartbeatActiveSession, registerActiveSession, revokeSession } from './services/sessionService';
 import { getPurchaseOrders, getItems } from './services/businzDataService';
 import { fetchMasterBranding } from './services/brandingService';
 import { initRealtimeSync } from './services/realtimeSyncService';
 import { fetchCloudStore } from './utils/supabaseDataSync';
 import { CANONICAL_PRODUCT_ALIASES } from './utils/vrmProductsData';
+
+function AppViewLoadingFallback({ activeTab }) {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '320px',
+      padding: '40px',
+      backgroundColor: '#FFFFFF',
+      borderRadius: '16px',
+      border: '1px solid #E2E8F0',
+      margin: '20px 0',
+      boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.04)'
+    }}>
+      <div style={{
+        width: '34px',
+        height: '34px',
+        border: '3px solid #E2E8F0',
+        borderTopColor: '#0E7490',
+        borderRadius: '50%',
+        animation: 'controlroom_spin 0.8s linear infinite'
+      }} />
+      <style>{`@keyframes controlroom_spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{
+        marginTop: '16px',
+        fontSize: '13px',
+        fontWeight: '600',
+        color: '#475569',
+        fontFamily: "'DM Sans', -apple-system, sans-serif"
+      }}>
+        Loading {activeTab || 'BUSINZ Dashboard'}...
+      </div>
+    </div>
+  );
+}
 
 class AppErrorBoundary extends Component {
   constructor(props) {
@@ -563,15 +599,17 @@ function App() {
   if (isDevRole && devViewMode === 'console') {
     return (
       <>
-        <DeveloperPortalView 
-          userRole={userRole} 
-          onSignOut={handleSignOut} 
-          showCustomAlert={showCustomAlert} 
-          onSwitchToErp={() => {
-            setDevViewMode('erp');
-            localStorage.setItem('controlroom_dev_view_mode', 'erp');
-          }}
-        />
+        <Suspense fallback={<AppViewLoadingFallback activeTab="Developer Console" />}>
+          <DeveloperPortalView 
+            userRole={userRole} 
+            onSignOut={handleSignOut} 
+            showCustomAlert={showCustomAlert} 
+            onSwitchToErp={() => {
+              setDevViewMode('erp');
+              localStorage.setItem('controlroom_dev_view_mode', 'erp');
+            }}
+          />
+        </Suspense>
         {toastAlert && (
           <NotificationToast 
             alert={toastAlert} 
@@ -669,66 +707,68 @@ function App() {
 
         {/* Scrollable Center Content Pane */}
         <div className={`content-pane ${(!activeTab.includes('Dashboard')) ? 'procurement-layout' : ''} ${(activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer') ? 'templates-view-pane' : ''} ${(activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') ? 'dashboard-view-pane' : ''}`}>
-          {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
-            <ProductionAdminView activeTab={activeTab} userRole={userRole} />
-          ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
-            <PerformaInvoiceView 
-              userRole={userRole}
-              onNavigateTab={handleTabChange}
-              targetPiNo={targetPiNo}
-              clearTargetPi={() => setTargetPiNo(null)}
-              onConvertToBom={(piData) => {
-                setConvertingPiData(piData);
-                handleTabChange('BOM Orders');
-              }} 
-            />
-          ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer' || activeTab === 'PO Template') ? (
-            (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) ? (
-              <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-            ) : (
-              <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : (String(userRole || '').toLowerCase().includes('dispatch') ? 'Dispatch Orders' : 'Proforma Invoice'))} />
-            )
-          ) : activeTab === 'Purchase Orders' ? (
-            <PurchaseOrdersView 
-              userRole={userRole} 
-              targetPoNo={targetPoNo} 
-              clearTargetPo={() => setTargetPoNo(null)} 
-              targetPoTab={targetPoTab}
-              clearTargetPoTab={() => setTargetPoTab(null)}
-              onNavigateTab={handleTabChange}
-            />
-          ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
-            <InventoryAutoConversion />
-          ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
-            <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard' && activeTab !== 'Tech Support Dashboard') ? (
-            ((userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) && (activeTab === 'BOM Orders' || activeTab === 'BOM' || activeTab === 'Sales BOM' || activeTab === 'BOM / Routing')) ? (
-              <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-            ) : (
-              <OtherViews 
-                activeTab={activeTab} 
-                onChangeTab={handleTabChange} 
-                userRole={userRole} 
-                convertingPiData={convertingPiData}
-                onClearConvertingPiData={() => setConvertingPiData(null)}
-                targetBomCode={targetBomCode}
-                clearTargetBom={() => setTargetBomCode(null)}
+          <Suspense fallback={<AppViewLoadingFallback activeTab={activeTab} />}>
+            {(activeTab === 'Dashboard' || activeTab === 'Production Dashboard' || activeTab === 'Dispatch Dashboard' || activeTab === 'Supervisor Dashboard' || activeTab === 'Operator Workspace' || activeTab === 'Floor Employee') && (userRole.includes('Production') || userRole === 'Dispatch Head' || userRole === 'Floor Employee' || userRole === 'Machine Operator' || userRole === 'Production Head' || userRole === 'Floor Supervisor') ? (
+              <ProductionAdminView activeTab={activeTab} userRole={userRole} />
+            ) : (activeTab === 'Performa Invoice' || activeTab === 'Proforma Invoice') ? (
+              <PerformaInvoiceView 
+                userRole={userRole}
+                onNavigateTab={handleTabChange}
                 targetPiNo={targetPiNo}
-                itemsList={itemsList}
-                purchaseOrders={purchaseOrders}
+                clearTargetPi={() => setTargetPiNo(null)}
+                onConvertToBom={(piData) => {
+                  setConvertingPiData(piData);
+                  handleTabChange('BOM Orders');
+                }} 
               />
-            )
-          ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
-            <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts'))) ? (
-            <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
-            <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : ((activeTab === 'Dashboard' || activeTab === 'Tech Support Dashboard') && (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support'))) ? (
-            <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
-          ) : (
-            <DashboardFullReference userRole={userRole} />
-          )}
+            ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer' || activeTab === 'PO Template') ? (
+              (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) ? (
+                <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+              ) : (
+                <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : (String(userRole || '').toLowerCase().includes('dispatch') ? 'Dispatch Orders' : 'Proforma Invoice'))} />
+              )
+            ) : activeTab === 'Purchase Orders' ? (
+              <PurchaseOrdersView 
+                userRole={userRole} 
+                targetPoNo={targetPoNo} 
+                clearTargetPo={() => setTargetPoNo(null)} 
+                targetPoTab={targetPoTab}
+                clearTargetPoTab={() => setTargetPoTab(null)}
+                onNavigateTab={handleTabChange}
+              />
+            ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
+              <InventoryAutoConversion />
+            ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
+              <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard' && activeTab !== 'Tech Support Dashboard') ? (
+              ((userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) && (activeTab === 'BOM Orders' || activeTab === 'BOM' || activeTab === 'Sales BOM' || activeTab === 'BOM / Routing')) ? (
+                <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+              ) : (
+                <OtherViews 
+                  activeTab={activeTab} 
+                  onChangeTab={handleTabChange} 
+                  userRole={userRole} 
+                  convertingPiData={convertingPiData}
+                  onClearConvertingPiData={() => setConvertingPiData(null)}
+                  targetBomCode={targetBomCode}
+                  clearTargetBom={() => setTargetBomCode(null)}
+                  targetPiNo={targetPiNo}
+                  itemsList={itemsList}
+                  purchaseOrders={purchaseOrders}
+                />
+              )
+            ) : (activeTab === 'Billing Dashboard' || ((activeTab === 'Dashboard') && (userRole === 'Invoice Executive' || userRole === 'Billing'))) ? (
+              <BillingDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : (activeTab === 'Finance Dashboard' || ((activeTab === 'Dashboard' || activeTab === 'Finance & Accounts') && (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts'))) ? (
+              <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : ((activeTab === 'Dashboard' || activeTab === 'Executive Dashboard') && (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director')) ? (
+              <CeoExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : ((activeTab === 'Dashboard' || activeTab === 'Tech Support Dashboard') && (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support'))) ? (
+              <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+            ) : (
+              <DashboardFullReference userRole={userRole} />
+            )}
+          </Suspense>
         </div>
       </main>
 

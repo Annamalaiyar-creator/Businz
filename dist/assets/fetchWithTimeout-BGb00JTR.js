@@ -1,0 +1,1 @@
+async function e(e,t={}){let{timeout:n=25e3,...r}=t,i=new AbortController,a=setTimeout(()=>i.abort(),n);try{let t=await fetch(e,{...r,signal:i.signal});return clearTimeout(a),t}catch(e){throw clearTimeout(a),e}}export{e as t};

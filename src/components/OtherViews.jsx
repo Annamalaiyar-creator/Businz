@@ -1,27 +1,65 @@
-import React, { Component } from 'react';
-import RfpView from './views/RfpView';
-import VendorManagementView from './views/VendorManagementView';
-import QuotationsView from './views/QuotationsView';
-import GoodsReceiptNoteView from './views/GoodsReceiptNoteView';
-import InvoiceUploadView from './views/InvoiceUploadView';
-import PaymentsView from './views/PaymentsView';
-import VendorPerformanceView from './views/VendorPerformanceView';
-import SpendAnalyticsView from './views/SpendAnalyticsView';
-import MaterialReorderView from './views/MaterialReorderView';
-import StockStatusView from './views/StockStatusView';
-import PriceComparisonView from './views/PriceComparisonView';
-import ItemsDirectoryView from './views/ItemsDirectoryView';
-import ProcurementReportsView from './views/ProcurementReportsView';
-import DispatchDashboardView from './views/DispatchDashboardView';
-import ProductionViewsEngine from './views/ProductionViewsEngine';
-import BomOrdersView from './views/BomOrdersView';
-import PresetManagementView from './views/PresetManagementView';
-import SalesCrmEngine from './crm/SalesCrmEngine';
-import BackupVaultView from './views/BackupVaultView';
-import SupportMailInboxView from './views/SupportMailInboxView';
-import FacebookMetaIntegrationView from './views/FacebookMetaIntegrationView';
-import IntegrationsHubView from './views/IntegrationsHubView';
+import React, { Component, lazy, Suspense } from 'react';
 import { RefreshCw } from 'lucide-react';
+
+const RfpView = lazy(() => import('./views/RfpView'));
+const VendorManagementView = lazy(() => import('./views/VendorManagementView'));
+const QuotationsView = lazy(() => import('./views/QuotationsView'));
+const GoodsReceiptNoteView = lazy(() => import('./views/GoodsReceiptNoteView'));
+const InvoiceUploadView = lazy(() => import('./views/InvoiceUploadView'));
+const PaymentsView = lazy(() => import('./views/PaymentsView'));
+const VendorPerformanceView = lazy(() => import('./views/VendorPerformanceView'));
+const SpendAnalyticsView = lazy(() => import('./views/SpendAnalyticsView'));
+const MaterialReorderView = lazy(() => import('./views/MaterialReorderView'));
+const StockStatusView = lazy(() => import('./views/StockStatusView'));
+const PriceComparisonView = lazy(() => import('./views/PriceComparisonView'));
+const ItemsDirectoryView = lazy(() => import('./views/ItemsDirectoryView'));
+const ProcurementReportsView = lazy(() => import('./views/ProcurementReportsView'));
+const DispatchDashboardView = lazy(() => import('./views/DispatchDashboardView'));
+const ProductionViewsEngine = lazy(() => import('./views/ProductionViewsEngine'));
+const BomOrdersView = lazy(() => import('./views/BomOrdersView'));
+const PresetManagementView = lazy(() => import('./views/PresetManagementView'));
+const SalesCrmEngine = lazy(() => import('./crm/SalesCrmEngine'));
+const BackupVaultView = lazy(() => import('./views/BackupVaultView'));
+const SupportMailInboxView = lazy(() => import('./views/SupportMailInboxView'));
+const FacebookMetaIntegrationView = lazy(() => import('./views/FacebookMetaIntegrationView'));
+const IntegrationsHubView = lazy(() => import('./views/IntegrationsHubView'));
+
+function ViewLoadingFallback({ activeTab }) {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '260px',
+      padding: '36px',
+      backgroundColor: '#FFFFFF',
+      borderRadius: '16px',
+      border: '1px solid #E2E8F0',
+      margin: '16px 0',
+      boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.04)'
+    }}>
+      <div style={{
+        width: '32px',
+        height: '32px',
+        border: '3px solid #E2E8F0',
+        borderTopColor: '#0E7490',
+        borderRadius: '50%',
+        animation: 'controlroom_spin 0.8s linear infinite'
+      }} />
+      <style>{`@keyframes controlroom_spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{
+        marginTop: '14px',
+        fontSize: '13px',
+        fontWeight: '600',
+        color: '#475569',
+        fontFamily: "'DM Sans', -apple-system, sans-serif"
+      }}>
+        Loading {activeTab || 'module'}...
+      </div>
+    </div>
+  );
+}
 
 class ViewErrorBoundary extends Component {
   constructor(props) {
@@ -100,7 +138,8 @@ export default function OtherViews(props) {
 
   return (
     <ViewErrorBoundary activeTab={activeTab}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+      <Suspense fallback={<ViewLoadingFallback activeTab={activeTab} />}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
         {activeTab === 'Requests for Purchase' && <RfpView {...props} />}
         {activeTab === 'Vendor Management' && <VendorManagementView {...props} />}
         {(activeTab === 'Goods Receipt Note' || activeTab === 'Goods Receipt Note (GRN)') && <GoodsReceiptNoteView {...props} />}
@@ -211,6 +250,7 @@ export default function OtherViews(props) {
           <ProductionViewsEngine {...props} />
         )}
       </div>
+      </Suspense>
     </ViewErrorBoundary>
   );
 }
