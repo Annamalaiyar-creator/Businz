@@ -1,101 +1,80 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search, Filter, Plus, Phone, MessageSquare, Calendar, ArrowRight,
   CheckCircle2, Clock, AlertCircle, Building2, User, Mail, ExternalLink,
   ChevronRight, RefreshCw, X, ShieldAlert, Sparkles, Tag, Eye, MoreHorizontal,
   FileText, Check, ChevronDown, Zap, Send, TrendingUp, Layers, Award,
-  Trash2, UserCheck, RotateCcw, Download, Printer, MapPin
+  Trash2, UserCheck, RotateCcw, Download, Printer, MapPin, ChevronLeft,
+  ChevronsLeft, ChevronsRight, AlertTriangle, Flame, PhoneCall, Users,
+  FileCheck2, Compass, ShieldCheck, HelpCircle
 } from 'lucide-react';
-import { getNextSequence } from '../../utils/sequenceGenerator';
 
 const STRUCTURE_CATEGORIES = [
   'Aluminium Mounting Structures',
   'Tin Shed Clamping Systems',
   'HDG Ground Mounting Structures',
   'Walkways & Safety Handrails',
-  'Ballasted Rooftop Systems'
-];
-
-const SALES_REPRESENTATIVES = [
-  'Mohith JV',
-  'Vijay',
-  'Gowtham',
-  'Suresh Babu',
-  'Sales Representative'
+  'Ballasted Rooftop Systems',
+  'Solar Carport Structures',
+  'Custom OEM Mounting'
 ];
 
 export default function CrmLeadsView({
-  leads = [],
-  customers = [],
   userRole = 'Sales Executive',
-  onSaveLead,
-  onConvertLead,
-  onUpdateLeadStatus,
-  onBatchUpdateLeads,
-  onDeleteLeads,
+  customers = [],
   onNavigateTab,
-  onOpenWhatsAppChat,
-  isLoading = false
+  onOpenWhatsAppChat
 }) {
   // Current Logged In User Identity
+  const loggedInEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
   const loggedInUserName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const loggedInEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
-  // Resolve effective salesperson name
-  const effectiveSalesperson = (userRole === 'Sales Head' ? 'Vijay' : (loggedInUserName || '')).replace(/\s*\([^)]*\)/g, '').trim();
+  // Role Checks
+  const isCeo = ['ceo', 'md', 'managing director'].some(r => (userRole || '').toLowerCase().includes(r));
+  const isTechSupport = ['tech support', 'technical support'].some(r => (userRole || '').toLowerCase().includes(r));
+  const isSalesHead = (userRole || '').toLowerCase().includes('sales head');
+  const isTechAdmin = ['technical administrator', 'technical admin', 'developer'].some(r => (userRole || '').toLowerCase().includes(r));
+  const isSalesExec = !isCeo && !isTechSupport && !isSalesHead && !isTechAdmin;
 
-  // Check if role has multi-rep visibility privileges
-  const isManagerOrAdmin = ['ceo', 'md', 'managing director', 'admin', 'director', 'sales head'].some(r =>
-    (userRole || '').toLowerCase().includes(r) || loggedInUserName.toLowerCase().includes(r)
-  );
+  // Global Visibility Privileges
+  const hasGlobalView = isCeo || isTechSupport || isSalesHead || isTechAdmin;
+  const canAssign = isCeo || isTechSupport || isSalesHead || isTechAdmin;
 
-  // View scope: defaults to 'my' so user ONLY sees their assigned leads!
-  const [viewScope, setViewScope] = useState('my'); // 'my' | 'all'
+  // Master State from Authoritative PostgreSQL API
+  const [dbLeads, setDbLeads] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [salespersons, setSalespersons] = useState([]);
 
-  // Match lead against logged in user
-  const isLeadAssignedToMe = (lead) => {
-    if (!lead || !lead.assignedSalesperson) return false;
-    const rep = String(lead.assignedSalesperson).replace(/\s*\([^)]*\)/g, '').toLowerCase().trim();
-    const me = effectiveSalesperson.toLowerCase().trim();
-    if (rep === me) return true;
-    if (rep.includes(me) || me.includes(rep)) return true;
-    if (loggedInEmail && lead.assignedEmail && lead.assignedEmail.toLowerCase().trim() === loggedInEmail) return true;
-    return false;
-  };
-
-  // Scoped leads: strictly user's assigned leads by default!
-  const scopedLeads = useMemo(() => {
-    if (viewScope === 'all' && isManagerOrAdmin) {
-      return leads;
-    }
-    return leads.filter(isLeadAssignedToMe);
-  }, [leads, viewScope, isManagerOrAdmin, effectiveSalesperson, loggedInEmail]);
-
-  // Search & Filter States matching PI/BOM
+  // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [leadTab, setLeadTab] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [sourceFilter, setSourceFilter] = useState('All');
-  const [selectedLeads, setSelectedLeads] = useState([]);
-  const [selectedLead, setSelectedLead] = useState(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulationToast, setSimulationToast] = useState(null);
+  const [assignedFilter, setAssignedFilter] = useState('All');
 
-  // Pagination State matching PI/BOM (Strictly [5, 10])
+  // Interactive Selection State
+  const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+
+  // Modals & Drawers
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showDetailDrawer, setShowDetailDrawer] = useState(false);
+  const [activeLead, setActiveLead] = useState(null);
+  const [leadDetailData, setLeadDetailData] = useState(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+
+  // Pagination State (Strictly [5, 10])
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState('');
 
-  // Bulk Reassign Modal State
-  const [showReassignModal, setShowReassignModal] = useState(false);
-  const [selectedRepToAssign, setSelectedRepToAssign] = useState(SALES_REPRESENTATIVES[0]);
+  // Notifications State
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
 
-  // Lead Create Modal State
-  const [createMode, setCreateMode] = useState('ai'); // 'ai' | 'manual'
-  const [aiPasteText, setAiPasteText] = useState('');
-  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-
-  const [newLeadForm, setNewLeadForm] = useState({
+  // Create Form State
+  const [createForm, setCreateForm] = useState({
     companyName: '',
     contactPerson: '',
     designation: '',
@@ -103,206 +82,229 @@ export default function CrmLeadsView({
     whatsapp: '',
     email: '',
     location: '',
-    source: 'WhatsApp Inbound',
+    source: 'Direct Inbound',
+    productRequirement: '50kW Aluminium Rooftop Mounting Structures',
     category: 'Aluminium Mounting Structures',
-    estimatedKw: '',
+    estimatedKw: '50',
     notes: '',
-    assignedSalesperson: effectiveSalesperson
+    priority: 'MEDIUM'
   });
 
-  const [dupWarning, setDupWarning] = useState(null);
-  const [newTimelineNote, setNewTimelineNote] = useState('');
+  // Assign Form State
+  const [assignForm, setAssignForm] = useState({
+    assignedToId: '',
+    assignedToName: '',
+    assignedToRole: 'Sales Executive',
+    reason: 'Assigned for prompt customer qualification'
+  });
 
-  // Duplicate Check
-  const handlePhoneOrEmailChange = (field, value) => {
-    setNewLeadForm(prev => ({ ...prev, [field]: value }));
-    const trimmed = String(value || '').trim().toLowerCase();
-    if (!trimmed || trimmed.length < 5) {
-      setDupWarning(null);
-      return;
-    }
+  // Activity Form State
+  const [activityForm, setActivityForm] = useState({
+    activityType: 'CALL',
+    callDurationSeconds: 180,
+    summary: '',
+    customerResponse: ''
+  });
 
-    const dupLead = leads.find(l => 
-      (field === 'phone' || field === 'whatsapp')
-        ? (l.phone?.replace(/\D/g, '') === trimmed.replace(/\D/g, '') || l.whatsapp?.replace(/\D/g, '') === trimmed.replace(/\D/g, ''))
-        : (l.email?.toLowerCase() === trimmed)
-    );
+  // Inbound Simulation State
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
 
-    const dupCustomer = customers.find(c =>
-      (field === 'phone' || field === 'whatsapp')
-        ? (c.primaryContact?.phone?.replace(/\D/g, '') === trimmed.replace(/\D/g, '') || c.primaryContact?.whatsapp?.replace(/\D/g, '') === trimmed.replace(/\D/g, ''))
-        : (c.primaryContact?.email?.toLowerCase() === trimmed)
-    );
-
-    if (dupLead) {
-      setDupWarning(`Notice: A lead already exists: "${dupLead.companyName}" (${dupLead.leadNumber}) assigned to ${dupLead.assignedSalesperson}.`);
-    } else if (dupCustomer) {
-      setDupWarning(`Notice: This contact is already an existing Customer: "${dupCustomer.companyName}" (${dupCustomer.customerCode}).`);
-    } else {
-      setDupWarning(null);
-    }
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // AI Auto-Extraction
-  const handleRunAiAnalysis = async () => {
-    if (!aiPasteText.trim()) return;
-    setIsAiAnalyzing(true);
+  // Fetch Authoritative Leads from Backend
+  const fetchLeads = async () => {
     try {
-      const res = await fetch('/api/crm/ai/analyze-enquiry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: aiPasteText })
-      });
-      const data = await res.json();
-      if (data?.analysis) {
-        setNewLeadForm(prev => ({
-          ...prev,
-          estimatedKw: data.analysis.estimatedKw || prev.estimatedKw || '',
-          category: data.analysis.category || prev.category,
-          companyName: data.analysis.companyName || prev.companyName || 'Solar Project Client',
-          location: data.analysis.location || prev.location || '',
-          phone: data.analysis.phone || prev.phone || '',
-          whatsapp: data.analysis.phone || prev.whatsapp || '',
-          notes: aiPasteText
-        }));
-      }
-    } catch (e) {
-      const clean = aiPasteText.toLowerCase();
-      const kwMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:kw|k\.w|kilowatt|megawatt|mw)/i);
-      const kw = kwMatch ? parseFloat(kwMatch[1]) : 100;
-      let cat = 'Aluminium Mounting Structures';
-      if (clean.includes('tin') || clean.includes('sheet') || clean.includes('shed')) cat = 'Tin Shed Clamping Systems';
-      else if (clean.includes('ground') || clean.includes('hdg')) cat = 'HDG Ground Mounting Structures';
+      setIsLoading(true);
+      const headers = {
+        'x-user-role': userRole,
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-name': loggedInUserName
+      };
 
-      setNewLeadForm(prev => ({
-        ...prev,
-        estimatedKw: kw,
-        category: cat,
-        notes: aiPasteText
-      }));
+      const res = await fetch('/api/crm/leads', { headers });
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data)) {
+        setDbLeads(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to load leads from database:', err);
     } finally {
-      setIsAiAnalyzing(false);
+      setIsLoading(false);
     }
   };
 
-  // Inbound Simulator
-  const handleSimulateInboundLead = async () => {
-    setIsSimulating(true);
+  // Fetch Salespersons for Assignment Dropdowns
+  const fetchSalespersons = async () => {
     try {
-      const samples = [
-        {
-          companyName: 'Surya Kiran Solar EPC',
-          contactPerson: 'Ramesh Kumar',
-          phone: '+91 98401 55678',
-          message: 'Need urgent proposal for 150 kW Aluminium Rooftop solar mounting structure for project in Hosur.',
-          source: 'WhatsApp Inbound'
-        },
-        {
-          companyName: 'SunPower Infrastructures Ltd',
-          contactPerson: 'Anand Varma',
-          phone: '+91 94432 11223',
-          message: 'RFQ: 350 kW Ground Mount Fixed Tilt HDG structures required for solar park near Coimbatore.',
-          source: 'IndiaMART Webhook'
-        },
-        {
-          companyName: 'GreenWatt Engineering Pvt Ltd',
-          contactPerson: 'Deepak Patel',
-          phone: '+91 98220 88990',
-          message: 'Inquiring for 80 kW Tin Shed Mini Rails with EPDM rubber and SS fasteners. Site in Sri City.',
-          source: 'VRM Website Form'
-        }
-      ];
-
-      const sample = samples[Math.floor(Math.random() * samples.length)];
-      const res = await fetch('/api/crm/leads/simulate-inbound', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...sample,
-          assignedSalesperson: effectiveSalesperson
-        })
-      });
-      const data = await res.json();
-      if (data?.lead && onSaveLead) {
-        const leadWithRep = {
-          ...data.lead,
-          assignedSalesperson: effectiveSalesperson
-        };
-        onSaveLead(leadWithRep);
-        setSimulationToast(`Inbound lead captured & pre-qualified for ${effectiveSalesperson}: "${leadWithRep.companyName}" (${leadWithRep.requirement})`);
-        setTimeout(() => setSimulationToast(null), 5000);
+      const res = await fetch('/api/crm/salespersons');
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.salespersons)) {
+        setSalespersons(json.salespersons);
       }
-    } catch (e) {
-      console.warn('Simulation notice:', e);
-    } finally {
-      setIsSimulating(false);
+    } catch (err) {
+      console.error('Failed to load salespersons:', err);
     }
   };
 
-  // Stage sub-tabs counts matching PI & BOM sub-tabs
-  const tabCounts = useMemo(() => {
-    return {
-      All: scopedLeads.length,
-      'New Lead': scopedLeads.filter(l => l.status === 'New Lead').length,
-      Contacted: scopedLeads.filter(l => l.status === 'Contacted').length,
-      Qualified: scopedLeads.filter(l => l.status === 'Qualified').length,
-      Converted: scopedLeads.filter(l => l.status === 'Converted').length,
-      Disqualified: scopedLeads.filter(l => l.status === 'Disqualified').length
-    };
-  }, [scopedLeads]);
-
-  // CSV Export matching PI & BOM
-  const handleExportCsv = () => {
-    const escapeCsv = (str) => {
-      if (str === null || str === undefined) return '""';
-      const s = String(str).replace(/"/g, '""');
-      return `"${s}"`;
-    };
-    const headers = ['Lead Number', 'Company Name', 'Contact Person', 'Phone', 'Email', 'Location', 'Solar Scope', 'Estimated kW', 'Estimated Value (INR)', 'Source', 'Sales Rep', 'Status', 'Created Date'];
-    const rows = filteredLeads.map(l => [
-      l.leadNumber,
-      l.companyName,
-      l.contactPerson,
-      l.phone,
-      l.email || '',
-      l.location || '',
-      l.category || '',
-      l.estimatedKw || '',
-      (l.estimatedValue || ((parseFloat(l.estimatedKw) || 50) * 2800)).toFixed(2),
-      l.source || '',
-      l.assignedSalesperson || '',
-      l.status || '',
-      l.createdAt ? l.createdAt.split('T')[0] : ''
-    ]);
-    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(escapeCsv).join(',')).join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Businz_Leads_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  // Fetch Notifications
+  const fetchNotifications = async () => {
+    if (!loggedInEmpId) return;
+    try {
+      const res = await fetch(`/api/crm/leads/notifications?employeeCode=${encodeURIComponent(loggedInEmpId)}`, {
+        headers: { 'x-user-emp-id': loggedInEmpId }
+      });
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.notifications)) {
+        setNotifications(json.notifications);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
+    }
   };
+
+  useEffect(() => {
+    fetchLeads();
+    fetchSalespersons();
+    fetchNotifications();
+
+    // Periodic Refresh every 45s
+    const timer = setInterval(() => {
+      fetchLeads();
+      fetchNotifications();
+    }, 45000);
+
+    return () => clearInterval(timer);
+  }, [userRole, loggedInEmpId]);
+
+  // Load Lead Detailed History for Drawer
+  const openLeadDetail = async (lead) => {
+    setActiveLead(lead);
+    setShowDetailDrawer(true);
+    setIsDetailLoading(true);
+    try {
+      const res = await fetch(`/api/crm/leads/${lead.id}`);
+      const json = await res.json();
+      if (json?.success && json.data) {
+        setLeadDetailData(json.data);
+      } else {
+        setLeadDetailData(lead);
+      }
+    } catch (err) {
+      setLeadDetailData(lead);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
+  // 12 KPI Metrics Calculation
+  const kpis = useMemo(() => {
+    const list = dbLeads || [];
+    const now = new Date();
+
+    const totalLeads = list.length;
+    const unassigned = list.filter(l => !l.assigned_to_user_id || l.status === 'New').length;
+    const assigned = list.filter(l => l.assigned_to_user_id && l.status === 'Assigned').length;
+    const contacted = list.filter(l => ['Contacted', 'In Progress', 'Qualified'].includes(l.status)).length;
+    const proposalSent = list.filter(l => l.status === 'Proposal Sent' || Number(l.quotes_sent || 0) > 0).length;
+    const revisions = list.reduce((sum, l) => sum + Number(l.total_revisions || 0), 0);
+    const converted = list.filter(l => l.status === 'Converted' || Number(l.quotes_accepted || 0) > 0).length;
+    const dropped = list.filter(l => ['Dropped', 'Lost', 'Disqualified'].includes(l.status)).length;
+    const unattended24h = list.filter(l => l.is_unattended_24h).length;
+    const escalated48h = list.filter(l => l.is_unattended_48h).length;
+
+    const followupsToday = list.filter(l => {
+      if (!l.next_followup_date) return false;
+      const d = new Date(l.next_followup_date);
+      return d.toDateString() === now.toDateString();
+    }).length;
+
+    const indiamartLeads = list.filter(l => (l.source || '').toLowerCase().includes('indiamart')).length;
+
+    return [
+      { label: 'Total Leads', val: totalLeads, color: '#0E7490', bg: '#ECFEFF', icon: Users },
+      { label: 'Unassigned', val: unassigned, color: '#D97706', bg: '#FEF3C7', icon: AlertCircle },
+      { label: 'Assigned Leads', val: assigned, color: '#2563EB', bg: '#EFF6FF', icon: UserCheck },
+      { label: 'In Progress', val: contacted, color: '#0284C7', bg: '#E0F2FE', icon: PhoneCall },
+      { label: 'Quotations Sent', val: proposalSent, color: '#7C3AED', bg: '#F3E8FF', icon: FileCheck2 },
+      { label: 'Quote Revisions', val: revisions, color: '#9333EA', bg: '#FAF5FF', icon: RotateCcw },
+      { label: 'Converted Won', val: converted, color: '#059669', bg: '#ECFDF5', icon: Award },
+      { label: 'Dropped / Lost', val: dropped, color: '#64748B', bg: '#F1F5F9', icon: Trash2 },
+      { label: '24h Inactive', val: unattended24h, color: '#EA580C', bg: '#FFF7ED', icon: Clock },
+      { label: '48h Escalated', val: escalated48h, color: '#DC2626', bg: '#FEF2F2', icon: AlertCircle },
+      { label: 'Follow-ups Today', val: followupsToday, color: '#0891B2', bg: '#ECFEFF', icon: Calendar },
+      { label: 'IndiaMART Inbound', val: indiamartLeads, color: '#B45309', bg: '#FFFBEB', icon: Compass }
+    ];
+  }, [dbLeads]);
+
+  // Status Sub-Tabs with Badges (Matching Stock Status / Items Directory Design System)
+  const leadTabs = useMemo(() => {
+    const list = dbLeads;
+    const total = list.length;
+    const unassigned = list.filter(l => !l.assigned_to_user_id || l.status === 'New').length;
+    const inProgress = list.filter(l => ['Assigned', 'Contacted', 'In Progress'].includes(l.status)).length;
+    const proposals = list.filter(l => l.status === 'Proposal Sent').length;
+    const converted = list.filter(l => l.status === 'Converted').length;
+    const inactive24h = list.filter(l => l.is_unattended_24h && !l.is_unattended_48h).length;
+    const escalated48h = list.filter(l => l.is_unattended_48h).length;
+    const dropped = list.filter(l => ['Dropped', 'Lost', 'Disqualified'].includes(l.status)).length;
+
+    return [
+      { id: 'All', label: 'All Leads', count: total, bg: '#F1F5F9', color: '#475569' },
+      { id: 'Unassigned', label: 'Unassigned', count: unassigned, bg: '#FEF3C7', color: '#B45309' },
+      { id: 'Contacted', label: 'In Progress', count: inProgress, bg: '#E0F2FE', color: '#0369A1' },
+      { id: 'Proposal Sent', label: 'Quotations Sent', count: proposals, bg: '#F3E8FF', color: '#7E22CE' },
+      { id: 'Converted', label: 'Converted', count: converted, bg: '#DCFCE7', color: '#15803D' },
+      { id: '24h Inactive', label: '24h Inactive', count: inactive24h, bg: '#FFF7ED', color: '#EA580C' },
+      { id: '48h Escalated', label: '48h Escalated', count: escalated48h, bg: '#FEF2F2', color: '#DC2626' },
+      { id: 'Dropped', label: 'Dropped', count: dropped, bg: '#F1F5F9', color: '#64748B' }
+    ];
+  }, [dbLeads]);
+
+  // Filter sales representatives strictly to Sales Executive and Sales Head roles only
+  const salesRepresentatives = useMemo(() => {
+    return (salespersons || []).filter(s => {
+      const r = (s.role || '').trim().toLowerCase();
+      return r === 'sales executive' || r === 'sales head' || r.includes('sales executive') || r.includes('sales head');
+    });
+  }, [salespersons]);
 
   // Filtering Logic
   const filteredLeads = useMemo(() => {
-    return scopedLeads.filter(lead => {
+    return dbLeads.filter(lead => {
       const q = searchQuery.toLowerCase().trim();
       const matchSearch = !q ||
-        lead.companyName?.toLowerCase().includes(q) ||
-        lead.contactPerson?.toLowerCase().includes(q) ||
-        lead.leadNumber?.toLowerCase().includes(q) ||
-        lead.phone?.includes(q) ||
-        lead.email?.toLowerCase().includes(q) ||
-        lead.location?.toLowerCase().includes(q);
+        (lead.company_name || '').toLowerCase().includes(q) ||
+        (lead.contact_person || '').toLowerCase().includes(q) ||
+        (lead.lead_number || '').toLowerCase().includes(q) ||
+        (lead.phone || '').includes(q) ||
+        (lead.email || '').toLowerCase().includes(q) ||
+        (lead.location || '').toLowerCase().includes(q);
 
-      const matchTab = leadTab === 'All' || lead.status === leadTab;
+      let matchStatus = true;
+      if (statusFilter === 'Unassigned') {
+        matchStatus = !lead.assigned_to_user_id || lead.status === 'New';
+      } else if (statusFilter === 'Contacted') {
+        matchStatus = ['Assigned', 'Contacted', 'In Progress'].includes(lead.status);
+      } else if (statusFilter === '24h Inactive') {
+        matchStatus = lead.is_unattended_24h;
+      } else if (statusFilter === '48h Escalated') {
+        matchStatus = lead.is_unattended_48h;
+      } else if (statusFilter === 'Dropped') {
+        matchStatus = ['Dropped', 'Lost', 'Disqualified'].includes(lead.status);
+      } else if (statusFilter !== 'All') {
+        matchStatus = lead.status === statusFilter;
+      }
+
       const matchSource = sourceFilter === 'All' || lead.source === sourceFilter;
-      return matchSearch && matchTab && matchSource;
+      const matchAssigned = assignedFilter === 'All' || lead.assigned_to_user_id === assignedFilter;
+
+      return matchSearch && matchStatus && matchSource && matchAssigned;
     });
-  }, [scopedLeads, searchQuery, leadTab, sourceFilter]);
+  }, [dbLeads, searchQuery, statusFilter, sourceFilter, assignedFilter]);
 
   // Pagination Slice
   const totalEntries = filteredLeads.length;
@@ -313,408 +315,468 @@ export default function CrmLeadsView({
   const currentRows = filteredLeads.slice(indexOfFirstRow, indexOfLastRow);
 
   // Table Row Selection
-  const handleSelectAll = (e, items) => {
+  const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedLeads(items.map(l => l.id));
+      setSelectedLeadIds(currentRows.map(l => l.id));
     } else {
-      setSelectedLeads([]);
+      setSelectedLeadIds([]);
     }
   };
 
   const handleSelectRow = (id) => {
-    setSelectedLeads(prev => 
+    setSelectedLeadIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
-  const clearFilters = () => {
-    setSearchQuery('');
-    setLeadTab('All');
-    setSourceFilter('All');
-    setCurrentPage(1);
-  };
-
-  // Bulk Operations
-  const handleBulkReassign = () => {
-    if (onBatchUpdateLeads && selectedLeads.length > 0) {
-      onBatchUpdateLeads(selectedLeads, { assignedSalesperson: selectedRepToAssign });
-      setShowReassignModal(false);
-      setSelectedLeads([]);
-    }
-  };
-
-  const handleBulkMarkQualified = () => {
-    if (onBatchUpdateLeads && selectedLeads.length > 0) {
-      onBatchUpdateLeads(selectedLeads, { status: 'Qualified' });
-      setSelectedLeads([]);
-    }
-  };
-
-  const handleBulkDelete = () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedLeads.length} lead(s)?`)) {
-      if (onDeleteLeads) {
-        onDeleteLeads(selectedLeads);
-      }
-      setSelectedLeads([]);
-    }
-  };
-
-  // Handle Form Submission
-  const handleCreateLeadSubmit = (e) => {
+  // Submit Lead Creation
+  const handleCreateLead = async (e) => {
     e.preventDefault();
-    if (!newLeadForm.companyName || !newLeadForm.contactPerson || !newLeadForm.phone) {
-      alert('Please provide Company Name, Contact Person, and Phone Number.');
+    if (!createForm.companyName || !createForm.contactPerson || !createForm.phone) {
+      alert('Company Name, Contact Person, and Phone are mandatory.');
       return;
     }
 
-    const nextNumber = getNextSequence('LEAD', leads || []).code;
-    const kw = parseFloat(newLeadForm.estimatedKw) || 50;
-    const isAutoQualified = kw >= 10;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-role': userRole,
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-name': loggedInUserName
+      };
 
-    const newRecord = {
-      id: nextNumber,
-      leadNumber: nextNumber,
-      companyName: newLeadForm.companyName,
-      contactPerson: newLeadForm.contactPerson,
-      designation: newLeadForm.designation || 'Project Head',
-      phone: newLeadForm.phone,
-      whatsapp: newLeadForm.whatsapp || newLeadForm.phone,
-      email: newLeadForm.email,
-      location: newLeadForm.location || 'Tamil Nadu',
-      source: newLeadForm.source,
-      status: isAutoQualified ? 'Qualified' : 'New Lead',
-      priority: kw >= 100 ? 'HIGH' : 'MEDIUM',
-      assignedSalesperson: newLeadForm.assignedSalesperson,
-      estimatedKw: kw,
-      category: newLeadForm.category,
-      estimatedValue: kw * 2800,
-      notes: newLeadForm.notes,
-      createdAt: new Date().toISOString(),
-      timeline: [
-        {
-          id: `TL-${Date.now()}-1`,
-          type: 'lead_created',
-          title: 'Lead Created',
-          description: `Created by ${newLeadForm.assignedSalesperson} via ${newLeadForm.source}`,
-          timestamp: new Date().toISOString()
-        },
-        ...(isAutoQualified ? [{
-          id: `TL-${Date.now()}-2`,
-          type: 'auto_qualified',
-          title: 'Auto-Qualified by System',
-          description: `Project size (${kw} kW) satisfies commercial criteria (>=10 kW).`,
-          timestamp: new Date().toISOString()
-        }] : [])
-      ]
-    };
-
-    onSaveLead(newRecord);
-    setShowCreateModal(false);
-    setNewLeadForm({
-      companyName: '',
-      contactPerson: '',
-      designation: '',
-      phone: '',
-      whatsapp: '',
-      email: '',
-      location: '',
-      source: 'WhatsApp Inbound',
-      category: 'Aluminium Mounting Structures',
-      estimatedKw: '',
-      notes: '',
-      assignedSalesperson: effectiveSalesperson
-    });
-    setAiPasteText('');
-    setDupWarning(null);
+      const res = await fetch('/api/crm/leads', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(createForm)
+      });
+      const data = await res.json();
+      if (data?.success) {
+        showToast(`Lead ${data.lead.lead_number} created successfully!`);
+        setShowCreateModal(false);
+        setCreateForm({
+          companyName: '',
+          contactPerson: '',
+          designation: '',
+          phone: '',
+          whatsapp: '',
+          email: '',
+          location: '',
+          source: 'Direct Inbound',
+          productRequirement: '50kW Aluminium Rooftop Mounting Structures',
+          category: 'Aluminium Mounting Structures',
+          estimatedKw: '50',
+          notes: '',
+          priority: 'MEDIUM'
+        });
+        await fetchLeads();
+      } else {
+        alert(data.error || 'Failed to create lead');
+      }
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
-  // Add Note in Drawer
-  const handleAddTimelineNote = () => {
-    if (!newTimelineNote.trim() || !selectedLead) return;
-    const noteEntry = {
-      id: `TL-${Date.now()}`,
-      type: 'manual_note',
-      title: 'Interaction Note',
-      description: newTimelineNote.trim(),
-      timestamp: new Date().toISOString()
-    };
-    const updated = {
-      ...selectedLead,
-      timeline: [noteEntry, ...(selectedLead.timeline || [])]
-    };
-    setSelectedLead(updated);
-    onSaveLead(updated);
-    setNewTimelineNote('');
+  // Submit Lead Assignment
+  const handleAssignLead = async (e) => {
+    e.preventDefault();
+    if (!activeLead) return;
+    if (!assignForm.assignedToId || !assignForm.assignedToName) {
+      alert('Please select a target sales employee.');
+      return;
+    }
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-role': userRole,
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-name': loggedInUserName
+      };
+
+      const res = await fetch(`/api/crm/leads/${activeLead.id}/assign`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          assignedToId: assignForm.assignedToId,
+          assignedToName: assignForm.assignedToName,
+          assignedToRole: assignForm.assignedToRole,
+          reason: assignForm.reason
+        })
+      });
+      const data = await res.json();
+      if (data?.success) {
+        showToast(`Lead assigned to ${assignForm.assignedToName} by ${loggedInUserName || userRole}!`);
+        setShowAssignModal(false);
+        await fetchLeads();
+        if (showDetailDrawer) await openLeadDetail(activeLead);
+      } else {
+        alert(data.error || 'Failed to assign lead');
+      }
+    } catch (err) {
+      alert(err.message);
+    }
   };
+
+  // Submit Lead Activity (Customer Call / WhatsApp / Meeting)
+  const handleRecordActivity = async (e) => {
+    e.preventDefault();
+    if (!activeLead) return;
+    if (!activityForm.summary.trim()) {
+      alert('Please provide an activity summary.');
+      return;
+    }
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-role': userRole,
+        'x-user-emp-id': loggedInEmpId,
+        'x-user-name': loggedInUserName
+      };
+
+      const res = await fetch(`/api/crm/leads/${activeLead.id}/activity`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          activityType: activityForm.activityType,
+          summary: activityForm.summary,
+          customerResponse: activityForm.customerResponse,
+          callDurationSeconds: Number(activityForm.callDurationSeconds) || 0
+        })
+      });
+      const data = await res.json();
+      if (data?.success) {
+        showToast(data.timerCleared ? 'Activity logged! 24h unattended timer cleared! ✅' : 'Activity logged successfully!');
+        setShowActivityModal(false);
+        setActivityForm({
+          activityType: 'CALL',
+          callDurationSeconds: 180,
+          summary: '',
+          customerResponse: ''
+        });
+        await fetchLeads();
+        if (showDetailDrawer) await openLeadDetail(activeLead);
+      } else {
+        alert(data.error || 'Failed to record activity');
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Inbound Simulation Handler
+  const handleSimulateInbound = async () => {
+    setIsSimulating(true);
+    try {
+      const res = await fetch('/api/crm/leads/simulate-inbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: 'Surya Kiran Solar EPC Pvt Ltd',
+          contactPerson: 'Ramesh Kumar',
+          phone: '+91 98401 55678',
+          source: 'IndiaMART Inbound',
+          productRequirement: '150 kW Aluminium Rooftop Mounting Structures for industrial warehouse in Hosur.',
+          estimatedKw: 150
+        })
+      });
+      const data = await res.json();
+      if (data?.success) {
+        showToast(`⚡ Inbound lead simulated: "${data.lead.company_name}" (${data.lead.lead_number})!`);
+        await fetchLeads();
+        await fetchNotifications();
+      }
+    } catch (err) {
+      console.warn('Simulation notice:', err);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  // CSV Export
+  const handleExportCsv = () => {
+    const escapeCsv = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const headers = [
+      'Lead Number', 'Company Name', 'Contact Person', 'Phone', 'Email',
+      'Location', 'Product Requirement', 'Estimated kW', 'Source',
+      'Assigned To', 'Assigned By', 'Status', '24h Inactive', 'Created At'
+    ];
+
+    const targetList = selectedLeadIds.length > 0
+      ? dbLeads.filter(l => selectedLeadIds.includes(l.id))
+      : filteredLeads;
+
+    const rows = targetList.map(l => [
+      l.lead_number,
+      l.company_name,
+      l.contact_person,
+      l.phone,
+      l.email || '',
+      l.location || '',
+      l.product_requirement || '',
+      l.estimated_kw || '',
+      l.source || '',
+      l.assigned_to_name ? `${l.assigned_to_name} (${l.assigned_to_user_id})` : 'Unassigned',
+      l.assigned_by_name ? `${l.assigned_by_name} (${l.assigned_by_role || ''})` : '-',
+      l.status || '',
+      l.is_unattended_24h ? 'YES' : 'NO',
+      l.created_at ? new Date(l.created_at).toLocaleString() : ''
+    ]);
+
+    const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(escapeCsv).join(',')).join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `BUSINZ_Leads_${selectedLeadIds.length > 0 ? 'Selected_' : 'Report_'}${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const unreadNotifCount = notifications.filter(n => !n.read).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
-      {/* Toast Notification for Real-Time Automation */}
-      {simulationToast && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minWidth: 0, paddingBottom: '80px' }}>
+      {/* Toast Notification */}
+      {toastMessage && (
         <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
           backgroundColor: '#0F172A',
           color: '#FFFFFF',
           padding: '12px 20px',
-          borderRadius: '10px',
+          borderRadius: '8px',
+          fontSize: '13px',
+          fontWeight: 600,
           boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+          zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '13px',
-          fontWeight: '600',
-          borderLeft: '4px solid #10B981'
+          gap: '8px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Zap size={18} color="#34D399" />
-            <span>{simulationToast}</span>
-          </div>
-          <button
-            onClick={() => setSimulationToast(null)}
-            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
-          >
-            <X size={16} />
-          </button>
+          <CheckCircle2 size={16} color="#10B981" />
+          {toastMessage}
         </div>
       )}
 
-      {/* 1. TOP TITLE AND CONTROLS BAR MATCHING PI & BOM DESIGN */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>
-              Sales Leads Directory
-            </h2>
-            <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '12px', backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #CFFAFE', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-              <User size={12} style={{ color: '#0E7490' }} /> {effectiveSalesperson}
-            </span>
-          </div>
-          <p style={{ fontSize: '13px', color: '#64748B', margin: '3px 0 0 0' }}>
-            {viewScope === 'my' ? `Showing leads assigned strictly to ${effectiveSalesperson}` : 'Showing all organizational solar project leads'}
-          </p>
+      {/* 1. TOP HEADER WITH CREATE BUTTON (BUSINZ DESIGN SYSTEM) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+            Lead Management
+          </h2>
+          <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+            Comprehensive inquiry-to-deal tracking, multi-channel inbound capture & automated follow-up workflows
+          </span>
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Executive/Manager Toggle */}
-          {isManagerOrAdmin && (
-            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', borderRadius: '8px', padding: '3px', border: '1px solid #E2E8F0', marginRight: '6px' }}>
-              <button
-                type="button"
-                onClick={() => { setViewScope('my'); setCurrentPage(1); }}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  backgroundColor: viewScope === 'my' ? '#0E7490' : 'transparent',
-                  color: viewScope === 'my' ? '#FFFFFF' : '#475569',
-                  cursor: 'pointer'
-                }}
-              >
-                My Leads ({leads.filter(isLeadAssignedToMe).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => { setViewScope('all'); setCurrentPage(1); }}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  backgroundColor: viewScope === 'all' ? '#0E7490' : 'transparent',
-                  color: viewScope === 'all' ? '#FFFFFF' : '#475569',
-                  cursor: 'pointer'
-                }}
-              >
-                All Leads ({leads.length})
-              </button>
-            </div>
-          )}
-
-
-          {/* New Solar Lead Button - Matching Create PI pill with circular icon */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={() => {
-              setShowCreateModal(true);
-              setCreateMode('ai');
-            }}
+            onClick={() => setShowCreateModal(true)}
             style={{
               backgroundColor: '#0E7490',
               border: 'none',
-              color: 'white',
+              color: '#FFFFFF',
               height: '40px',
+              padding: '0 6px 0 20px',
+              borderRadius: '50px',
               fontSize: '13px',
               fontWeight: '700',
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '0 6px 0 20px',
-              borderRadius: '50px',
               cursor: 'pointer',
               boxShadow: '0 2px 4px rgba(14, 116, 144, 0.2)',
-              transition: 'all 0.2s ease-in-out',
-              flexShrink: 0
+              transition: 'all 0.2s ease'
             }}
           >
-            <span>New Solar Lead</span>
+            <span>Create Lead</span>
             <div style={{
               width: '28px',
               height: '28px',
               borderRadius: '50%',
               backgroundColor: '#FFFFFF',
-              color: '#0E7490',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              color: '#0E7490'
             }}>
-              <ArrowRight style={{ width: '16px', height: '16px', color: '#0E7490' }} />
+              <Plus size={16} strokeWidth={3} />
             </div>
           </button>
         </div>
       </div>
 
-      {/* 2. FILTERS & SEARCH ROW CARD (EXACT MATCHING PI & BOM REFERENCE DESIGN) */}
+      {/* 12 Modern Bright-Themed KPI Cards */}
       <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '12px',
-        padding: '12px 16px',
-        backgroundColor: '#fafbfc',
-        borderRadius: '12px',
-        border: '1px solid #e2e8f0',
-        alignItems: 'center',
-        width: '100%',
-        boxSizing: 'border-box',
-        justifyContent: 'space-between',
-        marginBottom: '16px'
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+        gap: '12px'
       }}>
-        {/* Search Input Box */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          border: '1px solid #cbd5e1',
-          borderRadius: '8px',
-          padding: '0 12px',
-          height: '38px',
-          backgroundColor: '#f8fafc',
-          flex: '1 1 240px',
-          maxWidth: '380px',
-          minWidth: '200px'
-        }}>
-          <Search style={{ width: '15px', height: '15px', color: '#64748b', flexShrink: 0 }} />
-          <input id="crm-leads-search-query" name="searchQuery" aria-label="Search Leads (Lead No, Company, Contact, Phone)"
-            type="text"
-            placeholder="Search Leads (Lead No, Company, Contact, Phone)..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            style={{ border: 'none', background: 'none', outline: 'none', fontSize: '13px', width: '100%', minWidth: 0, color: '#334155' }}
-           />
-          {searchQuery && (
-            <X size={14} color="#94A3B8" style={{ cursor: 'pointer' }} onClick={() => setSearchQuery('')} />
+        {kpis.map((kpi, idx) => {
+          const IconComp = kpi.icon;
+          return (
+            <div
+              key={idx}
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                backgroundColor: kpi.bg,
+                color: kpi.color,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <IconComp size={18} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {kpi.label}
+                </span>
+                <span style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', display: 'block', lineHeight: 1.2 }}>
+                  {kpi.val}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Main Authoritative Table Card (Matching Stock Status / Items Directory Design System) */}
+      <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+        
+        {/* 1. Integrated Search & Dropdown Filters Strip */}
+        <div style={{ padding: '14px 20px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '220px' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              placeholder="Search by Lead / Company / Code / Type..."
+              style={{ height: '38px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px 0 36px', fontSize: '13px', width: '100%', boxSizing: 'border-box', backgroundColor: '#FFFFFF', color: '#334155' }}
+            />
+            <Search style={{ width: '14px', height: '14px', color: '#94A3B8', position: 'absolute', left: '12px', top: '12px' }} />
+          </div>
+
+          <div style={{ minWidth: '150px' }}>
+            <select
+              value={sourceFilter}
+              onChange={(e) => { setSourceFilter(e.target.value); setCurrentPage(1); }}
+              style={{ height: '38px', width: '100%', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#334155', fontWeight: '500' }}
+            >
+              <option value="All">All Sources</option>
+              <option value="IndiaMART Inbound">IndiaMART</option>
+              <option value="Website">Website</option>
+              <option value="WhatsApp Inbound">WhatsApp</option>
+              <option value="Direct Call">Direct Call</option>
+              <option value="Referral">Referral</option>
+            </select>
+          </div>
+
+          {hasGlobalView && (
+            <div style={{ minWidth: '160px' }}>
+              <select
+                value={assignedFilter}
+                onChange={(e) => { setAssignedFilter(e.target.value); setCurrentPage(1); }}
+                style={{ height: '38px', width: '100%', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#334155', fontWeight: '500' }}
+              >
+                <option value="All">All Assignees</option>
+                {salesRepresentatives.map(s => (
+                  <option key={s.employee_code} value={s.employee_code}>
+                    {s.employee_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(searchQuery || statusFilter !== 'All' || sourceFilter !== 'All' || assignedFilter !== 'All') && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setStatusFilter('All');
+                setSourceFilter('All');
+                setAssignedFilter('All');
+                setCurrentPage(1);
+              }}
+              title="Reset Filters"
+              style={{
+                height: '38px',
+                padding: '0 12px',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                color: '#475569',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <RotateCcw size={13} /> Reset
+            </button>
           )}
         </div>
 
-        {/* Filter Controls on Right */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', height: '38px', cursor: 'pointer', backgroundColor: 'white', fontSize: '13px', color: '#475569' }}>
-            <span>Date Range</span>
-            <Calendar style={{ width: '14px', height: '14px', color: '#64748b' }} />
-          </div>
-
-          <select id="crm-leads-source-filter" name="sourceFilter" aria-label="SourceFilter"
-            value={sourceFilter}
-            onChange={(e) => { setSourceFilter(e.target.value); setCurrentPage(1); }}
-            style={{ height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', padding: '0 24px 0 10px', fontSize: '13px', backgroundColor: 'white', color: '#334155', minWidth: '130px', outline: 'none' }}
-          >
-            <option value="All">Source: All</option>
-            <option value="WhatsApp Inbound">WhatsApp Inbound</option>
-            <option value="VRM Website Form">VRM Website</option>
-            <option value="IndiaMART Webhook">IndiaMART</option>
-            <option value="Referral">Referral</option>
-            <option value="Renewable Expo">Renewable Expo</option>
-          </select>
-
-          <button
-            onClick={() => {}}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 16px', height: '38px', cursor: 'pointer', backgroundColor: 'white', fontSize: '13px', fontWeight: '600', color: '#475569' }}
-          >
-            <Filter style={{ width: '14px', height: '14px', marginRight: '4px' }} />
-            <span>Filters</span>
-          </button>
-
-          <button
-            onClick={clearFilters}
-            title="Clear Filters"
-            style={{
-              background: '#f1f5f9',
-              border: '1px solid #cbd5e1',
-              color: '#475569',
-              cursor: 'pointer',
-              padding: '0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '8px',
-              height: '38px',
-              width: '38px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <RotateCcw style={{ width: '15px', height: '15px' }} />
-          </button>
-        </div>
-      </div>
-
-      {/* 3. STATUS SUB-TABS ROW & EXPORT BUTTON (EXACT WORK ORDERS / PI REFERENCE DESIGN) */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '1px solid #e2e8f0',
-        paddingBottom: '0',
-        marginBottom: '16px',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {[
-            { id: 'All', label: 'All Leads', count: tabCounts.All },
-            { id: 'New Lead', label: 'New Inquiries', count: tabCounts['New Lead'] },
-            { id: 'Contacted', label: 'Contacted', count: tabCounts.Contacted },
-            { id: 'Qualified', label: 'Qualified', count: tabCounts.Qualified },
-            { id: 'Converted', label: 'Converted', count: tabCounts.Converted },
-            { id: 'Disqualified', label: 'Disqualified', count: tabCounts.Disqualified }
-          ].map(tab => {
-            const isActive = leadTab === tab.id;
+        {/* 2. Status Sub-Tabs Row (Exact Design from Stock Status) */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', padding: '0 20px', gap: '20px', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#FFFFFF', overflowX: 'auto' }}>
+          {leadTabs.map(tab => {
+            const isActive = statusFilter === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => { setLeadTab(tab.id); setCurrentPage(1); }}
+                onClick={() => {
+                  setStatusFilter(tab.id);
+                  setCurrentPage(1);
+                }}
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  padding: '12px 0',
+                  padding: '12px 4px',
                   fontSize: '13px',
                   fontWeight: 'bold',
-                  color: isActive ? '#0E7490' : '#64748b',
+                  color: isActive ? '#0E7490' : '#64748B',
                   borderBottom: isActive ? '2px solid #0E7490' : '2px solid transparent',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '8px',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {tab.label}
                 <span style={{
-                  fontSize: '10px',
-                  padding: '2px 7px',
+                  fontSize: '11px',
+                  padding: '2px 8px',
                   borderRadius: '12px',
-                  backgroundColor: tab.id === 'Converted' ? '#ecfdf5' : tab.id === 'Qualified' ? '#ccfbf1' : tab.id === 'New Lead' ? '#fef3c7' : tab.id === 'Disqualified' ? '#fef2f2' : '#f1f5f9',
-                  color: tab.id === 'Converted' ? '#059669' : tab.id === 'Qualified' ? '#0f766e' : tab.id === 'New Lead' ? '#b45309' : tab.id === 'Disqualified' ? '#b91c1c' : '#475569',
+                  backgroundColor: tab.bg,
+                  color: tab.color,
                   fontWeight: 'bold'
                 }}>
                   {tab.count}
@@ -723,259 +785,239 @@ export default function CrmLeadsView({
             );
           })}
         </div>
-
-        <button
-          onClick={handleExportCsv}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            border: '1px solid #cbd5e1',
-            borderRadius: '8px',
-            padding: '6px 14px',
-            backgroundColor: 'white',
-            fontSize: '13px',
-            fontWeight: 'bold',
-            color: '#475569',
-            cursor: 'pointer',
-            marginBottom: '8px',
-            flexShrink: 0
-          }}
-        >
-          <Download style={{ width: '14px', height: '14px' }} />
-          Export
-        </button>
-      </div>
-
-      {/* 4. MAIN DATA TABLE MATCHING EXACT REFERENCE DESIGN */}
-      <div className="section-card" style={{ padding: 0, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
-        <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="custom-table" style={{ width: '100%', minWidth: '1180px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
             <thead>
               <tr style={{ color: '#475569', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontSize: '12px', fontWeight: 'bold', height: '48px' }}>
                 <th style={{ width: '48px', minWidth: '48px', maxWidth: '48px', padding: '12px 0', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
-                  <input id="crm-leads-select-all" name="selectAll" aria-label="SelectAll"
+                  <input
                     type="checkbox"
+                    checked={currentRows.length > 0 && selectedLeadIds.length === currentRows.length}
+                    onChange={handleSelectAll}
                     style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                    checked={filteredLeads.length > 0 && filteredLeads.every(l => selectedLeads.includes(l.id))}
-                    onChange={(e) => handleSelectAll(e, filteredLeads)}
-                   />
+                  />
                 </th>
-                <th style={{ width: '140px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>Lead No.</th>
-                <th style={{ minWidth: '220px', padding: '12px 14px', boxSizing: 'border-box' }}>Company Name</th>
-                <th style={{ width: '180px', minWidth: '160px', padding: '12px 14px', boxSizing: 'border-box' }}>Solar Scope & kW</th>
-                <th style={{ width: '130px', minWidth: '120px', padding: '12px 14px', boxSizing: 'border-box' }}>Lead Date</th>
-                <th style={{ width: '150px', minWidth: '130px', padding: '12px 14px', textAlign: 'right', boxSizing: 'border-box' }}>Estimated Value</th>
-                <th style={{ width: '140px', minWidth: '130px', padding: '12px 14px', boxSizing: 'border-box' }}>Sales Rep</th>
-                <th style={{ width: '140px', minWidth: '130px', padding: '12px 14px', textAlign: 'center', boxSizing: 'border-box' }}>Status</th>
+                <th style={{ padding: '12px 14px', width: '50px', minWidth: '50px', textAlign: 'center' }}>#</th>
+                <th style={{ padding: '12px 14px', minWidth: '220px' }}>Lead # & Company</th>
+                <th style={{ padding: '12px 14px', minWidth: '170px' }}>Primary Contact</th>
+                <th style={{ padding: '12px 14px', minWidth: '180px' }}>Requirement</th>
+                <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px' }}>Source</th>
+                <th style={{ padding: '12px 14px', width: '150px', minWidth: '150px' }}>Assigned To</th>
+                <th style={{ padding: '12px 14px', width: '120px', minWidth: '120px', textAlign: 'center' }}>Quotations</th>
+                <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px', textAlign: 'center' }}>SLA Status</th>
+                <th style={{ padding: '12px 14px', width: '130px', minWidth: '130px', textAlign: 'center' }}>Status</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <>
-                  <tr style={{ backgroundColor: '#F0FDFA' }}>
-                    <td
-                      colSpan={8}
-                      style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #CCFBF1' }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div className="businz-spin-ring" />
-                          <div style={{ textAlign: 'left' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490' }}>
-                                Loading Solar Leads...
-                              </span>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#ECFDF5', color: '#059669', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
-                                <span className="businz-pulse-dot" /> Live Cloud Database Sync
-                              </span>
-                            </div>
-                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                              Retrieving live leads from Businz Cloud...
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                  {Array.from({ length: 5 }).map((_, sIdx) => (
-                    <tr key={`lead-skel-${sIdx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ textAlign: 'center', padding: '12px 0', width: '48px' }}>
-                        <input id="crm-leads-input-1" name="input1" aria-label="Input 1" type="checkbox" disabled style={{ opacity: 0.3 }}  />
-                      </td>
-                      {Array.from({ length: 7 }).map((_, hIdx) => (
-                        <td key={`lead-skel-cell-${hIdx}`} style={{ padding: '12px 14px' }}>
-                          <div
-                            className="skeleton-shimmer skeleton-text"
-                            style={{
-                              width: hIdx === 0 ? '90px' : (hIdx === 1 ? '65%' : '100px'),
-                              height: '14px'
-                            }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </>
-              ) : filteredLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <FileText size={32} style={{ color: '#CBD5E1' }} />
-                      <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>No leads found</span>
-                      <span style={{ fontSize: '12px', color: '#94A3B8' }}>No records match your active filter or search query. Click "+ New Solar Lead" above to author a new project inquiry.</span>
-                      {(searchQuery || leadTab !== 'All' || sourceFilter !== 'All') && (
-                        <button
-                          type="button"
-                          onClick={clearFilters}
-                          style={{
-                            marginTop: '6px',
-                            padding: '6px 14px',
-                            backgroundColor: '#F1F5F9',
-                            color: '#0E7490',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Clear All Filters
-                        </button>
-                      )}
-                    </div>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>
+                    <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
+                    Loading authoritative CRM leads from database...
+                  </td>
+                </tr>
+              ) : currentRows.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '40px 0', color: '#94A3B8' }}>
+                    No leads found matching your criteria.
                   </td>
                 </tr>
               ) : (
                 currentRows.map((lead, idx) => {
-                  const isChecked = selectedLeads.includes(lead.id);
-                  const isConverted = lead.status === 'Converted';
-                  const isQualified = lead.status === 'Qualified';
-                  const isNew = lead.status === 'New Lead';
+                  const isSelected = selectedLeadIds.includes(lead.id);
 
-                  let statusBg = '#EFF6FF';
-                  let statusFg = '#2563EB';
-                  if (isConverted) {
-                    statusBg = '#ECFDF5';
-                    statusFg = '#059669';
-                  } else if (isQualified) {
-                    statusBg = '#CCFBF1';
-                    statusFg = '#0F766E';
-                  } else if (isNew) {
-                    statusBg = '#FEF3C7';
-                    statusFg = '#B45309';
-                  } else if (lead.status === 'Disqualified') {
-                    statusBg = '#FEF2F2';
-                    statusFg = '#DC2626';
+                  // Status Pill Styling
+                  let statusBg = '#F1F5F9';
+                  let statusColor = '#475569';
+                  if (lead.status === 'New') { statusBg = '#FEF3C7'; statusColor = '#B45309'; }
+                  else if (lead.status === 'Assigned') { statusBg = '#EFF6FF'; statusColor = '#1D4ED8'; }
+                  else if (lead.status === 'Contacted' || lead.status === 'In Progress') { statusBg = '#E0F2FE'; statusColor = '#0369A1'; }
+                  else if (lead.status === 'Proposal Sent') { statusBg = '#F3E8FF'; statusColor = '#7E22CE'; }
+                  else if (lead.status === 'Converted') { statusBg = '#DCFCE7'; statusColor = '#15803D'; }
+                  else if (['Dropped', 'Lost', 'Disqualified'].includes(lead.status)) { statusBg = '#FEE2E2'; statusColor = '#B91C1C'; }
+
+                  // Source Badge Styling
+                  const isIndiaMart = (lead.source || '').toLowerCase().includes('indiamart');
+                  const sourceBg = isIndiaMart ? '#FFF7ED' : '#F1F5F9';
+                  const sourceColor = isIndiaMart ? '#EA580C' : '#475569';
+
+                  // SLA Badge
+                  let slaBadge = (
+                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#ECFDF5', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle2 size={11} /> Active
+                    </span>
+                  );
+                  if (lead.is_unattended_48h) {
+                    slaBadge = (
+                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#FEF2F2', color: '#DC2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertCircle size={12} /> 48h Escalated
+                      </span>
+                    );
+                  } else if (lead.is_unattended_24h) {
+                    slaBadge = (
+                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#FFF7ED', color: '#EA580C', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertTriangle size={12} /> 24h Unattended
+                      </span>
+                    );
                   }
-
-                  const estValue = lead.estimatedValue || ((parseFloat(lead.estimatedKw) || 50) * 2800);
 
                   return (
                     <tr
-                      key={lead.id || idx}
+                      key={lead.id}
+                      onClick={() => openLeadDetail(lead)}
                       style={{
                         borderBottom: '1px solid #F1F5F9',
-                        transition: 'all 0.15s ease',
-                        backgroundColor: isChecked ? '#ECFEFF' : 'transparent',
-                        height: '52px'
+                        backgroundColor: isSelected ? '#ECFEFF' : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease'
                       }}
-                      className={`table-row-hover ${isChecked ? 'selected-row' : ''}`}
+                      className={`table-row-hover ${isSelected ? 'selected-row' : ''}`}
                     >
-                      {/* Checkbox with VRM Left Border Accent */}
-                      <td style={{
-                        width: '48px',
-                        minWidth: '48px',
-                        padding: '12px 14px',
-                        textAlign: 'center',
-                        verticalAlign: 'middle',
-                        boxSizing: 'border-box',
-                        borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent'
-                      }}>
-                        <input id="crm-leads-checkbox" name="checkbox" aria-label="Checkbox"
+                      {/* Checkbox with left accent border when selected */}
+                      <td
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '48px',
+                          padding: '12px 0',
+                          textAlign: 'center',
+                          verticalAlign: 'middle',
+                          borderLeft: isSelected ? '4px solid #0E7490' : '4px solid transparent'
+                        }}
+                      >
+                        <input
                           type="checkbox"
-                          checked={isChecked}
+                          checked={isSelected}
                           onChange={() => handleSelectRow(lead.id)}
                           style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0 }}
-                         />
+                        />
                       </td>
 
-                      {/* Lead No. with Source Indicator */}
-                      <td
-                        onClick={() => setSelectedLead(lead)}
-                        style={{ padding: '12px 14px', cursor: 'pointer' }}
-                      >
-                        <div style={{ fontWeight: 'bold', color: '#2563EB', fontSize: '13px' }}>
-                          {lead.leadNumber}
-                        </div>
-                        <span style={{ fontSize: '10px', fontWeight: '700', color: lead.source?.includes('WhatsApp') ? '#059669' : '#0284C7', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
-                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: lead.source?.includes('WhatsApp') ? '#059669' : '#0284C7', display: 'inline-block' }}></span>
-                          {lead.source || 'Direct'}
-                        </span>
+                      {/* Row Index # */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#64748B', fontWeight: 600 }}>
+                        {indexOfFirstRow + idx + 1}
                       </td>
 
-                      {/* Company Name & Contact Details */}
-                      <td
-                        onClick={() => setSelectedLead(lead)}
-                        style={{ padding: '12px 14px', cursor: 'pointer', fontWeight: '600', color: '#1E293B' }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: '700', color: '#0F172A' }}>{lead.companyName}</span>
-                          <span style={{ fontSize: '11px', color: '#64748B' }}>Attn: {lead.contactPerson} • {lead.phone}</span>
+                      {/* Lead & Company (Matching Material / SKU layout from Stock Status) */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 700, color: '#0F172A', cursor: 'pointer' }}>
+                          {lead.company_name || 'Independent Client'}
                         </div>
-                        {lead.location && (
-                          <div style={{ marginTop: '3px' }}>
-                            <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '50px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                              <MapPin size={10} style={{ color: '#0E7490' }} /> {lead.location}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                          <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700 }}>
+                            {lead.lead_number}
+                          </span>
+                          {lead.created_at && (
+                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                              • {new Date(lead.created_at).toLocaleDateString()}
                             </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Primary Contact */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 600, color: '#1E293B', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <User size={12} color="#64748B" /> {lead.contact_person || '-'}
+                        </div>
+                        {lead.phone && (
+                          <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                            <Phone size={11} color="#94A3B8" /> {lead.phone}
+                          </div>
+                        )}
+                        {lead.location && (
+                          <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>
+                            {lead.location}
                           </div>
                         )}
                       </td>
 
-                      {/* Solar Scope & kW */}
+                      {/* Product Requirement */}
+                      <td style={{ padding: '12px 14px', maxWidth: '180px' }}>
+                        <div style={{ fontSize: '12px', color: '#1E293B', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={lead.product_requirement}>
+                          {lead.product_requirement || 'General Solar Mounting'}
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 600 }}>
+                          {lead.estimated_kw ? `${lead.estimated_kw} kW` : ''}
+                        </span>
+                      </td>
+
+                      {/* Source */}
                       <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>{lead.estimatedKw ? `${lead.estimatedKw} kW` : 'Custom Spec'}</span>
-                          {lead.estimatedKw >= 100 && (
-                            <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#B45309', fontWeight: '800' }}>
-                              HIGH VAL
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: sourceBg,
+                          color: sourceColor,
+                          border: isIndiaMart ? '1px solid #FDBA74' : '1px solid #E2E8F0'
+                        }}>
+                          {lead.source || 'Inbound'}
+                        </span>
+                      </td>
+
+                      {/* Assigned To */}
+                      <td style={{ padding: '12px 14px' }}>
+                        {lead.assigned_to_name ? (
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '12px' }}>
+                              {lead.assigned_to_name}
+                            </div>
+                            <span style={{ fontSize: '10px', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 5px', borderRadius: '4px' }}>
+                              {lead.assigned_to_user_id}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#D97706', fontWeight: 600, backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '4px' }}>
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Quotations Metric */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            backgroundColor: (lead.quotations_count || 0) > 0 ? '#F3E8FF' : '#F1F5F9',
+                            color: (lead.quotations_count || 0) > 0 ? '#7C3AED' : '#64748B'
+                          }}>
+                            {lead.quotations_count || 0}
+                          </span>
+                          {(lead.total_revisions || 0) > 0 && (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              backgroundColor: '#FAF5FF',
+                              color: '#9333EA',
+                              border: '1px solid #E9D5FF'
+                            }}>
+                              Rev {lead.total_revisions}
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                          {lead.category || 'Aluminium Mounting Structures'}
-                        </div>
                       </td>
 
-                      {/* Lead Date */}
-                      <td style={{ padding: '12px 14px', color: '#64748B' }}>
-                        {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                      </td>
-
-                      {/* Estimated Value */}
-                      <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 'bold', color: '#0F172A' }}>
-                        ₹ {estValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-
-                      {/* Sales Rep */}
-                      <td style={{ padding: '12px 14px', color: '#334155', fontWeight: '600' }}>
-                        {lead.assignedSalesperson || 'Unassigned'}
+                      {/* SLA Timer */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        {slaBadge}
                       </td>
 
                       {/* Status */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <span style={{
-                          backgroundColor: statusBg,
-                          color: statusFg,
-                          padding: '4px 10px',
-                          borderRadius: '12px',
                           fontSize: '11px',
-                          fontWeight: 'bold',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px'
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          backgroundColor: statusBg,
+                          color: statusColor
                         }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusFg }}></span>
                           {lead.status}
                         </span>
                       </td>
@@ -985,126 +1027,191 @@ export default function CrmLeadsView({
               )}
             </tbody>
           </table>
+        </div>
 
-          {/* 5. PAGINATION FOOTER EXACT MATCHING PI & BOM STANDARD RULES */}
-          {filteredLeads.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
-              {/* Left Side: Rows per page selector + Showing X to Y of Z entries */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Showing per page</span>
-                  <select id="crm-leads-rows-per-page" name="rowsPerPage" aria-label="RowsPerPage"
-                    value={rowsPerPage}
-                    onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                    style={{ height: '32px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', padding: '0 8px', backgroundColor: 'white', fontWeight: 'bold' }}
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                  </select>
-                </div>
-                <span>Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, filteredLeads.length)} of {filteredLeads.length} entries</span>
-              </div>
-
-              {/* Right Side: Page navigation controls adjacent to Go to page input */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  <button
-                    disabled={safeCurrentPage === 1}
-                    onClick={() => setCurrentPage(1)}
-                    style={{ border: '1px solid #E2E8F0', background: safeCurrentPage === 1 ? '#F8FAFC' : 'white', cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B', fontWeight: 'bold' }}
-                  >
-                    &laquo;
-                  </button>
-                  <button
-                    disabled={safeCurrentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    style={{ border: '1px solid #E2E8F0', background: safeCurrentPage === 1 ? '#F8FAFC' : 'white', cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B' }}
-                  >
-                    &lt;
-                  </button>
-
-                  {(() => {
-                    let start = Math.max(1, safeCurrentPage - 1);
-                    let end = start + 2;
-                    if (end > totalPages) {
-                      end = totalPages;
-                      start = Math.max(1, end - 2);
-                    }
-                    return Array.from({ length: Math.max(1, end - start + 1) }, (_, i) => start + i).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        style={{
-                          border: '1px solid #E2E8F0',
-                          background: page === safeCurrentPage ? '#0E7490' : 'white',
-                          color: page === safeCurrentPage ? 'white' : '#475569',
-                          cursor: 'pointer',
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          fontWeight: page === safeCurrentPage ? 'bold' : '500'
-                        }}
-                      >
-                        {page}
-                      </button>
-                    ));
-                  })()}
-
-                  <button
-                    disabled={safeCurrentPage === totalPages || totalPages === 0}
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    style={{ border: '1px solid #E2E8F0', background: (safeCurrentPage === totalPages || totalPages === 0) ? '#F8FAFC' : 'white', cursor: (safeCurrentPage === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B' }}
-                  >
-                    &gt;
-                  </button>
-                  <button
-                    disabled={safeCurrentPage === totalPages || totalPages === 0}
-                    onClick={() => setCurrentPage(totalPages)}
-                    style={{ border: '1px solid #E2E8F0', background: (safeCurrentPage === totalPages || totalPages === 0) ? '#F8FAFC' : 'white', cursor: (safeCurrentPage === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', padding: '6px 8px', borderRadius: '6px', color: '#64748B', fontWeight: 'bold' }}
-                  >
-                    &raquo;
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
-                  <input id="crm-leads-go-to-page-input" name="goToPageInput" aria-label="GoToPageInput"
-                    type="number"
-                    min="1"
-                    max={totalPages || 1}
-                    value={goToPageInput}
-                    onChange={(e) => setGoToPageInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const p = parseInt(goToPageInput);
-                        if (p >= 1 && p <= totalPages) {
-                          setCurrentPage(p);
-                          setGoToPageInput('');
-                        }
-                      }
-                    }}
-                    style={{ width: '42px', height: '32px', border: '1px solid #CBD5E1', borderRadius: '6px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}
-                   />
-                  <button
-                    onClick={() => {
-                      const p = parseInt(goToPageInput);
-                      if (p >= 1 && p <= totalPages) {
-                        setCurrentPage(p);
-                        setGoToPageInput('');
-                      }
-                    }}
-                    style={{ height: '32px', padding: '0 10px', background: '#0E7490', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    Go &rsaquo;
-                  </button>
-                </div>
-              </div>
+        {/* Standard Pagination Footer Layout */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px',
+          borderTop: '1px solid #E2E8F0',
+          backgroundColor: '#FFFFFF',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          {/* Left Side: Rows per page [5, 10] + Showing X to Y of Z entries */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
+              <span>Showing per page</span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: '#FFFFFF',
+                  color: '#0F172A'
+                }}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+              </select>
             </div>
-          )}
+            <span style={{ fontSize: '12px', color: '#64748B' }}>
+              Showing {totalEntries === 0 ? 0 : indexOfFirstRow + 1} to {indexOfLastRow} of {totalEntries} entries
+            </span>
+          </div>
+
+          {/* Right Side: Page buttons (<< < 1 2 3 > >>) + Go to page input */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={safeCurrentPage === 1}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer',
+                  opacity: safeCurrentPage === 1 ? 0.4 : 1
+                }}
+              >
+                <ChevronsLeft size={14} />
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={safeCurrentPage === 1}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer',
+                  opacity: safeCurrentPage === 1 ? 0.4 : 1
+                }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  style={{
+                    minWidth: '28px',
+                    height: '28px',
+                    padding: '0 6px',
+                    borderRadius: '6px',
+                    border: '1px solid',
+                    borderColor: safeCurrentPage === p ? '#0E7490' : '#CBD5E1',
+                    backgroundColor: safeCurrentPage === p ? '#0E7490' : '#FFFFFF',
+                    color: safeCurrentPage === p ? '#FFFFFF' : '#334155',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={safeCurrentPage === totalPages}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  cursor: safeCurrentPage === totalPages ? 'not-allowed' : 'pointer',
+                  opacity: safeCurrentPage === totalPages ? 0.4 : 1
+                }}
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={safeCurrentPage === totalPages}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  cursor: safeCurrentPage === totalPages ? 'not-allowed' : 'pointer',
+                  opacity: safeCurrentPage === totalPages ? 0.4 : 1
+                }}
+              >
+                <ChevronsRight size={14} />
+              </button>
+            </div>
+
+            {/* Go to page input */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
+              <span style={{ fontSize: '12px', color: '#64748B' }}>Go to page</span>
+              <input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={goToPageInput}
+                onChange={(e) => setGoToPageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const p = parseInt(goToPageInput, 10);
+                    if (p >= 1 && p <= totalPages) {
+                      setCurrentPage(p);
+                      setGoToPageInput('');
+                    }
+                  }
+                }}
+                style={{
+                  width: '45px',
+                  padding: '4px 6px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12px',
+                  textAlign: 'center'
+                }}
+              />
+              <button
+                onClick={() => {
+                  const p = parseInt(goToPageInput, 10);
+                  if (p >= 1 && p <= totalPages) {
+                    setCurrentPage(p);
+                    setGoToPageInput('');
+                  }
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #0E7490',
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Go ›
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 6. FLOATING BOTTOM ACTION BAR EXACT MATCHING PI & BOM RULES */}
-      {selectedLeads.length > 0 && !showReassignModal && (
+      {/* Floating Bottom Action Bar (White pill design, single line) */}
+      {selectedLeadIds.length > 0 && (
         <div style={{
           position: 'fixed',
           bottom: '24px',
@@ -1128,25 +1235,20 @@ export default function CrmLeadsView({
           fontFamily: "'Plus Jakarta Sans', sans-serif"
         }}>
           <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px', paddingRight: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-            <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedLeads.length}</strong> Selected
+            <strong style={{ color: '#0F172A', fontSize: '14px' }}>{selectedLeadIds.length}</strong> Selected
           </span>
 
           {/* View Details */}
           <button
             onClick={() => {
-              if (selectedLeads.length > 1) {
-                alert("You can't open details for multiple leads at once. Please select a single lead.");
-                return;
-              }
-              const target = leads.find(l => l.id === selectedLeads[0]);
-              setSelectedLeads([]);
-              if (target) setSelectedLead(target);
+              const lead = dbLeads.find(l => l.id === selectedLeadIds[0]);
+              if (lead) openLeadDetail(lead);
             }}
             style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #E2E8F0',
               color: '#1E293B',
-              borderRadius: '10px',
+              borderRadius: '50px',
               padding: '6px 14px',
               fontSize: '12px',
               fontWeight: '700',
@@ -1156,59 +1258,51 @@ export default function CrmLeadsView({
               gap: '6px',
               whiteSpace: 'nowrap',
               flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
           >
             <Eye size={14} style={{ color: '#0E7490' }} /> View Details
           </button>
 
-          {/* Convert to Opportunity */}
-          {(() => {
-            const targetLead = selectedLeads.length === 1 ? leads.find(l => l.id === selectedLeads[0]) : null;
-            if (!targetLead || targetLead.status === 'Converted') return null;
+          {/* Reassign (CEO/TS/SH) */}
+          {canAssign && (
+            <button
+              onClick={() => {
+                const lead = dbLeads.find(l => l.id === selectedLeadIds[0]);
+                if (lead) {
+                  setActiveLead(lead);
+                  setShowAssignModal(true);
+                }
+              }}
+              style={{
+                backgroundColor: '#0E7490',
+                border: 'none',
+                color: '#FFFFFF',
+                borderRadius: '50px',
+                padding: '6px 16px',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)'
+              }}
+            >
+              <UserCheck size={14} style={{ color: '#FFFFFF' }} /> Assign / Reassign
+            </button>
+          )}
 
-            return (
-              <button
-                onClick={() => {
-                  setSelectedLeads([]);
-                  onConvertLead(targetLead);
-                }}
-                style={{
-                  backgroundColor: '#4F46E5',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  borderRadius: '10px',
-                  padding: '6px 16px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
-              >
-                <ArrowRight size={14} style={{ color: '#FFFFFF' }} /> Convert to Opportunity
-              </button>
-            );
-          })()}
-
-          {/* Assign Sales Rep */}
+          {/* Export Selected to CSV */}
           <button
-            onClick={() => setShowReassignModal(true)}
+            onClick={handleExportCsv}
             style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #E2E8F0',
               color: '#1E293B',
-              borderRadius: '10px',
+              borderRadius: '50px',
               padding: '6px 14px',
               fontSize: '12px',
               fontWeight: '700',
@@ -1218,82 +1312,26 @@ export default function CrmLeadsView({
               gap: '6px',
               whiteSpace: 'nowrap',
               flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
           >
-            <UserCheck size={14} style={{ color: '#0E7490' }} /> Assign Sales Rep
+            <Download size={14} style={{ color: '#059669' }} /> Export Selected
           </button>
 
-          {/* Mark Qualified */}
+          {/* Close / Deselect */}
           <button
-            onClick={handleBulkMarkQualified}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <CheckCircle2 size={14} style={{ color: '#059669' }} /> Mark Qualified
-          </button>
-
-          {/* Delete Leads */}
-          <button
-            onClick={handleBulkDelete}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <Trash2 size={14} style={{ color: '#DC2626' }} /> Delete
-          </button>
-
-          {/* Deselect All */}
-          <button
-            onClick={() => setSelectedLeads([])}
+            onClick={() => setSelectedLeadIds([])}
             title="Deselect all"
             style={{
               backgroundColor: 'transparent',
               border: 'none',
               color: '#94A3B8',
               cursor: 'pointer',
-              padding: '4px',
+              padding: '4px 6px',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: '6px',
-              marginLeft: '2px',
               flexShrink: 0
             }}
           >
@@ -1302,394 +1340,204 @@ export default function CrmLeadsView({
         </div>
       )}
 
-      {/* Bulk Reassign Modal */}
-      {showReassignModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(3px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10002,
-          padding: '20px'
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '14px',
-            width: '100%',
-            maxWidth: '420px',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
-            border: '1px solid #E2E8F0'
-          }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: '0 0 8px' }}>
-              Assign {selectedLeads.length} Selected Leads
-            </h3>
-            <p style={{ fontSize: '12px', color: '#64748B', margin: '0 0 16px' }}>
-              Select a sales representative to take ownership of these leads.
-            </p>
-
-            <label htmlFor="crm-leads-sales-representative" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Sales Representative
-            </label>
-            <select id="crm-leads-sales-representative" name="salesRepresentative" aria-label="Sales Representative"
-              value={selectedRepToAssign}
-              onChange={(e) => setSelectedRepToAssign(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px',
-                fontWeight: '600',
-                color: '#0F172A',
-                marginBottom: '20px'
-              }}
-            >
-              {SALES_REPRESENTATIVES.map(rep => (
-                <option key={rep} value={rep}>{rep}</option>
-              ))}
-            </select>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setShowReassignModal(false)}
-                style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleBulkReassign}
-                style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
-              >
-                Confirm Assignment
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Lead Modal */}
+      {/* CREATE LEAD MODAL */}
       {showCreateModal && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
+          inset: 0,
           backgroundColor: 'rgba(15, 23, 42, 0.6)',
           backdropFilter: 'blur(3px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 10000,
+          zIndex: 9999,
           padding: '20px'
         }}>
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '680px',
+            maxWidth: '600px',
             maxHeight: '90vh',
             overflowY: 'auto',
-            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.25)',
-            border: '1px solid #E2E8F0'
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
           }}>
-            {/* Modal Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '18px 24px',
-              borderBottom: '1px solid #E2E8F0',
-              backgroundColor: '#F8FAFC'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  Create New Solar Project Lead
-                  <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#E0F2FE', color: '#0369A1' }}>
-                    AI-Powered
-                  </span>
-                </h3>
-                <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-                  VRM Structures India Pvt Ltd • B2B Sales Management
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Create New Lead</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748B' }}>
+                  Auto-sequenced sequence number with 24-hour inactivity SLA.
                 </p>
               </div>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
-              >
+              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
 
-            {/* Mode Switch Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', padding: '0 24px' }}>
-              <button
-                type="button"
-                onClick={() => setCreateMode('ai')}
-                style={{
-                  padding: '12px 18px',
-                  border: 'none',
-                  borderBottom: createMode === 'ai' ? '2px solid #0E7490' : '2px solid transparent',
-                  backgroundColor: 'transparent',
-                  color: createMode === 'ai' ? '#0E7490' : '#64748B',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                <Sparkles size={16} /> AI Smart Paste (Instant)
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateMode('manual')}
-                style={{
-                  padding: '12px 18px',
-                  border: 'none',
-                  borderBottom: createMode === 'manual' ? '2px solid #0E7490' : '2px solid transparent',
-                  backgroundColor: 'transparent',
-                  color: createMode === 'manual' ? '#0E7490' : '#64748B',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                <FileText size={16} /> Standard Manual Form
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateLeadSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* AI Smart Paste Section */}
-              {createMode === 'ai' && (
-                <div style={{
-                  padding: '16px',
-                  backgroundColor: '#F0FDFA',
-                  borderRadius: '10px',
-                  border: '1px solid #CCFBF1',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px'
-                }}>
-                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={15} /> Paste Raw Customer Message (WhatsApp, Email, RFQ)
-                  </div>
-                  <textarea id="crm-leads-textarea-2" name={`textarea2_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Textarea 2"
-                    rows={3}
-                    placeholder="e.g. 'Hi VRM, I am Rajesh from Vikram Solar Chennai. We need quote for 250 kW Tin Shed Mini Rails. Call me on 9876543210.'"
-                    value={aiPasteText}
-                    onChange={(e) => setAiPasteText(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '13px',
-                      resize: 'vertical'
-                    }}
-                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: '#64748B' }}>
-                      AI automatically extracts Company, Contact, Phone, kW Capacity & Structure Type.
-                    </span>
-                    <button
-                      type="button"
-                      disabled={isAiAnalyzing || !aiPasteText.trim()}
-                      onClick={handleRunAiAnalysis}
-                      style={{
-                        padding: '6px 14px',
-                        backgroundColor: '#0E7490',
-                        color: '#FFFFFF',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: isAiAnalyzing || !aiPasteText.trim() ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <Sparkles size={14} />
-                      {isAiAnalyzing ? 'Extracting...' : 'Auto-Extract with AI'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Duplicate Warning Alert */}
-              {dupWarning && (
-                <div style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#FFFBEB',
-                  borderRadius: '8px',
-                  border: '1px solid #FDE68A',
-                  color: '#B45309',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <AlertCircle size={18} />
-                  <span>{dupWarning}</span>
-                </div>
-              )}
-
-              {/* Form Fields */}
+            <form onSubmit={handleCreateLead} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label htmlFor="crm-leads-company-epc-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Company / EPC Name *
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Company / Customer Name *
                   </label>
-                  <input id="crm-leads-company-epc-name" name="companyEPCName" aria-label="Company / EPC Name"
+                  <input
                     type="text"
                     required
-                    placeholder="e.g. Vikram Solar Ltd"
-                    value={newLeadForm.companyName}
-                    onChange={(e) => setNewLeadForm({ ...newLeadForm, companyName: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                   />
+                    placeholder="e.g. Apex Solar Energy Ltd"
+                    value={createForm.companyName}
+                    onChange={(e) => setCreateForm({ ...createForm, companyName: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
                 </div>
-
                 <div>
-                  <label htmlFor="crm-leads-contact-person-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Contact Person Name *
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Contact Person *
                   </label>
-                  <input id="crm-leads-contact-person-name" name="contactPersonName" aria-label="Contact Person Name"
+                  <input
                     type="text"
                     required
-                    placeholder="e.g. Rajesh Kannan"
-                    value={newLeadForm.contactPerson}
-                    onChange={(e) => setNewLeadForm({ ...newLeadForm, contactPerson: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                   />
+                    placeholder="e.g. Rajesh Sharma"
+                    value={createForm.contactPerson}
+                    onChange={(e) => setCreateForm({ ...createForm, contactPerson: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label htmlFor="crm-leads-phone-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
                     Phone Number *
                   </label>
-                  <input id="crm-leads-phone-number" name="phoneNumber" aria-label="Phone Number"
+                  <input
                     type="text"
                     required
-                    placeholder="+91 98765 43210"
-                    value={newLeadForm.phone}
-                    onChange={(e) => handlePhoneOrEmailChange('phone', e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                   />
+                    placeholder="e.g. 9840123456"
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value, whatsapp: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
                 </div>
-
                 <div>
-                  <label htmlFor="crm-leads-whats-app-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    WhatsApp Number
-                  </label>
-                  <input id="crm-leads-whats-app-number" name="whatsAppNumber" aria-label="WhatsApp Number"
-                    type="text"
-                    placeholder="Same as phone if blank"
-                    value={newLeadForm.whatsapp}
-                    onChange={(e) => handlePhoneOrEmailChange('whatsapp', e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                   />
-                </div>
-
-                <div>
-                  <label htmlFor="crm-leads-email-address" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
                     Email Address
                   </label>
-                  <input id="crm-leads-email-address" name="emailAddress" aria-label="Email Address"
+                  <input
                     type="email"
-                    placeholder="rajesh@company.com"
-                    value={newLeadForm.email}
-                    onChange={(e) => handlePhoneOrEmailChange('email', e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                   />
+                    placeholder="e.g. rajesh@apexsolar.com"
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label htmlFor="crm-leads-lead-source" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Lead Source
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Inbound Source
                   </label>
-                  <select id="crm-leads-lead-source" name="leadSource" aria-label="Lead Source"
-                    value={newLeadForm.source}
-                    onChange={(e) => setNewLeadForm({ ...newLeadForm, source: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                  <select
+                    value={createForm.source}
+                    onChange={(e) => setCreateForm({ ...createForm, source: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
                   >
-                    <option value="WhatsApp Inbound">WhatsApp Inbound</option>
-                    <option value="VRM Website Form">VRM Website</option>
-                    <option value="IndiaMART Webhook">IndiaMART</option>
+                    <option value="Direct Inbound">Direct Inbound</option>
+                    <option value="IndiaMART Inbound">IndiaMART</option>
+                    <option value="Website">Website</option>
+                    <option value="WhatsApp Inbound">WhatsApp</option>
+                    <option value="Direct Call">Direct Call</option>
                     <option value="Referral">Referral</option>
-                    <option value="Renewable Expo">Renewable Expo</option>
                   </select>
                 </div>
-
                 <div>
-                  <label htmlFor="crm-leads-structure-category" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Project Location / City
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Chennai, Tamil Nadu"
+                    value={createForm.location}
+                    onChange={(e) => setCreateForm({ ...createForm, location: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
                     Structure Category
                   </label>
-                  <select id="crm-leads-structure-category" name="structureCategory" aria-label="Structure Category"
-                    value={newLeadForm.category}
-                    onChange={(e) => setNewLeadForm({ ...newLeadForm, category: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                  <select
+                    value={createForm.category}
+                    onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
                   >
-                    {STRUCTURE_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
+                    {STRUCTURE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-
                 <div>
-                  <label htmlFor="crm-leads-estimated-k-w-capacity" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Estimated kW Capacity
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Estimated kW
                   </label>
-                  <input id="crm-leads-estimated-k-w-capacity" name="estimatedKWCapacity" aria-label="Estimated kW Capacity"
+                  <input
                     type="number"
-                    placeholder="e.g. 100"
-                    value={newLeadForm.estimatedKw}
-                    onChange={(e) => setNewLeadForm({ ...newLeadForm, estimatedKw: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
-                   />
+                    placeholder="e.g. 50"
+                    value={createForm.estimatedKw}
+                    onChange={(e) => setCreateForm({ ...createForm, estimatedKw: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="crm-leads-project-site-location" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Project Site Location & Notes
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  Product Requirement / Technical Scope
                 </label>
-                <textarea id="crm-leads-project-site-location" name="projectSiteLocation" aria-label="Project Site Location & Notes"
-                  rows={2}
-                  placeholder="e.g. Oragadam industrial rooftop, 140 km/h wind speed requirement, delivery before month end."
-                  value={newLeadForm.notes}
-                  onChange={(e) => setNewLeadForm({ ...newLeadForm, notes: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', resize: 'vertical' }}
-                 />
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Need aluminium walk-way clamps and 50kW rail mounting system with SS fasteners."
+                  value={createForm.productRequirement}
+                  onChange={(e) => setCreateForm({ ...createForm, productRequirement: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                />
               </div>
 
-              {/* Modal Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  style={{ padding: '9px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '9px 22px', borderRadius: '8px', border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '13px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 4px rgba(14, 116, 144, 0.25)' }}
+                  style={{
+                    flex: 1.5,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
                 >
-                  Save & Pre-Qualify Lead
+                  Create & Initialize SLA
                 </button>
               </div>
             </form>
@@ -1697,303 +1545,577 @@ export default function CrmLeadsView({
         </div>
       )}
 
-      {/* Slide-Over Detail & Interaction Timeline Drawer */}
-      {selectedLead && (
+      {/* ASSIGN / REASSIGN LEAD MODAL (CEO & Tech Support) */}
+      {showAssignModal && activeLead && (
         <div style={{
           position: 'fixed',
-          top: 0, right: 0, bottom: 0,
-          width: '560px',
-          maxWidth: '100vw',
-          backgroundColor: '#FFFFFF',
-          boxShadow: '-10px 0 25px -5px rgba(0,0,0,0.15)',
-          zIndex: 10001,
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(3px)',
           display: 'flex',
-          flexDirection: 'column',
-          borderLeft: '1px solid #E2E8F0'
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
         }}>
-          {/* Drawer Header */}
           <div style={{
-            padding: '18px 20px',
-            borderBottom: '1px solid #E2E8F0',
-            backgroundColor: '#F8FAFC',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '26px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
           }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Lead Details • {selectedLead.leadNumber}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
+                  Assign Lead: {activeLead.lead_number}
+                </h3>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>
+                  {activeLead.company_name} • Assigner: <strong>{loggedInUserName || userRole}</strong>
+                </span>
               </div>
-              <h3 style={{ fontSize: '17px', fontWeight: '800', color: '#0F172A', margin: '2px 0 0' }}>
-                {selectedLead.companyName}
-              </h3>
-            </div>
-            <button
-              onClick={() => setSelectedLead(null)}
-              style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Drawer Content */}
-          <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            {/* Visual 4-Step Stage Stepper */}
-            <div style={{
-              padding: '14px',
-              backgroundColor: '#F8FAFC',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0'
-            }}>
-              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '10px' }}>
-                Stage Progression Stepper
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                {['New Lead', 'Contacted', 'Qualified', 'Converted'].map((st, i) => {
-                  const stages = ['New Lead', 'Contacted', 'Qualified', 'Converted'];
-                  const currentIndex = stages.indexOf(selectedLead.status);
-                  const isDone = i <= currentIndex;
-                  const isCurrent = selectedLead.status === st;
-
-                  return (
-                    <button
-                      key={st}
-                      onClick={() => {
-                        if (st === 'Converted') {
-                          setSelectedLead(null);
-                          onConvertLead(selectedLead);
-                        } else if (onUpdateLeadStatus) {
-                          onUpdateLeadStatus(selectedLead.id, st, `Stage manually updated to "${st}"`);
-                          setSelectedLead(prev => ({ ...prev, status: st }));
-                        }
-                      }}
-                      style={{
-                        padding: '8px 4px',
-                        borderRadius: '6px',
-                        border: isCurrent ? '2px solid #0E7490' : (isDone ? '1px solid #CCFBF1' : '1px solid #CBD5E1'),
-                        backgroundColor: isCurrent ? '#0E7490' : (isDone ? '#F0FDFA' : '#FFFFFF'),
-                        color: isCurrent ? '#FFFFFF' : (isDone ? '#0F766E' : '#64748B'),
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {st}
-                    </button>
-                  );
-                })}
-              </div>
+              <button onClick={() => setShowAssignModal(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
             </div>
 
-            {/* Contact Details Card */}
-            <div style={{ padding: '14px', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                <span>Primary Contact Information</span>
-                <span style={{ color: '#0E7490', fontWeight: '700' }}>{selectedLead.assignedSalesperson}</span>
-              </div>
-              <div style={{ fontSize: '13px', color: '#0F172A', fontWeight: '700' }}>
-                {selectedLead.contactPerson} ({selectedLead.designation || 'Project Head'})
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Phone size={13} style={{ color: '#0E7490', flexShrink: 0 }} />
-                  <span>Phone: <strong style={{ color: '#0F172A' }}>{selectedLead.phone}</strong></span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MessageSquare size={13} style={{ color: '#16A34A', flexShrink: 0 }} />
-                  <span>WhatsApp: <strong style={{ color: '#0F172A' }}>{selectedLead.whatsapp || selectedLead.phone}</strong></span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Mail size={13} style={{ color: '#0E7490', flexShrink: 0 }} />
-                  <span>Email: <strong style={{ color: '#0F172A' }}>{selectedLead.email || 'Not specified'}</strong></span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MapPin size={13} style={{ color: '#0E7490', flexShrink: 0 }} />
-                  <span>Location: <strong style={{ color: '#0F172A' }}>{selectedLead.location || 'Tamil Nadu'}</strong></span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-                <a
-                  href={`tel:${selectedLead.phone}`}
+            <form onSubmit={handleAssignLead} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                  Select Sales Representative *
+                </label>
+                <select
+                  required
+                  value={assignForm.assignedToId}
+                  onChange={(e) => {
+                    const sel = salesRepresentatives.find(s => s.employee_code === e.target.value);
+                    if (sel) {
+                      setAssignForm({
+                        ...assignForm,
+                        assignedToId: sel.employee_code,
+                        assignedToName: sel.employee_name,
+                        assignedToRole: sel.role || 'Sales Executive'
+                      });
+                    } else {
+                      setAssignForm({ ...assignForm, assignedToId: e.target.value, assignedToName: '' });
+                    }
+                  }}
                   style={{
-                    padding: '6px 14px',
-                    borderRadius: '6px',
-                    border: '1px solid #E2E8F0',
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
                     backgroundColor: '#FFFFFF',
-                    color: '#0284C7',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    textDecoration: 'none'
+                    boxSizing: 'border-box'
                   }}
                 >
-                  <Phone size={14} /> Call Phone
-                </a>
+                  <option value="">-- Choose Sales Representative --</option>
+                  {salesRepresentatives.map(s => (
+                    <option key={s.employee_code} value={s.employee_code}>
+                      {s.employee_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                  Assignment Reason / Instructions (Permanent Audit Trail) *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={assignForm.reason}
+                  onChange={(e) => setAssignForm({ ...assignForm, reason: e.target.value })}
+                  placeholder="e.g. South region customer requested technical proposal within 24 hours."
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{
+                padding: '12px',
+                borderRadius: '8px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                fontSize: '11px',
+                color: '#64748B'
+              }}>
+                <strong>Permanent Audit Rule:</strong> Your name (<strong>{loggedInUserName || userRole}</strong>) will be recorded permanently in the lead's historical audit trail as the assigner.
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button
-                  onClick={() => onOpenWhatsAppChat ? onOpenWhatsAppChat(selectedLead) : onNavigateTab('WhatsApp Inbox')}
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
                   style={{
-                    padding: '6px 14px',
-                    borderRadius: '6px',
-                    border: '1px solid #BBF7D0',
-                    backgroundColor: '#F0FDF4',
-                    color: '#16A34A',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '12px',
-                    fontWeight: '700',
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: 600,
                     cursor: 'pointer'
                   }}
                 >
-                  <MessageSquare size={14} /> Open WhatsApp
+                  Cancel
                 </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1.5,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Confirm Assignment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ACTIVITY LOGGER MODAL (Enforces Qualifying Customer Activities) */}
+      {showActivityModal && activeLead && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '540px',
+            padding: '26px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
+                  Log Customer Activity: {activeLead.company_name}
+                </h3>
+                <span style={{ fontSize: '12px', color: '#059669', fontWeight: 600 }}>
+                  {activeLead.lead_number} • Conductor: {loggedInUserName || userRole}
+                </span>
+              </div>
+              <button onClick={() => setShowActivityModal(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordActivity} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Activity Type *
+                  </label>
+                  <select
+                    value={activityForm.activityType}
+                    onChange={(e) => setActivityForm({ ...activityForm, activityType: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
+                  >
+                    <option value="CALL">Phone Call</option>
+                    <option value="WHATSAPP">WhatsApp Discussion</option>
+                    <option value="EMAIL">Email Communication</option>
+                    <option value="MEETING">Client Meeting / Site Visit</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                    Call Duration (Seconds)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={activityForm.callDurationSeconds}
+                    onChange={(e) => setActivityForm({ ...activityForm, callDurationSeconds: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  Summary of Discussion *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Called client to verify technical rooftop specifications and pitch aluminium clamp structures."
+                  value={activityForm.summary}
+                  onChange={(e) => setActivityForm({ ...activityForm, summary: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  Customer Response / Outcome
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Client requested a formal quotation by tomorrow 2 PM. Very interested."
+                  value={activityForm.customerResponse}
+                  onChange={(e) => setActivityForm({ ...activityForm, customerResponse: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{
+                padding: '12px',
+                borderRadius: '8px',
+                backgroundColor: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                fontSize: '11px',
+                color: '#15803D'
+              }}>
+                ✅ <strong>Qualifying Interaction:</strong> Submitting this customer activity will verify engagement and immediately clear any pending 24-hour unattended warnings.
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowActivityModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1.5,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Record Activity & Satisfy SLA
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* LEAD PROFILE & DETAIL DRAWER */}
+      {showDetailDrawer && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.5)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 9999,
+          display: 'flex',
+          justifyContent: 'flex-end'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            width: '100%',
+            maxWidth: '680px',
+            height: '100%',
+            overflowY: 'auto',
+            padding: '28px',
+            boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            {/* Drawer Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid #E2E8F0' }}>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0E7490', backgroundColor: '#ECFEFF', padding: '2px 8px', borderRadius: '4px' }}>
+                  {leadDetailData?.lead_number || activeLead?.lead_number}
+                </span>
+                <h2 style={{ margin: '6px 0 2px', fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>
+                  {leadDetailData?.company_name || activeLead?.company_name}
+                </h2>
+                <span style={{ fontSize: '13px', color: '#64748B' }}>
+                  Contact: <strong>{leadDetailData?.contact_person || activeLead?.contact_person}</strong> ({leadDetailData?.phone || activeLead?.phone})
+                </span>
+              </div>
+              <button
+                onClick={() => { setShowDetailDrawer(false); setLeadDetailData(null); }}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Quick Summary Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              <div style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Current Status</span>
+                <strong style={{ fontSize: '14px', color: '#0F172A' }}>{leadDetailData?.status || activeLead?.status}</strong>
+              </div>
+              <div style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Assigned Rep</span>
+                <strong style={{ fontSize: '13px', color: '#0F172A' }}>
+                  {leadDetailData?.assigned_to_name ? `${leadDetailData.assigned_to_name} (${leadDetailData.assigned_to_user_id})` : 'Unassigned'}
+                </strong>
+              </div>
+              <div style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Assigned By</span>
+                <strong style={{ fontSize: '13px', color: '#0E7490' }}>
+                  {leadDetailData?.assigned_by_name ? `${leadDetailData.assigned_by_name} (${leadDetailData.assigned_by_role || ''})` : '—'}
+                </strong>
               </div>
             </div>
 
-            {/* Solar Scope & Deal Valuation Card */}
-            <div style={{ padding: '14px', backgroundColor: '#F0FDFA', borderRadius: '10px', border: '1px solid #CCFBF1' }}>
-              <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E', marginBottom: '6px' }}>
-                Solar Engineering Scope & Valuation
+            {/* Inactivity & SLA Status */}
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '10px',
+              backgroundColor: leadDetailData?.is_unattended_24h ? '#FFF7ED' : '#F0FDF4',
+              border: `1px solid ${leadDetailData?.is_unattended_24h ? '#FED7AA' : '#BBF7D0'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: leadDetailData?.is_unattended_24h ? '#C2410C' : '#15803D' }}>
+                  {leadDetailData?.is_unattended_48h ? '48-Hour Escalation Triggered' : leadDetailData?.is_unattended_24h ? '24-Hour Inactivity Warning Active' : 'SLA Active & Compliant'}
+                </span>
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                  Last Qualifying Activity: {leadDetailData?.last_qualifying_activity_at ? new Date(leadDetailData.last_qualifying_activity_at).toLocaleString() : 'No qualifying call/interaction yet'}
+                </span>
               </div>
-              <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>
-                {selectedLead.estimatedKw ? `${selectedLead.estimatedKw} kW Capacity` : 'Custom Scope'}
+              <button
+                onClick={() => {
+                  setShowActivityModal(true);
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Log Call Now
+              </button>
+            </div>
+
+            {/* Permanent Assignment History Timeline */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <UserCheck size={16} color="#0E7490" />
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
+                  Permanent Assignment Audit Trail
+                </h4>
               </div>
-              <div style={{ fontSize: '12px', color: '#334155', marginTop: '3px' }}>
-                Category: <strong>{selectedLead.category || 'Aluminium Mounting Structures'}</strong>
-              </div>
-              <div style={{ fontSize: '12px', color: '#0F766E', fontWeight: '700', marginTop: '4px' }}>
-                Estimated Deal Value: ₹ {((parseFloat(selectedLead.estimatedKw) || 50) * 2800).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
-              {selectedLead.notes && (
-                <div style={{ fontSize: '12px', color: '#475569', marginTop: '8px', padding: '8px', backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                  {selectedLead.notes}
+              {(!leadDetailData?.assignmentHistory || leadDetailData.assignmentHistory.length === 0) ? (
+                <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+                  No historical reassignments recorded yet.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {leadDetailData.assignmentHistory.map((ah) => (
+                    <div
+                      key={ah.id}
+                      style={{
+                        padding: '12px 14px',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 700, color: '#0F172A' }}>
+                          Assigned To: {ah.assigned_to_name} ({ah.assigned_to_user_id})
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                          {new Date(ah.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
+                        Assigned By: <strong>{ah.assigned_by_name}</strong> ({ah.assigned_by_role})
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px', fontStyle: 'italic' }}>
+                        Reason: "{ah.assignment_reason}"
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Quick Convert Button */}
-            {selectedLead.status !== 'Converted' && (
-              <div style={{
-                padding: '16px',
-                backgroundColor: '#EFF6FF',
-                borderRadius: '10px',
-                border: '1px solid #DBEAFE',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px'
-              }}>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E40AF' }}>
-                  Ready to quote this solar structure?
-                </div>
-                <p style={{ fontSize: '12px', color: '#3B82F6', margin: 0 }}>
-                  Convert this lead into an active Customer and commercial Opportunity to generate BOM calculations and Quotations.
-                </p>
-                <button
-                  onClick={() => {
-                    const l = selectedLead;
-                    setSelectedLead(null);
-                    onConvertLead(l);
-                  }}
-                  style={{
-                    padding: '9px 14px',
-                    backgroundColor: '#1D4ED8',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <ArrowRight size={14} /> Convert to Customer & Opportunity
-                </button>
-              </div>
-            )}
-
-            {/* Add Quick Note */}
+            {/* Activity Timeline */}
             <div>
-              <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', marginBottom: '6px' }}>
-                Add Interaction Note
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <PhoneCall size={16} color="#059669" />
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
+                  Qualifying Activity & Customer Call Log
+                </h4>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input id="crm-leads-new-timeline-note" name="newTimelineNote" aria-label="Called client; sent catalog via WhatsApp"
-                  type="text"
-                  placeholder="e.g. Called client; sent catalog via WhatsApp..."
-                  value={newTimelineNote}
-                  onChange={(e) => setNewTimelineNote(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTimelineNote()}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '12px'
-                  }}
-                 />
-                <button
-                  onClick={handleAddTimelineNote}
-                  style={{
-                    padding: '8px 14px',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Log
-                </button>
-              </div>
+              {(!leadDetailData?.activities || leadDetailData.activities.length === 0) ? (
+                <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+                  No calls or discussions logged yet.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {leadDetailData.activities.map((act) => (
+                    <div
+                      key={act.id}
+                      style={{
+                        padding: '12px 14px',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{
+                          fontWeight: 700,
+                          color: '#059669',
+                          backgroundColor: '#ECFDF5',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '11px'
+                        }}>
+                          {act.activity_type} {act.call_duration_seconds > 0 ? `(${Math.floor(act.call_duration_seconds / 60)}m ${act.call_duration_seconds % 60}s)` : ''}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                          {new Date(act.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#1E293B', marginTop: '6px', fontWeight: 500 }}>
+                        {act.summary}
+                      </div>
+                      {act.customer_response && (
+                        <div style={{ fontSize: '11px', color: '#475569', marginTop: '4px', backgroundColor: '#F8FAFC', padding: '6px 10px', borderRadius: '6px' }}>
+                          💬 Customer Response: "{act.customer_response}"
+                        </div>
+                      )}
+                      <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px' }}>
+                        Conducted By: {act.conducted_by_name} ({act.conducted_by_role})
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Chronological Activity Timeline */}
+            {/* Quotations Breakdown */}
             <div>
-              <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', marginBottom: '12px' }}>
-                Chronological Activity Timeline
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <FileCheck2 size={16} color="#7C3AED" />
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
+                  Linked Quotations & Revisions ({leadDetailData?.quotations?.length || 0})
+                </h4>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderLeft: '2px solid #E2E8F0', paddingLeft: '14px', marginLeft: '6px' }}>
-                {(selectedLead.timeline || [
-                  {
-                    id: 'TL-1',
-                    type: 'lead_created',
-                    title: 'Inquiry Logged',
-                    description: `Recorded via ${selectedLead.source}`,
-                    timestamp: selectedLead.createdAt
-                  }
-                ]).map((item, idx) => (
-                  <div key={idx} style={{ position: 'relative' }}>
-                    <div style={{
-                      position: 'absolute',
-                      left: '-21px',
-                      top: '2px',
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      backgroundColor: item.type?.includes('auto') ? '#10B981' : '#0E7490',
-                      border: '2px solid #FFFFFF'
-                    }} />
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      {item.type?.includes('auto') && <Zap size={13} style={{ color: '#059669', flexShrink: 0 }} />}
-                      {String(item.title || '').replace(/^⚡\s*/, '')}
+              {(!leadDetailData?.quotations || leadDetailData.quotations.length === 0) ? (
+                <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+                  No quotations created for this lead yet.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {leadDetailData.quotations.map((q) => (
+                    <div
+                      key={q.id}
+                      style={{
+                        padding: '12px 14px',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontWeight: 700, color: '#0E7490' }}>{q.quote_number}</span>
+                        {q.revision_number > 0 && (
+                          <span style={{ marginLeft: '6px', fontSize: '10px', backgroundColor: '#FAF5FF', color: '#9333EA', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                            Rev {q.revision_number}
+                          </span>
+                        )}
+                        <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                          Grand Total: ₹{Number(q.grand_total || 0).toLocaleString()} • Status: <strong>{q.status}</strong>
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                        {new Date(q.created_at).toLocaleDateString()}
+                      </span>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                      {item.description}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
-                      {new Date(item.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Status Transition Audit Trail */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <RotateCcw size={16} color="#64748B" />
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
+                  Status Transition Audit History
+                </h4>
               </div>
+              {(!leadDetailData?.statusHistory || leadDetailData.statusHistory.length === 0) ? (
+                <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+                  Initial status only.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {leadDetailData.statusHistory.map((sh) => (
+                    <div
+                      key={sh.id}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <span>
+                        Changed from <strong>{sh.previous_status || 'Start'}</strong> → <strong>{sh.new_status}</strong> by {sh.updated_by_name}
+                      </span>
+                      <span style={{ color: '#94A3B8' }}>{new Date(sh.created_at).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

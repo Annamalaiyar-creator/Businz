@@ -218,6 +218,18 @@ const compressImageFile = (file, maxDim = 450, quality = 0.85) => {
   });
 };
 
+// Safely resolve print image URLs, preventing unreachable localhost/dev URLs from stalling html2canvas on live servers
+const getSafePrintImageUrl = (url, fallback) => {
+  if (!url || typeof url !== 'string') return fallback;
+  if (url.startsWith('data:image/')) return url;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (url.includes('localhost:') || url.includes('127.0.0.1:') || url.includes('192.168.')) {
+      return fallback;
+    }
+  }
+  return url;
+};
+
 // Helper to convert number to Indian Rupees in words
 function numberToWordsINR(num) {
   if (num === null || num === undefined || isNaN(num) || num === 0) return 'Zero Rupees Only';
@@ -1284,7 +1296,7 @@ export function VRMProformaInvoicePrintSheet({
                 >
                   <div style={{ height: '48px', maxWidth: '180px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', overflow: 'hidden' }}>
                     <img
-                      src={cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')) || VRM_OFFICIAL_LOGO}
+                      src={getSafePrintImageUrl(cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')), VRM_OFFICIAL_LOGO)}
                       alt={cfg.companyName || 'VRM Structures'}
                       style={{
                         maxHeight: '44px',
@@ -2312,12 +2324,15 @@ export function VRMProformaInvoicePrintSheet({
                 }}>
                   {/* Official Stamp */}
                   <img
-                    src={cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')) || VRM_OFFICIAL_STAMP}
+                    src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
                     alt="VRM Structures Official Stamp"
                     style={{
                       height: '115px',
                       width: '115px',
                       objectFit: 'contain'
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.src = VRM_OFFICIAL_STAMP;
                     }}
                   />
                   {/* Optional Custom Signature overlay (Only shown if custom signature image uploaded) */}
@@ -3683,6 +3698,8 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
       const canvas = await html2canvas(sheetEl, {
         scale: 2,
         useCORS: true,
+        allowTaint: false,
+        imageTimeout: 3000,
         logging: false,
         backgroundColor: '#ffffff',
         ignoreElements: (element) => element.classList?.contains('no-print')
@@ -3744,6 +3761,8 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
           const canvas = await html2canvas(sheetEl, {
             scale: 2,
             useCORS: true,
+            allowTaint: false,
+            imageTimeout: 3000,
             logging: false,
             backgroundColor: '#ffffff',
             ignoreElements: (element) => element.classList?.contains('no-print')

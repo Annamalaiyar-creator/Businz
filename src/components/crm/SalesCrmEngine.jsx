@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Briefcase, Calendar, MessageSquare, FileText,
-  Boxes, BarChart3, Search, Plus, Bell, RefreshCw, ChevronRight, Check
+  Boxes, BarChart3, Search, Plus, Bell, RefreshCw, ChevronRight, Check, Globe
 } from 'lucide-react';
 import CrmDashboard from './CrmDashboard';
 import CrmLeadsView from './CrmLeadsView';
@@ -12,6 +12,7 @@ import CrmWhatsAppInbox from './CrmWhatsAppInbox';
 import CrmQuotationsView from './CrmQuotationsView';
 import CrmProductCatalog from './CrmProductCatalog';
 import CrmReportsView from './CrmReportsView';
+import IndiaMartSettingsView from './IndiaMartSettingsView';
 import { getNextSequence } from '../../utils/sequenceGenerator';
 
 import {
@@ -51,7 +52,7 @@ export default function SalesCrmEngine({
   onNavigateTab
 }) {
   const mapInitialTab = (tab) => {
-    if (tab === 'Leads') return 'Leads';
+    if (tab === 'Leads' || tab === 'Leads Directory') return 'Leads';
     if (tab === 'Customers' || tab === 'Customer Management') return 'Customers';
     if (tab === 'Opportunities') return 'Opportunities';
     if (tab === 'Follow-ups') return 'Follow-ups';
@@ -59,6 +60,7 @@ export default function SalesCrmEngine({
     if (tab === 'Quotations') return 'Quotations';
     if (tab === 'Product Catalog' || tab === 'Products') return 'Products';
     if (tab === 'Sales Reports') return 'Reports';
+    if (tab === 'IndiaMART' || tab === 'IndiaMART Integration') return 'IndiaMART';
     return 'Dashboard';
   };
 
@@ -731,7 +733,10 @@ export default function SalesCrmEngine({
     { id: 'WhatsApp', label: 'WhatsApp Inbox', icon: MessageSquare },
     { id: 'Quotations', label: 'Quotations', icon: FileText },
     { id: 'Products', label: 'Product Master', icon: Boxes },
-    { id: 'Reports', label: 'Analytics & Reports', icon: BarChart3 }
+    { id: 'Reports', label: 'Analytics & Reports', icon: BarChart3 },
+    ...( ['ceo', 'md', 'tech support', 'technical administrator', 'admin', 'sales head'].some(r =>
+      (userRole || '').toLowerCase().includes(r)
+    ) ? [{ id: 'IndiaMART', label: 'IndiaMART Integration', icon: Globe }] : [])
   ];
 
   function Building2Icon(props) {
@@ -875,6 +880,10 @@ export default function SalesCrmEngine({
             boms={boms}
             invoices={invoices}
           />
+        )}
+
+        {activeTab === 'IndiaMART' && (
+          <IndiaMartSettingsView userRole={userRole} />
         )}
       </div>
     </div>

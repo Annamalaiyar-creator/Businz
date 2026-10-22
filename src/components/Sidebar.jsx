@@ -8,7 +8,7 @@ import {
   Search, HelpCircle, MessageSquare, Rocket, Sparkles, ChevronUp,
   CheckCircle, ClipboardList, Truck, Warehouse, ShieldCheck, Activity, FileCheck,
   Calendar, Wrench, Calculator, RefreshCw, Scale, Building2, BarChart3,
-  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2
+  Zap, CreditCard, Layers, Briefcase, Palette, Factory, Mail, Share2, Globe
 } from 'lucide-react';
 import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { fetchCloudStore } from '../utils/supabaseDataSync';
@@ -293,16 +293,17 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'Preset Management', icon: Layers },
-            { label: 'Stock Status', icon: Warehouse },
-            { label: 'Raw Material Directory', icon: Layers }
+            { label: 'Stock Status', icon: Warehouse }
           ]
         },
         {
-          category: 'SUPPORT CHANNELS',
+          category: 'SUPPORT CHANNELS & CRM',
           items: [
-            { label: 'WhatsApp Inbox', icon: MessageSquare, badge: 'Live' },
-            { label: 'Mail Inbox', icon: Mail, badge: 'Direct' },
-            { label: 'Facebook & Meta', icon: Share2, badge: 'Meta' }
+            { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
+            { label: 'IndiaMART Integration', targetTab: 'IndiaMART', icon: Globe },
+            { label: 'WhatsApp Inbox', icon: MessageSquare },
+            { label: 'Mail Inbox', icon: Mail },
+            { label: 'Facebook & Meta', icon: Share2 }
           ]
         }
       ];
@@ -339,13 +340,15 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
               targetTab: 'Purchase Orders', 
               icon: ShoppingCart, 
               badge: realPendingPOCount > 0 ? String(realPendingPOCount) : undefined 
-            }
+            },
+            { label: 'Leads Directory', targetTab: 'Leads', icon: Users }
           ]
         },
         {
-          category: 'SYSTEM & CONFIG',
+          category: 'INTEGRATIONS & CONFIG',
           items: [
-            { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' }
+            { label: 'IndiaMART Integration', targetTab: 'IndiaMART', icon: Globe },
+            { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck }
           ]
         }
       ];
@@ -370,13 +373,13 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
 
     if (sysSection) {
       if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
-      if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
+      if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck });
     } else {
       const sysItems = [];
       if (showTemplates) {
         sysItems.push({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
       }
-      sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck, badge: 'Safe' });
+      sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck });
       sections.push({
         category: 'SYSTEM & CONFIG',
         items: sysItems
@@ -388,7 +391,8 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         ...s,
         items: (s.items || []).filter(i => 
           i.targetTab !== 'Templates' && i.label !== 'Templates' && i.label !== 'Print Templates' && i.label !== 'PO Template' && i.label !== 'Template Studio' &&
-          i.targetTab !== 'BOM Orders' && i.label !== 'BOM Orders' && i.label !== 'BOM' && i.label !== 'Sales BOM' && i.targetTab !== 'BOM'
+          i.targetTab !== 'BOM Orders' && i.label !== 'BOM Orders' && i.label !== 'BOM' && i.label !== 'Sales BOM' && i.targetTab !== 'BOM' &&
+          i.targetTab !== 'Raw Material Directory' && i.label !== 'Raw Material Directory' && i.label !== 'Raw Material Inventory' && i.targetTab !== 'Raw Material Inventory'
         )
       })).filter(s => s.items.length > 0);
     }
