@@ -74,8 +74,11 @@ function formatDateDDMMYYYY(val) {
   return s;
 }
 
-export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
+export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSales = false, userRole = '' }) {
   const [branding, setBranding] = useState(getCachedBranding);
+  const effectiveRole = userRole || (typeof localStorage !== 'undefined' ? (localStorage.getItem('controlroom_user_role') || '') : '');
+  const isDispatchRole = /dispatch/i.test(effectiveRole);
+  const isSalesUser = Boolean(isSales || !isDispatchRole || /sales/i.test(effectiveRole));
 
   useEffect(() => {
     let isMounted = true;
@@ -1161,27 +1164,6 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
         </tbody>
       </table>
 
-      {/* 7. OFFICIAL AUTHORIZED SIGNATORY BLOCK */}
-      <div 
-        className="print-avoid-break" 
-        style={{ 
-          borderTop: '1.5px solid #CBD5E1', 
-          paddingTop: '12px', 
-          marginTop: '16px', 
-          display: 'flex', 
-          justifyContent: 'flex-end', 
-          pageBreakInside: 'avoid', 
-          breakInside: 'avoid' 
-        }}
-      >
-        <div style={{ textAlign: 'center', minWidth: '220px' }}>
-          <div style={{ height: '36px' }}></div>
-          <div style={{ borderTop: '1.5px dashed #94A3B8', paddingTop: '5px', width: '100%' }}>
-            <strong style={{ color: '#0F172A', fontSize: '13px', display: 'block' }}>For VRM Structures India Pvt Ltd</strong>
-            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', fontWeight: '600' }}>Authorized Signatory</div>
-          </div>
-        </div>
-      </div>
 
       {/* 8. SYSTEM PRINT AUDIT WATERMARK */}
       <div style={{
@@ -1196,10 +1178,13 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document" }) {
       }}>
         <span>VRM BUSINZ ORDER LIST • {bomNumber}</span>
         <span>
-          {b.dispatchPrintCount > 1 
-            ? `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #${b.dispatchPrintCount} • 1st Print: ${b.firstPrintTimeStr || 'Recorded'})`
-            : `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #1)`
-          }
+          {isSalesUser ? (
+            `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+          ) : (
+            b.dispatchPrintCount > 1 
+              ? `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #${b.dispatchPrintCount} • 1st Print: ${b.firstPrintTimeStr || 'Recorded'})`
+              : `Printed: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} (Copy #1)`
+          )}
         </span>
       </div>
 
@@ -1287,12 +1272,19 @@ function recordBomPrintStatus(targetBom) {
   } catch (_) {}
 }
 
-export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true }) {
+export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true, userRole = '', isSales = false }) {
   const b = bomData || {};
   const hasTrackedRef = useRef(false);
 
+  const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
+  const effectiveRole = userRole || storedRole || '';
+  const isDispatchRole = /dispatch/i.test(effectiveRole);
+  const isSalesUser = Boolean(isSales || !isDispatchRole || /sales/i.test(effectiveRole));
+
   const handlePrint = () => {
-    recordBomPrintStatus(b);
+    if (!isSalesUser) {
+      recordBomPrintStatus(b);
+    }
     window.print();
   };
 
@@ -1311,12 +1303,14 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   useEffect(() => {
     if (!bomData || !autoPrint || hasTrackedRef.current) return;
     hasTrackedRef.current = true;
-    recordBomPrintStatus(b);
+    if (!isSalesUser) {
+      recordBomPrintStatus(b);
+    }
     const timer = setTimeout(() => {
       window.print();
     }, 400);
     return () => clearTimeout(timer);
-  }, [bomData, autoPrint]);
+  }, [bomData, autoPrint, isSalesUser]);
 
   if (!bomData) return null;
 
@@ -1419,7 +1413,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
         </div>
 
         {/* PRINT SHEET CONTENT */}
-        <VRMBomPrintSheet bomData={bomData} />
+        <VRMBomPrintSheet bomData={bomData} isSales={isSalesUser} userRole={effectiveRole} />
       </div>
     </div>
   );

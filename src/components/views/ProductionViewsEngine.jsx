@@ -2012,6 +2012,8 @@ export default function ProductionViewsEngine(props) {
         <VRMBomPrintTemplate
           bomData={printBomModal}
           onClose={() => setPrintBomModal(null)}
+          userRole={props.userRole || userRole || 'Dispatch Head'}
+          isSales={false}
         />
       )}
 

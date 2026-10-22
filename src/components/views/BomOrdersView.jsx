@@ -276,9 +276,32 @@ export default function BomOrdersView(props) {
       debouncedSync();
     };
 
+    const handleBomPrinted = (e) => {
+      const { bomCode, dispatchPrinted, dispatchPrintedAt, dispatchPrintTimeStr, dispatchPrintedDateStr, dispatchPrintedBy, dispatchPrintCount, firstPrintTimeStr, secondPrintTimeStr, dispatchPrintHistory } = e.detail || {};
+      if (!bomCode) return;
+      setBomStore(prev => (prev || []).map(b => {
+        if ((b.bomCode || b.code || b.id) === bomCode) {
+          return {
+            ...b,
+            dispatchPrinted: true,
+            dispatchPrintedAt,
+            dispatchPrintTimeStr,
+            dispatchPrintedDateStr,
+            dispatchPrintedBy,
+            dispatchPrintCount,
+            firstPrintTimeStr,
+            secondPrintTimeStr,
+            dispatchPrintHistory
+          };
+        }
+        return b;
+      }));
+    };
+
     window.addEventListener('controlroom_store_update', handleStoreUpdate);
     window.addEventListener('controlroom_bom_updated', handleStorageUpdate);
     window.addEventListener('controlroom_bom_store_updated', handleStorageUpdate);
+    window.addEventListener('vrm_bom_printed', handleBomPrinted);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
@@ -289,6 +312,7 @@ export default function BomOrdersView(props) {
       window.removeEventListener('controlroom_store_update', handleStoreUpdate);
       window.removeEventListener('controlroom_bom_updated', handleStorageUpdate);
       window.removeEventListener('controlroom_bom_store_updated', handleStorageUpdate);
+      window.removeEventListener('vrm_bom_printed', handleBomPrinted);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };
@@ -1397,10 +1421,12 @@ export default function BomOrdersView(props) {
       { id: 'Pending', label: 'Pending Sales Confirmation', count: (visibleBomStore || []).filter(b => !b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft').length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'AddressAction', label: 'Address Proof Requested', count: (visibleBomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales').length, bg: '#fee2e2', fg: '#b91c1c' },
       { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: (visibleBomStore || []).filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed').length, bg: '#dcfce7', fg: '#166534' },
+      { id: 'PendingPrint', label: 'Pending Print', count: (visibleBomStore || []).filter(b => (!b.dispatchPrinted && !b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#fef3c7', fg: '#b45309' },
+      { id: 'Printed', label: 'Print Taken', count: (visibleBomStore || []).filter(b => (b.dispatchPrinted || b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#dcfce7', fg: '#166534' },
       { id: 'Closed', label: 'Closed / Completed', count: (visibleBomStore || []).filter(b => b && (b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed'))).length, bg: '#ecfdf5', fg: '#047857' },
       { id: 'Cancelled', label: 'Cancelled & Restored', count: (visibleBomStore || []).filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled).length, bg: '#f1f5f9', fg: '#64748b' }
     ],
-    headers: ['BOM Code', 'Date of Entry', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Status'],
+    headers: ['BOM Code', 'Date & Time', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Printout Status', 'Status'],
     rows: (visibleBomStore || []).filter(Boolean).map(b => {
       const isDraft = b.status === 'Draft';
       const isCancelled = b.status === 'Cancelled & Stock Restored' || b.cancelled;
@@ -1461,10 +1487,74 @@ export default function BomOrdersView(props) {
       };
       const gVal = numVal(b.grandTotal) || numVal(b.total) || numVal(b.subTotal);
 
+      const resolveDateTime = (order) => {
+        let rawTs = order?.salesConfirmedAt || order?.createdAt || order?.timestamp;
+        let s = rawTs ? String(rawTs).trim() : '';
+
+        const isDateOnlySeed = !s || /^\d{4}-\d{2}-\d{2}$/.test(s) || /T00:00:00(?:\.000)?Z?$/i.test(s) || /T05:30:00(?:\.\d+)?Z?$/i.test(s);
+
+        if (isDateOnlySeed) {
+          const candidate = order?.updatedAt || order?.updated_at;
+          if (candidate) {
+            const candStr = String(candidate).trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(candStr) && !/T00:00:00(?:\.000)?Z?$/i.test(candStr) && !/T05:30:00(?:\.\d+)?Z?$/i.test(candStr)) {
+              rawTs = candidate;
+              s = candStr;
+            }
+          }
+        }
+
+        if (!rawTs) {
+          rawTs = order?.date;
+          s = rawTs ? String(rawTs).trim() : '';
+        }
+
+        if (!rawTs) {
+          return { date: '—', time: '', combined: '—' };
+        }
+
+        const explicitDateStr = order?.date;
+        let explicitDateObj = null;
+        if (explicitDateStr && /^\d{4}-\d{2}-\d{2}$/.test(String(explicitDateStr).trim())) {
+          const parts = String(explicitDateStr).trim().split('-');
+          explicitDateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          const parts = s.split('-');
+          const yr = parseInt(parts[0], 10);
+          const mo = parseInt(parts[1], 10) - 1;
+          const da = parseInt(parts[2], 10);
+          const d = new Date(yr, mo, da);
+          const dStr = isNaN(d.getTime()) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+          return { date: dStr, time: '', combined: dStr };
+        }
+
+        const d = new Date(rawTs);
+        if (isNaN(d.getTime())) {
+          return { date: s, time: '', combined: s };
+        }
+
+        const dStr = (explicitDateObj && !isNaN(explicitDateObj.getTime()))
+          ? explicitDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+        const tStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+        return { date: dStr, time: tStr, combined: `${dStr}, ${tStr}` };
+      };
+
+      const dt = resolveDateTime(b);
+      const isPrinted = Boolean(b.dispatchPrinted || b.isPrinted);
+      const printTime = b.dispatchPrintTimeStr || (b.dispatchPrintedAt ? new Date(b.dispatchPrintedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '');
+      const printDate = b.dispatchPrintedDateStr || (b.dispatchPrintedAt ? new Date(b.dispatchPrintedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+      const printedBy = b.dispatchPrintedBy || 'Dispatch Team';
+
       return {
         ...b,
         code: b.bomCode || b.code || 'BOM-101',
         c2: formattedDate,
+        dateTimeObj: dt,
         c3: displayName,
         salesPerson: (() => {
           const sp = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
@@ -1472,6 +1562,10 @@ export default function BomOrdersView(props) {
           return sp;
         })(),
         sourcePiNo: b.sourcePiNo || b.piNo || null,
+        dispatchPrinted: isPrinted,
+        dispatchPrintTimeStr: printTime,
+        dispatchPrintedDateStr: printDate,
+        dispatchPrintedBy: printedBy,
         c4: normalizePaymentTerm(b.paymentType || b.paymentTerms || b.piPaymentTerms),
         c5: gVal > 0 ? formatCurrency(gVal) : (b.grandTotal != null ? formatCurrency(b.grandTotal) : '—'),
         status: isAddressRequested ? 'Address Proof Requested from Sales' : (isClosedOrCompleted ? (b.status || 'Completed') : (b.status || 'Pending Sales Confirmation')),
@@ -1494,16 +1588,31 @@ export default function BomOrdersView(props) {
     const subTab = (activeSubTab || 'All').toLowerCase();
     const rStatus = (r.status || '').toLowerCase();
     const rTabGroup = (r.tabGroup || '').toLowerCase();
+    const isPrinted = Boolean(r.dispatchPrinted || r.isPrinted);
+    const isClosedOrDone = rTabGroup === 'closed' || rStatus.includes('closed') || rStatus.includes('complete') || r.fullyCompleted || (r.status || '').toLowerCase().includes('completed') || (r.status || '').toLowerCase().includes('closed');
 
-    const matchesTab = subTab === 'all' ||
-      subTab === 'all boms' ||
-      rTabGroup === subTab ||
-      ((subTab.includes('closed') || subTab.includes('complete')) && (rTabGroup === 'closed' || rStatus.includes('closed') || rStatus.includes('complete') || r.fullyCompleted)) ||
-      (subTab === 'addressaction' && (r.addressProofReuploadRequested || rStatus.includes('address proof'))) ||
-      (subTab.includes('cancel') && (rStatus.includes('cancel') || r.cancelled)) ||
-      (subTab.includes('pending') && (rStatus.includes('pending') || rStatus.includes('draft')) && !r.cancelled) ||
-      (subTab.includes('draft') && rStatus.includes('draft') && !r.cancelled) ||
-      (subTab.includes('sent') && (rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !r.cancelled);
+    let matchesTab = false;
+    if (subTab === 'all' || subTab === 'all boms') {
+      matchesTab = true;
+    } else if (subTab === 'pendingprint') {
+      matchesTab = !isPrinted && !r.cancelled && !isClosedOrDone;
+    } else if (subTab === 'printed') {
+      matchesTab = isPrinted && !r.cancelled && !isClosedOrDone;
+    } else if (subTab === 'addressaction') {
+      matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof'));
+    } else if (subTab.includes('closed') || subTab.includes('complete')) {
+      matchesTab = Boolean(isClosedOrDone);
+    } else if (subTab.includes('cancel')) {
+      matchesTab = Boolean(rStatus.includes('cancel') || r.cancelled);
+    } else if (subTab === 'draft' || (subTab.includes('draft') && !subTab.includes('pending'))) {
+      matchesTab = Boolean(rStatus.includes('draft') && !r.cancelled);
+    } else if (subTab.includes('pending')) {
+      matchesTab = Boolean((rStatus.includes('pending') || rStatus.includes('draft')) && !r.cancelled);
+    } else if (subTab.includes('sent')) {
+      matchesTab = Boolean((rTabGroup === 'sent' || rStatus.includes('sent') || rStatus.includes('confirm') || rStatus.includes('production')) && !r.cancelled);
+    } else {
+      matchesTab = rTabGroup === subTab;
+    }
 
     // Date range filter matching
     let matchesDate = true;
@@ -6791,6 +6900,8 @@ export default function BomOrdersView(props) {
           <VRMBomPrintTemplate
             bomData={printingBomRecord}
             onClose={() => setPrintingBomRecord(null)}
+            userRole={props.userRole || userRole || 'Sales Executive'}
+            isSales={true}
           />
         )}
 
@@ -6994,8 +7105,9 @@ export default function BomOrdersView(props) {
                   let colWidth = 'auto';
                   let minColWidth = '140px';
                   if (i === 0) { colWidth = '150px'; minColWidth = '150px'; }
-                  else if (i === 1) { minColWidth = '220px'; }
+                  else if (h.includes('Customer')) { minColWidth = '220px'; }
                   else if (h === 'Status') { colWidth = '160px'; minColWidth = '160px'; }
+                  else if (h === 'Printout Status' || h === 'Print Status') { colWidth = '160px'; minColWidth = '160px'; }
                   else if (isRight) { colWidth = '150px'; minColWidth = '150px'; }
                   else if (h.includes('Date')) { colWidth = '130px'; minColWidth = '130px'; }
                   else if (h.includes('Payment')) { colWidth = '150px'; minColWidth = '150px'; }
@@ -7174,9 +7286,18 @@ export default function BomOrdersView(props) {
                           const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
                           setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
                         }}
-                        style={{ padding: '12px 14px', color: '#64748B', cursor: 'pointer' }}
+                        style={{ padding: '12px 14px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap', cursor: 'pointer' }}
                       >
-                        {row.c2}
+                        {row.dateTimeObj ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2' }}>
+                            <span style={{ fontWeight: '600', color: '#1E293B', fontSize: '12.5px' }}>{row.dateTimeObj.date}</span>
+                            {row.dateTimeObj.time && (
+                              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>{row.dateTimeObj.time}</span>
+                            )}
+                          </div>
+                        ) : (
+                          row.c2
+                        )}
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: '600', color: '#1E293B' }}>{row.c3}</td>
                       <td style={{ padding: '12px 14px', color: '#0E7490', fontWeight: '700', fontSize: '12px' }}>
@@ -7186,6 +7307,56 @@ export default function BomOrdersView(props) {
                       </td>
                       <td style={{ padding: '12px 14px', color: '#64748B' }}>{row.c4}</td>
                       <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#0F172A', textAlign: 'right' }}>{row.c5}</td>
+                      {/* 7. DEDICATED PRINT STATUS COLUMN */}
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        {row.dispatchPrinted ? (
+                          <span
+                            title={`BOM physical sheet printed on ${row.dispatchPrintedDateStr || ''} at ${row.dispatchPrintTimeStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`}
+                            style={{
+                              backgroundColor: '#F0FDF4',
+                              color: '#15803D',
+                              border: '1px solid #BBF7D0',
+                              borderRadius: '6px',
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4.5px',
+                              width: 'fit-content',
+                              lineHeight: 1
+                            }}
+                          >
+                            <Printer size={11} strokeWidth={2.5} />
+                            <span>Printed</span>
+                            {row.dispatchPrintTimeStr && (
+                              <span style={{ opacity: 0.85, fontWeight: '600' }}>({row.dispatchPrintTimeStr})</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span
+                            title="BOM physical sheet has not been printed yet"
+                            style={{
+                              backgroundColor: '#FFFBEB',
+                              color: '#B45309',
+                              border: '1px solid #FDE68A',
+                              borderRadius: '6px',
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4.5px',
+                              width: 'fit-content',
+                              lineHeight: 1
+                            }}
+                          >
+                            <Clock size={11} strokeWidth={2.5} />
+                            <span>Pending Print</span>
+                          </span>
+                        )}
+                      </td>
+                      {/* 8. STATUS COLUMN */}
                       <td style={{ padding: '12px 14px', textAlign: 'left' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                           <span style={{ backgroundColor: row.stBg, color: row.stFg, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '5px', border: row.stBorder }}>
@@ -8548,6 +8719,8 @@ export default function BomOrdersView(props) {
         <VRMBomPrintTemplate
           bomData={printingBomRecord}
           onClose={() => setPrintingBomRecord(null)}
+          userRole={props.userRole || userRole || 'Sales Executive'}
+          isSales={true}
         />
       )}
 
