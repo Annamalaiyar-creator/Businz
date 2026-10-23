@@ -1,35 +1,17 @@
-import { Client } from 'pg';
-import dotenv from 'dotenv';
-dotenv.config();
-
-function getDbClient() {
-  return new Client({
-    connectionString: process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || process.env.POSTGRES_URL
-  });
-}
+import { pool, query } from './db.js';
 
 /**
  * Execute a query with auto-connection handling
  */
 export async function dbQuery(sql, params = []) {
-  const client = getDbClient();
-  try {
-    await client.connect();
-    const res = await client.query(sql, params);
-    return res;
-  } finally {
-    try {
-      await client.end();
-    } catch (_) {}
-  }
+  return query(sql, params);
 }
 
 /**
  * Execute within a transaction
  */
 export async function withTransaction(callback) {
-  const client = getDbClient();
-  await client.connect();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await callback(client);
@@ -40,7 +22,7 @@ export async function withTransaction(callback) {
     throw err;
   } finally {
     try {
-      await client.end();
+      client.release();
     } catch (_) {}
   }
 }
