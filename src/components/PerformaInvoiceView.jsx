@@ -2109,15 +2109,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     }
 
-    // 4.5 Mandatory Destination
-    if (!destination || !destination.trim()) {
-      missingList.push({
-        field: 'Destination',
-        message: 'Destination is mandatory. Please enter the delivery destination.',
-        targetId: 'performa-invoice-destination'
-      });
-    }
-
     // 5. Line items
     if (!Array.isArray(piItems) || piItems.length === 0) {
       missingList.push({
@@ -4082,13 +4073,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label htmlFor="performa-invoice-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Destination <span style={{ color: '#EF4444' }}>*</span>
+                    Destination
                   </label>
                   <input id="performa-invoice-destination" name="destination" aria-label="Destination"
                     type="text"
-                    required
                     value={destination}
-                    placeholder="e.g. Coimbatore, Hyderabad, Site Location..."
+                    placeholder="e.g. Coimbatore, Hyderabad, Site Location (Optional)..."
                     onChange={(e) => setDestination(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                    />
