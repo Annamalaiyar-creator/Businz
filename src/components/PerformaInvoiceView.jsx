@@ -5,7 +5,7 @@ import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
 import ModernDateRangePicker from './ModernDateRangePicker';
 import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
-import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
+import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS, stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
@@ -1915,6 +1915,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     }));
 
+    const isFixedKit = isFixedQuantityPreset(presetId, targetPreset.label || presetName);
     const newItems = targetPreset.items.map(it => {
       const baseQ = parseFloat(it.qty) || 1;
       const resCode = resolveProductCode(it);
@@ -1924,7 +1925,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: String(Math.round(baseQ * multiplier)),
+        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
         isPresetItem: true
@@ -5138,7 +5139,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                     [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                   }));
                                                 }
-                                                const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                                const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
+                                                const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
                                                 setPiItems(prev => prev.map(mat => {
                                                   if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
                                                     return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };

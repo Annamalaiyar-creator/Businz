@@ -8,7 +8,7 @@ import {
   AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap
 } from 'lucide-react';
 import HdgStructureConfiguratorModal from './HdgStructureConfiguratorModal';
-import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
+import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
 import NotificationToast from '../NotificationToast';
@@ -649,6 +649,7 @@ export default function CrmQuotationsView({
 
     const presetName = targetPreset.label || presetId;
     const initialGstRate = targetPreset.gstRate || targetPreset.gst || '18%';
+    const isFixedKit = isFixedQuantityPreset(presetId, presetName);
 
     setPresetGroups(prev => ({
       ...prev,
@@ -658,7 +659,8 @@ export default function CrmQuotationsView({
         presetName,
         setCount: multiplier,
         kitPrice: defaultPrice,
-        gstRate: initialGstRate
+        gstRate: initialGstRate,
+        isFixedKit
       }
     }));
 
@@ -669,7 +671,7 @@ export default function CrmQuotationsView({
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: String(Math.round(baseQ * multiplier)),
+        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
         isPresetItem: true
@@ -2131,7 +2133,8 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                               }));
                                             }
-                                            const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
+                                            const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
                                             setQuoteItems(prev => prev.map(mat => {
                                               if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
                                                 return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
@@ -2148,9 +2151,11 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                               }));
                                             }
+                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
+                                            const effectiveMultiplier = isFixedKit ? 1 : finalCount;
                                             setQuoteItems(prev => prev.map(mat => {
                                               if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * finalCount)) };
+                                                return { ...mat, qty: String(Math.round(mat.baseQty * effectiveMultiplier)) };
                                               }
                                               return mat;
                                             }));

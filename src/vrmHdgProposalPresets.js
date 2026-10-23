@@ -228,3 +228,40 @@ if (typeof window !== "undefined") {
     syncPresetsWithCloud();
   });
 }
+
+/**
+ * Presets where item quantities remain fixed at 1 (decoupled from set count multiplier)
+ * while kit pricing multiplies by set count (Option A).
+ */
+export const FIXED_QUANTITY_PRESET_IDS = new Set([
+  'preset_1_40mm_mini_rail',
+  'preset_2_60mm_mini_rail',
+  'preset_3_mini_rail_75mm_new',
+  'preset_4_100mm_mini_rail__new_',
+  'preset_5_mini_rail_125mm_height_and_300mm_length',
+  'preset_6_120mm_adhesive_rail',
+  'preset_7_120mm_adhesive_rail',
+  'preset_8_struct_rail_2_4mm',
+  'preset_9_double_c_rail_2_4m',
+  'preset_10_2_mtr_triangle_structure_north_slope',
+  'preset_11_2_mtr_triangle_structure_east_west_slope',
+  'preset_12_2_mtr_triangle_structure_bllast_structures'
+]);
+
+/**
+ * Checks if a preset has its component quantities decoupled (cut connection) from set count.
+ * Returns true if item quantities must remain fixed at 1 (or base quantity).
+ */
+export function isFixedQuantityPreset(presetId, presetName) {
+  if (!presetId && !presetName) return false;
+  const pId = String(presetId || '').trim();
+  if (pId && FIXED_QUANTITY_PRESET_IDS.has(pId)) return true;
+  const pName = String(presetName || '').toLowerCase().trim();
+  return (
+    pName.includes('mini rail') ||
+    pName.includes('adhesive rail') ||
+    pName.includes('struct rail 2.4') ||
+    pName.includes('double c rail 2.4') ||
+    pName.includes('triangle structure')
+  );
+}

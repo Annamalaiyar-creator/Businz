@@ -8,7 +8,7 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { fetchCloudStore, saveCloudStore, saveCloudStoreImmediate, subscribeToCloudStore, getAndReserveNextBomCode, resolveBomCollisions, deleteCloudBomRow, saveCloudBomRow } from '../../utils/supabaseDataSync';
-import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
+import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
 import { VRM_PRODUCTS } from '../../utils/vrmProductsData';
 import { saveMediaToCache, getMediaFromCache, stripDataUrlsFromRecord, compressAndSaveFile, cleanNum, formatCurrency, normalizePaymentTerm, STANDARD_PAYMENT_TERMS } from '../../utils/otherViewsShared';
 import { uploadBomDocumentFile, validateClientFile } from '../../utils/bomStorageClient';
@@ -2823,6 +2823,7 @@ export default function BomOrdersView(props) {
         }
       }));
 
+      const isFixedKit = isFixedQuantityPreset(presetId, targetPreset.label || presetName);
       const newItems = targetPreset.items.map(it => {
         const baseQ = parseFloat(it.qty) || 1;
         const matchedCatalog = (itemsList || []).find(ci => ci.name && ci.name.toLowerCase().trim() === String(it.name || '').toLowerCase().trim()) || (VRM_PRODUCTS || []).find(vp => vp.name && vp.name.toLowerCase().trim() === String(it.name || '').toLowerCase().trim());
@@ -2833,7 +2834,7 @@ export default function BomOrdersView(props) {
           presetGroupId: groupId,
           presetName,
           baseQty: baseQ,
-          qty: String(Math.round(baseQ * multiplier)),
+          qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
           rate: '0',
           gstRate: isDcrBosKit ? '5%' : (it.gstRate || initialGstRate),
           isPresetItem: true
@@ -4057,7 +4058,8 @@ export default function BomOrdersView(props) {
                                                   [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                 }));
                                               }
-                                              const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                              const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
+                                              const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
                                               setBomMaterialsList(prev => prev.map(mat => {
                                                 if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
                                                   return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
@@ -4074,9 +4076,11 @@ export default function BomOrdersView(props) {
                                                   [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                                 }));
                                               }
+                                              const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
+                                              const multiplier = isFixedKit ? 1 : finalCount;
                                               setBomMaterialsList(prev => prev.map(mat => {
                                                 if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                  return { ...mat, qty: String(Math.round(mat.baseQty * finalCount)) };
+                                                  return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
                                                 }
                                                 return mat;
                                               }));
