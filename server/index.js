@@ -5164,52 +5164,64 @@ app.get('/api/next-wo-number', async (req, res) => {
 
 
 app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
+  let combinedEstimates = [];
+  const existingMap = new Map();
+
+  // 1. Authoritative primary source: PostgreSQL public.proforma_invoices
   try {
     const databasePis = await loadDatabaseProformaInvoices();
     if (Array.isArray(databasePis) && databasePis.length > 0) {
-      return res.json(databasePis);
+      databasePis.forEach(p => {
+        if (p && p.piNo) {
+          existingMap.set(String(p.piNo).trim().toLowerCase(), p);
+          combinedEstimates.push(p);
+        }
+      });
     }
   } catch (err) {
     console.warn('[PI Database Read Notice]:', err.message);
   }
 
+  // 2. Safely merge any disk PIs that are not yet in the relational database
   const p1 = getStoreFilePath('proforma_invoice_store.json');
   const p2 = getStoreFilePath('sales_pi_store.json');
 
-  let localEstimates = [];
-  try {
-    if (fs.existsSync(p1)) {
-      const data = JSON.parse(fs.readFileSync(p1, 'utf8'));
-      if (Array.isArray(data)) localEstimates = data;
-    }
-  } catch (_) {}
-
-  try {
-    if (fs.existsSync(p2)) {
-      const salesData = JSON.parse(fs.readFileSync(p2, 'utf8'));
-      if (Array.isArray(salesData) && salesData.length > 0) {
-        const localMap = new Map();
-        localEstimates.forEach(x => { if (x && x.piNo) localMap.set(String(x.piNo).toLowerCase(), x); });
-        salesData.forEach(s => {
-          if (s && s.piNo) {
-            const k = String(s.piNo).toLowerCase();
-            if (localMap.has(k)) {
-              localMap.set(k, { ...s, ...localMap.get(k) });
-            } else {
-              localMap.set(k, s);
+  const checkAndMerge = (filePath) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            if (item && item.piNo) {
+              const k = String(item.piNo).trim().toLowerCase();
+              if (!existingMap.has(k)) {
+                existingMap.set(k, item);
+                combinedEstimates.push(item);
+              }
             }
           }
-        });
-        localEstimates = Array.from(localMap.values());
+        }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  };
 
-  if (localEstimates.length === 0 && Array.isArray(supabaseMemoryStore['proforma_invoice_store']) && supabaseMemoryStore['proforma_invoice_store'].length > 0) {
-    localEstimates = supabaseMemoryStore['proforma_invoice_store'];
+  checkAndMerge(p1);
+  checkAndMerge(p2);
+
+  if (combinedEstimates.length === 0 && Array.isArray(supabaseMemoryStore['proforma_invoice_store']) && supabaseMemoryStore['proforma_invoice_store'].length > 0) {
+    supabaseMemoryStore['proforma_invoice_store'].forEach(item => {
+      if (item && item.piNo) {
+        const k = String(item.piNo).trim().toLowerCase();
+        if (!existingMap.has(k)) {
+          existingMap.set(k, item);
+          combinedEstimates.push(item);
+        }
+      }
+    });
   }
 
-  res.json(localEstimates);
+  res.json(combinedEstimates);
 });
 
 // Direct import endpoint to ingest exported Quotes/Estimates

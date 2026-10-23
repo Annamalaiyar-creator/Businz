@@ -57,10 +57,10 @@ export function toConsumerPi(row) {
     statusType: row.status_type || (row.status === 'Draft' ? 'draft' : (row.status === 'Converted to BOM' ? 'converted' : 'issued')),
     salesPerson: row.sales_person || row.created_by || 'sales',
     salesperson: row.sales_person || row.created_by || 'sales',
-    salesPersonCode: row.sales_person_code || row.created_by_id || 'SE-1000',
+    salesPersonCode: row.sales_person_code || row.created_by_id || '',
     salesPersonEmail: row.sales_person_email || '',
     createdBy: row.created_by || row.sales_person || 'sales',
-    createdById: row.created_by_id || row.sales_person_code || 'SE-1000',
+    createdById: row.created_by_id || row.sales_person_code || '',
     unitValue: parseFloat(row.unit_value || subTotal),
     quantity: parseFloat(row.quantity || 1),
     subtotal: subTotal,
@@ -330,10 +330,10 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
       piData.status || existingRow?.status || 'Issued',
       piData.statusType || existingRow?.status_type || 'issued',
       piData.salesPerson || piData.salesperson || existingRow?.sales_person || 'sales',
-      piData.salesPersonCode || existingRow?.sales_person_code || 'SE-1000',
+      piData.salesPersonCode || piData.createdById || existingRow?.sales_person_code || '',
       piData.salesPersonEmail || existingRow?.sales_person_email || '',
       piData.createdBy || existingRow?.created_by || 'sales',
-      piData.createdById || existingRow?.created_by_id || 'SE-1000',
+      piData.createdById || piData.salesPersonCode || existingRow?.created_by_id || '',
       subTotal,
       taxTotal,
       cgst,
@@ -357,10 +357,64 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
       createdAt
     ];
 
-    const result = await client.query(upsertSql, values);
+    let savedRow = null;
+    try {
+      const result = await client.query(upsertSql, values);
+      savedRow = result.rows[0];
+    } catch (upsertErr) {
+      console.warn('[PI Upsert ON CONFLICT fallback]:', upsertErr.message);
+      // Fallback: If ON CONFLICT fails, execute direct check & update or insert
+      const checkRow = await client.query(
+        'SELECT id FROM public.proforma_invoices WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($1)) OR id = $1',
+        [cleanPiNo]
+      );
+      if (checkRow.rows.length > 0) {
+        const updateSql = `
+          UPDATE public.proforma_invoices SET
+            vendor = $3, customer_name = $4, contact_person = $5, phone = $6, email = $7, gst_no = $8,
+            product_name = $9, billing_address = $10, billing_address_obj = $11, delivery_address = $12, delivery_address_obj = $13,
+            vehicle_no = $14, signed_pi_doc = $15, pi_date = $16, delivery_date = $17, valid_until_date = $18, exp_date = $19,
+            payment_terms = $20, credit_days = $21, remarks = $22, transport_mode = $23, transporter_name = $24, destination = $25, transport_scope = $26,
+            status = $27, status_type = $28, sales_person = $29, sales_person_code = $30, sales_person_email = $31, created_by = $32, created_by_id = $33,
+            sub_total = $34, gst_amount = $35, cgst_amount = $36, sgst_amount = $37, grand_total = $38, unit_value = $39, quantity = $40, kit_subtotal = $41,
+            items = $42, preset_groups = $43, same_as_billing = $44, converted_bom_no = $45, converted_bom_code = $46, pdf_name = $47,
+            updated_at = NOW()
+          WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($2)) OR id = $1
+          RETURNING *;
+        `;
+        const updRes = await client.query(updateSql, values.slice(0, 47));
+        savedRow = updRes.rows[0];
+      } else {
+        const insertDirectSql = `
+          INSERT INTO public.proforma_invoices (
+            id, pi_no, vendor, customer_name, contact_person, phone, email, gst_no,
+            product_name, billing_address, billing_address_obj, delivery_address, delivery_address_obj,
+            vehicle_no, signed_pi_doc, pi_date, delivery_date, valid_until_date, exp_date,
+            payment_terms, credit_days, remarks, transport_mode, transporter_name, destination, transport_scope,
+            status, status_type, sales_person, sales_person_code, sales_person_email, created_by, created_by_id,
+            sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, unit_value, quantity, kit_subtotal,
+            items, preset_groups, same_as_billing, converted_bom_no, converted_bom_code, pdf_name,
+            zoho_synced, zoho_estimate_id, zoho_estimate_no, zoho_sync_error, zoho_synced_at, zoho_module,
+            created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8,
+            $9, $10, $11, $12, $13,
+            $14, $15, $16, $17, $18, $19,
+            $20, $21, $22, $23, $24, $25, $26,
+            $27, $28, $29, $30, $31, $32, $33,
+            $34, $35, $36, $37, $38, $39, $40, $41,
+            $42, $43, $44, $45, $46, $47,
+            $48, $49, $50, $51, $52, $53,
+            $54, NOW()
+          ) RETURNING *;
+        `;
+        const insRes = await client.query(insertDirectSql, values);
+        savedRow = insRes.rows[0];
+      }
+    }
+
     await client.query('COMMIT');
 
-    const savedRow = result.rows[0];
     const consumerPi = toConsumerPi(savedRow);
 
     // Targeted 1-record update in controlroom_store JSON keys (without whole-array overwrite)

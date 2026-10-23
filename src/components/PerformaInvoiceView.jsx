@@ -384,26 +384,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return raw.filter(pi => {
       if (!pi) return false;
       const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
-
-      // Primary Isolation Rule: Strict EMP Code matching
-      if (curCode && spCode) {
-        return spCode === curCode;
-      }
-
-      // If record belongs to a different EMP Code, strictly exclude
-      if (curCode && spCode && spCode !== curCode) {
-        return false;
-      }
-
-      // Email match
-      if (curEmail && String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase() === curEmail) {
-        return true;
-      }
-
-      // Strict exact name match ONLY if no employee code is tagged on the record
+      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
       const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (!spCode && curName && spName && spName === curName) {
+
+      // 1. Strict EMP Code matching
+      if (curCode && spCode && spCode === curCode) {
         return true;
+      }
+
+      // 2. Strict Email matching
+      if (curEmail && spEmail && spEmail === curEmail) {
+        return true;
+      }
+
+      // 3. Name matching when employee code is unassigned or generic fallback
+      const isGenericCode = !spCode || spCode === 'SE-1000' || spCode === 'SE-VRM001' || spCode === 'SE-DEFAULT' || spCode === 'UNASSIGNED';
+      if (curName && spName && (curName === spName || spName.includes(curName) || curName.includes(spName))) {
+        if (isGenericCode || (curCode && spCode === curCode)) {
+          return true;
+        }
+      }
+
+      // If record belongs to a distinct and different salesperson code, exclude
+      if (curCode && spCode && !isGenericCode && spCode !== curCode) {
+        return false;
       }
 
       return false;
@@ -697,6 +701,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitized.paymentProofDoc;
       delete sanitized.deliveryProofDoc;
       delete sanitized.deliveryAddressProofDoc;
+      sanitized.isEdit = true;
       fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2323,12 +2328,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         status: isDraft ? 'Draft' : (matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
         statusType: isDraft ? 'draft' : (matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
-        salesPerson: matchedExisting?.salesPerson || getEffectiveSalesPerson(),
-        salesperson: matchedExisting?.salesPerson || getEffectiveSalesPerson(),
-        salesPersonCode: matchedExisting?.salesPersonCode || currentEmpId || 'SE-VRM001',
-        salesPersonEmail: matchedExisting?.salesPersonEmail || currentLoggedEmail || 'sales@armsai.com',
-        createdBy: matchedExisting?.createdBy || getEffectiveSalesPerson(),
-        createdById: matchedExisting?.createdById || currentEmpId || 'SE-VRM001',
+        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
+        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
+        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || currentEmpId || 'SE-004',
+        salesPersonEmail: (isEditing ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
+        createdBy: (isEditing ? matchedExisting?.createdBy : null) || getEffectiveSalesPerson(),
+        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || 'SE-004',
         zohoSynced: matchedExisting?.zohoSynced || false,
         zohoEstimateId: matchedExisting?.zohoEstimateId || null,
         zohoModule: 'Quotes'
@@ -2371,56 +2376,50 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitizedPayload.deliveryProofDoc;
       delete sanitizedPayload.deliveryAddressProofDoc;
 
-      fetch('/api/estimates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sanitizedPayload)
-      }).then(res => res.json()).then(data => {
-        const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
-        const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
-        const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
+      try {
+        const response = await fetch('/api/estimates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sanitizedPayload)
+        });
 
-        // If the server auto-advanced the PI number due to concurrency collision, sync local state
-        const finalEstNo = serverAssignedPiNo || data?.estimate?.piNo || newPI.piNo;
-        if (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo) {
-          console.warn(`[PI CONCURRENCY NOTIFICATION] Server auto-advanced PI number from ${newPI.piNo} to ${serverAssignedPiNo}`);
+        const data = await response.json();
+        if (!response.ok || !data || data.success === false) {
+          throw new Error(data?.error || `Server returned error status ${response.status}`);
+        }
+
+        const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
+        const finalEstNo = serverAssignedPiNo || data?.estimate?.piNo || cleanPiNo;
+
+        if (serverAssignedPiNo && serverAssignedPiNo !== cleanPiNo) {
+          console.warn(`[PI CONCURRENCY NOTIFICATION] Server auto-advanced PI number from ${cleanPiNo} to ${serverAssignedPiNo}`);
           showTopToast(`ℹ️ PI Number was auto-advanced to ${serverAssignedPiNo} to prevent overwriting existing record.`, 'info', 6000);
         }
 
-        if (estId || (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo)) {
-          const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
-            ...p,
-            id: finalEstNo,
-            piNo: finalEstNo,
-            zohoEstimateId: estId || p.zohoEstimateId,
-            zohoSynced: Boolean(estId || p.zohoSynced),
-            zohoSyncError: null,
-            zohoModule: 'Quotes'
-          } : p);
-          updatePiList(enrichedList);
-        } else if (data && data.zohoError) {
-          console.warn('[ESTIMATE SYNC NOTICE]', data.zohoError);
-          const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
-            ...p,
-            zohoSynced: false,
-            zohoSyncError: data.zohoError
-          } : p);
-          updatePiList(enrichedList);
+        const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
+          ...p,
+          id: finalEstNo,
+          piNo: finalEstNo,
+          ...(data.pi || {})
+        } : p);
+        updatePiList(enrichedList);
+
+        // Dismiss modal and advance to list view once confirmed safely stored in DB
+        setPiConfirmModal(null);
+        resetForm();
+        setViewMode('list');
+
+        const safeCustomer = (vendorName || customerName || 'Customer').trim();
+        if (isDraft) {
+          showTopToast(`📝 Proforma Invoice (${finalEstNo}) for ${safeCustomer} has been saved as Draft in BUSINZ database.`, 'info', 5000);
+        } else {
+          showTopToast(`✅ Proforma Invoice (${finalEstNo}) for ${safeCustomer} stored permanently in BUSINZ database!`, 'success', 5000);
         }
-      }).catch(err => {
-        console.warn('[ESTIMATE DB SAVE NOTICE]', err);
-      });
-
-      // Instantly dismiss modal and advance to list view so user is never stuck
-      setPiConfirmModal(null);
-      resetForm();
-      setViewMode('list');
-
-      const safeCustomer = (vendorName || customerName || 'Customer').trim();
-      if (isDraft) {
-        showTopToast(`📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`, 'info', 5000);
-      } else {
-        showTopToast(`✅ Proforma Invoice (${cleanPiNo}) for ${safeCustomer} stored in BUSINZ database! Push to Zoho is ready whenever required.`, 'success', 5000);
+      } catch (saveErr) {
+        console.error('[ESTIMATE DB SAVE ERROR]', saveErr);
+        showTopToast('❌ Failed to store Proforma Invoice in database: ' + (saveErr?.message || 'Server error. Please try again.'), 'error', 8000);
+        // Do NOT reset form so salesperson never loses their entered form data!
+        return;
       }
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
