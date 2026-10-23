@@ -29,23 +29,31 @@ export default function ConfirmingBomModal({
   const isAlreadyForwarded = !isEditMode || isCancelled;
   const allItemsConfirmed = confirmingBomModal.items && confirmingBomModal.items.length > 0 && confirmingBomModal.items.every(i => i.confirmed);
 
+  const cleanNum = (val) => {
+    if (val === null || val === undefined || val === '') return 0;
+    if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+    const cleaned = String(val).replace(/[^0-9.-]/g, '');
+    const num = parseFloat(cleaned);
+    return Number.isFinite(num) ? num : 0;
+  };
+
   const modalPresetGroups = (Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0)
     ? confirmingBomModal.presetGroups.map(g => ({ ...g }))
-    : (confirmingBomModal.presetName || (parseFloat(confirmingBomModal.presetKitPrice) > 0))
+    : (confirmingBomModal.presetName || (cleanNum(confirmingBomModal.presetKitPrice) > 0))
       ? [{
           presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
           setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
-          kitPrice: parseFloat(confirmingBomModal.presetKitPrice) || 0
+          kitPrice: cleanNum(confirmingBomModal.presetKitPrice) || 0
         }]
       : [];
 
-  let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((parseFloat(g.kitPrice) || 0) * (parseInt(g.setCount) || 1)), 0) || (parseFloat(confirmingBomModal.presetKitPrice) || 0);
-  const customItemsTotal = (confirmingBomModal.items || []).reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
+  let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseInt(g.setCount) || 1)), 0) || (cleanNum(confirmingBomModal.presetKitPrice) || 0);
+  const customItemsTotal = (confirmingBomModal.items || []).reduce((acc, it) => acc + ((cleanNum(it.qty) || 0) * (cleanNum(it.rate) || 0)), 0);
 
   // Fallback: If presetKitsTotal is 0, but the BOM has items with rate 0 and grandTotal > customItemsTotal, compute preset package price
-  if (presetKitsTotal === 0 && (confirmingBomModal.items || []).some(it => it.isPresetItem || parseFloat(it.rate || 0) === 0)) {
-    const gTotal = parseFloat(confirmingBomModal.grandTotal) || 0;
-    const sTotal = parseFloat(confirmingBomModal.subTotal) || (gTotal > 0 ? (gTotal / 1.18) : 0);
+  if (presetKitsTotal === 0 && (confirmingBomModal.items || []).some(it => it.isPresetItem || cleanNum(it.rate || 0) === 0)) {
+    const gTotal = cleanNum(confirmingBomModal.grandTotal) || 0;
+    const sTotal = cleanNum(confirmingBomModal.subTotal) || (gTotal > 0 ? (gTotal / 1.18) : 0);
     if (sTotal > customItemsTotal) {
       presetKitsTotal = Math.max(0, Math.round((sTotal - customItemsTotal) * 100) / 100);
       if (modalPresetGroups.length === 0) {
@@ -54,16 +62,16 @@ export default function ConfirmingBomModal({
           setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
           kitPrice: presetKitsTotal
         });
-      } else if (modalPresetGroups.length === 1 && (parseFloat(modalPresetGroups[0].kitPrice) || 0) === 0) {
+      } else if (modalPresetGroups.length === 1 && (cleanNum(modalPresetGroups[0].kitPrice) || 0) === 0) {
         modalPresetGroups[0].kitPrice = presetKitsTotal / (parseInt(modalPresetGroups[0].setCount) || 1);
       }
     }
   }
 
   const calculatedSubtotal = presetKitsTotal + customItemsTotal;
-  const orderSubTotal = parseFloat(confirmingBomModal.subTotal) || calculatedSubtotal;
-  const orderGrandTotal = parseFloat(confirmingBomModal.grandTotal) || (calculatedSubtotal > 0 ? Math.round(calculatedSubtotal * 1.18 * 100) / 100 : 0);
-  const orderGstAmount = parseFloat(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
+  const orderSubTotal = cleanNum(confirmingBomModal.subTotal) || calculatedSubtotal;
+  const orderGrandTotal = cleanNum(confirmingBomModal.grandTotal) || (calculatedSubtotal > 0 ? Math.round(calculatedSubtotal * 1.18 * 100) / 100 : 0);
+  const orderGstAmount = cleanNum(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
   const grandTotalCalc = orderGrandTotal;
 
     let sourcePi = null;
@@ -1313,14 +1321,14 @@ export default function ConfirmingBomModal({
               {(() => {
                 const presetGroupMap = {};
                 (confirmingBomModal.items || []).forEach((item, idx) => {
-                  const itemRate = parseFloat(item.rate) || 0;
+                  const itemRate = cleanNum(item.rate) || 0;
                   const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
                   if (isPartBundle) {
-                    const gid = item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit';
+                    const gid = item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit';
                     if (!presetGroupMap[gid]) {
-                      const matchedGrp = modalPresetGroups.find(g => (g.presetGroupId || 'default_kit') === gid) || modalPresetGroups[0] || {};
+                      const matchedGrp = modalPresetGroups.find(g => (g.groupId === gid || g.presetGroupId === gid || g.presetId === gid || (g.groupId || 'default_kit') === gid)) || modalPresetGroups[0] || {};
                       const sets = parseInt(matchedGrp.setCount) || 1;
-                      const price = parseFloat(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
+                      const price = cleanNum(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
                       presetGroupMap[gid] = {
                         firstIdx: idx,
                         count: 0,
@@ -1335,11 +1343,11 @@ export default function ConfirmingBomModal({
                 });
 
                 return (confirmingBomModal.items || []).map((item, idx) => {
-                  const itemQty = parseFloat(item.qty) || 0;
-                  const itemRate = parseFloat(item.rate) || 0;
+                  const itemQty = cleanNum(item.qty) || 0;
+                  const itemRate = cleanNum(item.rate) || 0;
                   const itemTotal = itemQty * itemRate;
                   const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
-                  const gid = isPartBundle ? (item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit') : null;
+                  const gid = isPartBundle ? (item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit') : null;
                   const pInfo = gid ? presetGroupMap[gid] : null;
                   const isFirstInKit = pInfo && pInfo.firstIdx === idx;
 

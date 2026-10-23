@@ -5188,21 +5188,21 @@ export default function BomOrdersView(props) {
 
     const modalPresetGroups = (Array.isArray(confirmingBomModal.presetGroups) && confirmingBomModal.presetGroups.length > 0)
       ? confirmingBomModal.presetGroups.map(g => ({ ...g }))
-      : (confirmingBomModal.presetName || (parseFloat(confirmingBomModal.presetKitPrice) > 0))
+      : (confirmingBomModal.presetName || (cleanNum(confirmingBomModal.presetKitPrice) > 0))
         ? [{
             presetName: confirmingBomModal.presetName || 'Pre-Engineered Structure Kit Package',
             setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
-            kitPrice: parseFloat(confirmingBomModal.presetKitPrice) || 0
+            kitPrice: cleanNum(confirmingBomModal.presetKitPrice) || 0
           }]
         : [];
 
-    let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((parseFloat(g.kitPrice) || 0) * (parseInt(g.setCount) || 1)), 0) || (parseFloat(confirmingBomModal.presetKitPrice) || 0);
-    const customItemsTotal = (confirmingBomModal.items || []).reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
+    let presetKitsTotal = modalPresetGroups.reduce((acc, g) => acc + ((cleanNum(g.kitPrice) || 0) * (parseInt(g.setCount) || 1)), 0) || (cleanNum(confirmingBomModal.presetKitPrice) || 0);
+    const customItemsTotal = (confirmingBomModal.items || []).reduce((acc, it) => acc + ((cleanNum(it.qty) || 0) * (cleanNum(it.rate) || 0)), 0);
 
     // Fallback: If presetKitsTotal is 0, but the BOM has items with rate 0 and grandTotal > customItemsTotal, compute preset package price
-    if (presetKitsTotal === 0 && (confirmingBomModal.items || []).some(it => it.isPresetItem || parseFloat(it.rate || 0) === 0)) {
-      const gTotal = parseFloat(confirmingBomModal.grandTotal) || 0;
-      const sTotal = parseFloat(confirmingBomModal.subTotal) || (gTotal > 0 ? (gTotal / 1.18) : 0);
+    if (presetKitsTotal === 0 && (confirmingBomModal.items || []).some(it => it.isPresetItem || cleanNum(it.rate || 0) === 0)) {
+      const gTotal = cleanNum(confirmingBomModal.grandTotal) || 0;
+      const sTotal = cleanNum(confirmingBomModal.subTotal) || (gTotal > 0 ? (gTotal / 1.18) : 0);
       if (sTotal > customItemsTotal) {
         presetKitsTotal = Math.max(0, Math.round((sTotal - customItemsTotal) * 100) / 100);
         if (modalPresetGroups.length === 0) {
@@ -5211,16 +5211,16 @@ export default function BomOrdersView(props) {
             setCount: parseInt(confirmingBomModal.presetSetCount) || 1,
             kitPrice: presetKitsTotal
           });
-        } else if (modalPresetGroups.length === 1 && (parseFloat(modalPresetGroups[0].kitPrice) || 0) === 0) {
+        } else if (modalPresetGroups.length === 1 && (cleanNum(modalPresetGroups[0].kitPrice) || 0) === 0) {
           modalPresetGroups[0].kitPrice = presetKitsTotal / (parseInt(modalPresetGroups[0].setCount) || 1);
         }
       }
     }
 
     const calculatedSubtotal = presetKitsTotal + customItemsTotal;
-    const orderSubTotal = parseFloat(confirmingBomModal.subTotal) || calculatedSubtotal;
-    const orderGrandTotal = parseFloat(confirmingBomModal.grandTotal) || (calculatedSubtotal > 0 ? Math.round(calculatedSubtotal * 1.18 * 100) / 100 : 0);
-    const orderGstAmount = parseFloat(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
+    const orderSubTotal = cleanNum(confirmingBomModal.subTotal) || calculatedSubtotal;
+    const orderGrandTotal = cleanNum(confirmingBomModal.grandTotal) || (calculatedSubtotal > 0 ? Math.round(calculatedSubtotal * 1.18 * 100) / 100 : 0);
+    const orderGstAmount = cleanNum(confirmingBomModal.gstAmount) || (orderGrandTotal > orderSubTotal ? Math.round((orderGrandTotal - orderSubTotal) * 100) / 100 : Math.round(orderSubTotal * 0.18 * 100) / 100);
     const grandTotalCalc = orderGrandTotal;
 
     let sourcePi = null;
@@ -6553,14 +6553,14 @@ export default function BomOrdersView(props) {
                 {(() => {
                   const presetGroupMap = {};
                   (confirmingBomModal.items || []).forEach((item, idx) => {
-                    const itemRate = parseFloat(item.rate) || 0;
+                    const itemRate = cleanNum(item.rate) || 0;
                     const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
                     if (isPartBundle) {
-                      const gid = item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit';
+                      const gid = item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit';
                       if (!presetGroupMap[gid]) {
-                        const matchedGrp = modalPresetGroups.find(g => (g.presetGroupId || 'default_kit') === gid) || modalPresetGroups[0] || {};
+                        const matchedGrp = modalPresetGroups.find(g => (g.groupId === gid || g.presetGroupId === gid || g.presetId === gid || (g.groupId || 'default_kit') === gid)) || modalPresetGroups[0] || {};
                         const sets = parseInt(matchedGrp.setCount) || 1;
-                        const price = parseFloat(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
+                        const price = cleanNum(matchedGrp.kitPrice) || (presetKitsTotal / sets) || 0;
                         presetGroupMap[gid] = {
                           firstIdx: idx,
                           count: 0,
@@ -6575,11 +6575,11 @@ export default function BomOrdersView(props) {
                   });
 
                   return (confirmingBomModal.items || []).map((item, idx) => {
-                    const itemQty = parseFloat(item.qty) || 0;
-                    const itemRate = parseFloat(item.rate) || 0;
+                    const itemQty = cleanNum(item.qty) || 0;
+                    const itemRate = cleanNum(item.rate) || 0;
                     const itemTotal = itemQty * itemRate;
                     const isPartBundle = Boolean(item.isPresetItem || (modalPresetGroups.length > 0 && itemRate === 0));
-                    const gid = isPartBundle ? (item.presetGroupId || (modalPresetGroups[0]?.presetGroupId) || 'default_kit') : null;
+                    const gid = isPartBundle ? (item.presetGroupId || item.groupId || item.presetId || modalPresetGroups[0]?.groupId || modalPresetGroups[0]?.presetGroupId || 'default_kit') : null;
                     const pInfo = gid ? presetGroupMap[gid] : null;
                     const isFirstInKit = pInfo && pInfo.firstIdx === idx;
 
@@ -7959,13 +7959,15 @@ export default function BomOrdersView(props) {
                 const n = parseFloat(String(v || '').replace(/[^0-9.]/g, ''));
                 return Number.isFinite(n) && n > 0 ? n : 0;
               };
-              const calculatedItemTotal = (quickPreviewRecord.items || []).reduce((sum, it) => sum + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
+              const calculatedItemTotal = (quickPreviewRecord.items || []).reduce((sum, it) => sum + ((cleanNum(it.qty) || 0) * (cleanNum(it.rate) || 0)), 0);
               const grandVal = numVal(quickPreviewRecord.grandTotal) 
                 || numVal(quickPreviewRecord.c5)
                 || numVal(sourcePi?.grandTotal)
                 || numVal(sourcePi?.amount)
                 || numVal(calculatedItemTotal)
                 || numVal(quickPreviewRecord.subTotal);
+              const subVal = numVal(quickPreviewRecord.subTotal) || numVal(sourcePi?.subTotal) || (grandVal > 0 ? Math.round((grandVal / 1.18) * 100) / 100 : 0);
+              const gstVal = numVal(quickPreviewRecord.gstAmount) || numVal(sourcePi?.gstAmount) || Math.max(0, Math.round((grandVal - subVal) * 100) / 100);
 
               // Transporter & Logistics
               const existingLoading = quickPreviewRecord.vehicleLoading || {};
@@ -8225,24 +8227,109 @@ export default function BomOrdersView(props) {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* Preset Kit Package Rows */}
+                    {(() => {
+                      const pGroups = (Array.isArray(quickPreviewRecord.presetGroups) && quickPreviewRecord.presetGroups.length > 0)
+                        ? quickPreviewRecord.presetGroups
+                        : (quickPreviewRecord.presetName || (cleanNum(quickPreviewRecord.presetKitPrice) > 0))
+                          ? [{
+                              presetName: quickPreviewRecord.presetName || 'Pre-Engineered Structure Kit Package',
+                              setCount: parseInt(quickPreviewRecord.presetSetCount) || 1,
+                              kitPrice: cleanNum(quickPreviewRecord.presetKitPrice) || 0
+                            }]
+                          : [];
+
+                      return pGroups.map((grp, gIdx) => {
+                        const sCount = parseInt(grp.setCount) || 1;
+                        const kPrice = cleanNum(grp.kitPrice) || 0;
+                        const kTotal = sCount * kPrice;
+                        return (
+                          <tr key={`preset-pkg-${gIdx}`} style={{ backgroundColor: '#F0FDFA', borderBottom: '1.5px solid #CCFBF1' }}>
+                            <td style={{ padding: '8px 10px', color: '#0E7490', fontWeight: '800', textAlign: 'center' }}>★</td>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ backgroundColor: '#0E7490', color: '#FFFFFF', fontSize: '9px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                  PRESET KIT PACKAGE
+                                </span>
+                                <span>{grp.presetName || 'Preset Structure Kit'}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>
+                              {sCount} Set{sCount > 1 ? 's' : ''}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>
+                              ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '900', color: '#0E7490' }}>
+                              ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+
+                    {/* Component Items */}
                     {(quickPreviewRecord.items || []).map((it, idx) => {
-                      const q = Number(it.qty || 1);
-                      const r = Number(it.rate || 0);
+                      const q = cleanNum(it.qty, 1);
+                      const r = cleanNum(it.rate, 0);
                       const lineTotal = q * r;
+                      const hasPresets = (Array.isArray(quickPreviewRecord.presetGroups) && quickPreviewRecord.presetGroups.length > 0) || quickPreviewRecord.presetName || (cleanNum(quickPreviewRecord.presetKitPrice) > 0);
+                      const isKitPart = Boolean(it.isPresetItem || (hasPresets && r === 0));
                       return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700' }}>{idx + 1}</td>
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isKitPart ? '#FAFEFF' : '#FFFFFF' }}>
+                          <td style={{ padding: '8px 10px', color: '#94A3B8', fontWeight: '700', textAlign: 'center' }}>{idx + 1}</td>
                           <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0F172A' }}>
-                            <div>{it.name || '—'}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {isKitPart && (
+                                <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: '9px', fontWeight: '800', padding: '1px 5px', borderRadius: '3px' }}>
+                                  KIT COMPONENT
+                                </span>
+                              )}
+                              <span>{it.name || '—'}</span>
+                            </div>
                             {it.category && <span style={{ fontSize: '10px', color: '#64748B', fontWeight: '500' }}>{it.category}</span>}
                           </td>
                           <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: '800', color: '#0E7490' }}>{q} {it.uom || ''}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>₹ {r.toLocaleString('en-IN')}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>₹ {lineTotal.toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: isKitPart ? '#0E7490' : '#475569' }}>
+                            {isKitPart ? (
+                              <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 5px', borderRadius: '3px' }}>Included</span>
+                            ) : (
+                              `₹ ${r.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: isKitPart ? '#0E7490' : '#0F172A' }}>
+                            {isKitPart ? (
+                              <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '2px 5px', borderRadius: '3px' }}>Included</span>
+                            ) : (
+                              `₹ ${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #E2E8F0', fontWeight: '700', color: '#475569' }}>
+                      <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right' }}>Taxable Subtotal:</td>
+                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>
+                        ₹ {subVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    {gstVal > 0 && (
+                      <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '11.5px' }}>
+                        <td colSpan={4} style={{ padding: '4px 10px', textAlign: 'right' }}>GST:</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: '700', color: '#64748B' }}>
+                          ₹ {gstVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    )}
+                    <tr style={{ backgroundColor: '#ECFEFF', borderTop: '1px solid #A5F3FC', fontWeight: '900', color: '#0E7490', fontSize: '13px' }}>
+                      <td colSpan={4} style={{ padding: '10px', textAlign: 'right', textTransform: 'uppercase' }}>Total Order Value:</td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '14px', color: '#0E7490' }}>
+                        ₹ {grandVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
