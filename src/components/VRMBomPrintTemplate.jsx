@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO } from '../utils/vrmOfficialAssets';
+import { isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 
 // Helper to clean, deduplicate and format addresses into neat lines
 function formatAddressLines(rawAddr, city, state, pin) {
@@ -224,6 +225,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         const sCount = grpMeta.setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1;
         kitGroupsMap.set(key, {
           groupId: key,
+          presetId: grpMeta.presetId || item.presetId || null,
           presetName: pName,
           setCount: sCount,
           items: []
@@ -246,6 +248,14 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   // Helper to determine the actual total quantity for BOM printout
   const getItemQty = (item) => {
     return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
+  };
+
+  // Helper to determine the entire quantity for fixed-quantity presets (12 presets)
+  const getEntireKitItemQty = (item, setCount) => {
+    const sCount = parseInt(setCount) || 1;
+    const baseQ = parseFloat(item.baseQty) || (parseFloat(item.qty || item.bomQty || item.quantity) || 1);
+    const entireQty = Math.round(baseQ * sCount * 100) / 100;
+    return entireQty > 0 ? entireQty : (parseFloat(item.qty) || sCount);
   };
 
   // Helper to determine strictly the 1-set quantity for BOM printout (Option 2)
@@ -342,6 +352,11 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   const totalQuantity = Math.round(
     enrichedItems.reduce((sum, it) => {
       const itSetCount = it.setCount || (it.presetGroupId && kitGroupsMap.get(it.presetGroupId)?.setCount) || b.presetSetCount || matchedPi?.presetSetCount || 1;
+      const isFixed = isFixedQuantityPreset(it.presetGroupId || it.presetId, it.presetName || it.name) ||
+        (it.presetGroupId && kitGroupsMap.has(it.presetGroupId) && isFixedQuantityPreset(kitGroupsMap.get(it.presetGroupId).presetId, kitGroupsMap.get(it.presetGroupId).presetName));
+      if (isFixed) {
+        return sum + getEntireKitItemQty(it, itSetCount);
+      }
       return sum + getItemPerSetQty(it, itSetCount);
     }, 0) * 100
   ) / 100;
@@ -705,7 +720,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>Set</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
-              Qty / Set
+              Quantity
             </th>
             <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
@@ -789,7 +804,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 
                     {/* Items in this kit */}
                     {kg.items.map((item, itemIdx) => {
-                      const qty = getItemPerSetQty(item, kg.setCount);
+                      const isFixedKit = isFixedQuantityPreset(kg.presetId || kg.groupId, kg.presetName) || isFixedQuantityPreset(item.presetGroupId, item.presetName || item.name);
+                      const qty = isFixedKit ? getEntireKitItemQty(item, kg.setCount) : getItemPerSetQty(item, kg.setCount);
                       const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                         ? item.quantityTaken
                         : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -825,10 +841,10 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                             </div>
                           </td>
 
-                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
+                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside; completely empty for fixed-quantity presets */}
                           <td
                             style={{
-                              padding: isMiddle ? '4px 6px' : '0',
+                              padding: (isMiddle && !isFixedKit) ? '4px 6px' : '0',
                               textAlign: 'center',
                               verticalAlign: 'middle',
                               color: '#0E7490',
@@ -840,7 +856,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                               whiteSpace: 'nowrap'
                             }}
                           >
-                            {isMiddle ? (
+                            {(isMiddle && !isFixedKit) ? (
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                                   {kg.setCount || 1}
@@ -963,9 +979,12 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             enrichedItems.map((item, idx) => {
               const fallbackMid = Math.floor(enrichedItems.length / 2);
               const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
-              const qty = fallbackSetVal && Number(fallbackSetVal) > 1
-                ? getItemPerSetQty(item, fallbackSetVal)
-                : getItemQty(item);
+              const isFixed = isFixedQuantityPreset(item.presetGroupId || item.presetId, item.presetName || item.name);
+              const qty = isFixed
+                ? getEntireKitItemQty(item, fallbackSetVal)
+                : (fallbackSetVal && Number(fallbackSetVal) > 1
+                  ? getItemPerSetQty(item, fallbackSetVal)
+                  : getItemQty(item));
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
                 : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -990,7 +1009,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                   </td>
                   <td
                     style={{
-                      padding: (idx === fallbackMid && fallbackSetVal) ? '4px 6px' : '0',
+                      padding: (idx === fallbackMid && fallbackSetVal && !isFixed) ? '4px 6px' : '0',
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       color: '#0E7490',
@@ -1004,7 +1023,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {idx === fallbackMid && fallbackSetVal ? (
+                    {idx === fallbackMid && fallbackSetVal && !isFixed ? (
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                         <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                           {fallbackSetVal}
