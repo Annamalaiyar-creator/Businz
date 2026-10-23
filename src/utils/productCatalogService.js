@@ -45,8 +45,10 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
   const hasDirectItems = Array.isArray(directItems) && directItems.length > 0;
   const now = Date.now();
 
-  if (!hasDirectItems && cachedBaseCatalog && (now - lastCacheTime < CACHE_TTL_MS)) {
-    return cachedBaseCatalog;
+  if (cachedBaseCatalog && (now - lastCacheTime < CACHE_TTL_MS)) {
+    if (!hasDirectItems || directItems === cachedBaseCatalog) {
+      return cachedBaseCatalog;
+    }
   }
 
   const deletedCodes = getDeletedCodes();
@@ -134,9 +136,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       }
       baseStock = realStock;
     } else if (codeKey === 'alu-len-2414mm' || String(p.code || '').toLowerCase() === 'alu-len-2414mm') {
-      if (rawBal !== null && !isNaN(rawBal)) {
-        realStock = Math.max(0, rawBal);
-      } else if (centralBal !== null && !isNaN(centralBal)) {
+      if (centralBal !== null && !isNaN(centralBal)) {
         realStock = Math.max(0, centralBal);
       } else {
         realStock = 250;

@@ -3492,6 +3492,28 @@ export const CANONICAL_PRODUCT_ALIASES = {
   'MINI-RAIL-300MM': 'MR-300MM'
 };
 
+// Global resolution cache for instant O(1) repeated lookups
+const resolveCodeCache = new Map();
+
+// Pre-indexed lookup maps for instant resolution without searching array
+const directExactNameMap = new Map();
+const directNormNameMap = new Map();
+const directFingerprintMap = new Map();
+
+(VRM_PRODUCTS || []).forEach(p => {
+  if (!p || !p.code) return;
+  const c = p.code.toUpperCase();
+  const alias = CANONICAL_PRODUCT_ALIASES[c] || c;
+  if (p.name) {
+    const rawLower = p.name.toLowerCase().trim();
+    if (!directExactNameMap.has(rawLower)) directExactNameMap.set(rawLower, alias);
+    const norm = normalizeProductName(p.name);
+    if (norm && !directNormNameMap.has(norm)) directNormNameMap.set(norm, alias);
+    const fp = wordFingerprint(p.name);
+    if (fp && !directFingerprintMap.has(fp)) directFingerprintMap.set(fp, alias);
+  }
+});
+
 export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
   if (!item) return '';
   const rawDirect = String(item.code || item.sku || '').trim().toUpperCase();
@@ -3503,96 +3525,105 @@ export const resolveProductCode = (item, productsList = VRM_PRODUCTS) => {
   const rawName = String(item.name || item.description || '').trim();
   if (!rawName) return direct || '';
 
+  const cacheKey = (rawDirect || '') + '||' + rawName;
+  if (resolveCodeCache.has(cacheKey)) {
+    return resolveCodeCache.get(cacheKey);
+  }
+
+  // Fast O(1) direct map lookups
+  const cleanStr = rawName.toLowerCase().trim();
+  if (directExactNameMap.has(cleanStr)) {
+    const res = directExactNameMap.get(cleanStr);
+    resolveCodeCache.set(cacheKey, res);
+    return res;
+  }
+
+  const normRaw = normalizeProductName(rawName);
+  if (normRaw && directNormNameMap.has(normRaw)) {
+    const res = directNormNameMap.get(normRaw);
+    resolveCodeCache.set(cacheKey, res);
+    return res;
+  }
+
   // Pattern-based resolution for common aliases (e.g. Mini Rails, Adhesive Rails, Double C Rails)
-  const cleanStr = rawName.toLowerCase();
   const mrMatch = cleanStr.match(/mini\s*rail\s*[-–—]?\s*(\d+)\s*mm/i) || cleanStr.match(/(\d+)\s*mm\s*mini\s*rail/i) || cleanStr.match(/mini\s*rail\s*[-–—]?\s*(\d+)/i);
   if (mrMatch) {
     const mm = mrMatch[1];
-    if (mm === '300') return 'MR-300MM';
-    if (cleanStr.includes('old')) return ('MR' + mm + 'O').toUpperCase();
-    if (mm === '40') return 'MR40';
-    if (mm === '60') return 'MR60';
-    if (mm === '125') return 'MR125';
-    if (mm === '120') return 'MR120';
-    if (mm === '75') return 'MR75';
-    if (cleanStr.includes('new') && mm === '100') return 'MR100N';
-    return ('MR' + mm).toUpperCase();
+    let res = 'MR' + mm;
+    if (mm === '300') res = 'MR-300MM';
+    else if (cleanStr.includes('old')) res = 'MR' + mm + 'O';
+    else if (cleanStr.includes('new') && mm === '100') res = 'MR100N';
+    res = res.toUpperCase();
+    resolveCodeCache.set(cacheKey, res);
+    return res;
   }
   if (cleanStr.includes('mini rail') && (cleanStr.includes('300 mm') || cleanStr.includes('300mm') || cleanStr.includes('- 300'))) {
+    resolveCodeCache.set(cacheKey, 'MR-300MM');
     return 'MR-300MM';
   }
   const arMatch = cleanStr.match(/adhesive\s*rail\s*(\d+)/i) || cleanStr.match(/(\d+)\s*mm\s*adhesive\s*rail/i);
   if (arMatch) {
-    return ('AR' + arMatch[1]).toUpperCase();
+    const res = ('AR' + arMatch[1]).toUpperCase();
+    resolveCodeCache.set(cacheKey, res);
+    return res;
   }
   const ccMatch = cleanStr.match(/double\s*c\s*rail\s*([\d.]+)/i);
   if (ccMatch) {
     const len = ccMatch[1];
-    if (cleanStr.includes('new')) return ('CC' + len + 'N').toUpperCase();
-    if (cleanStr.includes('old')) return ('CC' + len + 'O').toUpperCase();
-    return ('CC' + len).toUpperCase();
+    let res = 'CC' + len;
+    if (cleanStr.includes('new')) res += 'N';
+    else if (cleanStr.includes('old')) res += 'O';
+    res = res.toUpperCase();
+    resolveCodeCache.set(cacheKey, res);
+    return res;
   }
   const srMatch = cleanStr.match(/struct\s*rail\s*([\d.]+)/i);
   if (srMatch) {
-    return ('SR' + srMatch[1]).toUpperCase();
+    const res = ('SR' + srMatch[1]).toUpperCase();
+    resolveCodeCache.set(cacheKey, res);
+    return res;
   }
   if (/hand\s*rail/i.test(cleanStr)) {
+    resolveCodeCache.set(cacheKey, 'HR');
     return 'HR';
-  }
-
-  const normRaw = normalizeProductName(rawName);
-
-  // 1. Direct or normalized name match in products catalog
-  const exact = productsList.find(p => p.name && (
-    p.name.toLowerCase().trim() === rawName.toLowerCase().trim() ||
-    normalizeProductName(p.name) === normRaw
-  ));
-  if (exact && exact.code) {
-    const c = exact.code.toUpperCase();
-    return CANONICAL_PRODUCT_ALIASES[c] || c;
   }
 
   // 2. Word fingerprint match
   const fp = wordFingerprint(rawName);
-  if (fp) {
-    const fpMatch = productsList.find(p => p.name && wordFingerprint(p.name) === fp);
-    if (fpMatch && fpMatch.code) {
-      const c = fpMatch.code.toUpperCase();
-      return CANONICAL_PRODUCT_ALIASES[c] || c;
-    }
+  if (fp && directFingerprintMap.has(fp)) {
+    const res = directFingerprintMap.get(fp);
+    resolveCodeCache.set(cacheKey, res);
+    return res;
   }
 
   // 3. Clean parenthetical variations (e.g. "(300mm)", "(100mm)", "new", "old")
   const strippedName = rawName.replace(/\([^)]*\)/g, '').replace(/\b(new|old|nos|mm)\b/gi, '').trim();
   if (strippedName && strippedName.length >= 3) {
     const normStripped = normalizeProductName(strippedName);
-    if (normStripped && normStripped.length >= 3) {
-      const stripMatch = productsList.find(p => {
-        const pNorm = normalizeProductName(p.name.replace(/\([^)]*\)/g, '').replace(/\b(new|old|nos|mm)\b/gi, ''));
-        return pNorm && normStripped && (pNorm === normStripped || (normStripped.length >= 5 && (pNorm.includes(normStripped) || normStripped.includes(pNorm))));
-      });
-      if (stripMatch && stripMatch.code) {
-        const c = stripMatch.code.toUpperCase();
-        return CANONICAL_PRODUCT_ALIASES[c] || c;
-      }
+    if (normStripped && directNormNameMap.has(normStripped)) {
+      const res = directNormNameMap.get(normStripped);
+      resolveCodeCache.set(cacheKey, res);
+      return res;
     }
   }
 
-  // 4. Fallback: check if normalized names or codes match for meaningful queries (length >= 3)
-  if (normRaw && normRaw.length >= 3) {
-    const subMatch = productsList.find(p => {
-      const pNorm = normalizeProductName(p.name);
-      const pCode = String(p.code || '').toLowerCase();
-      return (pCode && pCode.length >= 2 && normRaw === pCode) ||
-             (pNorm && normRaw.length >= 5 && (normRaw.includes(pNorm) || pNorm.includes(normRaw)));
-    });
-    if (subMatch && subMatch.code) {
-      const c = subMatch.code.toUpperCase();
-      return CANONICAL_PRODUCT_ALIASES[c] || c;
+  // 4. Fallback search only when using a custom productsList or unindexed items
+  if (productsList && productsList !== VRM_PRODUCTS) {
+    const exact = productsList.find(p => p.name && (
+      p.name.toLowerCase().trim() === cleanStr ||
+      normalizeProductName(p.name) === normRaw
+    ));
+    if (exact && exact.code) {
+      const c = exact.code.toUpperCase();
+      const res = CANONICAL_PRODUCT_ALIASES[c] || c;
+      resolveCodeCache.set(cacheKey, res);
+      return res;
     }
   }
 
-  return CANONICAL_PRODUCT_ALIASES[direct] || direct || '';
+  const finalRes = CANONICAL_PRODUCT_ALIASES[direct] || direct || '';
+  resolveCodeCache.set(cacheKey, finalRes);
+  return finalRes;
 };
 
 export default {

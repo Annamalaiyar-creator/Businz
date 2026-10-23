@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO } from '../utils/vrmOfficialAssets';
+import { isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 
 // Helper to clean, deduplicate and format addresses into neat lines
 function formatAddressLines(rawAddr, city, state, pin) {
@@ -224,6 +225,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
         const sCount = grpMeta.setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1;
         kitGroupsMap.set(key, {
           groupId: key,
+          presetId: grpMeta.presetId || item.presetId || null,
           presetName: pName,
           setCount: sCount,
           items: []
@@ -246,6 +248,30 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   // Helper to determine the actual total quantity for BOM printout
   const getItemQty = (item) => {
     return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
+  };
+
+  // Helper to determine the entire quantity for fixed-quantity presets (12 presets)
+  const getEntireKitItemQty = (item, setCount) => {
+    const sCount = parseInt(setCount) || 1;
+    const baseQ = parseFloat(item.baseQty) || (parseFloat(item.qty || item.bomQty || item.quantity) || 1);
+    const entireQty = Math.round(baseQ * sCount * 100) / 100;
+    return entireQty > 0 ? entireQty : (parseFloat(item.qty) || sCount);
+  };
+
+  // Helper to determine strictly the 1-set quantity for BOM printout (Option 2)
+  const getItemPerSetQty = (item, setCount) => {
+    // 1. Check if explicit baseQty (quantity per 1 set) is available
+    if (item.baseQty !== undefined && item.baseQty !== null && item.baseQty !== '' && !isNaN(parseFloat(item.baseQty))) {
+      const bq = parseFloat(item.baseQty);
+      if (bq > 0) return Math.round(bq * 100) / 100;
+    }
+    // 2. If setCount is greater than 1, calculate baseQty = totalQty / setCount
+    const sCount = Number(setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1);
+    const total = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
+    if (sCount > 1 && total > 0) {
+      return Math.round((total / sCount) * 100) / 100;
+    }
+    return total;
   };
 
   // Extract clean addresses
@@ -324,7 +350,15 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   }
 
   const totalQuantity = Math.round(
-    enrichedItems.reduce((sum, it) => sum + getItemQty(it), 0) * 100
+    enrichedItems.reduce((sum, it) => {
+      const itSetCount = it.setCount || (it.presetGroupId && kitGroupsMap.get(it.presetGroupId)?.setCount) || b.presetSetCount || matchedPi?.presetSetCount || 1;
+      const isFixed = isFixedQuantityPreset(it.presetGroupId || it.presetId, it.presetName || it.name) ||
+        (it.presetGroupId && kitGroupsMap.has(it.presetGroupId) && isFixedQuantityPreset(kitGroupsMap.get(it.presetGroupId).presetId, kitGroupsMap.get(it.presetGroupId).presetName));
+      if (isFixed) {
+        return sum + getEntireKitItemQty(it, itSetCount);
+      }
+      return sum + getItemPerSetQty(it, itSetCount);
+    }, 0) * 100
   ) / 100;
   const totalQuantityTaken = items.reduce((sum, item) => sum + (parseFloat(item.quantityTaken || item.qtyTaken || item.takenQty || 0) || 0), 0);
 
@@ -758,7 +792,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                                 fontWeight: '800'
                               }}
                             >
-                              {kg.setCount || 1} {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
+                              Total Quantity: {kg.setCount || 1} {Number(kg.setCount || 1) === 1 ? 'Set' : 'Sets'}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#475569', fontWeight: '700' }}>
@@ -770,7 +804,8 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 
                     {/* Items in this kit */}
                     {kg.items.map((item, itemIdx) => {
-                      const qty = getItemQty(item);
+                      const isFixedKit = isFixedQuantityPreset(kg.presetId || kg.groupId, kg.presetName) || isFixedQuantityPreset(item.presetGroupId, item.presetName || item.name);
+                      const qty = isFixedKit ? getEntireKitItemQty(item, kg.setCount) : getItemPerSetQty(item, kg.setCount);
                       const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                         ? item.quantityTaken
                         : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -806,10 +841,10 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                             </div>
                           </td>
 
-                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside */}
+                          {/* SET COLUMN: Seamless vertical strip with NO horizontal lines inside; completely empty for fixed-quantity presets */}
                           <td
                             style={{
-                              padding: isMiddle ? '4px 6px' : '0',
+                              padding: (isMiddle && !isFixedKit) ? '4px 6px' : '0',
                               textAlign: 'center',
                               verticalAlign: 'middle',
                               color: '#0E7490',
@@ -821,7 +856,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                               whiteSpace: 'nowrap'
                             }}
                           >
-                            {isMiddle ? (
+                            {(isMiddle && !isFixedKit) ? (
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                                   {kg.setCount || 1}
@@ -942,16 +977,20 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             </React.Fragment>
           ) : (
             enrichedItems.map((item, idx) => {
-              const qty = getItemQty(item);
+              const fallbackMid = Math.floor(enrichedItems.length / 2);
+              const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
+              const isFixed = isFixedQuantityPreset(item.presetGroupId || item.presetId, item.presetName || item.name);
+              const qty = isFixed
+                ? getEntireKitItemQty(item, fallbackSetVal)
+                : (fallbackSetVal && Number(fallbackSetVal) > 1
+                  ? getItemPerSetQty(item, fallbackSetVal)
+                  : getItemQty(item));
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
                 : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
                   ? item.qtyTaken
                   : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
               const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
-
-              const fallbackMid = Math.floor(enrichedItems.length / 2);
-              const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
 
               return (
                 <tr
@@ -970,7 +1009,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                   </td>
                   <td
                     style={{
-                      padding: (idx === fallbackMid && fallbackSetVal) ? '4px 6px' : '0',
+                      padding: (idx === fallbackMid && fallbackSetVal && !isFixed) ? '4px 6px' : '0',
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       color: '#0E7490',
@@ -984,7 +1023,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {idx === fallbackMid && fallbackSetVal ? (
+                    {idx === fallbackMid && fallbackSetVal && !isFixed ? (
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                         <span style={{ fontSize: '16px', fontWeight: '900', color: '#0E7490', lineHeight: '1.2' }}>
                           {fallbackSetVal}
@@ -1013,7 +1052,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           <tfoot style={{ display: 'table-row-group' }}>
             <tr style={{ backgroundColor: '#F1F5F9', borderTop: '2px solid #0E7490', fontWeight: '800', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
               <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right', color: '#475569', fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Total Quantity:
+                Total (Qty / Set):
               </td>
               <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900', borderRight: '1px solid #CBD5E1' }}>
                 {totalQuantity}
@@ -1200,9 +1239,9 @@ function recordBomPrintStatus(targetBom) {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = formatDateDDMMYYYY(now);
-  const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
+  const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
-  const printedByName = storedUser || storedRole || 'Dispatch Executive';
+  const printedByName = storedUser ? `${storedUser}${storedRole ? ` (${storedRole})` : ''}` : (storedRole || 'Team');
 
   const prevCount = parseInt(targetBom.dispatchPrintCount, 10) || 0;
   const newPrintCount = prevCount + 1;
@@ -1279,10 +1318,21 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
   const effectiveRole = userRole || storedRole || '';
   const isDispatchRole = /dispatch/i.test(effectiveRole);
-  const isSalesUser = Boolean(isSales || !isDispatchRole || /sales/i.test(effectiveRole));
+  const isSalesUser = Boolean(isSales || (!isDispatchRole && !/production/i.test(effectiveRole)) || /sales/i.test(effectiveRole));
+
+  // Physical BOM order printout is taken by Dispatch Head or Production Head
+  const isPhysicalPrintTaker = Boolean(
+    !isSales && (
+      effectiveRole === 'Dispatch Head' ||
+      effectiveRole === 'Production Head' ||
+      effectiveRole === 'Floor Supervisor' ||
+      isDispatchRole ||
+      /production/i.test(effectiveRole)
+    )
+  );
 
   const handlePrint = () => {
-    if (!isSalesUser) {
+    if (isPhysicalPrintTaker) {
       recordBomPrintStatus(b);
     }
     window.print();
@@ -1303,14 +1353,14 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   useEffect(() => {
     if (!bomData || !autoPrint || hasTrackedRef.current) return;
     hasTrackedRef.current = true;
-    if (!isSalesUser) {
-      recordBomPrintStatus(b);
+    if (isPhysicalPrintTaker) {
+      recordBomPrintStatus(bomData);
     }
     const timer = setTimeout(() => {
       window.print();
     }, 400);
     return () => clearTimeout(timer);
-  }, [bomData, autoPrint, isSalesUser]);
+  }, [bomData, autoPrint, isPhysicalPrintTaker]);
 
   if (!bomData) return null;
 

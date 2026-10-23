@@ -8,7 +8,7 @@ import {
   AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap
 } from 'lucide-react';
 import HdgStructureConfiguratorModal from './HdgStructureConfiguratorModal';
-import { VRM_HDG_PRESETS, getAllActivePresets } from '../../vrmHdgProposalPresets';
+import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
 import SearchablePresetSelector from '../SearchablePresetSelector';
 import TypeableProductSelect from '../TypeableProductSelect';
 import NotificationToast from '../NotificationToast';
@@ -299,23 +299,38 @@ export default function CrmQuotationsView({
     };
   }, []);
 
+  const stockLookupMap = useMemo(() => {
+    const map = new Map();
+    (itemsList || []).forEach(p => {
+      const st = Number(p.stock !== undefined ? p.stock : (p.availableStock !== undefined ? p.availableStock : 0));
+      const code = String(p.code || '').toLowerCase().trim();
+      const name = String(p.name || '').toLowerCase().trim();
+      if (code && !map.has(code)) map.set(code, st);
+      if (name && !map.has(name)) map.set(name, st);
+    });
+    return map;
+  }, [itemsList]);
+
   const getItemStock = (itemName, itemCode) => {
     if (!itemName && !itemCode) return null;
-    const cleanName = (itemName || '').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
-    const found = (itemsList || []).find(p => 
-      (cleanCode && (p.code || '').toLowerCase().trim() === cleanCode) ||
-      (cleanName && (p.name || '').toLowerCase().trim() === cleanName) ||
-      (cleanName && (p.name || '').toLowerCase().includes(cleanName))
-    );
-    if (!found) return null;
-    return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
+    if (cleanCode && stockLookupMap.has(cleanCode)) return stockLookupMap.get(cleanCode);
+    const cleanName = (itemName || '').toLowerCase().trim();
+    if (cleanName && stockLookupMap.has(cleanName)) return stockLookupMap.get(cleanName);
+    return null;
   };
 
   // Resolve currently logged in account user's name dynamically (matching Header & auth state)
   const getActiveUserName = () => {
-    if (userRole === 'Sales Head') return 'Vijay';
     const stored = localStorage.getItem('controlroom_logged_user_name');
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '' && stored.toLowerCase() !== 'vijay') return stored.trim();
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+    } catch (_) {}
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '') return stored.trim();
     try {
       const u = JSON.parse(localStorage.getItem('controlroom_logged_user') || '{}');
@@ -323,6 +338,7 @@ export default function CrmQuotationsView({
       if (u.fullName) return u.fullName;
       if (u.username) return u.username;
     } catch (e) {}
+    if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'CEO' || userRole === 'Technical Administrator') return 'Annamalaiyar';
     return 'Mohit JV';
   };
@@ -641,6 +657,7 @@ export default function CrmQuotationsView({
 
     const presetName = targetPreset.label || presetId;
     const initialGstRate = targetPreset.gstRate || targetPreset.gst || '18%';
+    const isFixedKit = isFixedQuantityPreset(presetId, presetName);
 
     setPresetGroups(prev => ({
       ...prev,
@@ -650,7 +667,8 @@ export default function CrmQuotationsView({
         presetName,
         setCount: multiplier,
         kitPrice: defaultPrice,
-        gstRate: initialGstRate
+        gstRate: initialGstRate,
+        isFixedKit
       }
     }));
 
@@ -661,7 +679,7 @@ export default function CrmQuotationsView({
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: String(Math.round(baseQ * multiplier)),
+        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
         isPresetItem: true
@@ -1811,7 +1829,7 @@ export default function CrmQuotationsView({
                   }}
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
-                  {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
+                  {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
                   <button
                     type="button"
                     onClick={() => handleRemovePresetGroup(grp.groupId)}
@@ -2123,7 +2141,8 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                               }));
                                             }
-                                            const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
+                                            const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
                                             setQuoteItems(prev => prev.map(mat => {
                                               if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
                                                 return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
@@ -2140,9 +2159,11 @@ export default function CrmQuotationsView({
                                                 [groupId]: { ...(prev[groupId] || currentGroup), setCount: finalCount }
                                               }));
                                             }
+                                            const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName) || !!currentGroup?.isFixedKit;
+                                            const effectiveMultiplier = isFixedKit ? 1 : finalCount;
                                             setQuoteItems(prev => prev.map(mat => {
                                               if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
-                                                return { ...mat, qty: String(Math.round(mat.baseQty * finalCount)) };
+                                                return { ...mat, qty: String(Math.round(mat.baseQty * effectiveMultiplier)) };
                                               }
                                               return mat;
                                             }));
@@ -3612,7 +3633,7 @@ export default function CrmQuotationsView({
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                   <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 6px', borderRadius: '4px' }}>
-                                    {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''} Kit
+                                    Total Quantity: {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''}
                                   </span>
                                   <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
                                     ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

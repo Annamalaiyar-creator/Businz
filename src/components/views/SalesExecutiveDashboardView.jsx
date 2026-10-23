@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { fetchCustomersDeduplicated } from '../../services/customerService';
 
 // Fast shallow list equality check to prevent unnecessary React re-renders and visual data flickering
 function areItemListsEqual(prev, next, idKey = 'id') {
@@ -116,9 +117,26 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
   const isCeoOrMd = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Technical Administrator' || userRole === 'Super Admin' || userRole === 'Admin';
   const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || isCeoOrMd;
-  const loggedUserName = userRole === 'Sales Head' 
-    ? 'Vijay' 
-    : ((typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : null) || 'Mohit JV');
+  const loggedUserName = (() => {
+    if (typeof localStorage === 'undefined') return userRole || 'Sales Executive';
+    const stored = localStorage.getItem('controlroom_logged_user_name');
+    if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') {
+      return stored.trim();
+    }
+    try {
+      const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) {
+        return match.employee_name || match.name;
+      }
+    } catch (_) {}
+    if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null') {
+      return stored.trim();
+    }
+    return userRole === 'Sales Head' ? 'Sales Head' : 'Mohit JV';
+  })();
 
   // CEO Target State
   const getCachedObj = (key, fallback = {}) => {
@@ -219,8 +237,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             return [];
           })
           .catch(() => fetchCloudStore('invoice_store', [])),
-        fetchWithTimeout('/api/customers', { timeout: 8000 })
-          .then(r => r.json())
+        fetchCustomersDeduplicated('/api/customers')
           .then(j => Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []))
           .catch(() => fetchCloudStore('customer_store', [])),
         fetchWithTimeout('/api/boms', { timeout: 5000 })
@@ -479,7 +496,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     // Default core reps if dataset is empty
     if (names.size === 0) {
       addName('Mohith J V');
-      addName('Vijay');
+      if (loggedName) addName(loggedName);
       addName('Sanjai Kumar');
       addName('Kalaiselvi T');
     }
@@ -1240,7 +1257,7 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-                Welcome back, {userRole === 'Sales Head' ? 'Vijay' : (localStorage.getItem('controlroom_logged_user_name') || 'Mohit JV')}!
+                Welcome back, {loggedUserName}!
               </h2>
               <span style={{
                 fontSize: '11px',

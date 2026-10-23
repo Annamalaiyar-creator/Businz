@@ -5,13 +5,14 @@ import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
 import ModernDateRangePicker from './ModernDateRangePicker';
 import VRMProformaInvoicePrintTemplate from './VRMProformaInvoicePrintTemplate';
-import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
+import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../vrmHdgProposalPresets';
 import { saveMediaToCache, getMediaFromCache, compressAndSaveFile, normalizePaymentTerm, STANDARD_PAYMENT_TERMS, stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import { getFullProductsCatalogWithStock } from '../utils/productCatalogService';
 import { normalizeProductName, resolveProductCode } from '../utils/vrmProductsData';
 import { centralInventoryStore } from '../utils/centralInventoryStore';
 import { saveCloudStore, saveCloudStoreImmediate, fetchCloudStore, subscribeToCloudStore } from '../utils/supabaseDataSync';
 import { notifyPiCreated } from '../services/notificationService';
+import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../services/customerService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 import { getNextSequence } from '../utils/sequenceGenerator';
 
@@ -237,8 +238,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         return false;
       }
 
-      // 1. Strict 1-to-1 match by source PI number (highest authority)
-      if (sPi && sPi === piNum) return true;
+      // 1. Strict 1-to-1 match by source PI number (with customer verification guard)
+      if (sPi && sPi === piNum) {
+        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
+        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
+        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
+          return false;
+        }
+        return true;
+      }
 
       // 2. If this BOM is explicitly owned by a DIFFERENT PI, it CANNOT match this PI!
       if (sPi && sPi !== piNum) return false;
@@ -352,10 +360,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   );
 
   const getEffectiveSalesPerson = () => {
-    if (userRole === 'Sales Head') return 'Vijay';
+    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay') return currentEmpName;
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+    } catch (_) {}
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null') return currentEmpName;
     const storedUser = localStorage.getItem('controlroom_logged_user');
     if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
+    if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     return userRole || 'Sales Executive';
@@ -375,26 +391,30 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     return raw.filter(pi => {
       if (!pi) return false;
       const spCode = String(pi.salesPersonCode || pi.createdById || '').trim().toUpperCase();
-
-      // Primary Isolation Rule: Strict EMP Code matching
-      if (curCode && spCode) {
-        return spCode === curCode;
-      }
-
-      // If record belongs to a different EMP Code, strictly exclude
-      if (curCode && spCode && spCode !== curCode) {
-        return false;
-      }
-
-      // Email match
-      if (curEmail && String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase() === curEmail) {
-        return true;
-      }
-
-      // Strict exact name match ONLY if no employee code is tagged on the record
+      const spEmail = String(pi.salesPersonEmail || pi.email || '').trim().toLowerCase();
       const spName = String(pi.salesPerson || pi.salesperson || pi.salesRep || pi.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (!spCode && curName && spName && spName === curName) {
+
+      // 1. Strict EMP Code matching
+      if (curCode && spCode && spCode === curCode) {
         return true;
+      }
+
+      // 2. Strict Email matching
+      if (curEmail && spEmail && spEmail === curEmail) {
+        return true;
+      }
+
+      // 3. Name matching when employee code is unassigned or generic fallback
+      const isGenericCode = !spCode || spCode === 'SE-1000' || spCode === 'SE-VRM001' || spCode === 'SE-DEFAULT' || spCode === 'UNASSIGNED';
+      if (curName && spName && (curName === spName || spName.includes(curName) || curName.includes(spName))) {
+        if (isGenericCode || (curCode && spCode === curCode)) {
+          return true;
+        }
+      }
+
+      // If record belongs to a distinct and different salesperson code, exclude
+      if (curCode && spCode && !isGenericCode && spCode !== curCode) {
+        return false;
       }
 
       return false;
@@ -403,46 +423,46 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   useEffect(() => {
     const loadPiData = async () => {
-      // 1. Authoritative source: Supabase cloud stores (fast)
+      // 1. Authoritative primary source: Self-hosted PostgreSQL database via /api/proforma-invoices
       try {
-        const [salesCloud, proformaCloud] = await Promise.all([
-          fetchCloudStore('sales_pi_store').catch(() => []),
-          fetchCloudStore('proforma_invoice_store').catch(() => [])
-        ]);
+        const dbRes = await fetch('/api/proforma-invoices');
+        if (dbRes.ok) {
+          const dbData = await dbRes.json();
+          if (Array.isArray(dbData) && dbData.length > 0) {
+            const mergedMap = new Map();
+            // Authoritative database records take precedence
+            dbData.forEach(p => {
+              if (p && p.piNo) mergedMap.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p));
+            });
 
-        const mergedMap = new Map();
-        const primaryCloud = (Array.isArray(salesCloud) && salesCloud.length > 0)
-          ? salesCloud
-          : (Array.isArray(proformaCloud) ? proformaCloud : []);
-
-        primaryCloud.forEach(p => {
-          if (p && p.piNo) {
-            mergedMap.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p));
-          }
-        });
-
-        if (Array.isArray(proformaCloud)) {
-          proformaCloud.forEach(p => {
-            if (p && p.piNo) {
-              const k = String(p.piNo).trim().toLowerCase();
-              if (!mergedMap.has(k)) {
-                mergedMap.set(k, normalizePiRecord(p));
+            // Zero-Data-Loss Safeguard: Preserve any locally staged/offline PIs
+            try {
+              const localCached = JSON.parse(localStorage.getItem(storageKey) || localStorage.getItem('controlroom_sales_pi_store') || '[]');
+              if (Array.isArray(localCached)) {
+                localCached.forEach(lp => {
+                  if (lp && lp.piNo) {
+                    const k = String(lp.piNo).trim().toLowerCase();
+                    if (!mergedMap.has(k)) {
+                      mergedMap.set(k, normalizePiRecord(lp));
+                    }
+                  }
+                });
               }
-            }
-          });
-        }
+            } catch (_) {}
 
-        if (mergedMap.size > 0) {
-          const result = Array.from(mergedMap.values()).map(normalizePiRecord);
-          setPiList(result);
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(result));
-          } catch (_) {}
+            const finalMerged = Array.from(mergedMap.values()).map(normalizePiRecord);
+            setPiList(finalMerged);
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(finalMerged));
+              localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(finalMerged));
+            } catch (_) {}
+            setTableLoading(false);
+            return;
+          }
         }
       } catch (err) {
-        console.error('Error loading Supabase PI data:', err);
+        console.warn('[PI Database Load Notice]:', err?.message || err);
       } finally {
-        // Immediately unblock table loading so UI does not wait for external Zoho round-trips
         setTableLoading(false);
       }
 
@@ -510,7 +530,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         setPiList(prevList => {
           const merged = new Map();
           (prevList || []).forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), p); });
-          latest.forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p)); });
+          latest.forEach(p => {
+            if (p && p.piNo) {
+              const k = String(p.piNo).trim().toLowerCase();
+              const existing = merged.get(k);
+              if (!existing) {
+                merged.set(k, normalizePiRecord(p));
+              } else {
+                const incomingTime = new Date(p.updatedAt || p.updated_at || p.createdAt || p.created_at || 0).getTime();
+                const existingTime = new Date(existing.updatedAt || existing.updated_at || existing.createdAt || existing.created_at || 0).getTime();
+                if (incomingTime >= existingTime) {
+                  merged.set(k, normalizePiRecord({ ...existing, ...p }));
+                }
+              }
+            }
+          });
           return Array.from(merged.values());
         });
         setTableLoading(false);
@@ -521,6 +555,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (sub && sub.unsubscribe) sub.unsubscribe();
     };
   }, [storageKey, isSalesRole]);
+
+  const handlePrintTemplatePiUpdate = (updatedPi) => {
+    if (!updatedPi || !updatedPi.piNo) return;
+    const cleanNo = String(updatedPi.piNo).trim().toLowerCase();
+    setPiList(prevList => {
+      const exists = (prevList || []).some(p => String(p.piNo || p.id).trim().toLowerCase() === cleanNo);
+      let nextList;
+      if (exists) {
+        nextList = (prevList || []).map(p => String(p.piNo || p.id).trim().toLowerCase() === cleanNo ? normalizePiRecord({ ...p, ...updatedPi }) : p);
+      } else {
+        nextList = [normalizePiRecord(updatedPi), ...(prevList || [])];
+      }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(nextList));
+        localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(nextList));
+        saveCloudStoreImmediate('sales_pi_store', nextList);
+        window.dispatchEvent(new Event('controlroom_storage_update'));
+      } catch (_) {}
+      return nextList;
+    });
+  };
 
   const updatePiList = (newList) => {
     setPiList(newList);
@@ -688,6 +743,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitized.paymentProofDoc;
       delete sanitized.deliveryProofDoc;
       delete sanitized.deliveryAddressProofDoc;
+      sanitized.isEdit = true;
       fetch('/api/estimates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -913,8 +969,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Resolve currently logged in user dynamically (matching Header & BOM creation)
   const getActiveUserName = () => {
-    if (userRole === 'Sales Head') return 'Vijay';
     const stored = localStorage.getItem('controlroom_logged_user_name');
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '' && stored.toLowerCase() !== 'vijay') return stored.trim();
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+    } catch (_) {}
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '') return stored.trim();
     try {
       const u = JSON.parse(localStorage.getItem('controlroom_logged_user') || '{}');
@@ -922,6 +985,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (u.fullName) return u.fullName;
       if (u.username) return u.username;
     } catch (e) {}
+    if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'CEO' || userRole === 'Technical Administrator') return 'Annamalaiyar';
     return 'Mohit JV';
   };
@@ -1106,14 +1170,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           }
         } catch (_) {}
 
-        // 2. Fetch authoritative customers from backend
+        // 2. Fetch initial top-60 customers from backend with deduplication & caching (Phase B4)
         try {
-          const res = await fetch('/api/customers');
-          if (res.ok) {
-            const list = await res.json();
-            if (Array.isArray(list) && list.length > 0) {
-              list.forEach(register);
-            }
+          const list = await searchCustomers({ limit: 60 });
+          if (Array.isArray(list) && list.length > 0) {
+            list.forEach(register);
           }
         } catch (_) {}
 
@@ -1289,66 +1350,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     };
   }, []);
 
+  const stockLookupMap = useMemo(() => {
+    const map = new Map();
+    (itemsList || []).forEach(p => {
+      const st = Number(p.availableStock !== undefined ? p.availableStock : (p.stock !== undefined ? p.stock : 0));
+      const code = String(p.code || '').toLowerCase().trim();
+      const name = String(p.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
+      const norm = normalizeProductName(p.name);
+      if (code && !map.has(code)) map.set(code, st);
+      if (name && !map.has(name)) map.set(name, st);
+      if (norm && !map.has(norm)) map.set(norm, st);
+      const resCode = resolveProductCode(p).toLowerCase().trim();
+      if (resCode && !map.has(resCode)) map.set(resCode, st);
+    });
+    return map;
+  }, [itemsList]);
+
   const getItemStock = (itemName, itemCode) => {
     if (!itemName && !itemCode) return null;
-    const cleanName = (itemName || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
-    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    if (cleanCode && stockLookupMap.has(cleanCode)) return stockLookupMap.get(cleanCode);
+    const cleanName = (itemName || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
+    if (cleanName && stockLookupMap.has(cleanName)) return stockLookupMap.get(cleanName);
     const normName = normalizeProductName(cleanName);
-
-    const isMr300 = cleanCode === 'mr-300mm' || resolvedCode === 'mr-300mm' || cleanCode === 'mr300' ||
-      ((cleanName.includes('mini rail') || normName.includes('mini rail')) && (cleanName.includes('300') || cleanName === 'mini rail'));
-
-    // 1. Primary authoritative lookup: search in itemsList (synchronous with TypeableProductSelect dropdown)
-    const found = (itemsList || []).find(p => {
-      const pCode = (p.code || '').toLowerCase().trim();
-      const pResCode = resolveProductCode(p).toLowerCase().trim();
-      const pName = (p.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
-      const pNorm = normalizeProductName(p.name);
-      if (isMr300) {
-        return pCode === 'mr-300mm' || pCode === 'mr300' || (pName.includes('mini rail') && (pName.includes('300') || pName === 'mini rail'));
-      }
-      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
-        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
-        (normName && pNorm === normName) ||
-        (cleanName && pName === cleanName) ||
-        (cleanName && pName.includes(cleanName));
-    });
-    if (found) {
-      const st = Number(found.availableStock !== undefined ? found.availableStock : (found.stock !== undefined ? found.stock : 0));
-      if (!isNaN(st) && st >= 0) return st;
-    }
-
-    // 2. Fallback to raw materials store in localStorage
-    try {
-      const rawSaved = localStorage.getItem('controlroom_raw_materials_store');
-      if (rawSaved) {
-        const rawList = JSON.parse(rawSaved);
-        if (Array.isArray(rawList)) {
-          const rawFound = rawList.find(rm => {
-            const rmCode = (rm.code || rm.sku || '').toLowerCase().trim();
-            const rmResCode = resolveProductCode(rm).toLowerCase().trim();
-            const rmName = (rm.name || '').replace(/[\u2013\u2014]/g, '-').toLowerCase().trim();
-            if (isMr300) {
-              return rmCode === 'mr-300mm' || rmCode === 'mr300' || (rmName.includes('mini rail') && (rmName.includes('300') || rmName === 'mini rail'));
-            }
-            return (resolvedCode && (rmCode === resolvedCode || rmResCode === resolvedCode)) ||
-              (cleanCode && (rmCode === cleanCode || rmResCode === cleanCode)) ||
-              (cleanName && (rmName === cleanName || rmName.includes(cleanName) || cleanName.includes(rmName))) ||
-              (normName && (normalizeProductName(rm.name) === normName));
-          });
-          if (rawFound) {
-            const isDemo = cleanCode === 'alu-len-2414mm' || resolvedCode === 'alu-len-2414mm' || isMr300;
-            const isLegacyDummy = !isDemo && Number(rawFound.goodsReceived || 0) === 0 && Number(rawFound.issuedProd || 0) === 0 &&
-              (rawFound.lastUpdated === 'Stock Set to 5,000' || (Number(rawFound.stock) === 5000 && Number(rawFound.physicalStock) === 5000));
-            if (isLegacyDummy) return 0;
-            const st = Number(rawFound.availableStock !== undefined ? rawFound.availableStock : (rawFound.stock !== undefined ? rawFound.stock : (rawFound.physicalStock || 0)));
-            if (!isNaN(st) && st >= 0) return st;
-          }
-        }
-      }
-    } catch (_) {}
-
+    if (normName && stockLookupMap.has(normName)) return stockLookupMap.get(normName);
+    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    if (resolvedCode && stockLookupMap.has(resolvedCode)) return stockLookupMap.get(resolvedCode);
     return 0;
   };
 
@@ -1781,7 +1808,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const handleAddMaterialRow = () => {
-    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%' }]);
+    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '73089090' }]);
   };
 
   const handleAddPresetItem = (groupId) => {
@@ -1797,6 +1824,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: grp.gstRate || '18%',
+      hsn: grp.hsn || grp.hsn_or_sac || '73089090',
       isPresetItem: true,
       presetGroupId: targetGid,
       presetName: grp.presetName
@@ -1834,6 +1862,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         setCount: count,
         kitPrice: newSetPrice ? String(newSetPrice) : '',
         gstRate: setGst,
+        hsn: '73089090',
         isCustomSet: true
       }
     }));
@@ -1846,6 +1875,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: setGst,
+      hsn: '73089090',
       isPresetItem: true,
       presetGroupId: groupId,
       presetName: cleanName
@@ -1876,6 +1906,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const presetName = targetPreset.label || presetId;
     const isDcrBosKit = targetPreset.category === 'DCR BOS Solar Kits' || targetPreset.category === 'BOS Solar Kits' || (targetPreset.label && targetPreset.label.includes('BOS KITS'));
     const initialGstRate = isDcrBosKit ? '5%' : (targetPreset.gstRate || targetPreset.gst || '18%');
+    const presetHsn = targetPreset.hsn || targetPreset.hsn_or_sac || '73089090';
 
     setPresetGroups(prev => ({
       ...prev,
@@ -1885,10 +1916,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetName,
         setCount: multiplier,
         kitPrice: defaultPrice,
-        gstRate: initialGstRate
+        gstRate: initialGstRate,
+        hsn: presetHsn
       }
     }));
 
+    const isFixedKit = isFixedQuantityPreset(presetId, targetPreset.label || presetName);
     const newItems = targetPreset.items.map(it => {
       const baseQ = parseFloat(it.qty) || 1;
       const resCode = resolveProductCode(it);
@@ -1898,9 +1931,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetGroupId: groupId,
         presetName,
         baseQty: baseQ,
-        qty: String(Math.round(baseQ * multiplier)),
+        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
+        hsn: it.hsn || it.hsn_or_sac || presetHsn,
         isPresetItem: true
       };
     });
@@ -2090,15 +2124,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     }
 
-    // 4.5 Mandatory Destination
-    if (!destination || !destination.trim()) {
-      missingList.push({
-        field: 'Destination',
-        message: 'Destination is mandatory. Please enter the delivery destination.',
-        targetId: 'performa-invoice-destination'
-      });
-    }
-
     // 5. Line items
     if (!Array.isArray(piItems) || piItems.length === 0) {
       missingList.push({
@@ -2261,6 +2286,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         ? piList[existingMatchIdx]
         : (isEditing && editIdx !== null ? piList[editIdx] : null);
 
+      const sanitizedItems = (piItems || []).map(it => ({
+        ...it,
+        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || '73089090').trim()
+      }));
+
       const newPI = {
         id: cleanPiNo,
         piNo: cleanPiNo,
@@ -2271,7 +2301,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         email,
         gstNo: (gstNo || '').toUpperCase(),
         productName: joinedProducts,
-        items: piItems,
+        hsn: sanitizedItems.find(it => it.hsn)?.hsn || '73089090',
+        items: sanitizedItems,
         presetGroups,
         billingAddress: {
           street: billingStreet,
@@ -2309,12 +2340,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         expDate: validUntilDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         status: isDraft ? 'Draft' : (matchedExisting?.status === 'Converted to BOM' ? 'Converted to BOM' : 'Issued'),
         statusType: isDraft ? 'draft' : (matchedExisting?.statusType === 'converted' ? 'converted' : 'issued'),
-        salesPerson: matchedExisting?.salesPerson || getEffectiveSalesPerson(),
-        salesperson: matchedExisting?.salesPerson || getEffectiveSalesPerson(),
-        salesPersonCode: matchedExisting?.salesPersonCode || currentEmpId || 'SE-VRM001',
-        salesPersonEmail: matchedExisting?.salesPersonEmail || currentLoggedEmail || 'sales@armsai.com',
-        createdBy: matchedExisting?.createdBy || getEffectiveSalesPerson(),
-        createdById: matchedExisting?.createdById || currentEmpId || 'SE-VRM001',
+        salesPerson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
+        salesperson: (isEditing ? matchedExisting?.salesPerson : null) || getEffectiveSalesPerson(),
+        salesPersonCode: (isEditing ? matchedExisting?.salesPersonCode : null) || currentEmpId || 'SE-004',
+        salesPersonEmail: (isEditing ? matchedExisting?.salesPersonEmail : null) || currentLoggedEmail || '',
+        createdBy: (isEditing ? matchedExisting?.createdBy : null) || getEffectiveSalesPerson(),
+        createdById: (isEditing ? matchedExisting?.createdById : null) || currentEmpId || 'SE-004',
         zohoSynced: matchedExisting?.zohoSynced || false,
         zohoEstimateId: matchedExisting?.zohoEstimateId || null,
         zohoModule: 'Quotes'
@@ -2347,7 +2378,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
       updatePiList(updatedList);
 
-      // Push to Zoho Books Quotes (Estimates API)
+      // Save Proforma Invoice to BUSINZ Database (PostgreSQL public.proforma_invoices)
+      // NOTE: Strictly database-first. Zero automatic Zoho sync. Zoho push occurs ONLY when salesperson clicks "Push to Zoho".
       const sanitizedPayload = {
         ...stripDataUrlsFromRecord(newPI),
         isEdit: isEditing
@@ -2356,55 +2388,50 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete sanitizedPayload.deliveryProofDoc;
       delete sanitizedPayload.deliveryAddressProofDoc;
 
-      fetch('/api/estimates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sanitizedPayload)
-      }).then(res => res.json()).then(data => {
-        const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
-        const rawEstId = data?.zohoEstimateId || data?.estimate?.zohoEstimateId;
-        const estId = (rawEstId && /^\d{15,22}$/.test(String(rawEstId).trim())) ? String(rawEstId).trim() : null;
+      try {
+        const response = await fetch('/api/estimates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sanitizedPayload)
+        });
 
-        // If the server auto-advanced the PI number due to concurrency collision, sync local state
-        const finalEstNo = serverAssignedPiNo || data?.estimate?.piNo || newPI.piNo;
-        if (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo) {
-          console.warn(`[PI CONCURRENCY NOTIFICATION] Server auto-advanced PI number from ${newPI.piNo} to ${serverAssignedPiNo}`);
+        const data = await response.json();
+        if (!response.ok || !data || data.success === false) {
+          throw new Error(data?.error || `Server returned error status ${response.status}`);
+        }
+
+        const serverAssignedPiNo = data?.pi?.piNo || data?.estimate?.piNo;
+        const finalEstNo = serverAssignedPiNo || data?.estimate?.piNo || cleanPiNo;
+
+        if (serverAssignedPiNo && serverAssignedPiNo !== cleanPiNo) {
+          console.warn(`[PI CONCURRENCY NOTIFICATION] Server auto-advanced PI number from ${cleanPiNo} to ${serverAssignedPiNo}`);
           showTopToast(`ℹ️ PI Number was auto-advanced to ${serverAssignedPiNo} to prevent overwriting existing record.`, 'info', 6000);
         }
 
-        if (estId || (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo)) {
-          console.log('[ZOHO ESTIMATE SYNC SUCCESS]', estId || 'Native Server Sync');
-          const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
-            ...p,
-            id: finalEstNo,
-            piNo: finalEstNo,
-            zohoEstimateId: estId || p.zohoEstimateId,
-            zohoSynced: Boolean(estId || p.zohoSynced),
-            zohoSyncError: null,
-            zohoModule: 'Quotes'
-          } : p);
-          updatePiList(enrichedList);
-        } else if (data && data.zohoError) {
-          console.warn('[ESTIMATE SYNC NOTICE]', data.zohoError);
-          const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
-            ...p,
-            zohoSynced: false,
-            zohoSyncError: data.zohoError
-          } : p);
-          updatePiList(enrichedList);
-        }
-      }).catch(err => {
-        console.warn('[ESTIMATE SYNC NOTICE]', err);
-      });
+        const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
+          ...p,
+          id: finalEstNo,
+          piNo: finalEstNo,
+          ...(data.pi || {})
+        } : p);
+        updatePiList(enrichedList);
 
-      // Instantly dismiss modal and advance to list view so user is never stuck
-      setPiConfirmModal(null);
-      resetForm();
-      setViewMode('list');
+        // Dismiss modal and advance to list view once confirmed safely stored in DB
+        setPiConfirmModal(null);
+        resetForm();
+        setViewMode('list');
 
-      if (isDraft) {
         const safeCustomer = (vendorName || customerName || 'Customer').trim();
-        showTopToast(`📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`, 'info', 5000);
+        if (isDraft) {
+          showTopToast(`📝 Proforma Invoice (${finalEstNo}) for ${safeCustomer} has been saved as Draft in BUSINZ database.`, 'info', 5000);
+        } else {
+          showTopToast(`✅ Proforma Invoice (${finalEstNo}) for ${safeCustomer} stored permanently in BUSINZ database!`, 'success', 5000);
+        }
+      } catch (saveErr) {
+        console.error('[ESTIMATE DB SAVE ERROR]', saveErr);
+        showTopToast('❌ Failed to store Proforma Invoice in database: ' + (saveErr?.message || 'Server error. Please try again.'), 'error', 8000);
+        // Do NOT reset form so salesperson never loses their entered form data!
+        return;
       }
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
@@ -2481,7 +2508,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       setPresetGroups({});
     }
     if (Array.isArray(pi.items) && pi.items.length > 0) {
-      setPiItems(pi.items);
+      setPiItems(pi.items.map(it => ({
+        ...it,
+        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || pi.hsn || '73089090'
+      })));
     } else {
       setPiItems([
         {
@@ -2490,7 +2520,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           uom: 'SET',
           qty: String(pi.quantity || 1),
           rate: String(pi.unitValue || 25000),
-          gstRate: '18%'
+          gstRate: '18%',
+          hsn: pi.hsn || '73089090'
         }
       ]);
     }
@@ -3635,13 +3666,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   const hasSavedBom = matchedBoms.length > 0;
                   const isConverted = hasSavedBom;
 
-                  if (isConverted) {
-                    const firstBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
-                    const isPushed = Boolean(target.zohoSynced);
-                    const isCurrentlyPushing = syncingPiNo === target.piNo;
+                  const firstBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
+                  const isPushed = Boolean(target.zohoSynced);
+                  const isCurrentlyPushing = syncingPiNo === target.piNo;
 
-                    return (
-                      <React.Fragment key={target.piNo}>
+                  return (
+                    <React.Fragment key={target.piNo}>
+                      {isConverted ? (
                         <button
                           onClick={() => {
                             setSelectedPIs([]);
@@ -3672,76 +3703,74 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         >
                           <Layers size={14} style={{ color: '#FFFFFF' }} /> View {firstBomCode} ↗
                         </button>
-
+                      ) : (
                         <button
-                          onClick={() => syncPiToZoho(target)}
-                          disabled={isCurrentlyPushing}
+                          onClick={() => {
+                            setSelectedPIs([]);
+                            handleConvertToBom(target);
+                          }}
                           style={{
-                            backgroundColor: isPushed ? '#F0FDF4' : '#0E7490',
-                            border: isPushed ? '1px solid #86EFAC' : 'none',
-                            color: isPushed ? '#15803D' : '#FFFFFF',
+                            backgroundColor: '#4F46E5',
+                            border: 'none',
+                            color: '#FFFFFF',
                             borderRadius: '10px',
                             padding: '6px 16px',
                             fontSize: '12px',
                             fontWeight: '700',
-                            cursor: isCurrentlyPushing ? 'not-allowed' : 'pointer',
+                            cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '6px',
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
-                            boxShadow: isPushed ? 'none' : '0 2px 4px rgba(14, 116, 144, 0.3)',
-                            transition: 'all 0.15s ease',
-                            opacity: isCurrentlyPushing ? 0.7 : 1
+                            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)',
+                            transition: 'all 0.15s ease'
                           }}
-                          title={isPushed ? `Already pushed to Zoho Books as Quote #${target.zohoEstimateNo || target.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
                         >
-                          {isCurrentlyPushing ? (
-                            <>
-                              <RotateCcw size={14} className="animate-spin" style={{ color: isPushed ? '#15803D' : '#FFFFFF' }} /> Pushing to Zoho...
-                            </>
-                          ) : isPushed ? (
-                            <>
-                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({target.zohoEstimateNo || target.piNo})
-                            </>
-                          ) : (
-                            <>
-                              <UploadCloud size={14} style={{ color: '#FFFFFF' }} /> Push to Zoho
-                            </>
-                          )}
+                          <Layers size={14} style={{ color: '#FFFFFF' }} /> Convert to BOM
                         </button>
-                      </React.Fragment>
-                    );
-                  }
+                      )}
 
-                  return (
-                    <button
-                      onClick={() => {
-                        setSelectedPIs([]);
-                        handleConvertToBom(target);
-                      }}
-                      style={{
-                        backgroundColor: '#4F46E5',
-                        border: 'none',
-                        color: '#FFFFFF',
-                        borderRadius: '10px',
-                        padding: '6px 16px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
-                    >
-                      <Layers size={14} style={{ color: '#FFFFFF' }} /> Convert to BOM
-                    </button>
+                      <button
+                        onClick={() => syncPiToZoho(target)}
+                        disabled={isCurrentlyPushing}
+                        style={{
+                          backgroundColor: isPushed ? '#F0FDF4' : '#0E7490',
+                          border: isPushed ? '1px solid #86EFAC' : 'none',
+                          color: isPushed ? '#15803D' : '#FFFFFF',
+                          borderRadius: '10px',
+                          padding: '6px 16px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: isCurrentlyPushing ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          boxShadow: isPushed ? 'none' : '0 2px 4px rgba(14, 116, 144, 0.3)',
+                          transition: 'all 0.15s ease',
+                          opacity: isCurrentlyPushing ? 0.7 : 1
+                        }}
+                        title={isPushed ? `Already pushed to Zoho Books as Quote #${target.zohoEstimateNo || target.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                      >
+                        {isCurrentlyPushing ? (
+                          <>
+                            <RotateCcw size={14} className="animate-spin" style={{ color: isPushed ? '#15803D' : '#FFFFFF' }} /> Pushing to Zoho...
+                          </>
+                        ) : isPushed ? (
+                          <>
+                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({target.zohoEstimateNo || target.piNo})
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud size={14} style={{ color: '#FFFFFF' }} /> Push to Zoho
+                          </>
+                        )}
+                      </button>
+                    </React.Fragment>
                   );
                 })()}
 
@@ -4069,13 +4098,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
                 <div>
                   <label htmlFor="performa-invoice-destination" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Destination <span style={{ color: '#EF4444' }}>*</span>
+                    Destination
                   </label>
                   <input id="performa-invoice-destination" name="destination" aria-label="Destination"
                     type="text"
-                    required
                     value={destination}
-                    placeholder="e.g. Coimbatore, Hyderabad, Site Location..."
+                    placeholder="e.g. Coimbatore, Hyderabad, Site Location (Optional)..."
                     onChange={(e) => setDestination(e.target.value)}
                     style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
                    />
@@ -4116,23 +4144,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           if (searchCustTimerRef.current) clearTimeout(searchCustTimerRef.current);
                           searchCustTimerRef.current = setTimeout(async () => {
                             try {
-                              const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`);
-                              if (res.ok) {
-                                const matches = await res.json();
-                                if (Array.isArray(matches) && matches.length > 0) {
-                                  setCustomerList(prev => {
-                                    const map = new Map();
-                                    (prev || []).forEach(p => {
-                                      const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
-                                      if (k) map.set(k, p);
-                                    });
-                                    matches.forEach(m => {
-                                      const k = (m.customerCode || m.id || m.companyName || m.name || '').toLowerCase().trim();
-                                      if (k && !map.has(k)) map.set(k, m);
-                                    });
-                                    return Array.from(map.values());
+                              const matches = await searchCustomers({ query: q, limit: 50 });
+                              if (Array.isArray(matches) && matches.length > 0) {
+                                setCustomerList(prev => {
+                                  const map = new Map();
+                                  (prev || []).forEach(p => {
+                                    const k = (p.customerCode || p.id || p.companyName || p.name || '').toLowerCase().trim();
+                                    if (k) map.set(k, p);
                                   });
-                                }
+                                  matches.forEach(m => {
+                                    const k = (m.customerCode || m.id || m.companyName || m.name || '').toLowerCase().trim();
+                                    if (k && !map.has(k)) map.set(k, m);
+                                  });
+                                  return Array.from(map.values());
+                                });
                               }
                             } catch (_) {}
                           }, 250);
@@ -4691,25 +4716,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                          />
                       </th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '28%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>HSN / SAC</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>UOM</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '7%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && (
-                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                           Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </th>
                       )}
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'right' }}>Taxable (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Total (₹)</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -4763,7 +4789,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -4793,12 +4819,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         color: theme.tagText,
                                         border: `1px solid ${theme.border}`
                                       }}>
-                                        {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                        Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
                                       </span>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
-                                        Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST
+                                        {(parseInt(currentGroup?.setCount) || 1) > 1 ? (
+                                          <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                        ) : (
+                                          <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                        )}
                                       </span>
                                       <button
                                         type="button"
@@ -4827,7 +4857,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -4890,6 +4920,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       const pName = matched.name;
                                       const pCat = matched.category || matched.description || item.category;
                                       const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
+                                      const pHsn = matched.hsn || matched.hsn_or_sac || item.hsn || '73089090';
                                       const isSolar5 = is5PctSolarProduct(pName, pCat);
                                       let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
                                       const u = String(rawUom).trim().toUpperCase();
@@ -4906,7 +4937,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
                                         uom: resolvedUom,
                                         category: pCat,
-                                        gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
+                                        gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%'),
+                                        hsn: pHsn
                                       } : mat));
                                     }}
                                   />
@@ -4948,6 +4980,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     </div>
                                   )}
                                 </div>
+                              </td>
+                              <td style={{ padding: '12px 6px' }}>
+                                <input id={`performa-invoice-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
+                                  type="text"
+                                  placeholder="73089090"
+                                  value={item.hsn !== undefined ? item.hsn : '73089090'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, hsn: val } : mat));
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    height: '38px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #E2E8F0',
+                                    padding: '0 6px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    color: '#0F172A',
+                                    backgroundColor: '#FFFFFF',
+                                    outline: 'none',
+                                    boxSizing: 'border-box',
+                                    textAlign: 'center'
+                                  }}
+                                  title="HSN / SAC Tariff Code"
+                                />
                               </td>
                               <td style={{ padding: '12px 10px' }}>
                                 <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
@@ -5131,7 +5189,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                                     [groupId]: { ...(prev[groupId] || currentGroup), setCount: valToSave }
                                                   }));
                                                 }
-                                                const multiplier = isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                                const isFixedKit = isFixedQuantityPreset(currentGroup?.presetId, currentGroup?.presetName || item.presetName);
+                                                const multiplier = isFixedKit ? 1 : (isNaN(parsed) ? 0 : Math.max(0, parsed));
                                                 setPiItems(prev => prev.map(mat => {
                                                   if ((mat.presetGroupId || 'legacy_default') === groupId && mat.baseQty) {
                                                     return { ...mat, qty: String(Math.round(mat.baseQty * multiplier)) };
@@ -6065,7 +6124,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <div key={gIdx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: '10px', padding: '12px' }}>
                             <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>{grp.presetName}</div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                              <span>Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
+                              <span>Total Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
                               <span>GST: <strong>{grp.gstRate || '18%'}</strong></span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '4px' }}>
@@ -6100,6 +6159,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', textAlign: 'left' }}>
                         <th style={{ padding: '10px 12px' }}>#</th>
                         <th style={{ padding: '10px 12px' }}>Item Description</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>HSN / SAC</th>
                         <th style={{ padding: '10px 12px', textAlign: 'center' }}>Live Stock</th>
                         <th style={{ padding: '10px 12px', textAlign: 'center' }}>Qty</th>
                         <th style={{ padding: '10px 12px', textAlign: 'right' }}>Unit Rate (₹)</th>
@@ -6154,7 +6214,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             <React.Fragment key={idx}>
                               {isFirstInGroup && (
                                 <tr key={`modal-preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
-                                  <td colSpan={8} style={{ padding: '8px 12px' }}>
+                                  <td colSpan={9} style={{ padding: '8px 12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{
@@ -6180,11 +6240,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           color: theme.tagText,
                                           border: `1px solid ${theme.border}`
                                         }}>
-                                          {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                          Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST
+                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong>{(parseInt(currentGroup?.setCount) || 1) > 1 ? ` (${currentGroup?.setCount || 1} Sets × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
                                       </div>
                                     </div>
                                   </td>
@@ -6192,7 +6252,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               )}
                               {isFirstCustomItem && distinctDetailsGroupIds.length > 0 && (
                                 <tr key="modal-custom-hdr" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                  <td colSpan={8} style={{ padding: '6px 12px' }}>
+                                  <td colSpan={9} style={{ padding: '6px 12px' }}>
                                     <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', marginRight: '8px' }}>
                                       CUSTOM ITEMS
                                     </span>
@@ -6232,6 +6292,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     )}
                                     {it.category && <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 'normal' }}>{it.category}</span>}
                                   </div>
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569', fontSize: '11px', fontFamily: 'monospace', fontWeight: '600' }}>
+                                  {it.hsn || it.hsn_or_sac || selectedPi.hsn || '73089090'}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                   {(() => {
@@ -7191,6 +7254,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         <VRMProformaInvoicePrintTemplate
           piData={printModalPi}
           onClose={() => setPrintModalPi(null)}
+          onSavePi={handlePrintTemplatePiUpdate}
         />
       )}
 

@@ -903,6 +903,8 @@ export default function VRMTemplateStudioView({ onBackToPI, userRole = '' }) {
       const canvas = await html2canvas(sheetEl, {
         scale: 2,
         useCORS: true,
+        allowTaint: false,
+        imageTimeout: 3000,
         logging: false,
         backgroundColor: '#ffffff',
         ignoreElements: (element) => element.classList?.contains('no-print')

@@ -30,6 +30,7 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
+import { stripDataUrlsFromRecord } from '../utils/otherViewsShared';
 import WhatsAppQrModal from './crm/WhatsAppQrModal';
 import {
   getCleanCurrentUserId,
@@ -216,6 +217,18 @@ const compressImageFile = (file, maxDim = 450, quality = 0.85) => {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+};
+
+// Safely resolve print image URLs, preventing unreachable localhost/dev URLs from stalling html2canvas on live servers
+const getSafePrintImageUrl = (url, fallback) => {
+  if (!url || typeof url !== 'string') return fallback;
+  if (url.startsWith('data:image/')) return url;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (url.includes('localhost:') || url.includes('127.0.0.1:') || url.includes('192.168.')) {
+      return fallback;
+    }
+  }
+  return url;
 };
 
 // Helper to convert number to Indian Rupees in words
@@ -1284,7 +1297,7 @@ export function VRMProformaInvoicePrintSheet({
                 >
                   <div style={{ height: '48px', maxWidth: '180px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', overflow: 'hidden' }}>
                     <img
-                      src={cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')) || VRM_OFFICIAL_LOGO}
+                      src={getSafePrintImageUrl(cfg.customLogoUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_logo')), VRM_OFFICIAL_LOGO)}
                       alt={cfg.companyName || 'VRM Structures'}
                       style={{
                         maxHeight: '44px',
@@ -1885,7 +1898,7 @@ export function VRMProformaInvoicePrintSheet({
                                     if (it.grpId) handleUpdatePresetGroup(it.grpId, { presetName: v, name: v });
                                   }}
                                 />
-                                {' '}({it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
+                                {' '}(Total Quantity: {it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
                               </span>
                               <span style={{ fontSize: '9px', color: '#475569', fontWeight: '700' }}>
                                 Kit Subtotal: ₹{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -2312,12 +2325,15 @@ export function VRMProformaInvoicePrintSheet({
                 }}>
                   {/* Official Stamp */}
                   <img
-                    src={cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')) || VRM_OFFICIAL_STAMP}
+                    src={getSafePrintImageUrl(cfg.customStampUrl || (typeof window !== 'undefined' && localStorage.getItem('vrm_constant_stamp')), VRM_OFFICIAL_STAMP)}
                     alt="VRM Structures Official Stamp"
                     style={{
                       height: '115px',
                       width: '115px',
                       objectFit: 'contain'
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.src = VRM_OFFICIAL_STAMP;
                     }}
                   />
                   {/* Optional Custom Signature overlay (Only shown if custom signature image uploaded) */}
@@ -3436,12 +3452,22 @@ function TemplateCustomizerDrawer({
 /**
  * Full Interactive Modal Dialog for Previewing, Printing, Customizing, and Exporting PDF
  */
-export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
+export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSavePi }) {
   const [isExporting, setIsExporting] = useState(false);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [currentPiData, setCurrentPiData] = useState(piData);
   const [undoToast, setUndoToast] = useState(null);
   const undoTimeoutRef = useRef(null);
+
+  // Persistence & Edit Safety Tracking
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSavingPi, setIsSavingPi] = useState(false);
+  const [lastSavedNotice, setLastSavedNotice] = useState(null);
+  const currentPiDataRef = useRef(currentPiData);
+
+  useEffect(() => {
+    currentPiDataRef.current = currentPiData;
+  }, [currentPiData]);
 
   // WhatsApp 1-Click Dispatch State
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
@@ -3664,11 +3690,65 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
     } catch (e) {}
   };
 
-  const handlePrint = () => {
+  const handleSavePiChanges = async (overrideData = null) => {
+    const targetPi = overrideData || currentPiDataRef.current || currentPiData;
+    if (!targetPi || !targetPi.piNo) return targetPi;
+    setIsSavingPi(true);
+    try {
+      const sanitized = {
+        ...stripDataUrlsFromRecord(targetPi),
+        isEdit: true
+      };
+      delete sanitized.paymentProofDoc;
+      delete sanitized.deliveryProofDoc;
+      delete sanitized.deliveryAddressProofDoc;
+
+      const res = await fetch('/api/estimates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sanitized)
+      });
+      const data = await res.json();
+      if (res.ok && data && data.success !== false) {
+        const persistedPi = data.pi || data.estimate || targetPi;
+        setCurrentPiData(prev => ({ ...prev, ...persistedPi }));
+        setHasUnsavedChanges(false);
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastSavedNotice(`Saved at ${timeStr}`);
+        setTimeout(() => setLastSavedNotice(null), 4000);
+        if (typeof onSavePi === 'function') {
+          onSavePi(persistedPi);
+        }
+        return persistedPi;
+      } else {
+        console.warn('[PrintTemplate] Save returned error:', data?.error);
+      }
+    } catch (err) {
+      console.error('[PrintTemplate] Save failed:', err);
+    } finally {
+      setIsSavingPi(false);
+    }
+    return targetPi;
+  };
+
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      handleSavePiChanges().catch(() => {});
+    }
+    if (onClose) onClose();
+  };
+
+  const handlePrint = async () => {
+    if (hasUnsavedChanges) {
+      await handleSavePiChanges();
+    }
     window.print();
   };
 
   const handleDownloadPdf = async () => {
+    if (hasUnsavedChanges) {
+      await handleSavePiChanges();
+    }
     setIsExporting(true);
     try {
       const sheetEl = document.getElementById('printable-proforma-invoice');
@@ -3683,6 +3763,8 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
       const canvas = await html2canvas(sheetEl, {
         scale: 2,
         useCORS: true,
+        allowTaint: false,
+        imageTimeout: 3000,
         logging: false,
         backgroundColor: '#ffffff',
         ignoreElements: (element) => element.classList?.contains('no-print')
@@ -3718,6 +3800,9 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
   };
 
   const handleOpenWhatsAppModal = async () => {
+    if (hasUnsavedChanges) {
+      await handleSavePiChanges();
+    }
     const rawPhone = currentPiData.phone || currentPiData.contactPhone || currentPiData.customerPhone || '';
     setWaRecipientPhone(rawPhone);
     setWaMessage(formatPiWhatsAppText(currentPiData));
@@ -3744,6 +3829,8 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
           const canvas = await html2canvas(sheetEl, {
             scale: 2,
             useCORS: true,
+            allowTaint: false,
+            imageTimeout: 3000,
             logging: false,
             backgroundColor: '#ffffff',
             ignoreElements: (element) => element.classList?.contains('no-print')
@@ -3870,6 +3957,31 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
             {showCustomizer ? 'Hide Customizer' : 'Customize Template'}
           </button>
 
+          {/* SAVE EDITS TO PI */}
+          <button
+            onClick={() => handleSavePiChanges()}
+            disabled={isSavingPi}
+            title={hasUnsavedChanges ? 'Click to save your edits to the database' : 'All changes are permanently saved'}
+            style={{
+              backgroundColor: hasUnsavedChanges ? '#0E7490' : '#1E293B',
+              color: '#FFFFFF',
+              border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid #334155',
+              borderRadius: '6px',
+              padding: '7px 14px',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: isSavingPi ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: hasUnsavedChanges ? '0 0 12px rgba(14, 116, 144, 0.5)' : 'none',
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            <Save size={14} style={{ color: hasUnsavedChanges ? '#38BDF8' : '#94A3B8' }} />
+            {isSavingPi ? 'Saving...' : (hasUnsavedChanges ? 'Save Changes' : (lastSavedNotice || 'Saved ✓'))}
+          </button>
+
           {/* DOWNLOAD PDF */}
           <button
             onClick={handleDownloadPdf}
@@ -3937,7 +4049,7 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
 
           {/* CLOSE */}
           <button
-            onClick={onClose}
+            onClick={handleClose}
             title="Close Preview"
             style={{
               backgroundColor: '#334155',
@@ -3977,7 +4089,10 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose }) {
             id="printable-proforma-invoice"
             isEditable={true}
             onUpdateSetting={handleUpdateSettings}
-            onUpdatePiData={(patch) => setCurrentPiData(prev => ({ ...prev, ...patch }))}
+            onUpdatePiData={(patch) => {
+              setCurrentPiData(prev => ({ ...prev, ...patch }));
+              setHasUnsavedChanges(true);
+            }}
             onElementRemoved={handleElementRemoved}
           />
         </div>

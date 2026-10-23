@@ -15,6 +15,7 @@ import { resolveProductCode, normalizeProductName } from "../../utils/vrmProduct
 import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
 import { getNextSequence } from "../../utils/sequenceGenerator";
+import { isFixedQuantityPreset, VRM_HDG_PRESETS } from "../../vrmHdgProposalPresets";
 
 export default function CreateBomFormPage(props) {
   const {
@@ -65,50 +66,35 @@ export default function CreateBomFormPage(props) {
     };
   }, []);
 
+  const stockLookupMap = React.useMemo(() => {
+    const map = new Map();
+    (itemsList || []).forEach(p => {
+      const st = Number(p.stock !== undefined ? p.stock : (p.availableStock !== undefined ? p.availableStock : 0));
+      const code = String(p.code || '').toLowerCase().trim();
+      const name = String(p.name || '').toLowerCase().trim();
+      const norm = normalizeProductName(p.name);
+      if (code && !map.has(code)) map.set(code, st);
+      if (name && !map.has(name)) map.set(name, st);
+      if (norm && !map.has(norm)) map.set(norm, st);
+      const resCode = resolveProductCode(p).toLowerCase().trim();
+      if (resCode && !map.has(resCode)) map.set(resCode, st);
+    });
+    return map;
+  }, [itemsList]);
+
   const getItemStock = (itemName, itemCode) => {
     if (!itemName && !itemCode) return null;
-    const cleanName = (itemName || '').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
-    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    if (cleanCode && stockLookupMap.has(cleanCode)) return stockLookupMap.get(cleanCode);
+    const cleanName = (itemName || '').toLowerCase().trim();
+    if (cleanName && stockLookupMap.has(cleanName)) return stockLookupMap.get(cleanName);
     const normName = normalizeProductName(itemName);
-
-    // 1. Search in itemsList
-    const found = (itemsList || []).find(p => {
-      const pCode = (p.code || '').toLowerCase().trim();
-      const pResCode = resolveProductCode(p).toLowerCase().trim();
-      const pName = (p.name || '').toLowerCase().trim();
-      const pNorm = normalizeProductName(p.name);
-      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
-        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
-        (normName && pNorm === normName) ||
-        (cleanName && pName === cleanName) ||
-        (cleanName && pName.includes(cleanName)) ||
-        (normName && pNorm.includes(normName));
-    });
-    if (found) {
-      return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
-    }
-
-    // 2. Direct fallback from Central Inventory Store (Inventory Store alone)
-    try {
-      const centralItems = centralInventoryStore.getInventoryItems();
-      if (Array.isArray(centralItems)) {
-        const foundCentral = centralItems.find(it => {
-          const itCode = (it.code || it.sku || '').toLowerCase().trim();
-          const itResCode = resolveProductCode(it).toLowerCase().trim();
-          const itName = (it.name || '').toLowerCase().trim();
-          return (resolvedCode && (itCode === resolvedCode || itResCode === resolvedCode)) ||
-            (cleanCode && (itCode === cleanCode || itResCode === cleanCode)) ||
-            (cleanName && (itName === cleanName || itName.includes(cleanName) || cleanName.includes(itName)));
-        });
-        if (foundCentral) {
-          return Number(foundCentral.stock !== undefined ? foundCentral.stock : (foundCentral.availableStock !== undefined ? foundCentral.availableStock : (foundCentral.physicalStock || 0)));
-        }
-      }
-    } catch (_) {}
-
+    if (normName && stockLookupMap.has(normName)) return stockLookupMap.get(normName);
+    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    if (resolvedCode && stockLookupMap.has(resolvedCode)) return stockLookupMap.get(resolvedCode);
     return null;
   };
+
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
     const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;
@@ -835,13 +821,14 @@ export default function CreateBomFormPage(props) {
                 setSelectedBomItemIndexes([]);
 
                 if (targetPreset && targetPreset.items) {
-                  const multiplier = parseInt(presetSetCount) || 1;
+                  const isFixedKit = isFixedQuantityPreset(val, targetPreset.label || val);
+                  const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                   setBomMaterialsList(targetPreset.items.map(it => {
                     const baseQ = parseFloat(it.qty) || 1;
                     return {
                       ...it,
                       baseQty: baseQ,
-                      qty: String(Math.round(baseQ * multiplier)),
+                      qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
                       rate: '0',
                       isPresetItem: true
                     };
@@ -865,13 +852,14 @@ export default function CreateBomFormPage(props) {
                 onClick={() => {
                   const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
                   if (targetPreset && targetPreset.items) {
-                    const multiplier = parseInt(presetSetCount) || 1;
+                    const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset.label || selectedPreset);
+                    const multiplier = isFixedKit ? 1 : (parseInt(presetSetCount) || 1);
                     const additionalItems = targetPreset.items.map(it => {
                       const baseQ = parseFloat(it.qty) || 1;
                       return {
                         ...it,
                         baseQty: baseQ,
-                        qty: String(Math.round(baseQ * multiplier)),
+                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
                         rate: '0',
                         isPresetItem: true
                       };
@@ -906,7 +894,7 @@ export default function CreateBomFormPage(props) {
 
             {/* SET COUNT / MULTIPLIER INPUT */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', padding: '0 8px', borderRadius: '8px', height: '36px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>No. of Sets:</span>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>Total Quantity (Sets):</span>
               <input id="create-bom-form-preset-set-count" name="presetSetCount" aria-label="PresetSetCount"
                 type="number"
                 min="1"
@@ -917,8 +905,9 @@ export default function CreateBomFormPage(props) {
                   const newCount = rawVal === '' ? '' : Math.max(1, parseInt(rawVal) || 1);
                   setPresetSetCount(newCount);
 
-                  const multiplier = parseInt(rawVal) || 1;
                   const targetPreset = activePresetsMap && activePresetsMap[selectedPreset] ? activePresetsMap[selectedPreset] : (VRM_HDG_PRESETS && VRM_HDG_PRESETS[selectedPreset]);
+                  const isFixedKit = isFixedQuantityPreset(selectedPreset, targetPreset?.label || selectedPreset);
+                  const multiplier = isFixedKit ? 1 : (parseInt(rawVal) || 1);
                   if (targetPreset && targetPreset.items) {
                     const baseItems = targetPreset.items;
                     setBomMaterialsList(baseItems.map(it => {
@@ -926,7 +915,7 @@ export default function CreateBomFormPage(props) {
                       return {
                         ...it,
                         baseQty: baseQ,
-                        qty: String(Math.round(baseQ * multiplier)),
+                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
                         rate: '0',
                         isPresetItem: true
                       };
@@ -937,7 +926,7 @@ export default function CreateBomFormPage(props) {
                       return {
                         ...it,
                         baseQty: it.baseQty || baseQ,
-                        qty: String(Math.round(baseQ * multiplier))
+                        qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier))
                       };
                     }));
                   }
@@ -1874,11 +1863,19 @@ export default function CreateBomFormPage(props) {
                     })();
 
                     const loggedInOperatorName = (() => {
-                      if (userRole === 'Sales Head') return 'Vijay';
                       const stored = localStorage.getItem('controlroom_logged_user_name');
+                      if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') return stored.trim();
+                      try {
+                        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+                        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+                        const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+                        const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+                        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+                      } catch (_) {}
                       if (stored && stored.trim() && stored !== 'undefined' && stored !== 'null') return stored.trim();
                       const storedUser = localStorage.getItem('controlroom_logged_user');
                       if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
+                      if (userRole === 'Sales Head') return 'Sales Head';
                       if (userRole === 'Accounts Head') return 'Venkatesh';
                       if (userRole === 'Accounts Executive') return 'Priya';
                       if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
@@ -1886,13 +1883,15 @@ export default function CreateBomFormPage(props) {
                     })();
                     const loggedInOperatorId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
 
-                    // PRESERVE ORIGINAL PI SALESPERSON: Prioritize PI salesperson over converting admin
-                    const effectiveSalesPersonName = (pendingPiFromStorage?.salesPerson && pendingPiFromStorage.salesPerson.trim()) ||
-                      (pendingPiFromStorage?.createdBy && pendingPiFromStorage.createdBy.trim()) ||
+                    const explicitSourcePi = String(props.newBomSourcePiNo || props.sourcePiNo || '').trim();
+
+                    // PRESERVE ORIGINAL PI SALESPERSON: Prioritize PI salesperson over converting admin only when explicitly converting
+                    const effectiveSalesPersonName = (explicitSourcePi && pendingPiFromStorage?.salesPerson && pendingPiFromStorage.salesPerson.trim()) ||
+                      (explicitSourcePi && pendingPiFromStorage?.createdBy && pendingPiFromStorage.createdBy.trim()) ||
                       loggedInOperatorName;
 
-                    const effectiveSalesPersonCode = (pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
-                      (pendingPiFromStorage?.createdById && pendingPiFromStorage.createdById.trim()) ||
+                    const effectiveSalesPersonCode = (explicitSourcePi && pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
+                      (explicitSourcePi && pendingPiFromStorage?.createdById && pendingPiFromStorage.createdById.trim()) ||
                       loggedInOperatorId;
 
                     const effectiveCreatorName = loggedInOperatorName;
@@ -1903,7 +1902,7 @@ export default function CreateBomFormPage(props) {
                       id: finalCode,
                       bomCode: finalCode,
                       code: finalCode,
-                      sourcePiNo: props.newBomSourcePiNo || props.sourcePiNo || pendingPiFromStorage?.sourcePiNo || pendingPiFromStorage?.piNo || pendingPiFromStorage?.id || null,
+                      sourcePiNo: explicitSourcePi || null,
                       date: new Date().toISOString().split('T')[0],
                       createdAt: new Date().toISOString(),
                       customerName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || 'Customer Order',
@@ -2150,6 +2149,7 @@ export default function CreateBomFormPage(props) {
                       setShowBOMForm(false);
                       setBomConfirmModal(null);
                       setCurrentPage(1);
+                      try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (_) {}
                       try {
                         window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: sanitizedNewBom } }));
                         window.dispatchEvent(new Event('central_inventory_updated'));

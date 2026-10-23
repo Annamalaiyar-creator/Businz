@@ -469,7 +469,7 @@ export function isRoleTargeted(userRole, targetRoles, metadata = {}) {
   // Fallback defaults if not set in localStorage
   if (!currentUserName) {
     if (userRole === 'Sales Executive') currentUserName = 'sales executive';
-    else if (userRole === 'Sales Head') currentUserName = 'vijay';
+    else if (userRole === 'Sales Head') currentUserName = 'sales head';
     else if (userRole === 'Technical Administrator' || userRole === 'CEO') currentUserName = 'annamalaiyar';
   }
 

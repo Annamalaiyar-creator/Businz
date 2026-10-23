@@ -16,6 +16,13 @@ import {
   getWorkflowRankServer,
   mergeBomRecords
 } from './bomPersistence.js';
+import {
+  saveProformaInvoiceToDatabase,
+  loadDatabaseProformaInvoices,
+  getNextDatabasePiNumber,
+  updatePiZohoSyncStatus,
+  toConsumerPi
+} from './piPersistence.js';
 import * as vrmDataModule from '../src/utils/vrmProductsData.js';
 const VRM_PRODUCTS = vrmDataModule.VRM_PRODUCTS || vrmDataModule.default?.VRM_PRODUCTS || [];
 const wordFingerprint = vrmDataModule.wordFingerprint || vrmDataModule.default?.wordFingerprint || ((w) => String(w || '').toLowerCase().trim());
@@ -68,6 +75,25 @@ import {
   isExternalStorageActive,
   initRuntimeStorage
 } from './runtimePaths.js';
+import {
+  getLeads as getDbLeads,
+  getLeadDetail,
+  createLead as createDbLead,
+  assignLead as assignDbLead,
+  recordLeadActivity,
+  updateLeadStatus as updateDbLeadStatus,
+  scheduleLeadFollowup,
+  getNotificationsForEmployee,
+  markNotificationRead,
+  checkAndProcessLeadInactivity
+} from './leadManagementService.js';
+import {
+  getIndiaMartConfig,
+  saveIndiaMartConfig,
+  testIndiaMartConnection,
+  syncIndiaMartLeads,
+  getIndiaMartSyncLogs
+} from './indiaMartService.js';
 
 // Prioritize local development env if present, then fallback to .env
 dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
@@ -672,7 +698,18 @@ const loadDatabaseBoms = async (forceRefresh = false) => {
               packedBy: diskItem.packedBy || item.packedBy || null,
               packedById: diskItem.packedById || item.packedById || null,
               packingCompletedAt: diskItem.packingCompletedAt || item.packingCompletedAt || null,
-              fullyCompleted: (diskItem.fullyCompleted !== undefined && diskRank >= dbRank) ? diskItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : diskItem.fullyCompleted)
+              fullyCompleted: (diskItem.fullyCompleted !== undefined && diskRank >= dbRank) ? diskItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : diskItem.fullyCompleted),
+              dispatchPrinted: Boolean(item.dispatchPrinted || diskItem.dispatchPrinted),
+              dispatchPrintCount: Math.max(parseInt(item.dispatchPrintCount, 10) || 0, parseInt(diskItem.dispatchPrintCount, 10) || 0),
+              dispatchPrintTimeStr: item.dispatchPrintTimeStr || diskItem.dispatchPrintTimeStr || '',
+              dispatchPrintedDateStr: item.dispatchPrintedDateStr || diskItem.dispatchPrintedDateStr || '',
+              dispatchPrintedBy: item.dispatchPrintedBy || diskItem.dispatchPrintedBy || '',
+              dispatchPrintedAt: item.dispatchPrintedAt || diskItem.dispatchPrintedAt || null,
+              firstPrintTimeStr: item.firstPrintTimeStr || diskItem.firstPrintTimeStr || null,
+              secondPrintTimeStr: item.secondPrintTimeStr || diskItem.secondPrintTimeStr || null,
+              dispatchPrintHistory: (Array.isArray(item.dispatchPrintHistory) && item.dispatchPrintHistory.length > 0)
+                ? item.dispatchPrintHistory
+                : (Array.isArray(diskItem.dispatchPrintHistory) ? diskItem.dispatchPrintHistory : [])
             });
           } else {
             combinedMap.set(c, item);
@@ -1684,6 +1721,51 @@ app.post('/api/media/upload', async (req, res) => {
 });
 
 // 🔍 MEDIA FINDER API (Locates existing uploaded files on disk by original name)
+let memoryMediaCache = null;
+let memoryMediaCacheMtime = 0;
+let cachedUploadsFileList = null;
+let lastUploadsFileListTime = 0;
+
+function getCachedMediaMap() {
+  const mediaCachePath = getStoreFilePath('media_cache.json');
+  try {
+    if (fs.existsSync(mediaCachePath)) {
+      const stats = fs.statSync(mediaCachePath);
+      if (!memoryMediaCache || memoryMediaCacheMtime !== stats.mtimeMs) {
+        memoryMediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8') || '{}');
+        memoryMediaCacheMtime = stats.mtimeMs;
+      }
+      return memoryMediaCache;
+    }
+  } catch (_) {}
+  return memoryMediaCache || {};
+}
+
+function getCachedUploadsFileList(dir) {
+  const now = Date.now();
+  if (cachedUploadsFileList && (now - lastUploadsFileListTime < 20000)) {
+    return cachedUploadsFileList;
+  }
+  const findFilesRecursively = (d) => {
+    let results = [];
+    try {
+      const entries = fs.readdirSync(d, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(d, entry.name);
+        if (entry.isDirectory()) {
+          results = results.concat(findFilesRecursively(fullPath));
+        } else if (entry.isFile()) {
+          results.push(fullPath);
+        }
+      }
+    } catch (_) {}
+    return results;
+  };
+  cachedUploadsFileList = findFilesRecursively(dir);
+  lastUploadsFileListTime = now;
+  return cachedUploadsFileList;
+}
+
 app.get('/api/media/find/:name', (req, res) => {
   try {
     const rawSearch = decodeURIComponent(req.params.name || '').toLowerCase().trim();
@@ -1691,48 +1773,48 @@ app.get('/api/media/find/:name', (req, res) => {
       return res.json({ found: false });
     }
 
-    // 1. Check server media_cache.json
-    const mediaCachePath = getStoreFilePath('media_cache.json');
-    if (fs.existsSync(mediaCachePath)) {
-      try {
-        const mediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8'));
-        for (const [k, v] of Object.entries(mediaCache)) {
-          const lowerK = String(k || '').toLowerCase();
-          if (lowerK === rawSearch || lowerK.includes(rawSearch) || rawSearch.includes(lowerK)) {
-            return res.json({ found: true, url: v, filename: k });
-          }
+    // Fast Path 1: Check in-memory media cache
+    const mediaCache = getCachedMediaMap();
+    if (mediaCache && typeof mediaCache === 'object') {
+      const normalizedSearch = rawSearch.replace(/[\s_]+/g, ' ').trim();
+      for (const [k, v] of Object.entries(mediaCache)) {
+        const lowerK = String(k || '').toLowerCase();
+        const normK = lowerK.replace(/[\s_]+/g, ' ').trim();
+        if (lowerK === rawSearch || normK === normalizedSearch || lowerK.includes(rawSearch) || rawSearch.includes(lowerK)) {
+          return res.json({ found: true, url: v, filename: k });
         }
-      } catch (_) {}
+      }
     }
 
-    // 2. Check uploadsDir recursively (including bom-documents subdirectories)
+    // Fast Path 2: Check direct physical files in uploadsDir
     if (fs.existsSync(uploadsDir)) {
-      const findFilesRecursively = (dir) => {
-        let results = [];
-        try {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-              results = results.concat(findFilesRecursively(fullPath));
-            } else if (entry.isFile()) {
-              results.push(fullPath);
-            }
-          }
-        } catch (_) {}
-        return results;
-      };
+      const sanitizedName = rawSearch.replace(/[^a-z0-9._-]/gi, '_');
+      const directCandidates = [
+        path.join(uploadsDir, rawSearch),
+        path.join(uploadsDir, sanitizedName),
+        path.join(uploadsDir, 'bom-documents', rawSearch),
+        path.join(uploadsDir, 'bom-documents', sanitizedName)
+      ];
 
-      const allFiles = findFilesRecursively(uploadsDir);
+      for (const cand of directCandidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          const rel = path.relative(uploadsDir, cand).replace(/\\/g, '/');
+          return res.json({ found: true, url: `/api/uploads/${rel}`, filename: path.basename(cand) });
+        }
+      }
+
+      // Fast Path 3: Cached recursive search across uploadsDir
+      const allFiles = getCachedUploadsFileList(uploadsDir);
       // Exact filename match
-      const exact = allFiles.find(f => path.basename(f).toLowerCase() === rawSearch);
+      const exact = allFiles.find(f => path.basename(f).toLowerCase() === rawSearch || path.basename(f).toLowerCase() === sanitizedName);
       if (exact) {
         const rel = path.relative(uploadsDir, exact).replace(/\\/g, '/');
         return res.json({ found: true, url: `/api/uploads/${rel}`, filename: path.basename(exact) });
       }
+
       // Base slug match (ignoring timestamps and special characters)
       const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '').toLowerCase();
-      if (searchBase) {
+      if (searchBase && searchBase.length >= 3) {
         const matched = allFiles.find(f => {
           const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
           return fBase && (fBase.includes(searchBase) || searchBase.includes(fBase));
@@ -3647,6 +3729,19 @@ async function repairBomSequences() {
           converted_bom_code: null,
           converted_bom_no: null
         };
+      } else if (pNo.toLowerCase().includes('122') && (pi.status === 'Converted to BOM' || pi.convertedBomCode || pi.convertedBomNo)) {
+        piUpdatedCount++;
+        piListChanged = true;
+        return {
+          ...pi,
+          status: 'Issued',
+          statusType: 'issued',
+          convertedToBom: false,
+          convertedBomCode: null,
+          convertedBomNo: null,
+          converted_bom_code: null,
+          converted_bom_no: null
+        };
       }
       return pi;
     });
@@ -3718,6 +3813,42 @@ async function repairBomSequences() {
           AND pi_no != 'PI-00061'
           AND id != 'PI-00061'
       `);
+
+      // Safety reconciliation: Unlink any mismatched BOM falsely claiming source_pi_no 122
+      await query(`
+        UPDATE public.bom_orders b
+        SET source_pi_no = null,
+            updated_at = NOW()
+        WHERE (b.source_pi_no ILIKE '%122%')
+          AND NOT EXISTS (
+            SELECT 1 FROM public.proforma_invoices p
+            WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `).catch(() => {});
+
+      // Safely restore PI-122 to Issued if no valid matching BOM exists
+      await query(`
+        UPDATE public.proforma_invoices p
+        SET converted_bom_code = NULL,
+            converted_bom_no = NULL,
+            status = 'Issued',
+            status_type = 'issued',
+            updated_at = NOW()
+        WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
+          AND p.status = 'Converted to BOM'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.bom_orders b
+            WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `).catch(() => {});
     } catch (_) {}
 
     for (const [piNo, info] of Object.entries(targetMap)) {
@@ -4433,7 +4564,46 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
             WHERE key IN ('controlroom_bom_store', 'bom_store')
           `, [cleanId, JSON.stringify(printData)]);
         } catch (_) {}
+
+        // Persist print tracking directly into public.bom_orders accounts_verification._extra_data
+        try {
+          await query(`
+            UPDATE public.bom_orders
+            SET accounts_verification = jsonb_set(
+              COALESCE(accounts_verification, '{}'::jsonb),
+              '{_extra_data}',
+              COALESCE(accounts_verification->'_extra_data', '{}'::jsonb) || $2::jsonb
+            ),
+            updated_at = NOW()
+            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
+          `, [cleanId, JSON.stringify(printData)]);
+        } catch (_) {}
+
+        // Also update direct public.bom_orders print tracking columns
+        try {
+          await query(`
+            UPDATE public.bom_orders
+            SET dispatch_printed = true,
+                dispatch_printed_at = NOW(),
+                dispatch_print_time_str = $2,
+                dispatch_printed_date_str = $3,
+                dispatch_printed_by = $4,
+                dispatch_print_count = $5
+            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
+          `, [cleanId, printData.dispatchPrintTimeStr || '', printData.dispatchPrintedDateStr || '', printData.dispatchPrintedBy || '', printData.dispatchPrintCount || 1]);
+        } catch (_) {}
       }
+
+      // 3. Broadcast real-time SSE event to ALL connected clients (Sales, Dispatch, Production, Admin)
+      broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullList });
+      broadcastRealtimeEvent('bom_updated', {
+        bom: updatedBom,
+        bomList: fullList,
+        printData: {
+          bomCode: updatedBom.bomCode || updatedBom.code || updatedBom.id,
+          ...printData
+        }
+      });
 
       return res.json({ success: true, bom: updatedBom });
     }
@@ -4930,57 +5100,13 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 // Proforma Invoices / Estimates endpoints
-// Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01)
+// Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01) directly from authoritative database
 app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) => {
   try {
-    const fy = getFinancialYear();
-    let records = [];
-
-    // 1. Query PostgreSQL proforma_invoices and bom_orders (source_pi_no) if connected
-    if (isDbConnected()) {
-      try {
-        const dbRes = await query(`
-          SELECT pi_no FROM public.proforma_invoices
-          WHERE pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
-        `).catch(() => null);
-        if (dbRes?.rows) records.push(...dbRes.rows);
-      } catch (_) {}
-
-      try {
-        const bomDbRes = await query(`
-          SELECT source_pi_no as pi_no FROM public.bom_orders
-          WHERE source_pi_no IS NOT NULL AND source_pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
-        `).catch(() => null);
-        if (bomDbRes?.rows) records.push(...bomDbRes.rows);
-      } catch (_) {}
-    }
-
-    // 2. Check local proforma_invoice_store.json, sales_pi_store.json, bom_store.json, and in-memory stores
-    const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json', 'bom_store.json'];
-    for (const sf of storeFiles) {
-      try {
-        const p = getStoreFilePath(sf);
-        if (fs.existsSync(p)) {
-          const list = JSON.parse(fs.readFileSync(p, 'utf8'));
-          if (Array.isArray(list)) records.push(...list);
-        }
-      } catch (_) {}
-    }
-
-    ['proforma_invoice_store', 'sales_pi_store', 'bom_store'].forEach(key => {
-      const list = supabaseMemoryStore[key];
-      if (Array.isArray(list)) records.push(...list);
-    });
-
-    const { code, nextNum } = getNextSequence('PI', records);
-    res.json({
-      nextPiNo: code,
-      nextEstimateNo: code,
-      nextNum,
-      fiscalYear: String(fy),
-      financialYear: fy
-    });
+    const nextSeq = await getNextDatabasePiNumber();
+    res.json(nextSeq);
   } catch (err) {
+    console.warn('[Next PI Number Fallback Warning]:', err.message);
     const fy = getFinancialYear();
     res.json({ nextPiNo: `VRM-PI-${fy}-01`, nextEstimateNo: `VRM-PI-${fy}-01`, nextNum: 1, fiscalYear: String(fy), financialYear: fy });
   }
@@ -5087,43 +5213,64 @@ app.get('/api/next-wo-number', async (req, res) => {
 
 
 app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
+  let combinedEstimates = [];
+  const existingMap = new Map();
+
+  // 1. Authoritative primary source: PostgreSQL public.proforma_invoices
+  try {
+    const databasePis = await loadDatabaseProformaInvoices();
+    if (Array.isArray(databasePis) && databasePis.length > 0) {
+      databasePis.forEach(p => {
+        if (p && p.piNo) {
+          existingMap.set(String(p.piNo).trim().toLowerCase(), p);
+          combinedEstimates.push(p);
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('[PI Database Read Notice]:', err.message);
+  }
+
+  // 2. Safely merge any disk PIs that are not yet in the relational database
   const p1 = getStoreFilePath('proforma_invoice_store.json');
   const p2 = getStoreFilePath('sales_pi_store.json');
 
-  let localEstimates = [];
-  try {
-    if (fs.existsSync(p1)) {
-      const data = JSON.parse(fs.readFileSync(p1, 'utf8'));
-      if (Array.isArray(data)) localEstimates = data;
-    }
-  } catch (_) {}
-
-  try {
-    if (fs.existsSync(p2)) {
-      const salesData = JSON.parse(fs.readFileSync(p2, 'utf8'));
-      if (Array.isArray(salesData) && salesData.length > 0) {
-        const localMap = new Map();
-        localEstimates.forEach(x => { if (x && x.piNo) localMap.set(String(x.piNo).toLowerCase(), x); });
-        salesData.forEach(s => {
-          if (s && s.piNo) {
-            const k = String(s.piNo).toLowerCase();
-            if (localMap.has(k)) {
-              localMap.set(k, { ...s, ...localMap.get(k) });
-            } else {
-              localMap.set(k, s);
+  const checkAndMerge = (filePath) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            if (item && item.piNo) {
+              const k = String(item.piNo).trim().toLowerCase();
+              if (!existingMap.has(k)) {
+                existingMap.set(k, item);
+                combinedEstimates.push(item);
+              }
             }
           }
-        });
-        localEstimates = Array.from(localMap.values());
+        }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  };
 
-  if (localEstimates.length === 0 && Array.isArray(supabaseMemoryStore['proforma_invoice_store']) && supabaseMemoryStore['proforma_invoice_store'].length > 0) {
-    localEstimates = supabaseMemoryStore['proforma_invoice_store'];
+  checkAndMerge(p1);
+  checkAndMerge(p2);
+
+  if (combinedEstimates.length === 0 && Array.isArray(supabaseMemoryStore['proforma_invoice_store']) && supabaseMemoryStore['proforma_invoice_store'].length > 0) {
+    supabaseMemoryStore['proforma_invoice_store'].forEach(item => {
+      if (item && item.piNo) {
+        const k = String(item.piNo).trim().toLowerCase();
+        if (!existingMap.has(k)) {
+          existingMap.set(k, item);
+          combinedEstimates.push(item);
+        }
+      }
+    });
   }
 
-  res.json(localEstimates);
+  res.json(combinedEstimates);
 });
 
 // Direct import endpoint to ingest exported Quotes/Estimates
@@ -5185,88 +5332,38 @@ app.get('/api/debug-estimates', async (req, res) => {
 });
 
 app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
-  let localEstimates = [];
-  const pProforma = getStoreFilePath('proforma_invoice_store.json');
-  const pSales = getStoreFilePath('sales_pi_store.json');
-
   try {
-    if (fs.existsSync(pProforma)) localEstimates = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
-  } catch (_) {}
+    // =========================================================================
+    // STEP 1: STORE IN OUR DATABASE FIRST (MANDATORY DATABASE-FIRST RULE)
+    // =========================================================================
+    const saveResult = await saveProformaInvoiceToDatabase(req.body);
+    const savedPi = saveResult.pi;
 
-  let salesEstimates = [];
-  try {
-    if (fs.existsSync(pSales)) salesEstimates = JSON.parse(fs.readFileSync(pSales, 'utf8'));
-  } catch (_) {}
+    console.log(`✅ [PI STEP 1: DATABASE PERSISTED] PI "${savedPi.piNo}" safely stored in PostgreSQL public.proforma_invoices.`);
 
-  const isExplicitEdit = Boolean(req.body.isEdit || req.body.editMode || req.body.isEditing);
-  let cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
-  let targetLower = cleanPiNo.toLowerCase();
+    // Broadcast realtime event immediately so all connected clients/dashboards see the PI
+    broadcastRealtimeEvent('pi_created', { pi: savedPi });
+    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: savedPi });
 
-  const existingProforma = localEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower) ||
-    salesEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower);
-
-  // CONCURRENCY & COLLISION PROTECTION:
-  // If NOT an explicit edit and the PI number already exists, DO NOT OVERWRITE!
-  // Automatically advance to the next sequential unused PI number (e.g. VRM-PI-2026-33, VRM-PI-2026-34, etc.)
-  if (!isExplicitEdit && existingProforma) {
-    let allRecords = [...localEstimates, ...salesEstimates];
-    if (Array.isArray(supabaseMemoryStore['sales_pi_store'])) {
-      allRecords.push(...supabaseMemoryStore['sales_pi_store']);
-    }
-    if (Array.isArray(supabaseMemoryStore['proforma_invoice_store'])) {
-      allRecords.push(...supabaseMemoryStore['proforma_invoice_store']);
-    }
-    const { code } = getNextSequence('PI', allRecords);
-    console.warn(`[PI CONCURRENCY SAFETY] PI number "${cleanPiNo}" is already taken. Auto-advancing new PI to next available sequence: "${code}".`);
-    cleanPiNo = code;
-    targetLower = cleanPiNo.toLowerCase();
+    // Store in database ONLY. Do NOT automatically push to Zoho.
+    // As per requirement: PI is pushed to Zoho ONLY when salesperson explicitly clicks "Push to Zoho".
+    return res.json({
+      success: true,
+      message: saveResult.wasAutoAdvanced
+        ? `Proforma Invoice auto-advanced to ${savedPi.piNo} to prevent overwriting existing record.`
+        : 'Proforma Invoice stored in BUSINZ database successfully!',
+      pi: savedPi,
+      estimate: savedPi,
+      zohoSynced: Boolean(savedPi.zohoSynced),
+      wasReassigned: saveResult.wasAutoAdvanced
+    });
+  } catch (err) {
+    console.error('[BUSINZ PI CREATE ERROR]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to store Proforma Invoice in database: ' + err.message
+    });
   }
-
-  const newPI = {
-    ...(isExplicitEdit && existingProforma ? existingProforma : {}),
-    ...req.body,
-    id: cleanPiNo,
-    piNo: cleanPiNo,
-    createdAt: (isExplicitEdit && existingProforma && existingProforma.createdAt) || req.body.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  // Persist to BOTH local stores and Supabase
-  let updatedProforma;
-  if (isExplicitEdit) {
-    updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  } else {
-    updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  }
-
-  try {
-    fs.writeFileSync(pProforma, JSON.stringify(updatedProforma, null, 2), 'utf8');
-  } catch (_) {}
-
-  let updatedSales;
-  if (isExplicitEdit) {
-    updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  } else {
-    updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  }
-
-  try {
-    fs.writeFileSync(pSales, JSON.stringify(updatedSales, null, 2), 'utf8');
-  } catch (_) {}
-
-  pushStoreToSupabase('proforma_invoice_store', updatedProforma).catch(() => {});
-  pushStoreToSupabase('sales_pi_store', updatedSales).catch(() => {});
-
-  return res.json({
-    success: true,
-    message: cleanPiNo !== req.body.piNo
-      ? `Proforma Invoice auto-advanced to ${cleanPiNo} to prevent overwriting existing record.`
-      : 'Proforma Invoice created in BUSINZ successfully!',
-    originalRequestedPiNo: req.body.piNo,
-    wasReassigned: cleanPiNo !== req.body.piNo,
-    estimate: newPI,
-    pi: newPI
-  });
 });
 
 // Fetch current Zoho Books ERP integration configuration & status
@@ -5352,7 +5449,8 @@ app.post('/api/zoho/exchange-code', async (req, res) => {
   }
 });
 
-// 1-Way Push Proforma Invoice to Zoho Books as Estimate / Quote
+// Manual 1-Way Push Proforma Invoice to Zoho Books as Estimate / Quote
+// Triggered strictly when the salesperson clicks the "Push to Zoho" button
 app.post(['/api/zoho/push-pi', '/api/estimates/push-to-zoho'], async (req, res) => {
   try {
     let piRecord = req.body.pi || req.body;
@@ -5362,32 +5460,70 @@ app.post(['/api/zoho/push-pi', '/api/estimates/push-to-zoho'], async (req, res) 
       return res.status(400).json({ success: false, error: 'piNo is required to push to Zoho' });
     }
 
-    // If full PI object wasn't supplied, load from local store
+    // If full PI object wasn't supplied, load from PostgreSQL database first
     if (!piRecord.items || piRecord.items.length === 0) {
-      const pProforma = getStoreFilePath('proforma_invoice_store.json');
-      const pSales = getStoreFilePath('sales_pi_store.json');
-      let found = null;
       try {
-        if (fs.existsSync(pProforma)) {
-          const list = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
-          found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
-        }
-        if (!found && fs.existsSync(pSales)) {
-          const list = JSON.parse(fs.readFileSync(pSales, 'utf8'));
-          found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+        const dbRes = await query(
+          'SELECT * FROM public.proforma_invoices WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($1)) OR LOWER(TRIM(id)) = LOWER(TRIM($1))',
+          [piNo]
+        );
+        if (dbRes.rows.length > 0) {
+          const dbPi = toConsumerPi(dbRes.rows[0]);
+          piRecord = { ...dbPi, ...piRecord };
         }
       } catch (_) {}
 
-      if (found) {
-        piRecord = { ...found, ...piRecord };
+      if (!piRecord.items || piRecord.items.length === 0) {
+        const pProforma = getStoreFilePath('proforma_invoice_store.json');
+        const pSales = getStoreFilePath('sales_pi_store.json');
+        let found = null;
+        try {
+          if (fs.existsSync(pProforma)) {
+            const list = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
+            found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+          }
+          if (!found && fs.existsSync(pSales)) {
+            const list = JSON.parse(fs.readFileSync(pSales, 'utf8'));
+            found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+          }
+        } catch (_) {}
+
+        if (found) {
+          piRecord = { ...found, ...piRecord };
+        }
       }
     }
 
     piRecord.piNo = piNo;
     const result = await pushPiToZoho(piRecord);
+
+    // Update database sync status
+    if (result?.estimate?.estimate_id) {
+      await updatePiZohoSyncStatus(piNo, {
+        zohoSynced: true,
+        zohoEstimateId: String(result.estimate.estimate_id).trim(),
+        zohoEstimateNo: result.estimate.estimate_number || piNo,
+        zohoSyncError: null
+      });
+
+      broadcastRealtimeEvent('pi_updated', {
+        piNo,
+        zohoSynced: true,
+        zohoEstimateId: String(result.estimate.estimate_id).trim(),
+        zohoEstimateNo: result.estimate.estimate_number || piNo
+      });
+    }
+
     return res.json(result);
   } catch (err) {
     console.error('[Zoho Push Route Error]:', err.message);
+    const piNo = String(req.body.piNo || req.body?.pi?.piNo || '').trim();
+    if (piNo) {
+      await updatePiZohoSyncStatus(piNo, {
+        zohoSynced: false,
+        zohoSyncError: err.message
+      }).catch(() => {});
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -7486,27 +7622,19 @@ app.post('/api/crm/leads/simulate-inbound', async (req, res) => {
       contactPerson = 'Ramesh Kumar',
       phone = '+91 98401 55678',
       message = 'Need urgent quotation for 150 kW Aluminium Rooftop solar mounting structure for project in Hosur.',
-      source = 'WhatsApp Inbound'
+      source = 'IndiaMART Inbound',
+      externalEnquiryId,
+      productRequirement,
+      estimatedKw = 150
     } = req.body;
 
-    const clean = message.toLowerCase();
-    const kwMatch = clean.match(/(\d+(?:\.\d+)?)\s*(?:kw|k\.w|kilowatt|megawatt|mw)/i);
-    let estimatedKw = kwMatch ? parseFloat(kwMatch[1]) : 150;
+    const creatorUser = {
+      employee_code: 'INBOUND-SIMULATOR',
+      employee_name: 'Inbound Ingestion Engine',
+      role: 'System'
+    };
 
-    let category = 'Aluminium Mounting Structures';
-    if (clean.includes('tin') || clean.includes('sheet') || clean.includes('shed')) {
-      category = 'Tin Shed Clamping Systems';
-    } else if (clean.includes('ground') || clean.includes('hdg')) {
-      category = 'HDG Ground Mounting Structures';
-    }
-
-    const isAutoQualified = estimatedKw >= 10;
-    const leadId = `LEAD-2026-${Date.now().toString().slice(-4)}`;
-    const nextNumber = `LEAD-${Math.floor(100 + Math.random() * 899)}`;
-
-    const simulatedLead = {
-      id: leadId,
-      leadNumber: nextNumber,
+    const leadRecord = await createDbLead({
       companyName,
       contactPerson,
       phone,
@@ -7514,61 +7642,86 @@ app.post('/api/crm/leads/simulate-inbound', async (req, res) => {
       email: `${contactPerson.toLowerCase().replace(/\s+/g, '.')}@${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
       location: 'Hosur, Tamil Nadu',
       source,
-      requirement: `${estimatedKw} kW ${category}`,
+      productRequirement: productRequirement || message,
       estimatedKw,
-      category,
-      estimatedValue: estimatedKw * 2800,
-      assignedSalesperson: 'Unassigned',
-      status: isAutoQualified ? 'Qualified' : 'New Lead',
-      priority: estimatedKw >= 100 ? 'HIGH' : 'MEDIUM',
-      notes: message,
-      isAutoGenerated: true,
-      createdAt: new Date().toISOString(),
-      timeline: [
-        {
-          id: `TL-${Date.now()}-1`,
-          type: 'auto_ingested',
-          title: 'Auto-Captured Inbound Inquiry',
-          description: `Captured via ${source} with AI auto-parsing: ${estimatedKw} kW ${category}`,
-          timestamp: new Date().toISOString()
-        },
-        ...(isAutoQualified ? [{
-          id: `TL-${Date.now()}-2`,
-          type: 'auto_qualified',
-          title: '⚡ Auto-Qualified by AI Engine',
-          description: `Capacity (${estimatedKw} kW) exceeds qualification threshold (>=10 kW). Estimated Deal: ₹ ${(estimatedKw * 2800).toLocaleString('en-IN')}`,
-          timestamp: new Date().toISOString()
-        }] : [])
-      ]
-    };
+      externalEnquiryId: externalEnquiryId || null,
+      creatorUser
+    });
 
-    // Persist directly to Leads Database
-    try {
-      const existing = await loadDatabaseLeads();
-      const updated = [simulatedLead, ...existing.filter(l => l.id !== simulatedLead.id)];
-      await saveLocalLeads(updated);
-    } catch (_) {}
-
-    // Broadcast realtime event so web clients can catch and update without reloading
-    broadcastRealtimeEvent('crm_lead_created', { lead: simulatedLead });
+    broadcastRealtimeEvent('crm_lead_created', { lead: leadRecord });
 
     res.json({
       success: true,
       message: 'Automated Inbound Lead Captured and Pre-Qualified in Database!',
-      lead: simulatedLead
+      lead: leadRecord,
+      data: leadRecord
     });
   } catch (err) {
+    if (err.message && err.message.includes('already ingested')) {
+      return res.json({ success: true, message: 'Lead already ingested (deduplicated)', skipped: true });
+    }
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // ==========================================
-// 🚀 CANONICAL LEADS DATABASE REST API
+// 🚀 CENTRALIZED LEADS DATABASE REST API & AUDIT
 // ==========================================
 app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
   try {
-    const leads = await loadDatabaseLeads();
+    const userRole = req.headers['x-user-role'] || req.query.userRole || 'Sales Executive';
+    const userEmpId = req.headers['x-user-emp-id'] || req.query.userEmpId || '';
+    const { search, status, source, assignedTo, unassignedOnly } = req.query;
+
+    const leads = await getDbLeads({
+      userRole,
+      userEmpId,
+      search,
+      status,
+      source,
+      assignedTo,
+      unassignedOnly: unassignedOnly === 'true'
+    });
+
     res.json({ success: true, count: leads.length, data: leads });
+  } catch (err) {
+    console.error('[GET /api/crm/leads error]:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Lead Notifications (Independent per-recipient read status)
+app.get('/api/crm/leads/notifications', async (req, res) => {
+  try {
+    const employeeCode = req.headers['x-user-emp-id'] || req.query.employeeCode || '';
+    if (!employeeCode) return res.json({ success: true, notifications: [] });
+
+    const notifications = await getNotificationsForEmployee(employeeCode);
+    res.json({ success: true, count: notifications.length, notifications, data: notifications });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/crm/leads/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employeeCode = req.headers['x-user-emp-id'] || req.body.employeeCode || '';
+    const result = await markNotificationRead(id, employeeCode);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const detail = await getLeadDetail(id);
+    if (!detail) {
+      return res.status(404).json({ success: false, error: 'Lead not found' });
+    }
+    res.json({ success: true, data: detail, lead: detail });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -7576,93 +7729,262 @@ app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
 
 app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
   try {
-    const newLead = (req.body && req.body.lead) ? req.body.lead : req.body;
-    if (!newLead || Object.keys(newLead).length === 0) return res.status(400).json({ success: false, error: 'No lead data provided' });
-
-    let current = await loadDatabaseLeads();
-    const { code: autoLeadCode } = getNextSequence('LEAD', current);
-    const leadId = newLead.id || autoLeadCode;
-    const nextNum = newLead.leadNumber || autoLeadCode;
-
-    const leadRecord = {
-      ...newLead,
-      id: leadId,
-      leadNumber: nextNum,
-      createdAt: newLead.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const updated = [leadRecord, ...current.filter(l => l.id !== leadId)];
-    await saveLocalLeads(updated);
-
-    broadcastRealtimeEvent('crm_lead_created', { lead: leadRecord });
-
-    res.json({ success: true, message: 'Lead added to database', lead: leadRecord, data: updated });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.put(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    let current = await loadDatabaseLeads();
-    const idx = current.findIndex(l => l.id === id || l.leadNumber === id);
-    if (idx === -1) {
-      return res.status(404).json({ success: false, error: 'Lead not found' });
+    const leadData = (req.body && req.body.lead) ? req.body.lead : req.body;
+    if (!leadData || Object.keys(leadData).length === 0) {
+      return res.status(400).json({ success: false, error: 'No lead data provided' });
     }
-    const updatedLead = {
-      ...current[idx],
-      ...updates,
-      updatedAt: new Date().toISOString()
+
+    const creatorUser = {
+      employee_code: req.headers['x-user-emp-id'] || req.body.creatorEmpId || 'USER',
+      employee_name: req.headers['x-user-name'] || req.body.creatorName || 'Employee',
+      role: req.headers['x-user-role'] || req.body.creatorRole || 'Sales Executive'
     };
-    current[idx] = updatedLead;
-    await saveLocalLeads(current);
 
-    broadcastRealtimeEvent('crm_lead_updated', { lead: updatedLead });
+    const createdLead = await createDbLead(leadData, creatorUser);
+    broadcastRealtimeEvent('crm_lead_created', { lead: createdLead });
 
-    res.json({ success: true, message: 'Lead updated in database', lead: updatedLead, data: current });
+    res.json({ success: true, message: 'Lead created successfully', lead: createdLead, data: createdLead });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.delete(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
+// Centralized Lead Assignment (Only CEO & Tech Support)
+app.post(['/api/crm/leads/:id/assign', '/api/leads/:id/assign'], async (req, res) => {
   try {
     const { id } = req.params;
-    let current = await loadDatabaseLeads();
-    const updated = current.filter(l => l.id !== id && l.leadNumber !== id);
-    await saveLocalLeads(updated);
+    const { assignedToId, assignedToName, assignedToRole, reason } = req.body;
 
-    res.json({ success: true, message: 'Lead deleted from database', data: updated });
+    if (!assignedToId || !assignedToName) {
+      return res.status(400).json({ success: false, error: 'Target assignee employee ID and Name are required.' });
+    }
+
+    const assignerUser = {
+      employee_code: req.headers['x-user-emp-id'] || req.body.assignerEmpId,
+      employee_name: req.headers['x-user-name'] || req.body.assignerName,
+      role: req.headers['x-user-role'] || req.body.assignerRole
+    };
+
+    const updated = await assignDbLead({
+      leadId: id,
+      assignedToId,
+      assignedToName,
+      assignedToRole: assignedToRole || 'Sales Executive',
+      assignerUser,
+      reason: reason || 'Direct assignment from CRM'
+    });
+
+    broadcastRealtimeEvent('crm_lead_assigned', { lead: updated });
+    res.json({ success: true, message: `Lead assigned to ${assignedToName}`, lead: updated, data: updated });
+  } catch (err) {
+    res.status(err.message.includes('Unauthorized') ? 403 : 500).json({ success: false, error: err.message });
+  }
+});
+
+// Customer Interaction Activity Logger (Resets 24h timer on qualifying activities)
+app.post(['/api/crm/leads/:id/activity', '/api/leads/:id/activity'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { activityType, summary, customerResponse, callDurationSeconds } = req.body;
+
+    if (!activityType || !summary) {
+      return res.status(400).json({ success: false, error: 'Activity type and summary are required.' });
+    }
+
+    const user = {
+      employee_code: req.headers['x-user-emp-id'] || req.body.userEmpId,
+      employee_name: req.headers['x-user-name'] || req.body.userName,
+      role: req.headers['x-user-role'] || req.body.userRole
+    };
+
+    const result = await recordLeadActivity({
+      leadId: id,
+      activityType,
+      summary,
+      customerResponse: customerResponse || '',
+      callDurationSeconds: Number(callDurationSeconds) || 0,
+      user
+    });
+
+    broadcastRealtimeEvent('crm_lead_activity_logged', { leadId: id, activity: result });
+    res.json({ success: true, message: 'Activity recorded successfully', ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post(['/api/crm/leads/batch', '/api/leads/batch'], async (req, res) => {
+// Status Transition with Audit Trail
+app.post(['/api/crm/leads/:id/status', '/api/leads/:id/status'], async (req, res) => {
   try {
-    const { leadIds = [], updates = {}, action = 'update' } = req.body;
-    let current = await loadDatabaseLeads();
+    const { id } = req.params;
+    const { status, remarks } = req.body;
 
-    if (action === 'delete') {
-      current = current.filter(l => !leadIds.includes(l.id) && !leadIds.includes(l.leadNumber));
-    } else {
-      current = current.map(l => {
-        if (leadIds.includes(l.id) || leadIds.includes(l.leadNumber)) {
-          return { ...l, ...updates, updatedAt: new Date().toISOString() };
+    if (!status) return res.status(400).json({ success: false, error: 'New status is required.' });
+
+    const user = {
+      employee_code: req.headers['x-user-emp-id'] || req.body.userEmpId,
+      employee_name: req.headers['x-user-name'] || req.body.userName,
+      role: req.headers['x-user-role'] || req.body.userRole
+    };
+
+    const result = await updateDbLeadStatus({
+      leadId: id,
+      newStatus: status,
+      remarks: remarks || '',
+      user
+    });
+
+    broadcastRealtimeEvent('crm_lead_status_updated', { leadId: id, ...result });
+    res.json({ success: true, message: 'Status updated', ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Schedule Follow-up
+app.post(['/api/crm/leads/:id/followup', '/api/leads/:id/followup'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { scheduledAt, notes } = req.body;
+
+    if (!scheduledAt) return res.status(400).json({ success: false, error: 'Scheduled date/time is required.' });
+
+    const user = {
+      employee_code: req.headers['x-user-emp-id'] || req.body.userEmpId,
+      employee_name: req.headers['x-user-name'] || req.body.userName,
+      role: req.headers['x-user-role'] || req.body.userRole
+    };
+
+    const result = await scheduleLeadFollowup({
+      leadId: id,
+      scheduledAt,
+      notes: notes || '',
+      user
+    });
+
+    res.json({ success: true, message: 'Follow-up scheduled', ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// Sales & Support Staff for Lead Assignment
+app.get('/api/crm/salespersons', async (req, res) => {
+  try {
+    let employees = [];
+    try {
+      employees = await getDatabaseStore('employees_store');
+    } catch (_) {}
+
+    const salesList = [];
+    const seenCodes = new Set();
+
+    // Default registered sales team: Strictly Sales Executive & Sales Head only
+    const defaults = [
+      { employee_code: 'SE-VRM090', employee_name: 'Karthi', role: 'Sales Executive', email: 'karthi@vrmstructures.in' },
+      { employee_code: 'SE-VRM091', employee_name: 'Mohith JV', role: 'Sales Executive', email: 'mohith@vrmstructures.in' },
+      { employee_code: 'SE-VRM092', employee_name: 'Gowtham', role: 'Sales Executive', email: 'gowtham@vrmstructures.in' },
+      { employee_code: 'SE-VRM093', employee_name: 'Suresh Babu', role: 'Sales Executive', email: 'suresh@vrmstructures.in' },
+      { employee_code: 'SH-VRM001', employee_name: 'Vijay', role: 'Sales Head', email: 'vijay@vrmstructures.in' }
+    ];
+
+    if (Array.isArray(employees)) {
+      employees.forEach(emp => {
+        const code = emp.employee_code || emp.code || emp.id;
+        const name = emp.employee_name || emp.name;
+        const role = emp.role || emp.designation || '';
+        const roleNorm = (role || '').trim().toLowerCase();
+        const isSales = roleNorm === 'sales executive' || roleNorm === 'sales head' ||
+                        roleNorm.includes('sales executive') || roleNorm.includes('sales head');
+        if (code && isSales && !seenCodes.has(code)) {
+          seenCodes.add(code);
+          salesList.push({
+            employee_code: code,
+            employee_name: name || code,
+            role: role || 'Sales Executive',
+            email: emp.email || ''
+          });
         }
-        return l;
       });
     }
 
-    await saveLocalLeads(current);
-    res.json({ success: true, count: current.length, data: current });
+    defaults.forEach(d => {
+      if (!seenCodes.has(d.employee_code)) {
+        seenCodes.add(d.employee_code);
+        salesList.push(d);
+      }
+    });
+
+    res.json({ success: true, salespersons: salesList, data: salesList });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// ==========================================
+// 🇮🇳 INDIAMART INTEGRATION API (ENCRYPTED)
+// ==========================================
+app.get('/api/integrations/indiamart/config', async (req, res) => {
+  try {
+    const config = await getIndiaMartConfig();
+    res.json({ success: true, config, data: config });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/integrations/indiamart/config', async (req, res) => {
+  try {
+    const { mobileNumber, crmApiKey, autoSyncEnabled, syncIntervalMinutes } = req.body;
+    const updated = await saveIndiaMartConfig({
+      mobileNumber,
+      crmApiKey,
+      autoSyncEnabled,
+      syncIntervalMinutes: Number(syncIntervalMinutes) || 15
+    });
+    res.json({ success: true, message: 'IndiaMART configuration saved securely!', config: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/integrations/indiamart/test', async (req, res) => {
+  try {
+    const result = await testIndiaMartConnection();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/integrations/indiamart/sync', async (req, res) => {
+  try {
+    const type = req.body?.type || 'MANUAL';
+    const result = await syncIndiaMartLeads(type);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/integrations/indiamart/logs', async (req, res) => {
+  try {
+    const logs = await getIndiaMartSyncLogs(30);
+    res.json({ success: true, count: logs.length, logs, data: logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Automatic 24h & 48h Inactivity Background Checker (Runs every 10 minutes)
+setInterval(async () => {
+  try {
+    await checkAndProcessLeadInactivity();
+  } catch (err) {
+    console.warn('[Background Lead Inactivity Check Error]:', err.message);
+  }
+}, 10 * 60 * 1000);
 
 // 🛡️ ENTERPRISE DISASTER RECOVERY & BACKUP API
 

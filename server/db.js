@@ -79,6 +79,15 @@ export async function initPostgresDatabase() {
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS invoice_no TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed BOOLEAN DEFAULT false;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_at TIMESTAMPTZ;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_time_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_date_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_by TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_count INTEGER DEFAULT 0;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS first_print_time_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS second_print_time_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_history JSONB DEFAULT '[]'::jsonb;
             
             -- 1-to-1 Sync order values, items, and salesperson from source PI if missing
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN
@@ -98,6 +107,210 @@ export async function initPostgresDatabase() {
         END $$;
       `);
     } catch (_) {}
+
+    // Ensure public.proforma_invoices table, all columns, and the unique index exist unconditionally
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.proforma_invoices (
+          id TEXT PRIMARY KEY,
+          pi_no TEXT NOT NULL,
+          vendor TEXT,
+          customer_name TEXT,
+          contact_person TEXT,
+          phone TEXT,
+          email TEXT,
+          gst_no TEXT,
+          product_name TEXT,
+          billing_address TEXT,
+          billing_address_obj JSONB DEFAULT '{}'::jsonb,
+          delivery_address TEXT,
+          delivery_address_obj JSONB DEFAULT '{}'::jsonb,
+          vehicle_no TEXT,
+          signed_pi_doc TEXT,
+          pi_date DATE DEFAULT CURRENT_DATE,
+          delivery_date DATE,
+          valid_until_date DATE,
+          exp_date DATE,
+          payment_terms TEXT,
+          credit_days TEXT,
+          remarks TEXT,
+          transport_mode TEXT,
+          transporter_name TEXT,
+          destination TEXT,
+          transport_scope TEXT,
+          status TEXT DEFAULT 'Issued',
+          status_type TEXT DEFAULT 'issued',
+          sales_person TEXT,
+          sales_person_code TEXT,
+          sales_person_email TEXT,
+          created_by TEXT,
+          created_by_id TEXT,
+          sub_total NUMERIC DEFAULT 0,
+          gst_amount NUMERIC DEFAULT 0,
+          cgst_amount NUMERIC DEFAULT 0,
+          sgst_amount NUMERIC DEFAULT 0,
+          grand_total NUMERIC DEFAULT 0,
+          unit_value NUMERIC DEFAULT 0,
+          quantity NUMERIC DEFAULT 1,
+          kit_subtotal NUMERIC DEFAULT 0,
+          items JSONB DEFAULT '[]'::jsonb,
+          preset_groups JSONB DEFAULT '{}'::jsonb,
+          same_as_billing BOOLEAN DEFAULT true,
+          converted_bom_no TEXT,
+          converted_bom_code TEXT,
+          pdf_name TEXT,
+          hsn TEXT DEFAULT '73089090',
+          zoho_synced BOOLEAN DEFAULT false,
+          zoho_estimate_id TEXT,
+          zoho_estimate_no TEXT,
+          zoho_sync_error TEXT,
+          zoho_synced_at TIMESTAMPTZ,
+          zoho_module TEXT DEFAULT 'Quotes',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        -- Add any missing columns to existing public.proforma_invoices table
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS hsn TEXT DEFAULT '73089090';
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS vendor TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS customer_name TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS contact_person TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS email TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS gst_no TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS product_name TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS billing_address TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS billing_address_obj JSONB DEFAULT '{}'::jsonb;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS delivery_address TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS delivery_address_obj JSONB DEFAULT '{}'::jsonb;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS vehicle_no TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS signed_pi_doc TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS pi_date DATE DEFAULT CURRENT_DATE;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS delivery_date DATE;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS valid_until_date DATE;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS exp_date DATE;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS payment_terms TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS credit_days TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS remarks TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS transport_mode TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS transporter_name TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS destination TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS transport_scope TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Issued';
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS status_type TEXT DEFAULT 'issued';
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person_code TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sales_person_email TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS created_by TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS created_by_id TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sub_total NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS gst_amount NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS cgst_amount NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS sgst_amount NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS grand_total NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS unit_value NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS quantity NUMERIC DEFAULT 1;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS kit_subtotal NUMERIC DEFAULT 0;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'::jsonb;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS preset_groups JSONB DEFAULT '{}'::jsonb;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS same_as_billing BOOLEAN DEFAULT true;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_no TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS converted_bom_code TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS pdf_name TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS zoho_synced BOOLEAN DEFAULT false;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS zoho_estimate_id TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS zoho_estimate_no TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS zoho_sync_error TEXT;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS zoho_synced_at TIMESTAMPTZ;
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS zoho_module TEXT DEFAULT 'Quotes';
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+        -- UNIQUE INDEX REQUIRED for ON CONFLICT (LOWER(TRIM(pi_no)))
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_proforma_invoices_pi_no_lower ON public.proforma_invoices (LOWER(TRIM(pi_no)));
+        CREATE INDEX IF NOT EXISTS idx_proforma_invoices_customer ON public.proforma_invoices (customer_name);
+        CREATE INDEX IF NOT EXISTS idx_proforma_invoices_created_at ON public.proforma_invoices (created_at DESC);
+      `);
+      console.log('✅ [PostgreSQL] public.proforma_invoices table & idx_proforma_invoices_pi_no_lower verified.');
+    } catch (piTableErr) {
+      console.warn('⚠️ [PostgreSQL proforma_invoices Table Warning]:', piTableErr.message);
+    }
+
+    // Auto-seed existing historical PIs into relational public.proforma_invoices if table is empty
+    try {
+      const piCountRes = await client.query('SELECT COUNT(*) as count FROM public.proforma_invoices');
+      const count = parseInt(piCountRes.rows[0]?.count || 0, 10);
+      if (count === 0) {
+        const piFiles = ['sales_pi_store.json', 'proforma_invoice_store.json'];
+        const seedPis = new Map();
+        for (const pf of piFiles) {
+          const pPath = getStoreFilePath(pf);
+          if (fs.existsSync(pPath)) {
+            try {
+              const list = JSON.parse(fs.readFileSync(pPath, 'utf8'));
+              if (Array.isArray(list)) {
+                for (const item of list) {
+                  if (item && (item.piNo || item.id)) {
+                    const key = String(item.piNo || item.id).trim().toLowerCase();
+                    if (!seedPis.has(key)) seedPis.set(key, item);
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+        }
+        if (seedPis.size > 0) {
+          console.log(`📦 [PostgreSQL] Seeding ${seedPis.size} Proforma Invoices into relational database...`);
+          const { saveProformaInvoiceToDatabase } = await import('./piPersistence.js');
+          for (const pi of seedPis.values()) {
+            await saveProformaInvoiceToDatabase(pi, pool).catch(e => console.warn(`[PI Seed Warning ${pi.piNo}]:`, e.message));
+          }
+          console.log(`✅ [PostgreSQL] Successfully seeded ${seedPis.size} Proforma Invoices into public.proforma_invoices.`);
+        }
+      }
+    } catch (seedErr) {
+      console.warn('[PI Seed Error]:', seedErr.message);
+    }
+
+    // Safety reconciliation: Fix any falsely-converted PIs whose linked BOM has mismatched customer or items (e.g. PI-122 accidental link)
+    try {
+      await client.query(`
+        UPDATE public.bom_orders b
+        SET source_pi_no = null,
+            updated_at = NOW()
+        WHERE (b.source_pi_no ILIKE '%122%')
+          AND NOT EXISTS (
+            SELECT 1 FROM public.proforma_invoices p
+            WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `);
+
+      await client.query(`
+        UPDATE public.proforma_invoices p
+        SET status = 'Issued',
+            status_type = 'issued',
+            converted_bom_no = null,
+            converted_bom_code = null,
+            updated_at = NOW()
+        WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
+          AND p.status = 'Converted to BOM'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.bom_orders b
+            WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `);
+      console.log('✅ [PostgreSQL] Verified PI/BOM conversion link integrity.');
+    } catch (auditErr) {
+      console.warn('[PI/BOM Integrity Audit Notice]:', auditErr.message);
+    }
 
     // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
     const storesToSeed = [

@@ -358,6 +358,20 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
 
   // Master team directory across Sales, Purchase, Procurement, and Accounts
   const teamDirectory = useMemo(() => {
+    const salesHeadDynamic = (() => {
+      try {
+        const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+        const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+        const match = allEmps.find(e => e && (e.role === 'Sales Head' || (e.employee_code || '').toUpperCase().startsWith('SH')) && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+        if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+      } catch (_) {}
+      const stored = localStorage.getItem('controlroom_logged_user_name');
+      const role = localStorage.getItem('controlroom_user_role');
+      if (role === 'Sales Head' && stored && stored.toLowerCase() !== 'vijay') return stored;
+      return 'Sales Head';
+    })();
+
     return [
       // 1. Sales Team
       {
@@ -377,16 +391,16 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {
         id: 'EMP-SH-001',
         code: 'SH-VRM001',
-        name: 'Vijay',
+        name: salesHeadDynamic,
         email: 'sales@vrm.com',
         phone: '+91 98450 11223',
         department: 'Sales',
         role: 'Sales Head',
         designation: 'Head of Solar Sales & BD',
         avatarBg: '#0891B2',
-        monthlyTarget: getRepMonthlyTarget('Vijay', 35000000),
+        monthlyTarget: getRepMonthlyTarget(salesHeadDynamic, 35000000),
         unit: 'Revenue',
-        aliases: ['vijay', 'sales head', 'sh-vrm001']
+        aliases: [salesHeadDynamic.toLowerCase(), 'sales head', 'sh-vrm001']
       },
       {
         id: 'EMP-SE-002',
