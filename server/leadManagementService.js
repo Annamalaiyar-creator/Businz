@@ -281,8 +281,10 @@ export async function createLead(leadData, creatorUser = {}) {
   const leadNumber = await generateNextLeadNumber();
   const id = `LEAD-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
 
-  const companyName = String(leadData.companyName || leadData.customerName || '').trim();
-  if (!companyName) throw new Error('Company / Customer Name is required.');
+  const phone = String(leadData.phone || leadData.whatsapp || '').trim();
+  if (!phone) throw new Error('Phone number is mandatory.');
+
+  const companyName = String(leadData.companyName || leadData.customerName || '').trim() || (phone ? `Contact ${phone}` : 'New Lead Customer');
 
   const createdById = creatorUser.employee_code || creatorUser.id || 'SYSTEM';
   const createdByName = creatorUser.employee_name || creatorUser.name || 'System';
@@ -308,8 +310,8 @@ export async function createLead(leadData, creatorUser = {}) {
     companyName,
     leadData.contactPerson || '',
     leadData.designation || '',
-    leadData.phone || '',
-    leadData.whatsapp || leadData.phone || '',
+    phone,
+    leadData.whatsapp || phone,
     leadData.email || '',
     leadData.location || '',
     leadData.source || 'Direct',
@@ -325,16 +327,36 @@ export async function createLead(leadData, creatorUser = {}) {
   ];
 
   const res = await dbQuery(sql, params);
-  const created = res.rows[0];
+  let created = res.rows[0];
 
-  // Notify CEO & Tech Support of New Lead
-  await createLeadNotification({
-    leadId: created.id,
-    type: 'NEW_LEAD',
-    title: `🆕 New Lead Created: ${created.company_name}`,
-    message: `Lead ${created.lead_number} created from ${created.source} by ${createdByName}. Added to Unassigned queue.`,
-    metadata: { leadNumber: created.lead_number, companyName: created.company_name, source: created.source }
-  });
+  // If assignee was specified upon creation, assign immediately
+  if (leadData.assignedToId && leadData.assignedToName) {
+    try {
+      const assignedLead = await assignLead({
+        leadId: created.id,
+        assignedToId: leadData.assignedToId,
+        assignedToName: leadData.assignedToName,
+        assignedToRole: leadData.assignedToRole || 'Sales Executive',
+        assignerUser: creatorUser,
+        reason: leadData.assignmentReason || 'Assigned on lead creation',
+        bypassPermission: true
+      });
+      if (assignedLead) {
+        created = assignedLead;
+      }
+    } catch (assignErr) {
+      console.error('[createLead: direct assign error]:', assignErr);
+    }
+  } else {
+    // Notify CEO & Tech Support of New Unassigned Lead
+    await createLeadNotification({
+      leadId: created.id,
+      type: 'NEW_LEAD',
+      title: `🆕 New Lead Created: ${created.company_name}`,
+      message: `Lead ${created.lead_number} created from ${created.source} by ${createdByName}. Added to Unassigned queue.`,
+      metadata: { leadNumber: created.lead_number, companyName: created.company_name, source: created.source }
+    });
+  }
 
   return created;
 }
@@ -345,8 +367,8 @@ export async function createLead(leadData, creatorUser = {}) {
  * Permanently logs to public.lead_assignment_history
  * Starts/Resets the 24-hour inactivity response timer
  */
-export async function assignLead({ leadId, assignedToId, assignedToName, assignedToRole, assignerUser, reason = 'Direct assignment' }) {
-  if (!canAssignLeads(assignerUser.role, assignerUser.employee_code)) {
+export async function assignLead({ leadId, assignedToId, assignedToName, assignedToRole, assignerUser, reason = 'Direct assignment', bypassPermission = false }) {
+  if (!bypassPermission && !canAssignLeads(assignerUser.role, assignerUser.employee_code)) {
     throw new Error('Unauthorized: Only CEO and Tech Support can assign or reassign leads.');
   }
 

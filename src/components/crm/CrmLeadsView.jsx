@@ -87,7 +87,10 @@ export default function CrmLeadsView({
     category: 'Aluminium Mounting Structures',
     estimatedKw: '50',
     notes: '',
-    priority: 'MEDIUM'
+    priority: 'MEDIUM',
+    assignedToId: '',
+    assignedToName: '',
+    assignedToRole: ''
   });
 
   // Assign Form State
@@ -332,8 +335,8 @@ export default function CrmLeadsView({
   // Submit Lead Creation
   const handleCreateLead = async (e) => {
     e.preventDefault();
-    if (!createForm.companyName || !createForm.contactPerson || !createForm.phone) {
-      alert('Company Name, Contact Person, and Phone are mandatory.');
+    if (!createForm.phone || !createForm.phone.trim()) {
+      alert('Phone Number is mandatory.');
       return;
     }
 
@@ -367,7 +370,10 @@ export default function CrmLeadsView({
           category: 'Aluminium Mounting Structures',
           estimatedKw: '50',
           notes: '',
-          priority: 'MEDIUM'
+          priority: 'MEDIUM',
+          assignedToId: '',
+          assignedToName: '',
+          assignedToRole: ''
         });
         await fetchLeads();
       } else {
@@ -1379,12 +1385,11 @@ export default function CrmLeadsView({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                    Company / Customer Name *
+                    Company / Customer Name
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Apex Solar Energy Ltd"
+                    placeholder="e.g. Apex Solar Energy Ltd (Optional)"
                     value={createForm.companyName}
                     onChange={(e) => setCreateForm({ ...createForm, companyName: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -1392,12 +1397,11 @@ export default function CrmLeadsView({
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                    Contact Person *
+                    Contact Person
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Rajesh Sharma"
+                    placeholder="e.g. Rajesh Sharma (Optional)"
                     value={createForm.contactPerson}
                     onChange={(e) => setCreateForm({ ...createForm, contactPerson: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -1407,8 +1411,8 @@ export default function CrmLeadsView({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                    Phone Number *
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#0E7490', marginBottom: '5px' }}>
+                    Phone Number * (Mandatory)
                   </label>
                   <input
                     type="text"
@@ -1416,7 +1420,7 @@ export default function CrmLeadsView({
                     placeholder="e.g. 9840123456"
                     value={createForm.phone}
                     onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value, whatsapp: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #0E7490', fontSize: '13px', boxSizing: 'border-box', backgroundColor: '#F0FDFA' }}
                   />
                 </div>
                 <div>
@@ -1425,7 +1429,7 @@ export default function CrmLeadsView({
                   </label>
                   <input
                     type="email"
-                    placeholder="e.g. rajesh@apexsolar.com"
+                    placeholder="e.g. rajesh@apexsolar.com (Optional)"
                     value={createForm.email}
                     onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -1503,6 +1507,62 @@ export default function CrmLeadsView({
                   onChange={(e) => setCreateForm({ ...createForm, productRequirement: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
                 />
+              </div>
+
+              {/* Assign Lead to Representative */}
+              <div style={{ backgroundColor: '#F0FDFA', border: '1.5px solid #CCFBF1', borderRadius: '10px', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#0E7490' }}>
+                    <UserCheck size={16} style={{ color: '#0E7490' }} />
+                    Assign To (Sales Representative)
+                  </label>
+                  <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: 700, backgroundColor: '#CCFBF1', padding: '2px 8px', borderRadius: '4px' }}>
+                    Optional
+                  </span>
+                </div>
+                <select
+                  value={createForm.assignedToId || ''}
+                  onChange={(e) => {
+                    const pool = (salesRepresentatives && salesRepresentatives.length > 0) ? salesRepresentatives : (salespersons || []);
+                    const sel = pool.find(s => s.employee_code === e.target.value);
+                    if (sel) {
+                      setCreateForm({
+                        ...createForm,
+                        assignedToId: sel.employee_code,
+                        assignedToName: sel.employee_name,
+                        assignedToRole: sel.role || 'Sales Executive'
+                      });
+                    } else {
+                      setCreateForm({
+                        ...createForm,
+                        assignedToId: '',
+                        assignedToName: '',
+                        assignedToRole: ''
+                      });
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #99F6E4',
+                    fontSize: '13px',
+                    backgroundColor: '#FFFFFF',
+                    boxSizing: 'border-box',
+                    color: createForm.assignedToId ? '#0F172A' : '#64748B',
+                    fontWeight: createForm.assignedToId ? 700 : 500
+                  }}
+                >
+                  <option value="">— Unassigned (Assign Later) —</option>
+                  {((salesRepresentatives && salesRepresentatives.length > 0) ? salesRepresentatives : (salespersons || [])).map(s => (
+                    <option key={s.employee_code} value={s.employee_code}>
+                      {s.employee_name} ({s.employee_code} • {s.role || 'Sales Executive'})
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '11px', color: '#475569', marginTop: '4px', display: 'block' }}>
+                  Select a sales executive to assign immediately upon creation, or leave unassigned.
+                </span>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>

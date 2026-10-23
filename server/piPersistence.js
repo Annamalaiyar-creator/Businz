@@ -70,7 +70,11 @@ export function toConsumerPi(row) {
     sgst: parseFloat(row.sgst_amount || 0),
     grandTotal: grandTotal,
     amount: '₹' + Math.round(grandTotal).toLocaleString('en-IN'),
-    items: Array.isArray(row.items) ? row.items : [],
+    hsn: row.hsn || '73089090',
+    items: Array.isArray(row.items) ? row.items.map(it => ({
+      ...it,
+      hsn: it.hsn || it.hsn_or_sac || it.hsnCode || row.hsn || '73089090'
+    })) : [],
     presetGroups: row.preset_groups || {},
     convertedBomNo: row.converted_bom_no || null,
     convertedBomCode: row.converted_bom_code || null,
@@ -228,7 +232,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
         payment_terms, credit_days, remarks, transport_mode, transporter_name, destination, transport_scope,
         status, status_type, sales_person, sales_person_code, sales_person_email, created_by, created_by_id,
         sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, unit_value, quantity, kit_subtotal,
-        items, preset_groups, same_as_billing, converted_bom_no, converted_bom_code, pdf_name,
+        items, preset_groups, same_as_billing, converted_bom_no, converted_bom_code, pdf_name, hsn,
         zoho_synced, zoho_estimate_id, zoho_estimate_no, zoho_sync_error, zoho_synced_at, zoho_module,
         created_at, updated_at
       ) VALUES (
@@ -238,9 +242,9 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
         $20, $21, $22, $23, $24, $25, $26,
         $27, $28, $29, $30, $31, $32, $33,
         $34, $35, $36, $37, $38, $39, $40, $41,
-        $42, $43, $44, $45, $46, $47,
-        $48, $49, $50, $51, $52, $53,
-        $54, NOW()
+        $42, $43, $44, $45, $46, $47, $48,
+        $49, $50, $51, $52, $53, $54,
+        $55, NOW()
       )
       ON CONFLICT (LOWER(TRIM(pi_no))) DO UPDATE SET
         vendor = EXCLUDED.vendor,
@@ -286,6 +290,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
         converted_bom_no = CASE WHEN EXCLUDED.status = 'Converted to BOM' THEN COALESCE(EXCLUDED.converted_bom_no, public.proforma_invoices.converted_bom_no) ELSE EXCLUDED.converted_bom_no END,
         converted_bom_code = CASE WHEN EXCLUDED.status = 'Converted to BOM' THEN COALESCE(EXCLUDED.converted_bom_code, public.proforma_invoices.converted_bom_code) ELSE EXCLUDED.converted_bom_code END,
         pdf_name = COALESCE(EXCLUDED.pdf_name, public.proforma_invoices.pdf_name),
+        hsn = COALESCE(EXCLUDED.hsn, public.proforma_invoices.hsn, '73089090'),
         zoho_synced = CASE WHEN EXCLUDED.zoho_synced THEN true ELSE public.proforma_invoices.zoho_synced END,
         zoho_estimate_id = COALESCE(EXCLUDED.zoho_estimate_id, public.proforma_invoices.zoho_estimate_id),
         zoho_estimate_no = COALESCE(EXCLUDED.zoho_estimate_no, public.proforma_invoices.zoho_estimate_no),
@@ -301,6 +306,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
     const custName = String(pick(piData.customerName || piData.vendor, existingRow?.customer_name || vendor)).trim();
     const items = Array.isArray(piData.items) ? piData.items : (existingRow?.items || []);
     const presetGroups = piData.presetGroups || existingRow?.preset_groups || {};
+    const hsnVal = String(pick(piData.hsn, (items && items[0]?.hsn) || existingRow?.hsn || '73089090')).trim();
 
     const values = [
       cleanPiNo,
@@ -350,6 +356,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
       piData.convertedBomNo || ((piData.status === 'Converted to BOM' || existingRow?.status === 'Converted to BOM') ? existingRow?.converted_bom_no : null) || null,
       piData.convertedBomCode || ((piData.status === 'Converted to BOM' || existingRow?.status === 'Converted to BOM') ? existingRow?.converted_bom_code : null) || null,
       piData.pdfName || existingRow?.pdf_name || null,
+      hsnVal,
       Boolean(piData.zohoSynced || existingRow?.zoho_synced),
       piData.zohoEstimateId || existingRow?.zoho_estimate_id || null,
       piData.zohoEstimateNo || existingRow?.zoho_estimate_no || null,
@@ -379,12 +386,12 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
             payment_terms = $20, credit_days = $21, remarks = $22, transport_mode = $23, transporter_name = $24, destination = $25, transport_scope = $26,
             status = $27, status_type = $28, sales_person = $29, sales_person_code = $30, sales_person_email = $31, created_by = $32, created_by_id = $33,
             sub_total = $34, gst_amount = $35, cgst_amount = $36, sgst_amount = $37, grand_total = $38, unit_value = $39, quantity = $40, kit_subtotal = $41,
-            items = $42, preset_groups = $43, same_as_billing = $44, converted_bom_no = $45, converted_bom_code = $46, pdf_name = $47,
+            items = $42, preset_groups = $43, same_as_billing = $44, converted_bom_no = $45, converted_bom_code = $46, pdf_name = $47, hsn = $48,
             updated_at = NOW()
           WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($2)) OR id = $1
           RETURNING *;
         `;
-        const updRes = await client.query(updateSql, values.slice(0, 47));
+        const updRes = await client.query(updateSql, values.slice(0, 48));
         savedRow = updRes.rows[0];
       } else {
         const insertDirectSql = `
@@ -395,7 +402,7 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
             payment_terms, credit_days, remarks, transport_mode, transporter_name, destination, transport_scope,
             status, status_type, sales_person, sales_person_code, sales_person_email, created_by, created_by_id,
             sub_total, gst_amount, cgst_amount, sgst_amount, grand_total, unit_value, quantity, kit_subtotal,
-            items, preset_groups, same_as_billing, converted_bom_no, converted_bom_code, pdf_name,
+            items, preset_groups, same_as_billing, converted_bom_no, converted_bom_code, pdf_name, hsn,
             zoho_synced, zoho_estimate_id, zoho_estimate_no, zoho_sync_error, zoho_synced_at, zoho_module,
             created_at, updated_at
           ) VALUES (
@@ -405,9 +412,9 @@ export async function saveProformaInvoiceToDatabase(piData, pool = defaultPool) 
             $20, $21, $22, $23, $24, $25, $26,
             $27, $28, $29, $30, $31, $32, $33,
             $34, $35, $36, $37, $38, $39, $40, $41,
-            $42, $43, $44, $45, $46, $47,
-            $48, $49, $50, $51, $52, $53,
-            $54, NOW()
+            $42, $43, $44, $45, $46, $47, $48,
+            $49, $50, $51, $52, $53, $54,
+            $55, NOW()
           ) RETURNING *;
         `;
         const insRes = await client.query(insertDirectSql, values);

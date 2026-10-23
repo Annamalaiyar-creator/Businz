@@ -159,6 +159,7 @@ export async function initPostgresDatabase() {
           converted_bom_no TEXT,
           converted_bom_code TEXT,
           pdf_name TEXT,
+          hsn TEXT DEFAULT '73089090',
           zoho_synced BOOLEAN DEFAULT false,
           zoho_estimate_id TEXT,
           zoho_estimate_no TEXT,
@@ -170,6 +171,7 @@ export async function initPostgresDatabase() {
         );
 
         -- Add any missing columns to existing public.proforma_invoices table
+        ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS hsn TEXT DEFAULT '73089090';
         ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS vendor TEXT;
         ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS customer_name TEXT;
         ALTER TABLE public.proforma_invoices ADD COLUMN IF NOT EXISTS contact_person TEXT;

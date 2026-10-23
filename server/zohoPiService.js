@@ -334,11 +334,14 @@ export async function pushPiToZoho(piData) {
       const name = grp.presetName || grp.name || piData.presetName || 'Solar Mounting Structure Preset Kit';
       const kitRate = parseFloat(grp.taxRate || grp.gstRate) || defaultRate;
       const taxId = resolveZohoTaxId({ isIntraState, requestedRate: kitRate, activeTaxes });
+      const hsnCode = String(grp.hsn || grp.hsn_or_sac || grp.hsnCode || piData.hsn || '73089090').trim();
       lineItems.push({
         name: String(name).slice(0, 100),
         rate: unitPrice,
         quantity: setCount,
         tax_id: taxId,
+        hsn_or_sac: hsnCode,
+        product_type: 'goods',
         description: `Preset Kit Package (${setCount} Set)`.slice(0, 100)
       });
     });
@@ -353,11 +356,14 @@ export async function pushPiToZoho(piData) {
     if (isNaN(r) || r < 0) r = 0;
     const itemRate = parseFloat(it.taxRate || it.gstRate) || defaultRate;
     const taxId = resolveZohoTaxId({ isIntraState, requestedRate: itemRate, activeTaxes });
+    const hsnCode = String(it.hsn || it.hsn_or_sac || it.hsnCode || piData.hsn || '73089090').trim();
     lineItems.push({
       name: String(it.name || it.productName || 'Solar Structure Component').slice(0, 100),
       rate: r,
       quantity: q,
       tax_id: taxId,
+      hsn_or_sac: hsnCode,
+      product_type: 'goods',
       description: String(it.description || it.category || 'Product Scope').slice(0, 100)
     });
   });
@@ -366,11 +372,14 @@ export async function pushPiToZoho(piData) {
   if (lineItems.length === 0) {
     const fallbackRate = parseFloat(piData.grandTotal || piData.subtotal || piData.total || 1000);
     const taxId = resolveZohoTaxId({ isIntraState, requestedRate: defaultRate, activeTaxes });
+    const hsnCode = String(piData.hsn || '73089090').trim();
     lineItems.push({
       name: String(piData.productName || 'Solar Mounting Structure Scope').slice(0, 100),
       rate: fallbackRate,
       quantity: 1,
       tax_id: taxId,
+      hsn_or_sac: hsnCode,
+      product_type: 'goods',
       description: 'Solar Structure Scope'
     });
   }

@@ -1808,7 +1808,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const handleAddMaterialRow = () => {
-    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%' }]);
+    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '73089090' }]);
   };
 
   const handleAddPresetItem = (groupId) => {
@@ -1824,6 +1824,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: grp.gstRate || '18%',
+      hsn: grp.hsn || grp.hsn_or_sac || '73089090',
       isPresetItem: true,
       presetGroupId: targetGid,
       presetName: grp.presetName
@@ -1861,6 +1862,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         setCount: count,
         kitPrice: newSetPrice ? String(newSetPrice) : '',
         gstRate: setGst,
+        hsn: '73089090',
         isCustomSet: true
       }
     }));
@@ -1873,6 +1875,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: setGst,
+      hsn: '73089090',
       isPresetItem: true,
       presetGroupId: groupId,
       presetName: cleanName
@@ -1903,6 +1906,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const presetName = targetPreset.label || presetId;
     const isDcrBosKit = targetPreset.category === 'DCR BOS Solar Kits' || targetPreset.category === 'BOS Solar Kits' || (targetPreset.label && targetPreset.label.includes('BOS KITS'));
     const initialGstRate = isDcrBosKit ? '5%' : (targetPreset.gstRate || targetPreset.gst || '18%');
+    const presetHsn = targetPreset.hsn || targetPreset.hsn_or_sac || '73089090';
 
     setPresetGroups(prev => ({
       ...prev,
@@ -1912,7 +1916,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         presetName,
         setCount: multiplier,
         kitPrice: defaultPrice,
-        gstRate: initialGstRate
+        gstRate: initialGstRate,
+        hsn: presetHsn
       }
     }));
 
@@ -1929,6 +1934,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
+        hsn: it.hsn || it.hsn_or_sac || presetHsn,
         isPresetItem: true
       };
     });
@@ -2280,6 +2286,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         ? piList[existingMatchIdx]
         : (isEditing && editIdx !== null ? piList[editIdx] : null);
 
+      const sanitizedItems = (piItems || []).map(it => ({
+        ...it,
+        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || '73089090').trim()
+      }));
+
       const newPI = {
         id: cleanPiNo,
         piNo: cleanPiNo,
@@ -2290,7 +2301,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         email,
         gstNo: (gstNo || '').toUpperCase(),
         productName: joinedProducts,
-        items: piItems,
+        hsn: sanitizedItems.find(it => it.hsn)?.hsn || '73089090',
+        items: sanitizedItems,
         presetGroups,
         billingAddress: {
           street: billingStreet,
@@ -2496,7 +2508,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       setPresetGroups({});
     }
     if (Array.isArray(pi.items) && pi.items.length > 0) {
-      setPiItems(pi.items);
+      setPiItems(pi.items.map(it => ({
+        ...it,
+        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || pi.hsn || '73089090'
+      })));
     } else {
       setPiItems([
         {
@@ -2505,7 +2520,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           uom: 'SET',
           qty: String(pi.quantity || 1),
           rate: String(pi.unitValue || 25000),
-          gstRate: '18%'
+          gstRate: '18%',
+          hsn: pi.hsn || '73089090'
         }
       ]);
     }
@@ -4700,25 +4716,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                          />
                       </th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '28%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>HSN / SAC</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>UOM</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '7%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'center' }}>GST Rate</th>
                       {hasAnyPreset && (
-                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
+                        <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                           Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </th>
                       )}
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
-                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'right' }}>Taxable (₹)</th>
+                      <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Total (₹)</th>
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -4772,7 +4789,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -4840,7 +4857,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 10 : 9} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -4903,6 +4920,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       const pName = matched.name;
                                       const pCat = matched.category || matched.description || item.category;
                                       const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
+                                      const pHsn = matched.hsn || matched.hsn_or_sac || item.hsn || '73089090';
                                       const isSolar5 = is5PctSolarProduct(pName, pCat);
                                       let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
                                       const u = String(rawUom).trim().toUpperCase();
@@ -4919,7 +4937,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         rate: matched.price || matched.rate ? String(matched.price || matched.rate) : mat.rate,
                                         uom: resolvedUom,
                                         category: pCat,
-                                        gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
+                                        gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%'),
+                                        hsn: pHsn
                                       } : mat));
                                     }}
                                   />
@@ -4961,6 +4980,32 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     </div>
                                   )}
                                 </div>
+                              </td>
+                              <td style={{ padding: '12px 6px' }}>
+                                <input id={`performa-invoice-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
+                                  type="text"
+                                  placeholder="73089090"
+                                  value={item.hsn !== undefined ? item.hsn : '73089090'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, hsn: val } : mat));
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    height: '38px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #E2E8F0',
+                                    padding: '0 6px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    color: '#0F172A',
+                                    backgroundColor: '#FFFFFF',
+                                    outline: 'none',
+                                    boxSizing: 'border-box',
+                                    textAlign: 'center'
+                                  }}
+                                  title="HSN / SAC Tariff Code"
+                                />
                               </td>
                               <td style={{ padding: '12px 10px' }}>
                                 <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
@@ -6114,6 +6159,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', textAlign: 'left' }}>
                         <th style={{ padding: '10px 12px' }}>#</th>
                         <th style={{ padding: '10px 12px' }}>Item Description</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>HSN / SAC</th>
                         <th style={{ padding: '10px 12px', textAlign: 'center' }}>Live Stock</th>
                         <th style={{ padding: '10px 12px', textAlign: 'center' }}>Qty</th>
                         <th style={{ padding: '10px 12px', textAlign: 'right' }}>Unit Rate (₹)</th>
@@ -6168,7 +6214,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             <React.Fragment key={idx}>
                               {isFirstInGroup && (
                                 <tr key={`modal-preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1px solid ${theme.border}` }}>
-                                  <td colSpan={8} style={{ padding: '8px 12px' }}>
+                                  <td colSpan={9} style={{ padding: '8px 12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{
@@ -6206,7 +6252,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               )}
                               {isFirstCustomItem && distinctDetailsGroupIds.length > 0 && (
                                 <tr key="modal-custom-hdr" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                  <td colSpan={8} style={{ padding: '6px 12px' }}>
+                                  <td colSpan={9} style={{ padding: '6px 12px' }}>
                                     <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', marginRight: '8px' }}>
                                       CUSTOM ITEMS
                                     </span>
@@ -6246,6 +6292,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     )}
                                     {it.category && <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 'normal' }}>{it.category}</span>}
                                   </div>
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569', fontSize: '11px', fontFamily: 'monospace', fontWeight: '600' }}>
+                                  {it.hsn || it.hsn_or_sac || selectedPi.hsn || '73089090'}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                   {(() => {
