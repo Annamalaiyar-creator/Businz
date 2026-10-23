@@ -16,6 +16,13 @@ import {
   getWorkflowRankServer,
   mergeBomRecords
 } from './bomPersistence.js';
+import {
+  saveProformaInvoiceToDatabase,
+  loadDatabaseProformaInvoices,
+  getNextDatabasePiNumber,
+  updatePiZohoSyncStatus,
+  toConsumerPi
+} from './piPersistence.js';
 import * as vrmDataModule from '../src/utils/vrmProductsData.js';
 const VRM_PRODUCTS = vrmDataModule.VRM_PRODUCTS || vrmDataModule.default?.VRM_PRODUCTS || [];
 const wordFingerprint = vrmDataModule.wordFingerprint || vrmDataModule.default?.wordFingerprint || ((w) => String(w || '').toLowerCase().trim());
@@ -5044,57 +5051,13 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 // Proforma Invoices / Estimates endpoints
-// Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01)
+// Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01) directly from authoritative database
 app.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) => {
   try {
-    const fy = getFinancialYear();
-    let records = [];
-
-    // 1. Query PostgreSQL proforma_invoices and bom_orders (source_pi_no) if connected
-    if (isDbConnected()) {
-      try {
-        const dbRes = await query(`
-          SELECT pi_no FROM public.proforma_invoices
-          WHERE pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
-        `).catch(() => null);
-        if (dbRes?.rows) records.push(...dbRes.rows);
-      } catch (_) {}
-
-      try {
-        const bomDbRes = await query(`
-          SELECT source_pi_no as pi_no FROM public.bom_orders
-          WHERE source_pi_no IS NOT NULL AND source_pi_no ~ '^VRM-PI-[0-9]{4}-[0-9]+$'
-        `).catch(() => null);
-        if (bomDbRes?.rows) records.push(...bomDbRes.rows);
-      } catch (_) {}
-    }
-
-    // 2. Check local proforma_invoice_store.json, sales_pi_store.json, bom_store.json, and in-memory stores
-    const storeFiles = ['proforma_invoice_store.json', 'sales_pi_store.json', 'bom_store.json'];
-    for (const sf of storeFiles) {
-      try {
-        const p = getStoreFilePath(sf);
-        if (fs.existsSync(p)) {
-          const list = JSON.parse(fs.readFileSync(p, 'utf8'));
-          if (Array.isArray(list)) records.push(...list);
-        }
-      } catch (_) {}
-    }
-
-    ['proforma_invoice_store', 'sales_pi_store', 'bom_store'].forEach(key => {
-      const list = supabaseMemoryStore[key];
-      if (Array.isArray(list)) records.push(...list);
-    });
-
-    const { code, nextNum } = getNextSequence('PI', records);
-    res.json({
-      nextPiNo: code,
-      nextEstimateNo: code,
-      nextNum,
-      fiscalYear: String(fy),
-      financialYear: fy
-    });
+    const nextSeq = await getNextDatabasePiNumber();
+    res.json(nextSeq);
   } catch (err) {
+    console.warn('[Next PI Number Fallback Warning]:', err.message);
     const fy = getFinancialYear();
     res.json({ nextPiNo: `VRM-PI-${fy}-01`, nextEstimateNo: `VRM-PI-${fy}-01`, nextNum: 1, fiscalYear: String(fy), financialYear: fy });
   }
@@ -5201,6 +5164,15 @@ app.get('/api/next-wo-number', async (req, res) => {
 
 
 app.get(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
+  try {
+    const databasePis = await loadDatabaseProformaInvoices();
+    if (Array.isArray(databasePis) && databasePis.length > 0) {
+      return res.json(databasePis);
+    }
+  } catch (err) {
+    console.warn('[PI Database Read Notice]:', err.message);
+  }
+
   const p1 = getStoreFilePath('proforma_invoice_store.json');
   const p2 = getStoreFilePath('sales_pi_store.json');
 
@@ -5299,88 +5271,38 @@ app.get('/api/debug-estimates', async (req, res) => {
 });
 
 app.post(['/api/estimates', '/api/proforma-invoices'], async (req, res) => {
-  let localEstimates = [];
-  const pProforma = getStoreFilePath('proforma_invoice_store.json');
-  const pSales = getStoreFilePath('sales_pi_store.json');
-
   try {
-    if (fs.existsSync(pProforma)) localEstimates = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
-  } catch (_) {}
+    // =========================================================================
+    // STEP 1: STORE IN OUR DATABASE FIRST (MANDATORY DATABASE-FIRST RULE)
+    // =========================================================================
+    const saveResult = await saveProformaInvoiceToDatabase(req.body);
+    const savedPi = saveResult.pi;
 
-  let salesEstimates = [];
-  try {
-    if (fs.existsSync(pSales)) salesEstimates = JSON.parse(fs.readFileSync(pSales, 'utf8'));
-  } catch (_) {}
+    console.log(`✅ [PI STEP 1: DATABASE PERSISTED] PI "${savedPi.piNo}" safely stored in PostgreSQL public.proforma_invoices.`);
 
-  const isExplicitEdit = Boolean(req.body.isEdit || req.body.editMode || req.body.isEditing);
-  let cleanPiNo = String(req.body.piNo || req.body.id || `PI-${Date.now()}`).trim();
-  let targetLower = cleanPiNo.toLowerCase();
+    // Broadcast realtime event immediately so all connected clients/dashboards see the PI
+    broadcastRealtimeEvent('pi_created', { pi: savedPi });
+    broadcastRealtimeEvent('store_updated', { key: 'sales_pi_store', storeData: savedPi });
 
-  const existingProforma = localEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower) ||
-    salesEstimates.find(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() === targetLower);
-
-  // CONCURRENCY & COLLISION PROTECTION:
-  // If NOT an explicit edit and the PI number already exists, DO NOT OVERWRITE!
-  // Automatically advance to the next sequential unused PI number (e.g. VRM-PI-2026-33, VRM-PI-2026-34, etc.)
-  if (!isExplicitEdit && existingProforma) {
-    let allRecords = [...localEstimates, ...salesEstimates];
-    if (Array.isArray(supabaseMemoryStore['sales_pi_store'])) {
-      allRecords.push(...supabaseMemoryStore['sales_pi_store']);
-    }
-    if (Array.isArray(supabaseMemoryStore['proforma_invoice_store'])) {
-      allRecords.push(...supabaseMemoryStore['proforma_invoice_store']);
-    }
-    const { code } = getNextSequence('PI', allRecords);
-    console.warn(`[PI CONCURRENCY SAFETY] PI number "${cleanPiNo}" is already taken. Auto-advancing new PI to next available sequence: "${code}".`);
-    cleanPiNo = code;
-    targetLower = cleanPiNo.toLowerCase();
+    // Store in database ONLY. Do NOT automatically push to Zoho.
+    // As per requirement: PI is pushed to Zoho ONLY when salesperson explicitly clicks "Push to Zoho".
+    return res.json({
+      success: true,
+      message: saveResult.wasAutoAdvanced
+        ? `Proforma Invoice auto-advanced to ${savedPi.piNo} to prevent overwriting existing record.`
+        : 'Proforma Invoice stored in BUSINZ database successfully!',
+      pi: savedPi,
+      estimate: savedPi,
+      zohoSynced: Boolean(savedPi.zohoSynced),
+      wasReassigned: saveResult.wasAutoAdvanced
+    });
+  } catch (err) {
+    console.error('[BUSINZ PI CREATE ERROR]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to store Proforma Invoice in database: ' + err.message
+    });
   }
-
-  const newPI = {
-    ...(isExplicitEdit && existingProforma ? existingProforma : {}),
-    ...req.body,
-    id: cleanPiNo,
-    piNo: cleanPiNo,
-    createdAt: (isExplicitEdit && existingProforma && existingProforma.createdAt) || req.body.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  // Persist to BOTH local stores and Supabase
-  let updatedProforma;
-  if (isExplicitEdit) {
-    updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  } else {
-    updatedProforma = [newPI, ...localEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  }
-
-  try {
-    fs.writeFileSync(pProforma, JSON.stringify(updatedProforma, null, 2), 'utf8');
-  } catch (_) {}
-
-  let updatedSales;
-  if (isExplicitEdit) {
-    updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  } else {
-    updatedSales = [newPI, ...salesEstimates.filter(pi => String(pi.piNo || pi.id || '').trim().toLowerCase() !== targetLower)];
-  }
-
-  try {
-    fs.writeFileSync(pSales, JSON.stringify(updatedSales, null, 2), 'utf8');
-  } catch (_) {}
-
-  pushStoreToSupabase('proforma_invoice_store', updatedProforma).catch(() => {});
-  pushStoreToSupabase('sales_pi_store', updatedSales).catch(() => {});
-
-  return res.json({
-    success: true,
-    message: cleanPiNo !== req.body.piNo
-      ? `Proforma Invoice auto-advanced to ${cleanPiNo} to prevent overwriting existing record.`
-      : 'Proforma Invoice created in BUSINZ successfully!',
-    originalRequestedPiNo: req.body.piNo,
-    wasReassigned: cleanPiNo !== req.body.piNo,
-    estimate: newPI,
-    pi: newPI
-  });
 });
 
 // Fetch current Zoho Books ERP integration configuration & status
@@ -5466,7 +5388,8 @@ app.post('/api/zoho/exchange-code', async (req, res) => {
   }
 });
 
-// 1-Way Push Proforma Invoice to Zoho Books as Estimate / Quote
+// Manual 1-Way Push Proforma Invoice to Zoho Books as Estimate / Quote
+// Triggered strictly when the salesperson clicks the "Push to Zoho" button
 app.post(['/api/zoho/push-pi', '/api/estimates/push-to-zoho'], async (req, res) => {
   try {
     let piRecord = req.body.pi || req.body;
@@ -5476,32 +5399,70 @@ app.post(['/api/zoho/push-pi', '/api/estimates/push-to-zoho'], async (req, res) 
       return res.status(400).json({ success: false, error: 'piNo is required to push to Zoho' });
     }
 
-    // If full PI object wasn't supplied, load from local store
+    // If full PI object wasn't supplied, load from PostgreSQL database first
     if (!piRecord.items || piRecord.items.length === 0) {
-      const pProforma = getStoreFilePath('proforma_invoice_store.json');
-      const pSales = getStoreFilePath('sales_pi_store.json');
-      let found = null;
       try {
-        if (fs.existsSync(pProforma)) {
-          const list = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
-          found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
-        }
-        if (!found && fs.existsSync(pSales)) {
-          const list = JSON.parse(fs.readFileSync(pSales, 'utf8'));
-          found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+        const dbRes = await query(
+          'SELECT * FROM public.proforma_invoices WHERE LOWER(TRIM(pi_no)) = LOWER(TRIM($1)) OR LOWER(TRIM(id)) = LOWER(TRIM($1))',
+          [piNo]
+        );
+        if (dbRes.rows.length > 0) {
+          const dbPi = toConsumerPi(dbRes.rows[0]);
+          piRecord = { ...dbPi, ...piRecord };
         }
       } catch (_) {}
 
-      if (found) {
-        piRecord = { ...found, ...piRecord };
+      if (!piRecord.items || piRecord.items.length === 0) {
+        const pProforma = getStoreFilePath('proforma_invoice_store.json');
+        const pSales = getStoreFilePath('sales_pi_store.json');
+        let found = null;
+        try {
+          if (fs.existsSync(pProforma)) {
+            const list = JSON.parse(fs.readFileSync(pProforma, 'utf8'));
+            found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+          }
+          if (!found && fs.existsSync(pSales)) {
+            const list = JSON.parse(fs.readFileSync(pSales, 'utf8'));
+            found = list.find(p => String(p.piNo || p.id || '').trim().toLowerCase() === piNo.toLowerCase());
+          }
+        } catch (_) {}
+
+        if (found) {
+          piRecord = { ...found, ...piRecord };
+        }
       }
     }
 
     piRecord.piNo = piNo;
     const result = await pushPiToZoho(piRecord);
+
+    // Update database sync status
+    if (result?.estimate?.estimate_id) {
+      await updatePiZohoSyncStatus(piNo, {
+        zohoSynced: true,
+        zohoEstimateId: String(result.estimate.estimate_id).trim(),
+        zohoEstimateNo: result.estimate.estimate_number || piNo,
+        zohoSyncError: null
+      });
+
+      broadcastRealtimeEvent('pi_updated', {
+        piNo,
+        zohoSynced: true,
+        zohoEstimateId: String(result.estimate.estimate_id).trim(),
+        zohoEstimateNo: result.estimate.estimate_number || piNo
+      });
+    }
+
     return res.json(result);
   } catch (err) {
     console.error('[Zoho Push Route Error]:', err.message);
+    const piNo = String(req.body.piNo || req.body?.pi?.piNo || '').trim();
+    if (piNo) {
+      await updatePiZohoSyncStatus(piNo, {
+        zohoSynced: false,
+        zohoSyncError: err.message
+      }).catch(() => {});
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });

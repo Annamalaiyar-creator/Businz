@@ -412,46 +412,46 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   useEffect(() => {
     const loadPiData = async () => {
-      // 1. Authoritative source: Supabase cloud stores (fast)
+      // 1. Authoritative primary source: Self-hosted PostgreSQL database via /api/proforma-invoices
       try {
-        const [salesCloud, proformaCloud] = await Promise.all([
-          fetchCloudStore('sales_pi_store').catch(() => []),
-          fetchCloudStore('proforma_invoice_store').catch(() => [])
-        ]);
+        const dbRes = await fetch('/api/proforma-invoices');
+        if (dbRes.ok) {
+          const dbData = await dbRes.json();
+          if (Array.isArray(dbData) && dbData.length > 0) {
+            const mergedMap = new Map();
+            // Authoritative database records take precedence
+            dbData.forEach(p => {
+              if (p && p.piNo) mergedMap.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p));
+            });
 
-        const mergedMap = new Map();
-        const primaryCloud = (Array.isArray(salesCloud) && salesCloud.length > 0)
-          ? salesCloud
-          : (Array.isArray(proformaCloud) ? proformaCloud : []);
-
-        primaryCloud.forEach(p => {
-          if (p && p.piNo) {
-            mergedMap.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p));
-          }
-        });
-
-        if (Array.isArray(proformaCloud)) {
-          proformaCloud.forEach(p => {
-            if (p && p.piNo) {
-              const k = String(p.piNo).trim().toLowerCase();
-              if (!mergedMap.has(k)) {
-                mergedMap.set(k, normalizePiRecord(p));
+            // Zero-Data-Loss Safeguard: Preserve any locally staged/offline PIs
+            try {
+              const localCached = JSON.parse(localStorage.getItem(storageKey) || localStorage.getItem('controlroom_sales_pi_store') || '[]');
+              if (Array.isArray(localCached)) {
+                localCached.forEach(lp => {
+                  if (lp && lp.piNo) {
+                    const k = String(lp.piNo).trim().toLowerCase();
+                    if (!mergedMap.has(k)) {
+                      mergedMap.set(k, normalizePiRecord(lp));
+                    }
+                  }
+                });
               }
-            }
-          });
-        }
+            } catch (_) {}
 
-        if (mergedMap.size > 0) {
-          const result = Array.from(mergedMap.values()).map(normalizePiRecord);
-          setPiList(result);
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(result));
-          } catch (_) {}
+            const finalMerged = Array.from(mergedMap.values()).map(normalizePiRecord);
+            setPiList(finalMerged);
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(finalMerged));
+              localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(finalMerged));
+            } catch (_) {}
+            setTableLoading(false);
+            return;
+          }
         }
       } catch (err) {
-        console.error('Error loading Supabase PI data:', err);
+        console.warn('[PI Database Load Notice]:', err?.message || err);
       } finally {
-        // Immediately unblock table loading so UI does not wait for external Zoho round-trips
         setTableLoading(false);
       }
 
@@ -2361,7 +2361,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
       updatePiList(updatedList);
 
-      // Push to Zoho Books Quotes (Estimates API)
+      // Save Proforma Invoice to BUSINZ Database (PostgreSQL public.proforma_invoices)
+      // NOTE: Strictly database-first. Zero automatic Zoho sync. Zoho push occurs ONLY when salesperson clicks "Push to Zoho".
       const sanitizedPayload = {
         ...stripDataUrlsFromRecord(newPI),
         isEdit: isEditing
@@ -2387,7 +2388,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         }
 
         if (estId || (serverAssignedPiNo && serverAssignedPiNo !== newPI.piNo)) {
-          console.log('[ZOHO ESTIMATE SYNC SUCCESS]', estId || 'Native Server Sync');
           const enrichedList = updatedList.map(p => (p.piNo === newPI.piNo || p.id === newPI.id) ? {
             ...p,
             id: finalEstNo,
@@ -2408,7 +2408,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           updatePiList(enrichedList);
         }
       }).catch(err => {
-        console.warn('[ESTIMATE SYNC NOTICE]', err);
+        console.warn('[ESTIMATE DB SAVE NOTICE]', err);
       });
 
       // Instantly dismiss modal and advance to list view so user is never stuck
@@ -2416,9 +2416,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       resetForm();
       setViewMode('list');
 
+      const safeCustomer = (vendorName || customerName || 'Customer').trim();
       if (isDraft) {
-        const safeCustomer = (vendorName || customerName || 'Customer').trim();
         showTopToast(`📝 Proforma Invoice (${cleanPiNo}) for ${safeCustomer} has been saved as Draft.`, 'info', 5000);
+      } else {
+        showTopToast(`✅ Proforma Invoice (${cleanPiNo}) for ${safeCustomer} stored in BUSINZ database! Push to Zoho is ready whenever required.`, 'success', 5000);
       }
     } catch (err) {
       console.error('Error creating Proforma Invoice:', err);
@@ -3649,13 +3651,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   const hasSavedBom = matchedBoms.length > 0;
                   const isConverted = hasSavedBom;
 
-                  if (isConverted) {
-                    const firstBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
-                    const isPushed = Boolean(target.zohoSynced);
-                    const isCurrentlyPushing = syncingPiNo === target.piNo;
+                  const firstBomCode = matchedBoms[0]?.bomCode || matchedBoms[0]?.code || matchedBoms[0]?.id;
+                  const isPushed = Boolean(target.zohoSynced);
+                  const isCurrentlyPushing = syncingPiNo === target.piNo;
 
-                    return (
-                      <React.Fragment key={target.piNo}>
+                  return (
+                    <React.Fragment key={target.piNo}>
+                      {isConverted ? (
                         <button
                           onClick={() => {
                             setSelectedPIs([]);
@@ -3686,76 +3688,74 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         >
                           <Layers size={14} style={{ color: '#FFFFFF' }} /> View {firstBomCode} ↗
                         </button>
-
+                      ) : (
                         <button
-                          onClick={() => syncPiToZoho(target)}
-                          disabled={isCurrentlyPushing}
+                          onClick={() => {
+                            setSelectedPIs([]);
+                            handleConvertToBom(target);
+                          }}
                           style={{
-                            backgroundColor: isPushed ? '#F0FDF4' : '#0E7490',
-                            border: isPushed ? '1px solid #86EFAC' : 'none',
-                            color: isPushed ? '#15803D' : '#FFFFFF',
+                            backgroundColor: '#4F46E5',
+                            border: 'none',
+                            color: '#FFFFFF',
                             borderRadius: '10px',
                             padding: '6px 16px',
                             fontSize: '12px',
                             fontWeight: '700',
-                            cursor: isCurrentlyPushing ? 'not-allowed' : 'pointer',
+                            cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '6px',
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
-                            boxShadow: isPushed ? 'none' : '0 2px 4px rgba(14, 116, 144, 0.3)',
-                            transition: 'all 0.15s ease',
-                            opacity: isCurrentlyPushing ? 0.7 : 1
+                            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)',
+                            transition: 'all 0.15s ease'
                           }}
-                          title={isPushed ? `Already pushed to Zoho Books as Quote #${target.zohoEstimateNo || target.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
                         >
-                          {isCurrentlyPushing ? (
-                            <>
-                              <RotateCcw size={14} className="animate-spin" style={{ color: isPushed ? '#15803D' : '#FFFFFF' }} /> Pushing to Zoho...
-                            </>
-                          ) : isPushed ? (
-                            <>
-                              <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({target.zohoEstimateNo || target.piNo})
-                            </>
-                          ) : (
-                            <>
-                              <UploadCloud size={14} style={{ color: '#FFFFFF' }} /> Push to Zoho
-                            </>
-                          )}
+                          <Layers size={14} style={{ color: '#FFFFFF' }} /> Convert to BOM
                         </button>
-                      </React.Fragment>
-                    );
-                  }
+                      )}
 
-                  return (
-                    <button
-                      onClick={() => {
-                        setSelectedPIs([]);
-                        handleConvertToBom(target);
-                      }}
-                      style={{
-                        backgroundColor: '#4F46E5',
-                        border: 'none',
-                        color: '#FFFFFF',
-                        borderRadius: '10px',
-                        padding: '6px 16px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338CA'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
-                    >
-                      <Layers size={14} style={{ color: '#FFFFFF' }} /> Convert to BOM
-                    </button>
+                      <button
+                        onClick={() => syncPiToZoho(target)}
+                        disabled={isCurrentlyPushing}
+                        style={{
+                          backgroundColor: isPushed ? '#F0FDF4' : '#0E7490',
+                          border: isPushed ? '1px solid #86EFAC' : 'none',
+                          color: isPushed ? '#15803D' : '#FFFFFF',
+                          borderRadius: '10px',
+                          padding: '6px 16px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: isCurrentlyPushing ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          boxShadow: isPushed ? 'none' : '0 2px 4px rgba(14, 116, 144, 0.3)',
+                          transition: 'all 0.15s ease',
+                          opacity: isCurrentlyPushing ? 0.7 : 1
+                        }}
+                        title={isPushed ? `Already pushed to Zoho Books as Quote #${target.zohoEstimateNo || target.piNo}. Click to re-sync.` : 'Push this Proforma Invoice to Zoho Books as a Quote'}
+                      >
+                        {isCurrentlyPushing ? (
+                          <>
+                            <RotateCcw size={14} className="animate-spin" style={{ color: isPushed ? '#15803D' : '#FFFFFF' }} /> Pushing to Zoho...
+                          </>
+                        ) : isPushed ? (
+                          <>
+                            <CheckCircle size={14} style={{ color: '#16A34A' }} /> Zoho Synced ({target.zohoEstimateNo || target.piNo})
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud size={14} style={{ color: '#FFFFFF' }} /> Push to Zoho
+                          </>
+                        )}
+                      </button>
+                    </React.Fragment>
                   );
                 })()}
 

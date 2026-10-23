@@ -2698,24 +2698,19 @@
     "salesConfirmed": false,
     "salesConfirmedAt": null,
     "salesPerson": "Sales Department",
-    "salesPersonCode": "",
+    "salesPersonCode": "SE-1000",
     "c8": "Sales Department",
     "createdBy": "Sales Department",
-    "createdById": "",
+    "createdById": "SE-1000",
     "items": [
       {
-        "qty": 50,
+        "qty": "200",
         "uom": "NOS",
         "code": "MR-300MM",
         "name": "Mini Rail - 300 mm",
-        "rate": 140,
-        "baseQty": 50,
+        "rate": "140",
         "gstRate": "18%",
-        "category": "Aluminium Profiles",
-        "confirmed": true,
-        "presetName": null,
-        "isPresetItem": false,
-        "presetGroupId": null
+        "category": "Aluminium Profiles"
       }
     ],
     "payments": {
@@ -2766,11 +2761,11 @@
     "presetKitPrice": 0,
     "presetSetCount": 0,
     "presetGroups": [],
-    "subTotal": 0,
+    "subTotal": 28000,
     "gstAmount": 0,
     "cgstAmount": 0,
     "sgstAmount": 0,
-    "grandTotal": 0,
+    "grandTotal": 33040,
     "cancelled": false,
     "cancelledAt": null,
     "cancelledBy": null,

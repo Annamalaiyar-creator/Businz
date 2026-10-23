@@ -1688,6 +1688,35 @@ export async function saveCloudStoreImmediate(storeKey, storeData) {
     return; // STOP! NEVER touch leaves table for Invoices!
   }
 
+  // CANONICAL PROFORMA INVOICE (PI) WRITE PATH: Dedicated relational persistence to public.proforma_invoices
+  // Enforces AGENTS.md Rule 2 & 3: 1 Record Change = 1 Targeted Operation. Whole-array table overwrites blocked.
+  if (storeKey === 'sales_pi_store' || storeKey === 'proforma_invoice_store') {
+    try {
+      if (Array.isArray(storeData)) {
+        console.warn(`[SupabaseSync] Whole-array PI sync to database blocked (${storeData.length} records) to prevent overwriting other users' records.`);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+            detail: { storeKey, data: storeData }
+          }));
+        }
+      } else if (storeData && typeof storeData === 'object') {
+        fetch('/api/estimates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(storeData)
+        }).catch(() => {});
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('controlroom_store_update', {
+            detail: { storeKey, data: storeData }
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('[SupabaseSync] Error persisting PI:', err?.message || err);
+    }
+    return; // STOP! NEVER touch leaves table for PIs!
+  }
+
   try {
     const employeeKey = storeKey.toUpperCase();
     const { data: records } = await supabase
