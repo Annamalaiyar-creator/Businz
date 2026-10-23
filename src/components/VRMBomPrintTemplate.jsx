@@ -1278,6 +1278,8 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
 
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
   const effectiveRole = userRole || storedRole || '';
+  const isDispatchRole = /dispatch/i.test(effectiveRole);
+  const isSalesUser = Boolean(isSales || (!isDispatchRole && !/production/i.test(effectiveRole)) || /sales/i.test(effectiveRole));
 
   // Physical BOM order printout is taken by Dispatch Head or Production Head
   const isPhysicalPrintTaker = Boolean(
@@ -1285,7 +1287,7 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
       effectiveRole === 'Dispatch Head' ||
       effectiveRole === 'Production Head' ||
       effectiveRole === 'Floor Supervisor' ||
-      /dispatch/i.test(effectiveRole) ||
+      isDispatchRole ||
       /production/i.test(effectiveRole)
     )
   );
