@@ -1829,7 +1829,7 @@ export default function CrmQuotationsView({
                   }}
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
-                  {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
+                  {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
                   <button
                     type="button"
                     onClick={() => handleRemovePresetGroup(grp.groupId)}
@@ -3633,7 +3633,7 @@ export default function CrmQuotationsView({
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                   <span style={{ fontSize: '10px', fontWeight: '800', color: '#0E7490', backgroundColor: '#CCFBF1', padding: '2px 6px', borderRadius: '4px' }}>
-                                    {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''} Kit
+                                    Total Quantity: {gInfo.setCount} Set{gInfo.setCount > 1 ? 's' : ''}
                                   </span>
                                   <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>
                                     ₹ {gInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

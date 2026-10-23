@@ -3684,7 +3684,7 @@ export default function BomOrdersView(props) {
                   }}
                 >
                   <Layers size={13} style={{ color: '#0E7490' }} />
-                  {grp.presetName} ({grp.setCount} Set{grp.setCount > 1 ? 's' : ''})
+                  {grp.presetName} (Total Quantity: {grp.setCount || 1} Set{(grp.setCount || 1) > 1 ? 's' : ''})
                   {!newBomSourcePiNo && (
                     <button
                       type="button"
@@ -3994,7 +3994,7 @@ export default function BomOrdersView(props) {
                                           ₹{parseFloat(currentGroup.kitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                         </div>
                                         <div style={{ fontSize: '11px', color: '#6366F1', fontWeight: '600', marginTop: '2px' }}>
-                                          {groupCount} items × {currentGroup.setCount || 1} set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
+                                          {groupCount} items × Total Quantity: {currentGroup.setCount || 1} Set{(parseInt(currentGroup.setCount) || 1) !== 1 ? 's' : ''}
                                         </div>
                                         <div style={{ fontSize: '10px', color: '#6366F1', fontWeight: '700', marginTop: '3px' }}>
                                           GST: {currentGroup.gstRate || '18%'}

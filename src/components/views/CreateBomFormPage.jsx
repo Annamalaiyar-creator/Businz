@@ -894,7 +894,7 @@ export default function CreateBomFormPage(props) {
 
             {/* SET COUNT / MULTIPLIER INPUT */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', padding: '0 8px', borderRadius: '8px', height: '36px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>No. of Sets:</span>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569', whiteSpace: 'nowrap' }}>Total Quantity (Sets):</span>
               <input id="create-bom-form-preset-set-count" name="presetSetCount" aria-label="PresetSetCount"
                 type="number"
                 min="1"

@@ -4767,12 +4767,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         color: theme.tagText,
                                         border: `1px solid ${theme.border}`
                                       }}>
-                                        {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                        Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
                                       </span>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
-                                        Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST
+                                        {(parseInt(currentGroup?.setCount) || 1) > 1 ? (
+                                          <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                        ) : (
+                                          <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
+                                        )}
                                       </span>
                                       <button
                                         type="button"
@@ -6040,7 +6044,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                           <div key={gIdx} style={{ backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: '10px', padding: '12px' }}>
                             <div style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>{grp.presetName}</div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                              <span>Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
+                              <span>Total Quantity: <strong>{sCount} Set{sCount > 1 ? 's' : ''}</strong></span>
                               <span>GST: <strong>{grp.gstRate || '18%'}</strong></span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginTop: '4px' }}>
@@ -6155,11 +6159,11 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           color: theme.tagText,
                                           border: `1px solid ${theme.border}`
                                         }}>
-                                          {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
+                                          Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>
-                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST
+                                        Kit Subtotal: <strong style={{ color: theme.primary }}>₹ {Number((parseFloat(currentGroup?.kitPrice) || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong>{(parseInt(currentGroup?.setCount) || 1) > 1 ? ` (${currentGroup?.setCount || 1} Sets × ₹${Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')})` : ''} + {currentGroup?.gstRate || '18%'} GST
                                       </div>
                                     </div>
                                   </td>
