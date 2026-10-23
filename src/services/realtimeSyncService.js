@@ -75,6 +75,24 @@ export const initRealtimeSync = () => {
 
           // 3. BOM Orders & Routing
           if (type === 'bom_updated' || (type === 'store_updated' && payload?.key === 'bom_store')) {
+            if (payload?.printData?.bomCode) {
+              window.dispatchEvent(new CustomEvent('vrm_bom_printed', { detail: payload.printData }));
+            } else if (payload?.bom?.dispatchPrinted && (payload?.bom?.bomCode || payload?.bom?.id)) {
+              window.dispatchEvent(new CustomEvent('vrm_bom_printed', {
+                detail: {
+                  bomCode: payload.bom.bomCode || payload.bom.code || payload.bom.id,
+                  dispatchPrinted: true,
+                  dispatchPrintedAt: payload.bom.dispatchPrintedAt,
+                  dispatchPrintTimeStr: payload.bom.dispatchPrintTimeStr,
+                  dispatchPrintedDateStr: payload.bom.dispatchPrintedDateStr,
+                  dispatchPrintedBy: payload.bom.dispatchPrintedBy,
+                  dispatchPrintCount: payload.bom.dispatchPrintCount,
+                  firstPrintTimeStr: payload.bom.firstPrintTimeStr,
+                  secondPrintTimeStr: payload.bom.secondPrintTimeStr,
+                  dispatchPrintHistory: payload.bom.dispatchPrintHistory
+                }
+              }));
+            }
             window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: payload }));
             window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: payload }));
             emitStorageUpdate();

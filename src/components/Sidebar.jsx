@@ -360,6 +360,14 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const isCeo = (role === 'CEO' || role === 'MD' || role === 'Managing Director');
     const isTa = (role === 'Technical Administrator' || role === 'Technical Admin' || role === 'Developer' || (role || '').startsWith('TA'));
     const isTechSupport = (role === 'Tech Support' || role === 'Technical Support' || (role || '').toLowerCase().includes('tech support'));
+    const isAccounts = (
+      role === 'Accounts Head' || 
+      role === 'Accounts Executive' || 
+      role === 'Accounts Lead' || 
+      role === 'Finance & Accounts' || 
+      role === 'Accounts' || 
+      (role || '').toLowerCase().includes('account')
+    );
 
     const isProcurementRole = role === 'Procurement Head' || role === 'Procurement Admin' || (role || '').includes('Procurement');
     const templateLabel = isProcurementRole ? 'PO Template' : 'Templates';
@@ -369,7 +377,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.label === 'PO Template' || i.targetTab === 'Templates'));
     const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
-    const showTemplates = !hasTemplates && !isCeo && !isTechSupport;
+    const showTemplates = !hasTemplates && !isCeo && !isTechSupport && !isAccounts;
 
     if (sysSection) {
       if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
@@ -393,6 +401,20 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           i.targetTab !== 'Templates' && i.label !== 'Templates' && i.label !== 'Print Templates' && i.label !== 'PO Template' && i.label !== 'Template Studio' &&
           i.targetTab !== 'BOM Orders' && i.label !== 'BOM Orders' && i.label !== 'BOM' && i.label !== 'Sales BOM' && i.targetTab !== 'BOM' &&
           i.targetTab !== 'Raw Material Directory' && i.label !== 'Raw Material Directory' && i.label !== 'Raw Material Inventory' && i.targetTab !== 'Raw Material Inventory'
+        )
+      })).filter(s => s.items.length > 0);
+    }
+
+    if (isAccounts) {
+      sections = sections.map(s => ({
+        ...s,
+        items: (s.items || []).filter(i => 
+          i.targetTab !== 'Templates' && 
+          i.label !== 'Templates' && 
+          i.label !== 'Print Templates' && 
+          i.label !== 'PO Template' && 
+          i.label !== 'Template Studio' &&
+          i.label !== 'Templates Studio'
         )
       })).filter(s => s.items.length > 0);
     }

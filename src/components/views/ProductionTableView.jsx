@@ -298,8 +298,8 @@ export default function ProductionTableView({
                               <span
                                 title={
                                   row.dispatchPrintCount > 1
-                                    ? `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd Print: ${row.secondPrintTimeStr || row.dispatchPrintTimeStr}${row.dispatchPrintCount > 2 ? ` (Total Prints: ${row.dispatchPrintCount})` : ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`
-                                    : `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} on ${row.dispatchPrintedDateStr || ''} by ${row.dispatchPrintedBy || 'Dispatch Team'}`
+                                    ? `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} • 2nd Print: ${row.secondPrintTimeStr || row.dispatchPrintTimeStr}${row.dispatchPrintCount > 2 ? ` (Total Prints: ${row.dispatchPrintCount})` : ''} by ${row.dispatchPrintedBy || 'Dispatch / Production Team'}`
+                                    : `1st Print: ${row.firstPrintTimeStr || row.dispatchPrintTimeStr} on ${row.dispatchPrintedDateStr || ''} by ${row.dispatchPrintedBy || 'Dispatch / Production Team'}`
                                 }
                                 style={{
                                   backgroundColor: row.dispatchPrintCount > 1 ? '#EFF6FF' : '#F0FDF4',

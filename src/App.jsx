@@ -371,11 +371,11 @@ function App() {
     }
   }, [userRole, activeTab]);
 
-  // Ensure Accounts Head / Accounts Executive role cannot land on removed Spend, Payments, or Delivery Challans pages
+  // Ensure Accounts Head / Accounts Executive role cannot land on removed Spend, Payments, Delivery Challans, or Templates pages
   useEffect(() => {
-    const isAccountsRole = userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts';
+    const isAccountsRole = userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || (userRole || '').toLowerCase().includes('account');
     if (isAccountsRole && 
-        (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports' || activeTab === 'Delivery Challans')) {
+        (activeTab === 'Payments' || activeTab === 'Spend Analytics' || activeTab === 'Spend Reports' || activeTab === 'Delivery Challans' || activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer' || activeTab === 'PO Template')) {
       handleTabChange('Finance Dashboard');
     }
 
@@ -724,6 +724,8 @@ function App() {
             ) : (activeTab === 'Templates' || activeTab === 'Templetes' || activeTab === 'Print Templates' || activeTab === 'Template Studio' || activeTab === 'Template Customizer' || activeTab === 'PO Template') ? (
               (userRole === 'Tech Support' || userRole === 'Technical Support' || (userRole || '').toLowerCase().includes('tech support')) ? (
                 <TechSupportDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
+              ) : (userRole === 'Accounts Head' || userRole === 'Accounts Executive' || userRole === 'Finance & Accounts' || (userRole || '').toLowerCase().includes('account')) ? (
+                <AccountsFinanceDashboard userRole={userRole} onNavigateTab={handleTabChange} />
               ) : (
                 <VRMTemplateStudioView userRole={userRole} onBackToPI={() => handleTabChange(userRole?.includes('Procurement') ? 'Purchase Orders' : (String(userRole || '').toLowerCase().includes('dispatch') ? 'Dispatch Orders' : 'Proforma Invoice'))} />
               )

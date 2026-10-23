@@ -79,6 +79,15 @@ export async function initPostgresDatabase() {
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS invoice_no TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS contact_person TEXT;
             ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS gst_no TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed BOOLEAN DEFAULT false;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_at TIMESTAMPTZ;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_time_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_date_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_printed_by TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_count INTEGER DEFAULT 0;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS first_print_time_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS second_print_time_str TEXT;
+            ALTER TABLE public.bom_orders ADD COLUMN IF NOT EXISTS dispatch_print_history JSONB DEFAULT '[]'::jsonb;
             
             -- 1-to-1 Sync order values, items, and salesperson from source PI if missing
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'proforma_invoices') THEN

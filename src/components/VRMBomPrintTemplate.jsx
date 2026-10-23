@@ -1200,9 +1200,9 @@ function recordBomPrintStatus(targetBom) {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = formatDateDDMMYYYY(now);
-  const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
+  const storedUser = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_user_name') || localStorage.getItem('controlroom_user_email') || '') : '';
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
-  const printedByName = storedUser || storedRole || 'Dispatch Executive';
+  const printedByName = storedUser ? `${storedUser}${storedRole ? ` (${storedRole})` : ''}` : (storedRole || 'Team');
 
   const prevCount = parseInt(targetBom.dispatchPrintCount, 10) || 0;
   const newPrintCount = prevCount + 1;
@@ -1278,11 +1278,20 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
 
   const storedRole = (typeof localStorage !== 'undefined') ? (localStorage.getItem('controlroom_user_role') || '') : '';
   const effectiveRole = userRole || storedRole || '';
-  const isDispatchRole = /dispatch/i.test(effectiveRole);
-  const isSalesUser = Boolean(isSales || !isDispatchRole || /sales/i.test(effectiveRole));
+
+  // Physical BOM order printout is taken by Dispatch Head or Production Head
+  const isPhysicalPrintTaker = Boolean(
+    !isSales && (
+      effectiveRole === 'Dispatch Head' ||
+      effectiveRole === 'Production Head' ||
+      effectiveRole === 'Floor Supervisor' ||
+      /dispatch/i.test(effectiveRole) ||
+      /production/i.test(effectiveRole)
+    )
+  );
 
   const handlePrint = () => {
-    if (!isSalesUser) {
+    if (isPhysicalPrintTaker) {
       recordBomPrintStatus(b);
     }
     window.print();
@@ -1303,14 +1312,14 @@ export default function VRMBomPrintTemplate({ bomData, onClose, autoPrint = true
   useEffect(() => {
     if (!bomData || !autoPrint || hasTrackedRef.current) return;
     hasTrackedRef.current = true;
-    if (!isSalesUser) {
-      recordBomPrintStatus(b);
+    if (isPhysicalPrintTaker) {
+      recordBomPrintStatus(bomData);
     }
     const timer = setTimeout(() => {
       window.print();
     }, 400);
     return () => clearTimeout(timer);
-  }, [bomData, autoPrint, isSalesUser]);
+  }, [bomData, autoPrint, isPhysicalPrintTaker]);
 
   if (!bomData) return null;
 

@@ -229,6 +229,28 @@ export const toConsumerBomServer = (row) => {
     invoiceConfirmed: Boolean(row.invoice_confirmed || row.invoiceConfirmed || extraData.invoiceConfirmed),
     invoiceDeducted: Boolean(row.invoice_deducted || row.invoiceDeducted || extraData.invoiceDeducted),
     invoiceNo: row.invoice_no || row.invoiceNo || extraData.invoiceNo || '',
+    dispatchPrinted: Boolean(
+      row.dispatch_printed || 
+      row.dispatchPrinted || 
+      extraData.dispatchPrinted || 
+      (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.dispatchPrinted)
+    ),
+    dispatchPrintedAt: row.dispatch_printed_at || row.dispatchPrintedAt || extraData.dispatchPrintedAt || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.dispatchPrintedAt) || null,
+    dispatchPrintTimeStr: row.dispatch_print_time_str || row.dispatchPrintTimeStr || extraData.dispatchPrintTimeStr || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.dispatchPrintTimeStr) || '',
+    dispatchPrintedDateStr: row.dispatch_printed_date_str || row.dispatchPrintedDateStr || extraData.dispatchPrintedDateStr || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.dispatchPrintedDateStr) || '',
+    dispatchPrintedBy: row.dispatch_printed_by || row.dispatchPrintedBy || extraData.dispatchPrintedBy || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.dispatchPrintedBy) || '',
+    dispatchPrintCount: parseInt(row.dispatch_print_count || row.dispatchPrintCount || extraData.dispatchPrintCount || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.dispatchPrintCount), 10) || ((row.dispatch_printed || row.dispatchPrinted || extraData.dispatchPrinted) ? 1 : 0),
+    firstPrintTimeStr: row.first_print_time_str || row.firstPrintTimeStr || extraData.firstPrintTimeStr || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.firstPrintTimeStr) || null,
+    secondPrintTimeStr: row.second_print_time_str || row.secondPrintTimeStr || extraData.secondPrintTimeStr || (cleanAccountsVerification && cleanAccountsVerification._extra_data && cleanAccountsVerification._extra_data.secondPrintTimeStr) || null,
+    dispatchPrintHistory: Array.isArray(row.dispatch_print_history)
+      ? row.dispatch_print_history
+      : (Array.isArray(row.dispatchPrintHistory)
+        ? row.dispatchPrintHistory
+        : (Array.isArray(extraData.dispatchPrintHistory)
+          ? extraData.dispatchPrintHistory
+          : (Array.isArray(cleanAccountsVerification?._extra_data?.dispatchPrintHistory)
+            ? cleanAccountsVerification._extra_data.dispatchPrintHistory
+            : []))),
     stockBlocked: Boolean(row.stock_blocked),
     stockBlockedAt: row.stock_blocked_at || null,
     stockDeducted: Boolean(row.stock_deducted),
@@ -540,7 +562,18 @@ export function mergeBomRecords(existing, incoming) {
     lrCopyDoc: incoming.lrCopyDoc || existing.lrCopyDoc || null,
     dispatchPackingMedia: (incoming.dispatchPackingMedia?.photos?.length > 0 || incoming.dispatchPackingMedia?.videos?.length > 0)
       ? incoming.dispatchPackingMedia
-      : (existing.dispatchPackingMedia || { photos: [], videos: [] })
+      : (existing.dispatchPackingMedia || { photos: [], videos: [] }),
+    dispatchPrinted: Boolean(incoming.dispatchPrinted || existing.dispatchPrinted),
+    dispatchPrintCount: Math.max(parseInt(incoming.dispatchPrintCount, 10) || 0, parseInt(existing.dispatchPrintCount, 10) || 0),
+    dispatchPrintTimeStr: incoming.dispatchPrintTimeStr || existing.dispatchPrintTimeStr || '',
+    dispatchPrintedDateStr: incoming.dispatchPrintedDateStr || existing.dispatchPrintedDateStr || '',
+    dispatchPrintedBy: incoming.dispatchPrintedBy || existing.dispatchPrintedBy || '',
+    dispatchPrintedAt: incoming.dispatchPrintedAt || existing.dispatchPrintedAt || null,
+    firstPrintTimeStr: incoming.firstPrintTimeStr || existing.firstPrintTimeStr || null,
+    secondPrintTimeStr: incoming.secondPrintTimeStr || existing.secondPrintTimeStr || null,
+    dispatchPrintHistory: (Array.isArray(incoming.dispatchPrintHistory) && incoming.dispatchPrintHistory.length > 0)
+      ? incoming.dispatchPrintHistory
+      : (Array.isArray(existing.dispatchPrintHistory) ? existing.dispatchPrintHistory : [])
   };
 }
 

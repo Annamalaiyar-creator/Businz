@@ -691,7 +691,18 @@ const loadDatabaseBoms = async (forceRefresh = false) => {
               packedBy: diskItem.packedBy || item.packedBy || null,
               packedById: diskItem.packedById || item.packedById || null,
               packingCompletedAt: diskItem.packingCompletedAt || item.packingCompletedAt || null,
-              fullyCompleted: (diskItem.fullyCompleted !== undefined && diskRank >= dbRank) ? diskItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : diskItem.fullyCompleted)
+              fullyCompleted: (diskItem.fullyCompleted !== undefined && diskRank >= dbRank) ? diskItem.fullyCompleted : (item.fullyCompleted !== undefined ? item.fullyCompleted : diskItem.fullyCompleted),
+              dispatchPrinted: Boolean(item.dispatchPrinted || diskItem.dispatchPrinted),
+              dispatchPrintCount: Math.max(parseInt(item.dispatchPrintCount, 10) || 0, parseInt(diskItem.dispatchPrintCount, 10) || 0),
+              dispatchPrintTimeStr: item.dispatchPrintTimeStr || diskItem.dispatchPrintTimeStr || '',
+              dispatchPrintedDateStr: item.dispatchPrintedDateStr || diskItem.dispatchPrintedDateStr || '',
+              dispatchPrintedBy: item.dispatchPrintedBy || diskItem.dispatchPrintedBy || '',
+              dispatchPrintedAt: item.dispatchPrintedAt || diskItem.dispatchPrintedAt || null,
+              firstPrintTimeStr: item.firstPrintTimeStr || diskItem.firstPrintTimeStr || null,
+              secondPrintTimeStr: item.secondPrintTimeStr || diskItem.secondPrintTimeStr || null,
+              dispatchPrintHistory: (Array.isArray(item.dispatchPrintHistory) && item.dispatchPrintHistory.length > 0)
+                ? item.dispatchPrintHistory
+                : (Array.isArray(diskItem.dispatchPrintHistory) ? diskItem.dispatchPrintHistory : [])
             });
           } else {
             combinedMap.set(c, item);
@@ -4497,7 +4508,46 @@ app.post('/api/boms/:id/print-status', async (req, res) => {
             WHERE key IN ('controlroom_bom_store', 'bom_store')
           `, [cleanId, JSON.stringify(printData)]);
         } catch (_) {}
+
+        // Persist print tracking directly into public.bom_orders accounts_verification._extra_data
+        try {
+          await query(`
+            UPDATE public.bom_orders
+            SET accounts_verification = jsonb_set(
+              COALESCE(accounts_verification, '{}'::jsonb),
+              '{_extra_data}',
+              COALESCE(accounts_verification->'_extra_data', '{}'::jsonb) || $2::jsonb
+            ),
+            updated_at = NOW()
+            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
+          `, [cleanId, JSON.stringify(printData)]);
+        } catch (_) {}
+
+        // Also update direct public.bom_orders print tracking columns
+        try {
+          await query(`
+            UPDATE public.bom_orders
+            SET dispatch_printed = true,
+                dispatch_printed_at = NOW(),
+                dispatch_print_time_str = $2,
+                dispatch_printed_date_str = $3,
+                dispatch_printed_by = $4,
+                dispatch_print_count = $5
+            WHERE LOWER(TRIM(bom_code)) = $1 OR LOWER(TRIM(id)) = $1 OR LOWER(TRIM(code)) = $1
+          `, [cleanId, printData.dispatchPrintTimeStr || '', printData.dispatchPrintedDateStr || '', printData.dispatchPrintedBy || '', printData.dispatchPrintCount || 1]);
+        } catch (_) {}
       }
+
+      // 3. Broadcast real-time SSE event to ALL connected clients (Sales, Dispatch, Production, Admin)
+      broadcastRealtimeEvent('store_updated', { key: 'bom_store', storeData: fullList });
+      broadcastRealtimeEvent('bom_updated', {
+        bom: updatedBom,
+        bomList: fullList,
+        printData: {
+          bomCode: updatedBom.bomCode || updatedBom.code || updatedBom.id,
+          ...printData
+        }
+      });
 
       return res.json({ success: true, bom: updatedBom });
     }
