@@ -299,17 +299,25 @@ export default function CrmQuotationsView({
     };
   }, []);
 
+  const stockLookupMap = useMemo(() => {
+    const map = new Map();
+    (itemsList || []).forEach(p => {
+      const st = Number(p.stock !== undefined ? p.stock : (p.availableStock !== undefined ? p.availableStock : 0));
+      const code = String(p.code || '').toLowerCase().trim();
+      const name = String(p.name || '').toLowerCase().trim();
+      if (code && !map.has(code)) map.set(code, st);
+      if (name && !map.has(name)) map.set(name, st);
+    });
+    return map;
+  }, [itemsList]);
+
   const getItemStock = (itemName, itemCode) => {
     if (!itemName && !itemCode) return null;
-    const cleanName = (itemName || '').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
-    const found = (itemsList || []).find(p => 
-      (cleanCode && (p.code || '').toLowerCase().trim() === cleanCode) ||
-      (cleanName && (p.name || '').toLowerCase().trim() === cleanName) ||
-      (cleanName && (p.name || '').toLowerCase().includes(cleanName))
-    );
-    if (!found) return null;
-    return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
+    if (cleanCode && stockLookupMap.has(cleanCode)) return stockLookupMap.get(cleanCode);
+    const cleanName = (itemName || '').toLowerCase().trim();
+    if (cleanName && stockLookupMap.has(cleanName)) return stockLookupMap.get(cleanName);
+    return null;
   };
 
   // Resolve currently logged in account user's name dynamically (matching Header & auth state)

@@ -12,7 +12,7 @@ import { getFullProductsCatalogWithStock } from '../utils/productCatalogService'
  * 2. Click the chevron or focus to open a full dropdown list of catalog items with live stock & price ("dropdown")
  * 3. Select any item to auto-populate product details
  */
-export default function TypeableProductSelect({
+function TypeableProductSelect({
   value = '',
   onChange,
   itemsList = [],
@@ -138,18 +138,20 @@ export default function TypeableProductSelect({
 
   // Resolved active items list with fallback to full products catalog
   const activeItemsList = useMemo(() => {
-    let list = [];
-    try {
-      list = getFullProductsCatalogWithStock(itemsList);
-    } catch (_) {
-      list = Array.isArray(itemsList) && itemsList.length > 0 ? itemsList : [];
+    if (Array.isArray(itemsList) && itemsList.length > 0) {
+      return itemsList;
     }
-    return list;
+    try {
+      return getFullProductsCatalogWithStock();
+    } catch (_) {
+      return [];
+    }
   }, [itemsList, catalogTick]);
 
-  // Filter items based on query
-  // Filter items based on query (displays ALL catalog products without artificial cutoffs)
+  // Filter items based on query (computed only when dropdown is open)
   const filteredItems = useMemo(() => {
+    if (!isOpen) return [];
+
     const list = activeItemsList;
     const q = (searchQuery || '').toLowerCase().trim();
     if (!q) return list;
@@ -159,13 +161,13 @@ export default function TypeableProductSelect({
     return list.filter(item => {
       const name = String(item.name || '').toLowerCase();
       const code = String(item.code || '').toLowerCase();
-      const resCode = resolveProductCode(item).toLowerCase();
+      const resCode = code || resolveProductCode(item).toLowerCase();
       const cat = String(item.category || item.description || '').toLowerCase();
       const normName = normalizeProductName(item.name);
       return name.includes(q) || code.includes(q) || (resQ && (code === resQ || resCode === resQ)) || cat.includes(q) ||
         (normQ && normName.includes(normQ));
     });
-  }, [activeItemsList, searchQuery]);
+  }, [isOpen, activeItemsList, searchQuery]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
@@ -490,3 +492,5 @@ export default function TypeableProductSelect({
     </div>
   );
 }
+
+export default React.memo(TypeableProductSelect);

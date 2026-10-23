@@ -66,50 +66,35 @@ export default function CreateBomFormPage(props) {
     };
   }, []);
 
+  const stockLookupMap = React.useMemo(() => {
+    const map = new Map();
+    (itemsList || []).forEach(p => {
+      const st = Number(p.stock !== undefined ? p.stock : (p.availableStock !== undefined ? p.availableStock : 0));
+      const code = String(p.code || '').toLowerCase().trim();
+      const name = String(p.name || '').toLowerCase().trim();
+      const norm = normalizeProductName(p.name);
+      if (code && !map.has(code)) map.set(code, st);
+      if (name && !map.has(name)) map.set(name, st);
+      if (norm && !map.has(norm)) map.set(norm, st);
+      const resCode = resolveProductCode(p).toLowerCase().trim();
+      if (resCode && !map.has(resCode)) map.set(resCode, st);
+    });
+    return map;
+  }, [itemsList]);
+
   const getItemStock = (itemName, itemCode) => {
     if (!itemName && !itemCode) return null;
-    const cleanName = (itemName || '').toLowerCase().trim();
     const cleanCode = (itemCode || '').toLowerCase().trim();
-    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    if (cleanCode && stockLookupMap.has(cleanCode)) return stockLookupMap.get(cleanCode);
+    const cleanName = (itemName || '').toLowerCase().trim();
+    if (cleanName && stockLookupMap.has(cleanName)) return stockLookupMap.get(cleanName);
     const normName = normalizeProductName(itemName);
-
-    // 1. Search in itemsList
-    const found = (itemsList || []).find(p => {
-      const pCode = (p.code || '').toLowerCase().trim();
-      const pResCode = resolveProductCode(p).toLowerCase().trim();
-      const pName = (p.name || '').toLowerCase().trim();
-      const pNorm = normalizeProductName(p.name);
-      return (resolvedCode && (pCode === resolvedCode || pResCode === resolvedCode)) ||
-        (cleanCode && (pCode === cleanCode || pResCode === cleanCode)) ||
-        (normName && pNorm === normName) ||
-        (cleanName && pName === cleanName) ||
-        (cleanName && pName.includes(cleanName)) ||
-        (normName && pNorm.includes(normName));
-    });
-    if (found) {
-      return Number(found.stock !== undefined ? found.stock : (found.availableStock !== undefined ? found.availableStock : 0));
-    }
-
-    // 2. Direct fallback from Central Inventory Store (Inventory Store alone)
-    try {
-      const centralItems = centralInventoryStore.getInventoryItems();
-      if (Array.isArray(centralItems)) {
-        const foundCentral = centralItems.find(it => {
-          const itCode = (it.code || it.sku || '').toLowerCase().trim();
-          const itResCode = resolveProductCode(it).toLowerCase().trim();
-          const itName = (it.name || '').toLowerCase().trim();
-          return (resolvedCode && (itCode === resolvedCode || itResCode === resolvedCode)) ||
-            (cleanCode && (itCode === cleanCode || itResCode === cleanCode)) ||
-            (cleanName && (itName === cleanName || itName.includes(cleanName) || cleanName.includes(itName)));
-        });
-        if (foundCentral) {
-          return Number(foundCentral.stock !== undefined ? foundCentral.stock : (foundCentral.availableStock !== undefined ? foundCentral.availableStock : (foundCentral.physicalStock || 0)));
-        }
-      }
-    } catch (_) {}
-
+    if (normName && stockLookupMap.has(normName)) return stockLookupMap.get(normName);
+    const resolvedCode = resolveProductCode({ name: itemName, code: itemCode }).toLowerCase().trim();
+    if (resolvedCode && stockLookupMap.has(resolvedCode)) return stockLookupMap.get(resolvedCode);
     return null;
   };
+
   const calculateBOMTotals = () => {
     const kitUnitPrice = (selectedPreset && presetKitPrice !== '') ? cleanNum(presetKitPrice, 0) : 0;
     const kitMultiplier = parseInt(String(presetSetCount).replace(/[^0-9]/g, '')) || 1;

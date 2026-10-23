@@ -59,6 +59,17 @@ const loadLocalCustomPresets = () => {
 
 // In-memory active cache for custom presets directly backed by localStorage & Supabase
 let customPresetsCache = loadLocalCustomPresets();
+let cachedActivePresets = null;
+
+const buildActivePresets = () => {
+  const merged = { ...basePresetsMap, ...customPresetsCache };
+  const normalized = {};
+  Object.keys(merged).forEach(key => {
+    normalized[key] = normalizePresetGst(merged[key]);
+  });
+  cachedActivePresets = normalized;
+  return normalized;
+};
 
 /**
  * Synchronize custom presets with server and Supabase cloud store across all systems and devices
@@ -99,11 +110,7 @@ export async function syncPresetsWithCloud() {
           localStorage.setItem("controlroom_presets_store", JSON.stringify(customPresetsCache));
         } catch (_) {}
       }
-      const mergedAll = { ...basePresetsMap, ...customPresetsCache };
-      const normalized = {};
-      Object.keys(mergedAll).forEach(key => {
-        normalized[key] = normalizePresetGst(mergedAll[key]);
-      });
+      const normalized = buildActivePresets();
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("vrm_presets_updated", { detail: normalized }));
       }
@@ -119,12 +126,8 @@ export async function syncPresetsWithCloud() {
  * Get all active presets including custom/edited presets stored in Supabase database
  */
 export function getAllActivePresets() {
-  const merged = { ...basePresetsMap, ...customPresetsCache };
-  const normalized = {};
-  Object.keys(merged).forEach(key => {
-    normalized[key] = normalizePresetGst(merged[key]);
-  });
-  return normalized;
+  if (cachedActivePresets) return cachedActivePresets;
+  return buildActivePresets();
 }
 
 /**
@@ -150,12 +153,7 @@ export function saveCustomPreset(preset) {
       }
     }
 
-    // Create merged allPresets dictionary
-    const merged = { ...basePresetsMap, ...customPresetsCache };
-    const normalized = {};
-    Object.keys(merged).forEach(key => {
-      normalized[key] = normalizePresetGst(merged[key]);
-    });
+    const normalized = buildActivePresets();
 
     // Dispatch real-time update event immediately to all active views and selectors
     if (typeof window !== "undefined") {

@@ -7,7 +7,7 @@ import { VRM_HDG_PRESETS, getAllActivePresets } from '../vrmHdgProposalPresets';
  * Allows both typing to search/filter presets and clicking to open a comprehensive dropdown menu.
  * Displays ALL available presets (master standard + tech support custom presets).
  */
-export default function SearchablePresetSelector({
+function SearchablePresetSelector({
   value,
   onChange,
   activePresetsMap,
@@ -76,6 +76,9 @@ export default function SearchablePresetSelector({
 
   // Categories definition
   const categorizedPresets = useMemo(() => {
+    // Optimization: When dropdown is closed, do NOT compute heavy categories!
+    if (!isOpen) return [];
+
     const categories = [
       { name: 'Tech Support & Custom Presets', match: (p) => Boolean(p.isCustom || (p.id && String(p.id).includes('custom'))) },
       { name: 'GAL Hat Purline Structures (2 Row)', match: (p) => p.category === 'GAL Hat Purline Structures (2 Row)' || (p.label && p.label.includes('GAL Hat Purline (2 Row)')) },
@@ -107,24 +110,35 @@ export default function SearchablePresetSelector({
       );
     });
 
-    const rendered = new Set();
-    const groups = [];
+    const groupsMap = new Map();
+    categories.forEach(c => groupsMap.set(c.name, []));
+    const uncat = [];
 
+    filtered.forEach(p => {
+      let matched = false;
+      for (const cat of categories) {
+        if (cat.match(p)) {
+          groupsMap.get(cat.name).push(p);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) uncat.push(p);
+    });
+
+    const groups = [];
     categories.forEach(cat => {
-      const items = filtered.filter(p => !rendered.has(p.id) && cat.match(p));
-      items.forEach(p => rendered.add(p.id));
-      if (items.length > 0) {
+      const items = groupsMap.get(cat.name);
+      if (items && items.length > 0) {
         groups.push({ category: cat.name, items });
       }
     });
-
-    const remaining = filtered.filter(p => !rendered.has(p.id));
-    if (remaining.length > 0) {
-      groups.push({ category: 'Other Tech Support & Custom Presets', items: remaining });
+    if (uncat.length > 0) {
+      groups.push({ category: 'Other Tech Support & Custom Presets', items: uncat });
     }
 
     return groups;
-  }, [allPresetsList, searchTerm, selectedPresetObj]);
+  }, [isOpen, allPresetsList, searchTerm, selectedPresetObj]);
 
   const handleSelect = (presetId) => {
     const target = presetsStore[presetId] || (VRM_HDG_PRESETS && VRM_HDG_PRESETS[presetId]);
@@ -371,3 +385,5 @@ export default function SearchablePresetSelector({
     </div>
   );
 }
+
+export default React.memo(SearchablePresetSelector);
