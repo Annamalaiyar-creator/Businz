@@ -1894,13 +1894,15 @@ export default function CreateBomFormPage(props) {
                     })();
                     const loggedInOperatorId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim();
 
-                    // PRESERVE ORIGINAL PI SALESPERSON: Prioritize PI salesperson over converting admin
-                    const effectiveSalesPersonName = (pendingPiFromStorage?.salesPerson && pendingPiFromStorage.salesPerson.trim()) ||
-                      (pendingPiFromStorage?.createdBy && pendingPiFromStorage.createdBy.trim()) ||
+                    const explicitSourcePi = String(props.newBomSourcePiNo || props.sourcePiNo || '').trim();
+
+                    // PRESERVE ORIGINAL PI SALESPERSON: Prioritize PI salesperson over converting admin only when explicitly converting
+                    const effectiveSalesPersonName = (explicitSourcePi && pendingPiFromStorage?.salesPerson && pendingPiFromStorage.salesPerson.trim()) ||
+                      (explicitSourcePi && pendingPiFromStorage?.createdBy && pendingPiFromStorage.createdBy.trim()) ||
                       loggedInOperatorName;
 
-                    const effectiveSalesPersonCode = (pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
-                      (pendingPiFromStorage?.createdById && pendingPiFromStorage.createdById.trim()) ||
+                    const effectiveSalesPersonCode = (explicitSourcePi && pendingPiFromStorage?.salesPersonCode && pendingPiFromStorage.salesPersonCode.trim()) ||
+                      (explicitSourcePi && pendingPiFromStorage?.createdById && pendingPiFromStorage.createdById.trim()) ||
                       loggedInOperatorId;
 
                     const effectiveCreatorName = loggedInOperatorName;
@@ -1911,7 +1913,7 @@ export default function CreateBomFormPage(props) {
                       id: finalCode,
                       bomCode: finalCode,
                       code: finalCode,
-                      sourcePiNo: props.newBomSourcePiNo || props.sourcePiNo || pendingPiFromStorage?.sourcePiNo || pendingPiFromStorage?.piNo || pendingPiFromStorage?.id || null,
+                      sourcePiNo: explicitSourcePi || null,
                       date: new Date().toISOString().split('T')[0],
                       createdAt: new Date().toISOString(),
                       customerName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || 'Customer Order',
@@ -2158,6 +2160,7 @@ export default function CreateBomFormPage(props) {
                       setShowBOMForm(false);
                       setBomConfirmModal(null);
                       setCurrentPage(1);
+                      try { localStorage.removeItem('controlroom_pending_pi_to_bom'); } catch (_) {}
                       try {
                         window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: sanitizedNewBom } }));
                         window.dispatchEvent(new Event('central_inventory_updated'));

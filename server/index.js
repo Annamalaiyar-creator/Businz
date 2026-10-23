@@ -3729,6 +3729,19 @@ async function repairBomSequences() {
           converted_bom_code: null,
           converted_bom_no: null
         };
+      } else if (pNo.toLowerCase().includes('122') && (pi.status === 'Converted to BOM' || pi.convertedBomCode || pi.convertedBomNo)) {
+        piUpdatedCount++;
+        piListChanged = true;
+        return {
+          ...pi,
+          status: 'Issued',
+          statusType: 'issued',
+          convertedToBom: false,
+          convertedBomCode: null,
+          convertedBomNo: null,
+          converted_bom_code: null,
+          converted_bom_no: null
+        };
       }
       return pi;
     });
@@ -3800,6 +3813,42 @@ async function repairBomSequences() {
           AND pi_no != 'PI-00061'
           AND id != 'PI-00061'
       `);
+
+      // Safety reconciliation: Unlink any mismatched BOM falsely claiming source_pi_no 122
+      await query(`
+        UPDATE public.bom_orders b
+        SET source_pi_no = null,
+            updated_at = NOW()
+        WHERE (b.source_pi_no ILIKE '%122%')
+          AND NOT EXISTS (
+            SELECT 1 FROM public.proforma_invoices p
+            WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `).catch(() => {});
+
+      // Safely restore PI-122 to Issued if no valid matching BOM exists
+      await query(`
+        UPDATE public.proforma_invoices p
+        SET converted_bom_code = NULL,
+            converted_bom_no = NULL,
+            status = 'Issued',
+            status_type = 'issued',
+            updated_at = NOW()
+        WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
+          AND p.status = 'Converted to BOM'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.bom_orders b
+            WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `).catch(() => {});
     } catch (_) {}
 
     for (const [piNo, info] of Object.entries(targetMap)) {

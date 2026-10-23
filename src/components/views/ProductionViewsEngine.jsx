@@ -1469,6 +1469,8 @@ export default function ProductionViewsEngine(props) {
                 setShowCustomerForm={setShowCustomerForm}
                 customerList={customerList}
                 itemsList={props.itemsList || []}
+                sourcePiNo={props.sourcePiNo || props.newBomSourcePiNo || null}
+                newBomSourcePiNo={props.newBomSourcePiNo || props.sourcePiNo || null}
                 setBomStore={setBomStore}
                 newBomCode={newBomCode}
                 setNewBomCode={setNewBomCode}

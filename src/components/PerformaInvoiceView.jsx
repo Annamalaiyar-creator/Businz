@@ -238,8 +238,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         return false;
       }
 
-      // 1. Strict 1-to-1 match by source PI number (highest authority)
-      if (sPi && sPi === piNum) return true;
+      // 1. Strict 1-to-1 match by source PI number (with customer verification guard)
+      if (sPi && sPi === piNum) {
+        const piCust = String(pi.customerName || pi.vendor || '').trim().toLowerCase();
+        const bCust = String(b.customerName || b.companyName || '').trim().toLowerCase();
+        if (piCust && bCust && piCust !== bCust && !piCust.includes(bCust) && !bCust.includes(piCust)) {
+          return false;
+        }
+        return true;
+      }
 
       // 2. If this BOM is explicitly owned by a DIFFERENT PI, it CANNOT match this PI!
       if (sPi && sPi !== piNum) return false;

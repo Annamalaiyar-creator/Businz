@@ -270,6 +270,46 @@ export async function initPostgresDatabase() {
       console.warn('[PI Seed Error]:', seedErr.message);
     }
 
+    // Safety reconciliation: Fix any falsely-converted PIs whose linked BOM has mismatched customer or items (e.g. PI-122 accidental link)
+    try {
+      await client.query(`
+        UPDATE public.bom_orders b
+        SET source_pi_no = null,
+            updated_at = NOW()
+        WHERE (b.source_pi_no ILIKE '%122%')
+          AND NOT EXISTS (
+            SELECT 1 FROM public.proforma_invoices p
+            WHERE (LOWER(TRIM(p.pi_no)) = LOWER(TRIM(b.source_pi_no)) OR LOWER(TRIM(p.id)) = LOWER(TRIM(b.source_pi_no)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `);
+
+      await client.query(`
+        UPDATE public.proforma_invoices p
+        SET status = 'Issued',
+            status_type = 'issued',
+            converted_bom_no = null,
+            converted_bom_code = null,
+            updated_at = NOW()
+        WHERE (p.pi_no ILIKE '%122%' OR p.id ILIKE '%122%')
+          AND p.status = 'Converted to BOM'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.bom_orders b
+            WHERE (LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.pi_no)) OR LOWER(TRIM(b.source_pi_no)) = LOWER(TRIM(p.id)))
+              AND (
+                LOWER(TRIM(COALESCE(b.customer_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+                OR LOWER(TRIM(COALESCE(b.company_name, ''))) = LOWER(TRIM(COALESCE(p.customer_name, '')))
+              )
+          );
+      `);
+      console.log('✅ [PostgreSQL] Verified PI/BOM conversion link integrity.');
+    } catch (auditErr) {
+      console.warn('[PI/BOM Integrity Audit Notice]:', auditErr.message);
+    }
+
     // Ensure all critical stores are seeded into PostgreSQL so they are permanently preserved in the VPS database
     const storesToSeed = [
       'bom_store',
