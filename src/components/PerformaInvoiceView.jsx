@@ -530,7 +530,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         setPiList(prevList => {
           const merged = new Map();
           (prevList || []).forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), p); });
-          latest.forEach(p => { if (p && p.piNo) merged.set(String(p.piNo).trim().toLowerCase(), normalizePiRecord(p)); });
+          latest.forEach(p => {
+            if (p && p.piNo) {
+              const k = String(p.piNo).trim().toLowerCase();
+              const existing = merged.get(k);
+              if (!existing) {
+                merged.set(k, normalizePiRecord(p));
+              } else {
+                const incomingTime = new Date(p.updatedAt || p.updated_at || p.createdAt || p.created_at || 0).getTime();
+                const existingTime = new Date(existing.updatedAt || existing.updated_at || existing.createdAt || existing.created_at || 0).getTime();
+                if (incomingTime >= existingTime) {
+                  merged.set(k, normalizePiRecord({ ...existing, ...p }));
+                }
+              }
+            }
+          });
           return Array.from(merged.values());
         });
         setTableLoading(false);
@@ -541,6 +555,27 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (sub && sub.unsubscribe) sub.unsubscribe();
     };
   }, [storageKey, isSalesRole]);
+
+  const handlePrintTemplatePiUpdate = (updatedPi) => {
+    if (!updatedPi || !updatedPi.piNo) return;
+    const cleanNo = String(updatedPi.piNo).trim().toLowerCase();
+    setPiList(prevList => {
+      const exists = (prevList || []).some(p => String(p.piNo || p.id).trim().toLowerCase() === cleanNo);
+      let nextList;
+      if (exists) {
+        nextList = (prevList || []).map(p => String(p.piNo || p.id).trim().toLowerCase() === cleanNo ? normalizePiRecord({ ...p, ...updatedPi }) : p);
+      } else {
+        nextList = [normalizePiRecord(updatedPi), ...(prevList || [])];
+      }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(nextList));
+        localStorage.setItem('controlroom_sales_pi_store', JSON.stringify(nextList));
+        saveCloudStoreImmediate('sales_pi_store', nextList);
+        window.dispatchEvent(new Event('controlroom_storage_update'));
+      } catch (_) {}
+      return nextList;
+    });
+  };
 
   const updatePiList = (newList) => {
     setPiList(newList);
@@ -7170,6 +7205,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         <VRMProformaInvoicePrintTemplate
           piData={printModalPi}
           onClose={() => setPrintModalPi(null)}
+          onSavePi={handlePrintTemplatePiUpdate}
         />
       )}
 
