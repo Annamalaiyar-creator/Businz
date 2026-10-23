@@ -248,6 +248,22 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
     return parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
   };
 
+  // Helper to determine strictly the 1-set quantity for BOM printout (Option 2)
+  const getItemPerSetQty = (item, setCount) => {
+    // 1. Check if explicit baseQty (quantity per 1 set) is available
+    if (item.baseQty !== undefined && item.baseQty !== null && item.baseQty !== '' && !isNaN(parseFloat(item.baseQty))) {
+      const bq = parseFloat(item.baseQty);
+      if (bq > 0) return Math.round(bq * 100) / 100;
+    }
+    // 2. If setCount is greater than 1, calculate baseQty = totalQty / setCount
+    const sCount = Number(setCount || item.setCount || b.presetSetCount || matchedPi?.presetSetCount || 1);
+    const total = parseFloat(item.qty || item.bomQty || item.quantity || item.targetQty || item.orderedQty || item.packedQty || item.itemQty || 0) || 0;
+    if (sCount > 1 && total > 0) {
+      return Math.round((total / sCount) * 100) / 100;
+    }
+    return total;
+  };
+
   // Extract clean addresses
   const bObj = b.billingAddressObj || {};
   let rawBAddr = bObj.address || b.billingAddress || b.billingStreet || b.customerBillingAddress || '';
@@ -324,7 +340,10 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
   }
 
   const totalQuantity = Math.round(
-    enrichedItems.reduce((sum, it) => sum + getItemQty(it), 0) * 100
+    enrichedItems.reduce((sum, it) => {
+      const itSetCount = it.setCount || (it.presetGroupId && kitGroupsMap.get(it.presetGroupId)?.setCount) || b.presetSetCount || matchedPi?.presetSetCount || 1;
+      return sum + getItemPerSetQty(it, itSetCount);
+    }, 0) * 100
   ) / 100;
   const totalQuantityTaken = items.reduce((sum, item) => sum + (parseFloat(item.quantityTaken || item.qtyTaken || item.takenQty || 0) || 0), 0);
 
@@ -686,7 +705,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>Set</th>
             <th style={{ padding: '8px 6px', width: '65px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '12.5px', boxSizing: 'border-box' }}>UOM</th>
             <th style={{ padding: '8px 6px', width: '95px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.3)', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>
-              Quantity
+              Qty / Set
             </th>
             <th style={{ padding: '8px 6px', width: '125px', textAlign: 'center', borderBottom: '1px solid #0E7490', fontSize: '13px', boxSizing: 'border-box' }}>Quantity Taken</th>
           </tr>
@@ -770,7 +789,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
 
                     {/* Items in this kit */}
                     {kg.items.map((item, itemIdx) => {
-                      const qty = getItemQty(item);
+                      const qty = getItemPerSetQty(item, kg.setCount);
                       const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                         ? item.quantityTaken
                         : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
@@ -942,16 +961,17 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
             </React.Fragment>
           ) : (
             enrichedItems.map((item, idx) => {
-              const qty = getItemQty(item);
+              const fallbackMid = Math.floor(enrichedItems.length / 2);
+              const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
+              const qty = fallbackSetVal && Number(fallbackSetVal) > 1
+                ? getItemPerSetQty(item, fallbackSetVal)
+                : getItemQty(item);
               const qtyTaken = (item.quantityTaken !== undefined && item.quantityTaken !== null && item.quantityTaken !== '')
                 ? item.quantityTaken
                 : ((item.qtyTaken !== undefined && item.qtyTaken !== null && item.qtyTaken !== '')
                   ? item.qtyTaken
                   : ((item.takenQty !== undefined && item.takenQty !== null && item.takenQty !== '') ? item.takenQty : ''));
               const itemName = item.name || item.itemName || item.productName || item.item_name || 'Custom Product Item';
-
-              const fallbackMid = Math.floor(enrichedItems.length / 2);
-              const fallbackSetVal = item.setCount || b.presetSetCount || matchedPi?.presetSetCount || '';
 
               return (
                 <tr
@@ -1013,7 +1033,7 @@ export function VRMBomPrintSheet({ bomData, id = "printable-bom-document", isSal
           <tfoot style={{ display: 'table-row-group' }}>
             <tr style={{ backgroundColor: '#F1F5F9', borderTop: '2px solid #0E7490', fontWeight: '800', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
               <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right', color: '#475569', fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Total Quantity:
+                Total (Qty / Set):
               </td>
               <td style={{ padding: '8px 6px', textAlign: 'center', color: '#0E7490', fontSize: '15px', fontWeight: '900', borderRight: '1px solid #CBD5E1' }}>
                 {totalQuantity}
