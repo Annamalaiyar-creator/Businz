@@ -353,10 +353,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   );
 
   const getEffectiveSalesPerson = () => {
-    if (userRole === 'Sales Head') return 'Vijay';
+    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay') return currentEmpName;
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+    } catch (_) {}
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null') return currentEmpName;
     const storedUser = localStorage.getItem('controlroom_logged_user');
     if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') return storedUser.trim();
+    if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     return userRole || 'Sales Executive';
@@ -914,8 +922,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Resolve currently logged in user dynamically (matching Header & BOM creation)
   const getActiveUserName = () => {
-    if (userRole === 'Sales Head') return 'Vijay';
     const stored = localStorage.getItem('controlroom_logged_user_name');
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '' && stored.toLowerCase() !== 'vijay') return stored.trim();
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
+    } catch (_) {}
     if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '') return stored.trim();
     try {
       const u = JSON.parse(localStorage.getItem('controlroom_logged_user') || '{}');
@@ -923,6 +938,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       if (u.fullName) return u.fullName;
       if (u.username) return u.username;
     } catch (e) {}
+    if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'CEO' || userRole === 'Technical Administrator') return 'Annamalaiyar';
     return 'Mohit JV';
   };

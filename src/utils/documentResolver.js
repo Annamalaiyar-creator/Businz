@@ -84,7 +84,7 @@ export function resolveDocumentUrl(doc) {
     }
     // Direct static URL fallback for files stored in bom-documents
     if (doc.storagePath && typeof doc.storagePath === 'string') {
-      const cleanPath = doc.storagePath.replace(/^\/+/, '');
+      const cleanPath = doc.storagePath.replace(/^\/+/, '').replace(/^bom-documents\//, '');
       return `/api/uploads/bom-documents/${cleanPath}`;
     }
   }
@@ -108,13 +108,17 @@ export function resolveDocumentUrl(doc) {
 
   // 5. Direct storage path fallback even without storageBucket
   if (doc.storagePath && typeof doc.storagePath === 'string') {
-    const cleanPath = doc.storagePath.replace(/^\/+/, '');
+    const cleanPath = doc.storagePath.replace(/^\/+/, '').replace(/^bom-documents\//, '');
     return `/api/uploads/bom-documents/${cleanPath}`;
   }
 
   // 6. Check local media cache by document name
   if (doc.name) {
     const fromCache = getMediaFromCache(doc.name);
+    if (fromCache) return fromCache;
+  }
+  if (doc.originalName) {
+    const fromCache = getMediaFromCache(doc.originalName);
     if (fromCache) return fromCache;
   }
 
@@ -148,18 +152,26 @@ export async function resolveDocumentUrlAsync(doc, bomCode = null) {
   if (isStorageDocument(doc)) {
     try {
       const targetBom = bomCode || doc.storagePath.split('/')[0];
-      const sessionId = typeof localStorage !== 'undefined' ? localStorage.getItem('controlroom_device_session_id') : null;
+      const sessionId = typeof localStorage !== 'undefined' ?
+        (localStorage.getItem('controlroom_device_session_id') ||
+         localStorage.getItem('businz_device_session_id') ||
+         localStorage.getItem('token')) : null;
 
       const headers = { 'Content-Type': 'application/json' };
       if (sessionId) headers['x-session-id'] = sessionId;
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => { try { controller.abort(); } catch (_) {} }, 3500);
+
       const res = await fetch(
         `/api/boms/${encodeURIComponent(targetBom)}/documents/signed-url?path=${encodeURIComponent(doc.storagePath)}`,
-        { headers }
-      );
+        { headers, signal: controller.signal }
+      ).catch(() => null);
 
-      if (res.ok) {
-        const json = await res.json();
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
         if (json && json.signedUrl) {
           let sUrl = json.signedUrl;
           if (sUrl.startsWith('/uploads/')) sUrl = `/api${sUrl}`;
@@ -177,7 +189,7 @@ export async function resolveDocumentUrlAsync(doc, bomCode = null) {
 
     // Direct static path fallback
     if (doc.storagePath) {
-      const cleanPath = doc.storagePath.replace(/^\/+/, '');
+      const cleanPath = doc.storagePath.replace(/^\/+/, '').replace(/^bom-documents\//, '');
       const directUrl = `/api/uploads/bom-documents/${cleanPath}`;
       return directUrl;
     }
@@ -186,9 +198,17 @@ export async function resolveDocumentUrlAsync(doc, bomCode = null) {
   // Check server media finder as resilient fallback
   if (docName) {
     try {
-      const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
-      if (res.ok) {
-        const data = await res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => { try { controller.abort(); } catch (_) {} }, 3500);
+
+      const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`, {
+        signal: controller.signal
+      }).catch(() => null);
+
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) {
+        const data = await res.json().catch(() => null);
         if (data?.found && data?.url) {
           let u = data.url;
           if (u.startsWith('/uploads/')) u = `/api${u}`;

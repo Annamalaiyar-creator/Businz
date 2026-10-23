@@ -529,8 +529,19 @@ export default function BomOrdersView(props) {
     return { isValid: missingList.length === 0, missingList, errors };
   };
   const getEffectiveSalesPerson = () => {
-    if (userRole === 'Sales Head') return 'Vijay';
     const storedName = localStorage.getItem('controlroom_logged_user_name');
+    if (storedName && storedName.trim() && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') {
+      return storedName.trim();
+    }
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
+      if (match && (match.employee_name || match.name)) {
+        return match.employee_name || match.name;
+      }
+    } catch (_) {}
     if (storedName && storedName.trim() && storedName !== 'undefined' && storedName !== 'null') {
       return storedName.trim();
     }
@@ -542,6 +553,7 @@ export default function BomOrdersView(props) {
     if (storedEmp && storedEmp.trim() && storedEmp !== 'undefined' && storedEmp !== 'null') {
       return storedEmp.trim();
     }
+    if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Accounts Executive') return 'Priya';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';

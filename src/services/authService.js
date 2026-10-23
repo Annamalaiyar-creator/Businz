@@ -19,7 +19,7 @@ export const DEFAULT_CORE_EMPLOYEES = [
   },
   {
     employee_code: "SH-VRM001",
-    employee_name: "Vijay",
+    employee_name: "Sales Head",
     email: "sales@vrm.com",
     password: "12345",
     role: "Sales Head",
@@ -27,7 +27,7 @@ export const DEFAULT_CORE_EMPLOYEES = [
   },
   {
     employee_code: "SH-1000",
-    employee_name: "Vijay",
+    employee_name: "Sales Head",
     email: "vijay@vrmstructures.in",
     password: "12345",
     role: "Sales Head",
@@ -162,10 +162,9 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
 
   const finalRoleName = accountRecord.role;
   let finalDisplayName = accountRecord.employee_name || cleanUsername;
-  if (finalRoleName === 'Sales Head' || cleanEmpCodeNorm.startsWith('SH')) {
-    if (!finalDisplayName || finalDisplayName.toLowerCase() === 'sales' || finalDisplayName.toLowerCase() === 'sales head' || finalDisplayName.toLowerCase() === 'sh' || finalDisplayName.includes('@')) {
-      finalDisplayName = 'Vijay';
-    }
+  if (!accountRecord.employee_name && cleanUsername.includes('@')) {
+    const emailPrefix = cleanUsername.split('@')[0].replace(/[._-]/g, ' ');
+    finalDisplayName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
   }
 
   // Developer / Technical Administrator accounts (TA-VRM###) bypass access approval requirements

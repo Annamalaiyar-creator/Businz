@@ -234,16 +234,16 @@ export default function DashboardFullReference({ userRole }) {
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em', wordBreak: 'break-word' }}>
               Welcome back, {(() => {
-                if (userRole === 'Sales Head') return 'Vijay';
                 const storedName = localStorage.getItem('controlroom_logged_user_name');
-                if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
+                if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
                 try {
                   const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
                   const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
                   const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-                  const match = allEmps.find(e => e && (e.role === userRole || (userRole.includes('Supervisor') && String(e.role).includes('Supervisor')) || (userRole.includes('Dispatch') && String(e.role).includes('Dispatch'))));
+                  const match = allEmps.find(e => e && e.role === userRole && e.employee_name && e.employee_name.toLowerCase() !== 'vijay');
                   if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
                 } catch(e) {}
+                if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
                 if (userRole === 'Production Head') return 'Senthil Kumar';
                 if (userRole === 'Technical Administrator') return 'Annamalaiyar';
                 if (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director') return 'Velmurugan Rathinam';
@@ -252,7 +252,7 @@ export default function DashboardFullReference({ userRole }) {
                 if (userRole === 'Floor Employee') return 'Floor Employee';
                 if (userRole === 'Accounts Head') return 'Venkatesh';
                 if (userRole === 'Accounts Executive') return 'Priya';
-                if (userRole === 'Sales Head') return 'Vijay';
+                if (userRole === 'Sales Head') return 'Sales Head';
                 if (userRole === 'Sales Executive') return localStorage.getItem('controlroom_logged_user_name') || 'Sales Executive';
                 if (userRole === 'Design Engineer') return 'Dinesh';
                 if (userRole === 'Design Executive') return 'Kavitha';

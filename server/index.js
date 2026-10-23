@@ -1703,6 +1703,51 @@ app.post('/api/media/upload', async (req, res) => {
 });
 
 // 🔍 MEDIA FINDER API (Locates existing uploaded files on disk by original name)
+let memoryMediaCache = null;
+let memoryMediaCacheMtime = 0;
+let cachedUploadsFileList = null;
+let lastUploadsFileListTime = 0;
+
+function getCachedMediaMap() {
+  const mediaCachePath = getStoreFilePath('media_cache.json');
+  try {
+    if (fs.existsSync(mediaCachePath)) {
+      const stats = fs.statSync(mediaCachePath);
+      if (!memoryMediaCache || memoryMediaCacheMtime !== stats.mtimeMs) {
+        memoryMediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8') || '{}');
+        memoryMediaCacheMtime = stats.mtimeMs;
+      }
+      return memoryMediaCache;
+    }
+  } catch (_) {}
+  return memoryMediaCache || {};
+}
+
+function getCachedUploadsFileList(dir) {
+  const now = Date.now();
+  if (cachedUploadsFileList && (now - lastUploadsFileListTime < 20000)) {
+    return cachedUploadsFileList;
+  }
+  const findFilesRecursively = (d) => {
+    let results = [];
+    try {
+      const entries = fs.readdirSync(d, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(d, entry.name);
+        if (entry.isDirectory()) {
+          results = results.concat(findFilesRecursively(fullPath));
+        } else if (entry.isFile()) {
+          results.push(fullPath);
+        }
+      }
+    } catch (_) {}
+    return results;
+  };
+  cachedUploadsFileList = findFilesRecursively(dir);
+  lastUploadsFileListTime = now;
+  return cachedUploadsFileList;
+}
+
 app.get('/api/media/find/:name', (req, res) => {
   try {
     const rawSearch = decodeURIComponent(req.params.name || '').toLowerCase().trim();
@@ -1710,48 +1755,48 @@ app.get('/api/media/find/:name', (req, res) => {
       return res.json({ found: false });
     }
 
-    // 1. Check server media_cache.json
-    const mediaCachePath = getStoreFilePath('media_cache.json');
-    if (fs.existsSync(mediaCachePath)) {
-      try {
-        const mediaCache = JSON.parse(fs.readFileSync(mediaCachePath, 'utf8'));
-        for (const [k, v] of Object.entries(mediaCache)) {
-          const lowerK = String(k || '').toLowerCase();
-          if (lowerK === rawSearch || lowerK.includes(rawSearch) || rawSearch.includes(lowerK)) {
-            return res.json({ found: true, url: v, filename: k });
-          }
+    // Fast Path 1: Check in-memory media cache
+    const mediaCache = getCachedMediaMap();
+    if (mediaCache && typeof mediaCache === 'object') {
+      const normalizedSearch = rawSearch.replace(/[\s_]+/g, ' ').trim();
+      for (const [k, v] of Object.entries(mediaCache)) {
+        const lowerK = String(k || '').toLowerCase();
+        const normK = lowerK.replace(/[\s_]+/g, ' ').trim();
+        if (lowerK === rawSearch || normK === normalizedSearch || lowerK.includes(rawSearch) || rawSearch.includes(lowerK)) {
+          return res.json({ found: true, url: v, filename: k });
         }
-      } catch (_) {}
+      }
     }
 
-    // 2. Check uploadsDir recursively (including bom-documents subdirectories)
+    // Fast Path 2: Check direct physical files in uploadsDir
     if (fs.existsSync(uploadsDir)) {
-      const findFilesRecursively = (dir) => {
-        let results = [];
-        try {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-              results = results.concat(findFilesRecursively(fullPath));
-            } else if (entry.isFile()) {
-              results.push(fullPath);
-            }
-          }
-        } catch (_) {}
-        return results;
-      };
+      const sanitizedName = rawSearch.replace(/[^a-z0-9._-]/gi, '_');
+      const directCandidates = [
+        path.join(uploadsDir, rawSearch),
+        path.join(uploadsDir, sanitizedName),
+        path.join(uploadsDir, 'bom-documents', rawSearch),
+        path.join(uploadsDir, 'bom-documents', sanitizedName)
+      ];
 
-      const allFiles = findFilesRecursively(uploadsDir);
+      for (const cand of directCandidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          const rel = path.relative(uploadsDir, cand).replace(/\\/g, '/');
+          return res.json({ found: true, url: `/api/uploads/${rel}`, filename: path.basename(cand) });
+        }
+      }
+
+      // Fast Path 3: Cached recursive search across uploadsDir
+      const allFiles = getCachedUploadsFileList(uploadsDir);
       // Exact filename match
-      const exact = allFiles.find(f => path.basename(f).toLowerCase() === rawSearch);
+      const exact = allFiles.find(f => path.basename(f).toLowerCase() === rawSearch || path.basename(f).toLowerCase() === sanitizedName);
       if (exact) {
         const rel = path.relative(uploadsDir, exact).replace(/\\/g, '/');
         return res.json({ found: true, url: `/api/uploads/${rel}`, filename: path.basename(exact) });
       }
+
       // Base slug match (ignoring timestamps and special characters)
       const searchBase = path.basename(rawSearch, path.extname(rawSearch)).replace(/[^a-z0-9]/gi, '').toLowerCase();
-      if (searchBase) {
+      if (searchBase && searchBase.length >= 3) {
         const matched = allFiles.find(f => {
           const fBase = path.basename(f, path.extname(f)).toLowerCase().replace(/[^a-z0-9]/gi, '');
           return fBase && (fBase.includes(searchBase) || searchBase.includes(fBase));

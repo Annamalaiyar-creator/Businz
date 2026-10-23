@@ -31,12 +31,16 @@ export default function AccountsVerificationModal({
   const [accountsBomViewMode, setAccountsBomViewMode] = useState('paper');
   const [resolvedProofDataUrl, setResolvedProofDataUrl] = useState(null);
   const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
+  const [isResolvingProof, setIsResolvingProof] = useState(false);
+  const [isResolvingAddressProof, setIsResolvingAddressProof] = useState(false);
 
   useEffect(() => {
     let active = true;
     if (!accountsVerificationModal) {
       setResolvedProofDataUrl(null);
       setResolvedAddressProofDataUrl(null);
+      setIsResolvingProof(false);
+      setIsResolvingAddressProof(false);
       return;
     }
 
@@ -85,14 +89,23 @@ export default function AccountsVerificationModal({
     if (immediate && !immediate.startsWith('blob:')) {
       if (immediate.startsWith('/uploads/')) immediate = `/api${immediate}`;
       setResolvedProofDataUrl(immediate);
+      setIsResolvingProof(false);
     } else if (rawProof || docName) {
+      setIsResolvingProof(true);
       resolveDocumentUrlAsync(rawProof || docName, bCode).then(sUrl => {
-        if (active && sUrl) {
-          const cleanUrl = sUrl.startsWith('/uploads/') ? `/api${sUrl}` : sUrl;
-          setResolvedProofDataUrl(cleanUrl);
-          if (docName) saveMediaToCache(docName, cleanUrl);
+        if (active) {
+          if (sUrl) {
+            const cleanUrl = sUrl.startsWith('/uploads/') ? `/api${sUrl}` : sUrl;
+            setResolvedProofDataUrl(cleanUrl);
+            if (docName) saveMediaToCache(docName, cleanUrl);
+          }
+          setIsResolvingProof(false);
         }
+      }).catch(() => {
+        if (active) setIsResolvingProof(false);
       });
+    } else {
+      setIsResolvingProof(false);
     }
 
     // 2. Resolve Delivery Address Proof
@@ -123,14 +136,23 @@ export default function AccountsVerificationModal({
     if (immediateAddr && !immediateAddr.startsWith('blob:')) {
       if (immediateAddr.startsWith('/uploads/')) immediateAddr = `/api${immediateAddr}`;
       setResolvedAddressProofDataUrl(immediateAddr);
+      setIsResolvingAddressProof(false);
     } else if (rawAddressProof || addrDocName) {
+      setIsResolvingAddressProof(true);
       resolveDocumentUrlAsync(rawAddressProof || addrDocName, bCode).then(aUrl => {
-        if (active && aUrl) {
-          const cleanUrl = aUrl.startsWith('/uploads/') ? `/api${aUrl}` : aUrl;
-          setResolvedAddressProofDataUrl(cleanUrl);
-          if (addrDocName) saveMediaToCache(addrDocName, cleanUrl);
+        if (active) {
+          if (aUrl) {
+            const cleanUrl = aUrl.startsWith('/uploads/') ? `/api${aUrl}` : aUrl;
+            setResolvedAddressProofDataUrl(cleanUrl);
+            if (addrDocName) saveMediaToCache(addrDocName, cleanUrl);
+          }
+          setIsResolvingAddressProof(false);
         }
+      }).catch(() => {
+        if (active) setIsResolvingAddressProof(false);
       });
+    } else {
+      setIsResolvingAddressProof(false);
     }
 
     return () => { active = false; };
@@ -896,7 +918,13 @@ export default function AccountsVerificationModal({
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button
                       type="button"
-                      onClick={() => setViewingProofDocModal(accountsVerificationModal)}
+                      onClick={() => setViewingProofDocModal({
+                        ...accountsVerificationModal,
+                        targetDoc: rawProof,
+                        targetDocUrl: pDocDataUrl,
+                        targetDocName: docName,
+                        docTitle: 'Payment Proof Document & Remittance Slip'
+                      })}
                       style={{
                         backgroundColor: '#EFF6FF',
                         border: '1px solid #BFDBFE',
@@ -951,7 +979,13 @@ export default function AccountsVerificationModal({
                     flexWrap: 'wrap'
                   }}>
                     <div
-                      onClick={() => setViewingProofDocModal(accountsVerificationModal)}
+                      onClick={() => setViewingProofDocModal({
+                        ...accountsVerificationModal,
+                        targetDoc: rawProof,
+                        targetDocUrl: pDocDataUrl,
+                        targetDocName: docName,
+                        docTitle: 'Payment Proof Document & Remittance Slip'
+                      })}
                       style={{
                         cursor: 'pointer',
                         width: '140px',
@@ -981,11 +1015,24 @@ export default function AccountsVerificationModal({
                           alt="Payment Proof"
                           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                           onError={(e) => {
-                            if (docName && !pDocDataUrl.includes('/api/uploads/')) {
-                              e.currentTarget.src = `/api/uploads/${encodeURIComponent(docName)}`;
+                            if (docName) {
+                              const cleanName = encodeURIComponent(docName);
+                              if (!e.currentTarget.src.includes(`/api/uploads/${cleanName}`)) {
+                                e.currentTarget.src = `/api/uploads/${cleanName}`;
+                                return;
+                              }
                             }
+                            e.currentTarget.style.display = 'none';
                           }}
                         />
+                      ) : !isResolvingProof ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#2563EB', textAlign: 'center', padding: '4px' }}>
+                          <FileText size={28} />
+                          <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {docName || 'Payment Slip'}
+                          </span>
+                          <span style={{ fontSize: '9px', color: '#2563EB', fontWeight: '700' }}>Click to View</span>
+                        </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#0E7490' }}>
                           <Loader2 className="animate-spin" size={20} />
@@ -1042,7 +1089,13 @@ export default function AccountsVerificationModal({
                   </div>
                 ) : (
                   <div
-                    onClick={() => setViewingProofDocModal(accountsVerificationModal)}
+                    onClick={() => setViewingProofDocModal({
+                      ...accountsVerificationModal,
+                      targetDoc: rawProof,
+                      targetDocUrl: pDocDataUrl,
+                      targetDocName: docName,
+                      docTitle: 'Payment Proof Document & Remittance Slip'
+                    })}
                     style={{
                       backgroundColor: '#F8FAFC',
                       border: '1px solid #E2E8F0',
@@ -1078,7 +1131,13 @@ export default function AccountsVerificationModal({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setViewingProofDocModal(accountsVerificationModal);
+                          setViewingProofDocModal({
+                            ...accountsVerificationModal,
+                            targetDoc: rawProof,
+                            targetDocUrl: pDocDataUrl,
+                            targetDocName: docName,
+                            docTitle: 'Payment Proof Document & Remittance Slip'
+                          });
                         }}
                         style={{
                           backgroundColor: '#EFF6FF',
@@ -1608,7 +1667,10 @@ export default function AccountsVerificationModal({
         <RecordedProofViewerModal
           viewingProofDocModal={viewingProofDocModal}
           onClose={() => setViewingProofDocModal(null)}
-          initialResolvedUrl={resolvedProofDataUrl}
+          initialResolvedUrl={
+            viewingProofDocModal.targetDocUrl ||
+            (viewingProofDocModal.docTitle?.includes('Address') ? resolvedAddressProofDataUrl : resolvedProofDataUrl)
+          }
           custNameText={custNameText}
           orderValue={orderValue}
           payTypeText={payTypeText}
@@ -1626,25 +1688,30 @@ function RecordedProofViewerModal({
   orderValue,
   payTypeText
 }) {
-  const [docUrl, setDocUrl] = useState(initialResolvedUrl || null);
-  const [loading, setLoading] = useState(!initialResolvedUrl);
+  const isAddressDoc = Boolean(
+    viewingProofDocModal?.docTitle?.toLowerCase().includes('address') ||
+    viewingProofDocModal?.targetDocName?.toLowerCase().includes('address')
+  );
 
-  const rawProof = viewingProofDocModal.targetDoc ||
-    viewingProofDocModal.deliveryAddressProofDoc ||
-    viewingProofDocModal.addressProofDoc ||
-    viewingProofDocModal.balancePaymentProofDoc ||
-    viewingProofDocModal.balanceProofDoc ||
-    viewingProofDocModal.payments?.balanceProofDocObj ||
-    viewingProofDocModal.payments?.balanceProofDoc ||
-    viewingProofDocModal.salesPoDetails?.balanceProofDocObj ||
-    viewingProofDocModal.paymentProofDoc ||
-    viewingProofDocModal.payments?.proofDocObj ||
-    viewingProofDocModal.payments?.proofDoc ||
-    viewingProofDocModal.proofDoc ||
-    viewingProofDocModal.salesPoDetails?.proofDocObj;
+  const rawProof = viewingProofDocModal?.targetDoc ||
+    (isAddressDoc ? (
+      viewingProofDocModal?.deliveryAddressProofDoc ||
+      viewingProofDocModal?.addressProofDoc ||
+      viewingProofDocModal?.deliveryProofDoc
+    ) : (
+      viewingProofDocModal?.paymentProofDoc ||
+      viewingProofDocModal?.payments?.proofDocObj ||
+      viewingProofDocModal?.payments?.proofDoc ||
+      viewingProofDocModal?.balancePaymentProofDoc ||
+      viewingProofDocModal?.balanceProofDoc ||
+      viewingProofDocModal?.proofDoc ||
+      viewingProofDocModal?.salesPoDetails?.proofDocObj
+    )) ||
+    viewingProofDocModal?.deliveryAddressProofDoc ||
+    viewingProofDocModal?.addressProofDoc;
 
-  let docName = null;
-  if (rawProof) {
+  let docName = viewingProofDocModal?.targetDocName || null;
+  if (!docName && rawProof) {
     if (typeof rawProof === 'string' && !rawProof.startsWith('data:')) {
       docName = rawProof;
     } else if (rawProof.name) {
@@ -1653,32 +1720,54 @@ function RecordedProofViewerModal({
       docName = rawProof.originalName;
     }
   }
-  if (!docName && viewingProofDocModal.balancePaymentProofDocName) {
-    docName = viewingProofDocModal.balancePaymentProofDocName;
-  }
-  if (!docName && viewingProofDocModal.balanceProofDocName) {
-    docName = viewingProofDocModal.balanceProofDocName;
-  }
-  if (!docName && viewingProofDocModal.paymentProofDocName) {
-    docName = viewingProofDocModal.paymentProofDocName;
+  if (!docName) {
+    docName = isAddressDoc
+      ? (viewingProofDocModal?.deliveryAddressProofDocName || viewingProofDocModal?.addressProofDocName)
+      : (viewingProofDocModal?.paymentProofDocName || viewingProofDocModal?.balancePaymentProofDocName || viewingProofDocModal?.balanceProofDocName);
   }
 
-  const bCode = viewingProofDocModal.bomCode || viewingProofDocModal.code || 'BOM-2026';
-  const cName = viewingProofDocModal.customerName || viewingProofDocModal.companyName || custNameText;
-  const amtVal = parseFloat(viewingProofDocModal.grandTotal || orderValue || 0);
-  const pType = viewingProofDocModal.paymentType || payTypeText || '100% Advance';
+  const explicitUrl = viewingProofDocModal?.targetDocUrl || initialResolvedUrl || null;
+  const [docUrl, setDocUrl] = useState(explicitUrl);
+  const [loading, setLoading] = useState(!explicitUrl);
+  const [imageError, setImageError] = useState(false);
+
+  // Sync with explicit URL updates from parent
+  useEffect(() => {
+    if (explicitUrl) {
+      setDocUrl(explicitUrl);
+      setLoading(false);
+      setImageError(false);
+    }
+  }, [explicitUrl]);
+
+  const bCode = viewingProofDocModal?.bomCode || viewingProofDocModal?.code || 'BOM-2026';
+  const cName = viewingProofDocModal?.customerName || viewingProofDocModal?.companyName || custNameText;
+  const amtVal = parseFloat(viewingProofDocModal?.grandTotal || orderValue || 0);
+  const pType = viewingProofDocModal?.paymentType || payTypeText || '100% Advance';
 
   useEffect(() => {
     let active = true;
 
-    // 1. Direct synchronous values
+    // 1. If explicit URL already provided, we're done
+    if (explicitUrl) {
+      setDocUrl(explicitUrl);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Direct synchronous values
     let direct = (typeof rawProof === 'string' && rawProof.startsWith('data:'))
       ? rawProof
-      : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || viewingProofDocModal.proofDocData || viewingProofDocModal.payments?.proofDocData || null);
+      : (rawProof?.dataUrl || rawProof?.fileData || rawProof?.url || (!isAddressDoc ? (viewingProofDocModal?.proofDocData || viewingProofDocModal?.payments?.proofDocData) : null) || null);
+
     if (!direct && docName) {
       direct = getMediaFromCache(docName);
     }
-    if (direct) {
+    if (!direct && rawProof) {
+      direct = resolveDocumentUrl(rawProof);
+    }
+    if (direct && !direct.startsWith('blob:')) {
+      if (direct.startsWith('/uploads/')) direct = `/api${direct}`;
       setDocUrl(direct);
       setLoading(false);
       return;
@@ -1686,67 +1775,99 @@ function RecordedProofViewerModal({
 
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      try { controller.abort(); } catch (_) {}
+    }, 4000); // 4-second maximum safety timeout to guarantee loading never hangs
+
     const resolveAsync = async () => {
-      // 2. Storage resolver (Supabase bucket)
-      if (rawProof && (rawProof.storageBucket || rawProof.storagePath)) {
-        try {
-          const url = await resolveDocumentUrlAsync(rawProof, bCode);
-          if (active && url) {
-            setDocUrl(url);
-            if (docName) saveMediaToCache(docName, url);
-            setLoading(false);
-            return;
-          }
-        } catch (_) {}
-      }
-
-      // 3. Media cache async (IndexedDB)
-      if (docName) {
-        try {
-          const cUrl = await getMediaFromCacheAsync(docName);
-          if (active && cUrl) {
-            setDocUrl(cUrl);
-            setLoading(false);
-            return;
-          }
-        } catch (_) {}
-
-        // 4. Server find API
-        try {
-          const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`);
-          const data = await res.json();
-          if (active && data?.found && data?.url) {
-            setDocUrl(data.url);
-            saveMediaToCache(docName, data.url);
-            setLoading(false);
-            return;
-          }
-        } catch (_) {}
-
-        // 5. Direct /api/uploads fallback
-        if (active) {
-          const directUploadUrl = `/api/uploads/${encodeURIComponent(docName)}`;
+      try {
+        // 3. Storage resolver (Supabase / VPS bucket)
+        if (rawProof && (rawProof.storageBucket || rawProof.storagePath)) {
           try {
-            const headRes = await fetch(directUploadUrl, { method: 'HEAD' });
-            if (headRes.ok && active) {
-              setDocUrl(directUploadUrl);
+            const url = await resolveDocumentUrlAsync(rawProof, bCode);
+            if (active && url) {
+              const cleanUrl = url.startsWith('/uploads/') ? `/api${url}` : url;
+              setDocUrl(cleanUrl);
+              if (docName) saveMediaToCache(docName, cleanUrl);
               setLoading(false);
               return;
             }
           } catch (_) {}
         }
-      }
 
-      if (active) setLoading(false);
+        // 4. Media cache async (IndexedDB)
+        if (docName) {
+          try {
+            const cUrl = await getMediaFromCacheAsync(docName);
+            if (active && cUrl) {
+              setDocUrl(cUrl);
+              setLoading(false);
+              return;
+            }
+          } catch (_) {}
+
+          // 5. Server media find API
+          try {
+            const res = await fetch(`/api/media/find/${encodeURIComponent(docName)}`, { signal: controller.signal });
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              if (active && data?.found && data?.url) {
+                const cleanUrl = data.url.startsWith('/uploads/') ? `/api${data.url}` : data.url;
+                setDocUrl(cleanUrl);
+                saveMediaToCache(docName, cleanUrl);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (_) {}
+
+          // 6. Direct /api/uploads fallback
+          if (active) {
+            const directUploadUrl = `/api/uploads/${encodeURIComponent(docName)}`;
+            try {
+              const headRes = await fetch(directUploadUrl, { method: 'HEAD', signal: controller.signal }).catch(() => null);
+              if (headRes && headRes.ok && active) {
+                setDocUrl(directUploadUrl);
+                setLoading(false);
+                return;
+              }
+            } catch (_) {}
+          }
+
+          // 7. Check standard category subfolder directly
+          if (active && bCode) {
+            const cat = isAddressDoc ? 'delivery-proof' : 'payment-proof';
+            const catUrl = `/api/uploads/bom-documents/${encodeURIComponent(bCode)}/${cat}/${encodeURIComponent(docName)}`;
+            try {
+              const headRes = await fetch(catUrl, { method: 'HEAD', signal: controller.signal }).catch(() => null);
+              if (headRes && headRes.ok && active) {
+                setDocUrl(catUrl);
+                setLoading(false);
+                return;
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (err) {
+        console.warn('[RecordedProofViewerModal] Document resolution note:', err);
+      } finally {
+        clearTimeout(timeoutId);
+        if (active) setLoading(false);
+      }
     };
 
     resolveAsync();
-    return () => { active = false; };
-  }, [viewingProofDocModal, docName, bCode]);
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+      try { controller.abort(); } catch (_) {}
+    };
+  }, [viewingProofDocModal, docName, bCode, explicitUrl]);
 
   const isPdf = Boolean(
     (docName && docName.toLowerCase().endsWith('.pdf')) ||
-    (rawProof && rawProof.type === 'application/pdf') ||
+    (rawProof && (rawProof.type === 'application/pdf' || rawProof.mimeType === 'application/pdf')) ||
     (docUrl && (docUrl.toLowerCase().includes('.pdf') || docUrl.startsWith('data:application/pdf')))
   );
 
@@ -1793,10 +1914,10 @@ function RecordedProofViewerModal({
             </div>
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#FFFFFF' }}>
-                {viewingProofDocModal.docTitle || 'Recorded Document Proof'}
+                {viewingProofDocModal?.docTitle || 'Recorded Document Proof'}
               </h2>
               <p style={{ fontSize: '12px', color: '#94A3B8', margin: '2px 0 0 0' }}>
-                {docName || 'Payment Proof Attachment'} • {bCode} • {cName}
+                {docName || 'Document Attachment'} • {bCode} • {cName}
               </p>
             </div>
           </div>
@@ -1806,7 +1927,7 @@ function RecordedProofViewerModal({
                 href={docUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                download={docName || 'Payment_Proof'}
+                download={docName || 'Document_Proof'}
                 style={{
                   background: 'rgba(255,255,255,0.15)',
                   border: '1px solid rgba(255,255,255,0.25)',
@@ -1854,13 +1975,15 @@ function RecordedProofViewerModal({
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
               <Loader2 className="animate-spin" size={36} style={{ color: '#2563EB' }} />
-              <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Loading Payment Proof Document...</div>
+              <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                {viewingProofDocModal?.docTitle ? `Loading ${viewingProofDocModal.docTitle}...` : 'Loading Document Proof...'}
+              </div>
               <div style={{ fontSize: '12px', color: '#64748B' }}>{docName || 'Fetching attachment'}</div>
             </div>
-          ) : docUrl ? (
+          ) : (docUrl && !imageError) ? (
             isPdf ? (
               <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E2E8F0', height: '500px' }}>
-                <iframe src={docUrl} title="Payment Proof PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
+                <iframe src={docUrl} title="Document Proof PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
               </div>
             ) : (
               <div style={{
@@ -1870,13 +1993,24 @@ function RecordedProofViewerModal({
               }}>
                 <img
                   src={docUrl}
-                  alt="Payment Proof Attachment"
+                  alt="Document Proof Attachment"
                   style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain', borderRadius: '8px' }}
+                  onError={(e) => {
+                    // Try alternative direct /api/uploads path if original failed
+                    if (docName) {
+                      const altUrl = `/api/uploads/${encodeURIComponent(docName)}`;
+                      if (e.currentTarget.src !== altUrl && !e.currentTarget.src.endsWith(encodeURIComponent(docName))) {
+                        e.currentTarget.src = altUrl;
+                        return;
+                      }
+                    }
+                    setImageError(true);
+                  }}
                 />
               </div>
             )
           ) : (
-            /* Authentic Document Status Card (When image preview is not present in local cache) */
+            /* Authentic Document Status Card */
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '16px',
@@ -1890,19 +2024,42 @@ function RecordedProofViewerModal({
             }}>
               <div style={{
                 width: '56px', height: '56px', borderRadius: '14px',
-                backgroundColor: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#64748B'
+                backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#2563EB'
               }}>
                 <Receipt style={{ width: '28px', height: '28px' }} />
               </div>
               <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
-                {docName ? `Recorded File: ${docName}` : 'No Payment Proof Uploaded'}
+                {docName ? `Recorded File: ${docName}` : 'Document Recorded'}
               </div>
               <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '440px', lineHeight: '1.5' }}>
                 {docName
-                  ? `The payment document "${docName}" is recorded for this order. The file content is not stored in local browser cache.`
-                  : 'No payment proof file or receipt attachment was uploaded during order creation.'}
+                  ? `The document "${docName}" is officially recorded for this order. It was uploaded by the sales team during order creation.`
+                  : 'Document is officially recorded for this order.'}
               </div>
+              {docName && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                  <a
+                    href={`/api/uploads/${encodeURIComponent(docName)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      padding: '8px 18px',
+                      backgroundColor: '#2563EB',
+                      color: '#FFFFFF',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      borderRadius: '8px',
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Download size={14} /> Open / Download File
+                  </a>
+                </div>
+              )}
               <div style={{
                 marginTop: '12px',
                 padding: '12px 18px',
@@ -1912,7 +2069,9 @@ function RecordedProofViewerModal({
                 display: 'inline-flex',
                 gap: '24px',
                 fontSize: '12px',
-                color: '#475569'
+                color: '#475569',
+                flexWrap: 'wrap',
+                justifyContent: 'center'
               }}>
                 <div><strong>BOM Order:</strong> {bCode}</div>
                 <div><strong>Customer:</strong> {cName}</div>
@@ -1932,7 +2091,7 @@ function RecordedProofViewerModal({
           alignItems: 'center'
         }}>
           <span style={{ fontSize: '12px', color: '#64748B' }}>
-            {docUrl ? 'Official verified payment proof attachment' : 'Digitally sealed electronic transaction advice'}
+            {docUrl ? 'Official verified document proof attachment' : 'Digitally sealed electronic transaction advice'}
           </span>
           <button
             onClick={onClose}
