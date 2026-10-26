@@ -29,6 +29,151 @@ export async function withTransaction(callback) {
   }
 }
 
+let schemaEnsured = false;
+export async function ensureLeadsSchema() {
+  if (schemaEnsured) return;
+  try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS public.leads (
+        id TEXT PRIMARY KEY,
+        lead_number TEXT UNIQUE,
+        company_name TEXT NOT NULL,
+        contact_person TEXT,
+        designation TEXT,
+        phone TEXT,
+        whatsapp TEXT,
+        email TEXT,
+        source TEXT DEFAULT 'Manual',
+        status TEXT DEFAULT 'New',
+        assigned_salesperson TEXT,
+        estimated_kw NUMERIC DEFAULT 0,
+        category TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE public.leads 
+        ADD COLUMN IF NOT EXISTS location TEXT,
+        ADD COLUMN IF NOT EXISTS product_requirement TEXT,
+        ADD COLUMN IF NOT EXISTS lead_created_by_id TEXT,
+        ADD COLUMN IF NOT EXISTS lead_created_by_name TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_by_user_id TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_by_name TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_by_role TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_to_user_id TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_to_name TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_to_role TEXT,
+        ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'MEDIUM',
+        ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS external_enquiry_id TEXT,
+        ADD COLUMN IF NOT EXISTS external_payload JSONB,
+        ADD COLUMN IF NOT EXISTS last_qualifying_activity_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS last_activity_type TEXT,
+        ADD COLUMN IF NOT EXISTS is_unattended_24h BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ;
+
+      CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
+        id TEXT PRIMARY KEY,
+        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        assigned_by_user_id TEXT NOT NULL,
+        assigned_by_name TEXT NOT NULL,
+        assigned_by_role TEXT NOT NULL,
+        assigned_to_user_id TEXT NOT NULL,
+        assigned_to_name TEXT NOT NULL,
+        assigned_to_role TEXT NOT NULL,
+        previous_assigned_to_user_id TEXT,
+        previous_assigned_to_name TEXT,
+        assignment_reason TEXT,
+        assignment_type TEXT NOT NULL DEFAULT 'INITIAL',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS public.lead_activities (
+        id TEXT PRIMARY KEY,
+        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        activity_type TEXT NOT NULL,
+        is_qualifying_activity BOOLEAN NOT NULL DEFAULT false,
+        summary TEXT NOT NULL,
+        customer_response TEXT,
+        call_duration_seconds INT,
+        conducted_by_user_id TEXT NOT NULL,
+        conducted_by_name TEXT NOT NULL,
+        conducted_by_role TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS public.lead_status_history (
+        id TEXT PRIMARY KEY,
+        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        previous_status TEXT,
+        new_status TEXT NOT NULL,
+        remarks TEXT,
+        updated_by_user_id TEXT NOT NULL,
+        updated_by_name TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS public.lead_followups (
+        id TEXT PRIMARY KEY,
+        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        scheduled_at TIMESTAMPTZ NOT NULL,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        assigned_salesperson_id TEXT NOT NULL,
+        assigned_salesperson_name TEXT NOT NULL,
+        completed_at TIMESTAMPTZ,
+        outcome_remarks TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS public.lead_inactivity_incidents (
+        id TEXT PRIMARY KEY,
+        lead_id TEXT NOT NULL REFERENCES public.leads(id) ON DELETE RESTRICT,
+        salesperson_id TEXT NOT NULL,
+        salesperson_name TEXT NOT NULL,
+        incident_type TEXT NOT NULL,
+        assigned_at TIMESTAMPTZ NOT NULL,
+        alerted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ,
+        resolved_by_user_id TEXT,
+        resolution_type TEXT,
+        details JSONB
+      );
+
+      CREATE TABLE IF NOT EXISTS public.lead_notifications (
+        id TEXT PRIMARY KEY,
+        lead_id TEXT REFERENCES public.leads(id) ON DELETE SET NULL,
+        incident_id TEXT REFERENCES public.lead_inactivity_incidents(id) ON DELETE SET NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS public.lead_notification_recipients (
+        id TEXT PRIMARY KEY,
+        notification_id TEXT NOT NULL REFERENCES public.lead_notifications(id) ON DELETE CASCADE,
+        recipient_user_id TEXT NOT NULL,
+        recipient_role TEXT,
+        read BOOLEAN DEFAULT false,
+        read_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    schemaEnsured = true;
+    console.log('✅ [PostgreSQL] Ensured public.leads columns and CRM tables exist.');
+  } catch (err) {
+    console.warn('[PostgreSQL Leads Schema Notice]:', err.message);
+  }
+}
+
 /**
  * Generate sequential Lead ID: VRM-LD-YYYY-XX (e.g. VRM-LD-2026-01)
  */
@@ -368,7 +513,18 @@ export async function createLead(leadData, creatorUser = {}) {
     leadData.externalPayload ? JSON.stringify(leadData.externalPayload) : null
   ];
 
-  const res = await dbQuery(sql, params);
+  let res;
+  try {
+    res = await dbQuery(sql, params);
+  } catch (queryErr) {
+    if (queryErr.message && (queryErr.message.includes('does not exist') || queryErr.message.includes('column'))) {
+      console.log('[createLead] Missing column detected, auto-healing leads schema...', queryErr.message);
+      await ensureLeadsSchema();
+      res = await dbQuery(sql, params);
+    } else {
+      throw queryErr;
+    }
+  }
   let created = res.rows[0];
 
   // If assignee was specified upon creation, assign immediately
