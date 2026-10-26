@@ -2155,35 +2155,23 @@ const loadLocalItems = () => {
       });
     } catch (_) {}
   }
-  const memItems = (supabaseMemoryStore.item_store || []).filter(m => {
-    return !isDeletedOrInvalid(m.code, m.sku, m.name) && !isDeletedOrInvalid(m.itemId, m.id, m.name);
+
+  const baseList = diskItems.length > 0 ? diskItems : (supabaseMemoryStore.item_store || []);
+  const seen = new Set();
+  const unified = [];
+
+  baseList.forEach(it => {
+    if (!it || !it.name || isDeletedOrInvalid(it.code, it.sku, it.name) || isDeletedOrInvalid(it.itemId, it.id, it.name)) return;
+    const c = String(it.code || it.sku || it.itemId || it.id || '').toLowerCase().trim();
+    const n = String(it.name || '').toLowerCase().trim();
+    const key = c ? `c:${c}` : `n:${n}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    unified.push(it);
   });
-  if (Array.isArray(memItems) && memItems.length >= diskItems.length && memItems.length > 0) {
-    return memItems;
-  }
-  if (Array.isArray(diskItems) && diskItems.length > 0) {
-    if (Array.isArray(memItems) && memItems.length > 0) {
-      const map = new Map();
-      diskItems.forEach(d => {
-        const k = String(d.code || d.name || '').toUpperCase().trim();
-        if (k) map.set(k, { ...d });
-      });
-      memItems.forEach(m => {
-        const k = String(m.code || m.name || '').toUpperCase().trim();
-        if (k && map.has(k)) {
-          map.set(k, { ...map.get(k), ...m });
-        } else if (k) {
-          map.set(k, { ...m });
-        }
-      });
-      const unified = Array.from(map.values()).filter(i => !isDeletedOrInvalid(i.code, i.sku, i.name));
-      supabaseMemoryStore.item_store = unified;
-      return unified;
-    }
-    supabaseMemoryStore.item_store = diskItems;
-    return diskItems;
-  }
-  return memItems || [];
+
+  supabaseMemoryStore.item_store = unified;
+  return unified;
 };
 
 const loadLocalRawMaterials = () => {

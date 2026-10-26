@@ -139,14 +139,29 @@ function TypeableProductSelect({
 
   // Resolved active items list with fallback to full products catalog
   const activeItemsList = useMemo(() => {
+    let source = [];
     if (Array.isArray(itemsList) && itemsList.length > 0) {
-      return itemsList;
+      source = itemsList;
+    } else {
+      try {
+        source = getFullProductsCatalogWithStock();
+      } catch (_) {
+        source = [];
+      }
     }
-    try {
-      return getFullProductsCatalogWithStock();
-    } catch (_) {
-      return [];
+    // Strict deduplication by code and name
+    const seen = new Set();
+    const result = [];
+    for (const it of source) {
+      if (!it || !it.name) continue;
+      const codeKey = String(it.code || it.sku || it.itemId || it.id || '').toLowerCase().trim();
+      const nameKey = String(it.name || '').toLowerCase().trim();
+      const key = codeKey ? `c:${codeKey}` : `n:${nameKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(it);
     }
+    return result;
   }, [itemsList, catalogTick]);
 
   // Filter items based on query (computed only when dropdown is open)

@@ -1,4 +1,4 @@
-import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
+import { resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
 import { centralInventoryStore } from './centralInventoryStore.js';
 import { getHsnCode } from './hsnCodeService.js';
 
@@ -26,21 +26,48 @@ if (typeof window !== 'undefined') {
   window.addEventListener('controlroom_raw_materials_update', invalidateCatalogCache);
 }
 
-let saveStorageTimer = null;
-const scheduleStorageSave = (list) => {
-  if (saveStorageTimer) return;
-  saveStorageTimer = setTimeout(() => {
-    saveStorageTimer = null;
-    try {
-      localStorage.setItem('controlroom_items_list', JSON.stringify(list));
-    } catch (_) {}
-  }, 1000);
+let serverItemsCache = null;
+
+export const syncFullCatalogFromBackend = async () => {
+  try {
+    const res = await fetch('/api/items', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data) && data.length > 0) {
+        const deletedCodes = getDeletedCodes();
+        const cleaned = data.filter(it => {
+          const c = String(it.code || it.sku || it.itemId || it.id || '').toUpperCase().trim();
+          const n = String(it.name || '').toUpperCase().trim();
+          if (/^\d{10,}$/.test(c) || /^\d{10,}$/.test(n)) return false;
+          return !deletedCodes.includes(c) && !deletedCodes.includes(n);
+        });
+        serverItemsCache = cleaned;
+        try {
+          localStorage.setItem('controlroom_item_store', JSON.stringify(cleaned));
+        } catch (_) {}
+        invalidateCatalogCache();
+        try {
+          window.dispatchEvent(new Event('central_inventory_updated'));
+          window.dispatchEvent(new Event('controlroom_items_update'));
+        } catch (_) {}
+        return getFullProductsCatalogWithStock();
+      }
+    }
+  } catch (_) {}
+  return getFullProductsCatalogWithStock();
 };
+
+// Eager sync on client load
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncFullCatalogFromBackend();
+  }, 100);
+}
 
 /**
  * Product Catalog & Live Stock Service
- * Provides the unified, full 285+ standardized VRM products catalog
- * combined with real-time stock balances from Central Inventory Store.
+ * STRICT USER RULE: Only products registered in the Item Directory (/api/items, controlroom_item_store)
+ * are included. Static dummy catalogs (VRM_PRODUCTS) and duplicate products are strictly excluded.
  */
 export const getFullProductsCatalogWithStock = (directItems = null) => {
   const hasDirectItems = Array.isArray(directItems) && directItems.length > 0;
@@ -64,25 +91,23 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
            (id && deletedCodes.includes(id));
   };
 
-  // 1. Build live stock map from Central Inventory Store (Finished Goods & Products)
+  // 1. Build live stock map from Central Inventory Store
   const stockMap = new Map();
-
   try {
     const centralItems = centralInventoryStore.getInventoryItems();
     if (Array.isArray(centralItems)) {
       centralItems.forEach(ci => {
         if (isItemDeleted(ci.code, ci.name, ci.sku, ci.itemId)) return;
         const resCode = resolveProductCode(ci);
-        const codeKey = String(resCode || ci.code || '').toLowerCase().trim();
-        const origCode = String(ci.code || '').toLowerCase().trim();
+        const codeKey = String(resCode || ci.code || ci.sku || '').toLowerCase().trim();
+        const origCode = String(ci.code || ci.sku || '').toLowerCase().trim();
         const nameKey = String(ci.name || '').toLowerCase().trim();
         const normKey = normalizeProductName(ci.name);
         const fpKey = wordFingerprint(ci.name);
-        const isDemo = codeKey === 'alu-len-2414mm' || origCode === 'alu-len-2414mm' || codeKey === 'mr-300mm' || origCode === 'mr-300mm';
-        const isLegacyDummy = !isDemo && (ci.lastUpdated === 'Stock Set to 5,000' || (Number(ci.stock) === 5000 && Number(ci.openingStock) === 5000 && Number(ci.goodsReceived || 0) === 0));
-        const st = isLegacyDummy ? 0 : (ci.available !== undefined 
+
+        const st = ci.available !== undefined 
           ? Number(ci.available) 
-          : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock !== undefined ? ci.stock : 0)));
+          : (ci.onHand !== undefined ? Number(ci.onHand) : Number(ci.stock !== undefined ? ci.stock : 0));
         
         if (codeKey) stockMap.set(codeKey, st);
         if (origCode) stockMap.set(origCode, st);
@@ -95,265 +120,127 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     console.warn('[CATALOG] Central store stock query notice:', e.message);
   }
 
-  // 2. Map all 285 VRM standardized products with true live inventory stock
-  const catalogMap = new Map();
+  // 2. Collect candidate items strictly from the Item Directory sources
+  let candidatePool = [];
 
-  (VRM_PRODUCTS || []).forEach(p => {
-    if (isItemDeleted(p.code, p.name, p.sku, p.itemId)) return;
-    const resCode = resolveProductCode(p).toLowerCase().trim();
-    const codeKey = String(resCode || p.code || '').toLowerCase().trim();
-    const nameKey = String(p.name || '').toLowerCase().trim();
-    const normKey = normalizeProductName(p.name);
-    const fpKey = wordFingerprint(nameKey);
+  if (hasDirectItems) {
+    candidatePool = directItems;
+  } else if (Array.isArray(serverItemsCache) && serverItemsCache.length > 0) {
+    candidatePool = serverItemsCache;
+  } else {
+    // Read from localStorage item_store (saved by ItemsDirectoryView & /api/items)
+    try {
+      const rawStore = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
+      if (rawStore) {
+        const parsed = JSON.parse(rawStore);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          candidatePool = parsed;
+        }
+      }
+    } catch (_) {}
 
-    // Live stock balance lookup strictly from Central Inventory Store
-    let realStock = null;
-    let baseStock = 0;
-
-    const findInStore = (store) => {
-      if (codeKey && store.has(codeKey)) return Number(store.get(codeKey));
-      if (normKey && store.has(normKey)) return Number(store.get(normKey));
-      if (nameKey && store.has(nameKey)) return Number(store.get(nameKey));
-      if (fpKey && store.has(fpKey)) return Number(store.get(fpKey));
-      return null;
-    };
-
-    const centralBal = findInStore(stockMap);
-
-    if (centralBal !== null && !isNaN(centralBal)) {
-      realStock = Math.max(0, centralBal);
-      baseStock = realStock;
-    } else {
-      realStock = 0;
-      baseStock = 0;
+    // Fallback to custom items list if item_store is not yet cached
+    if (candidatePool.length === 0) {
+      try {
+        const rawCustom = localStorage.getItem('controlroom_items_list');
+        if (rawCustom) {
+          const parsed = JSON.parse(rawCustom);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            candidatePool = parsed;
+          }
+        }
+      } catch (_) {}
     }
 
-    // Authoritative real stock assignments with live deduction priority
-    if (codeKey === 'mr-300mm' || nameKey === 'mini rail - 300 mm' || (nameKey.includes('mini rail') && nameKey.includes('300'))) {
-      if (centralBal !== null && !isNaN(centralBal)) {
-        realStock = Math.max(0, centralBal);
-      } else {
-        realStock = 2000;
+    // Trigger background sync if on browser and cache was empty
+    if (typeof window !== 'undefined' && !serverItemsCache) {
+      setTimeout(() => syncFullCatalogFromBackend(), 50);
+    }
+  }
+
+  // 3. Deduplicate and enrich items with live stock
+  const seenMap = new Map();
+  const seenNames = new Map();
+  const result = [];
+
+  (candidatePool || []).forEach(ci => {
+    if (!ci || !ci.name) return;
+    const rawCode = String(ci.code || ci.sku || ci.itemId || ci.id || '').trim();
+    const rawName = String(ci.name || '').trim();
+    if (!rawName) return;
+    if (/^\d{10,}$/.test(rawCode) || /^\d{10,}$/.test(rawName)) return; // skip raw zoho numeric IDs
+    if (isItemDeleted(rawCode, rawName, ci.sku, ci.itemId || ci.id)) return;
+
+    const codeKey = rawCode.toLowerCase();
+    const nameKey = rawName.toLowerCase();
+    const normName = normalizeProductName(rawName);
+
+    // Live stock lookup
+    let realStock = 0;
+    if (codeKey && stockMap.has(codeKey)) {
+      realStock = Math.max(0, Number(stockMap.get(codeKey)));
+    } else if (normName && stockMap.has(normName)) {
+      realStock = Math.max(0, Number(stockMap.get(normName)));
+    } else if (nameKey && stockMap.has(nameKey)) {
+      realStock = Math.max(0, Number(stockMap.get(nameKey)));
+    } else {
+      realStock = Math.max(0, Number(ci.stock !== undefined ? ci.stock : (ci.availableStock !== undefined ? ci.availableStock : 0)));
+    }
+
+    // Check if this item has already been seen (by code or by exact name)
+    const isAutoCode = !rawCode || rawCode.startsWith('ITEM-') || rawCode.startsWith('ITM-') || rawCode.startsWith('FG-');
+    let existing = null;
+    if (codeKey && seenMap.has(codeKey)) {
+      existing = seenMap.get(codeKey);
+    } else if (isAutoCode && seenNames.has(nameKey)) {
+      existing = seenNames.get(nameKey);
+    }
+
+    if (existing) {
+      // Merge best attributes
+      if ((!existing.rate || Number(existing.rate) === 0) && Number(ci.rate || ci.price || 0) > 0) {
+        existing.rate = String(ci.rate || ci.price);
+        existing.price = existing.rate;
       }
-      baseStock = realStock;
-    } else if (codeKey === 'alu-len-2414mm' || String(p.code || '').toLowerCase() === 'alu-len-2414mm') {
-      if (centralBal !== null && !isNaN(centralBal)) {
-        realStock = Math.max(0, centralBal);
-      } else {
-        realStock = 250;
+      if ((!existing.code || existing.code.startsWith('ITEM-') || existing.code.startsWith('ITM-')) && rawCode && !rawCode.startsWith('ITEM-') && !rawCode.startsWith('ITM-')) {
+        existing.code = rawCode;
+        existing.sku = rawCode;
       }
-      baseStock = realStock;
+      if (realStock > existing.stock) {
+        existing.stock = realStock;
+        existing.availableStock = realStock;
+      }
+      return;
     }
 
     const itemRecord = {
-      code: p.code || '',
-      name: p.name || '',
-      category: p.material || p.category || 'Structure Assembly',
-      uom: p.uom || 'NOS',
-      rate: String(p.price || p.rate || '0'),
-      price: String(p.price || p.rate || '0'),
-      gstRate: p.gst || '18%',
-      hsn: p.hsn || getHsnCode(p),
+      id: ci.id || ci.itemId || rawCode || `ITM-${Date.now()}`,
+      itemId: ci.itemId || ci.id || rawCode || '',
+      code: rawCode,
+      sku: ci.sku || rawCode,
+      name: rawName,
+      category: ci.category || ci.cat || ci.description || 'Finished Goods',
+      uom: ci.uom || ci.unit || 'NOS',
+      unit: ci.unit || ci.uom || 'NOS',
+      rate: String(ci.rate || ci.price || '0'),
+      price: String(ci.price || ci.rate || '0'),
+      gstRate: ci.gstRate || ci.gst || '18%',
+      hsn: ci.hsn || ci.hsn_or_sac || ci.hsnCode || getHsnCode(ci),
       stock: realStock,
       availableStock: realStock,
-      physicalStock: baseStock,
-      reservedStock: 0
+      physicalStock: realStock,
+      status: ci.status || 'Active'
     };
 
-    const itemKey = codeKey || nameKey;
-    catalogMap.set(itemKey, itemRecord);
-    if (nameKey && !catalogMap.has(nameKey)) {
-      catalogMap.set(nameKey, itemRecord);
-    }
+    if (codeKey) seenMap.set(codeKey, itemRecord);
+    seenNames.set(nameKey, itemRecord);
+    result.push(itemRecord);
   });
 
-  // Authoritative registration of Mini Rail - 300 mm in catalog from Central Inventory Store
-  let mr300Stock = stockMap.get('mr-300mm');
-  if (mr300Stock === undefined) mr300Stock = stockMap.get('mini rail - 300 mm');
-  if (mr300Stock === undefined || isNaN(mr300Stock) || mr300Stock <= 0) mr300Stock = 1800;
-  mr300Stock = Math.max(0, Number(mr300Stock));
-
-  const miniRail300Record = {
-    code: 'MR-300MM',
-    name: 'Mini Rail - 300 mm',
-    category: 'Aluminium Profiles',
-    uom: 'NOS',
-    rate: '140',
-    price: '140',
-    gstRate: '18%',
-    hsn: '76109090',
-    stock: mr300Stock,
-    availableStock: mr300Stock,
-    physicalStock: 2000,
-    reservedStock: 200
-  };
-  catalogMap.set('mr-300mm', miniRail300Record);
-  catalogMap.set('mini rail - 300 mm', miniRail300Record);
-  catalogMap.set('mini rail – 300 mm', miniRail300Record);
-  catalogMap.set('mini rail 300 mm', miniRail300Record);
-  catalogMap.set('mini rail', miniRail300Record);
-
-  // Helper to identify Raw Materials so BOM is strictly disconnected from Raw Materials
-  const isRawMaterialItem = (code = '', name = '', category = '') => {
-    const c = String(code || '').toUpperCase().trim();
-    const n = String(name || '').toUpperCase().trim();
-    const cat = String(category || '').toUpperCase().trim();
-    if (cat.includes('RAW MATERIAL') || cat.includes('RAW ALUMINIUM') || cat.includes('RAW BAR') || cat.includes('RAW PROFILE')) return true;
-    if (c.startsWith('RM-') || c.startsWith('ALU-LEN-') || c.startsWith('RAW-') || c.startsWith('BAR-')) return true;
-    if (n.startsWith('RAW ') || n.includes('RAW BAR') || n.includes('RAW LENGTH') || n.includes('ALUMINIUM RAW LENGTH') || n.includes('RAW ALUMINIUM')) return true;
-    return false;
-  };
-
-  // 3. Include any items from custom item store (Finished Goods & Products only, excluding Raw Materials)
-  const mergeExtraItems = (items) => {
-    if (!Array.isArray(items)) return;
-    items.forEach(ci => {
-      if (isItemDeleted(ci.code, ci.name, ci.sku, ci.itemId || ci.id)) return;
-      if (isRawMaterialItem(ci.code || ci.sku, ci.name, ci.category || ci.cat)) return;
-      const rawCode = String(ci.code || ci.sku || ci.itemId || ci.id || '').trim();
-      const nameKey = String(ci.name || '').toLowerCase().trim();
-      const resCode = resolveProductCode(ci);
-      const itemKey = rawCode ? rawCode.toLowerCase() : nameKey;
-      const lookupCode = (rawCode || resCode || '').toLowerCase();
-
-      let realStock = 0;
-      const isMr300Only = (lookupCode === 'mr-300mm') || ((nameKey.includes('mini rail') || nameKey.includes('minirail')) && !/\b(75|100|120|125|150|40|60)\s*mm/i.test(nameKey) && (nameKey.includes('300') || nameKey === 'mini rail'));
-      if (isMr300Only) {
-        if (stockMap.has('mr-300mm')) {
-          realStock = Math.max(0, Number(stockMap.get('mr-300mm')));
-        } else {
-          realStock = mr300Stock;
-        }
-        if (realStock <= 0) realStock = 1800;
-      } else if (lookupCode && stockMap.has(lookupCode)) {
-        const val = Number(stockMap.get(lookupCode));
-        realStock = Math.max(0, val);
-      } else if (nameKey && stockMap.has(nameKey)) {
-        const val = Number(stockMap.get(nameKey));
-        realStock = Math.max(0, val);
-      } else {
-        const val = Number(ci.stock !== undefined ? ci.stock : (ci.availableStock !== undefined ? ci.availableStock : (ci.physicalStock || 0)));
-        realStock = Math.max(0, val);
-      }
-
-      if (itemKey) {
-        const existing = catalogMap.get(itemKey);
-        if (!existing) {
-          const rec = {
-            code: rawCode || ci.code || ci.sku || resCode || '',
-            sku: ci.sku || rawCode || '',
-            itemId: ci.itemId || ci.id || rawCode || '',
-            name: ci.name,
-            category: ci.category || ci.cat || ci.description || 'Finished Product',
-            uom: ci.uom || ci.unit || 'NOS',
-            unit: ci.unit || ci.uom || 'NOS',
-            rate: String(ci.rate || ci.price || '0'),
-            price: String(ci.rate || ci.price || '0'),
-            gstRate: ci.gstRate || ci.gst || '18%',
-            hsn: ci.hsn || ci.hsn_or_sac || ci.hsnCode || getHsnCode(ci),
-            stock: realStock,
-            availableStock: realStock,
-            physicalStock: realStock,
-            status: ci.status || 'Active'
-          };
-          catalogMap.set(itemKey, rec);
-          if (nameKey && !catalogMap.has(nameKey)) {
-            catalogMap.set(nameKey, rec);
-          }
-          if (rawCode && !catalogMap.has(rawCode.toLowerCase())) {
-            catalogMap.set(rawCode.toLowerCase(), rec);
-          }
-        } else {
-          if (ci.rate || ci.price) {
-            existing.rate = String(ci.rate || ci.price || existing.rate);
-            existing.price = existing.rate;
-          }
-          if (realStock !== undefined && !isNaN(realStock)) {
-            existing.stock = realStock;
-            existing.availableStock = realStock;
-          }
-          if (ci.category || ci.cat) {
-            existing.category = ci.category || ci.cat;
-          }
-        }
-      }
-    });
-  };
-
-  // 3a. Include items registered in Central Inventory Store
-  try {
-    const centralItems = centralInventoryStore.getInventoryItems();
-    if (Array.isArray(centralItems) && centralItems.length > 0) {
-      mergeExtraItems(centralItems);
-    }
-  } catch (_) {}
-
-  // 3b. Include items directly passed
-  if (Array.isArray(directItems) && directItems.length > 0) {
-    mergeExtraItems(directItems);
-  }
-
-  // 3c. Include items from server memory cache
-  if (Array.isArray(serverItemsCache) && serverItemsCache.length > 0) {
-    mergeExtraItems(serverItemsCache);
-  }
-
-  // 3d. Include items from item_store / controlroom_item_store
-  try {
-    const itemStoreStr = localStorage.getItem('controlroom_item_store') || localStorage.getItem('item_store');
-    if (itemStoreStr) {
-      mergeExtraItems(JSON.parse(itemStoreStr));
-    }
-  } catch (_) {}
-
-  // 3e. Include items from controlroom_items_list
-  try {
-    const customItemsStr = localStorage.getItem('controlroom_items_list');
-    if (customItemsStr) {
-      mergeExtraItems(JSON.parse(customItemsStr));
-    }
-  } catch (_) {}
-
-  // Deduplicate items so fullList only contains unique items (Finished Goods / Inventory Store only)
-  const uniqueItemsMap = new Map();
-  for (const it of catalogMap.values()) {
-    const uKey = String(it.code || it.name || '').toLowerCase().trim();
-    if (uKey && !uniqueItemsMap.has(uKey)) {
-      uniqueItemsMap.set(uKey, it);
-    }
-  }
-  const fullList = Array.from(uniqueItemsMap.values())
-    .filter(it => !isItemDeleted(it.code, it.name, it.sku, it.itemId))
-    .filter(it => !isRawMaterialItem(it.code, it.name, it.category));
-
-  if (!hasDirectItems) {
-    cachedBaseCatalog = fullList;
+  if (!hasDirectItems && result.length > 0) {
+    cachedBaseCatalog = result;
     lastCacheTime = now;
-    scheduleStorageSave(fullList);
   }
 
-  return fullList;
+  return result;
 };
-
-let serverItemsCache = null;
-
-export const syncFullCatalogFromBackend = async () => {
-  try {
-    const res = await fetch('/api/items');
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (Array.isArray(data) && data.length > 0) {
-        serverItemsCache = data;
-        try {
-          localStorage.setItem('controlroom_item_store', JSON.stringify(data));
-        } catch (_) {}
-        try {
-          window.dispatchEvent(new Event('central_inventory_updated'));
-        } catch (_) {}
-        return getFullProductsCatalogWithStock();
-      }
-    }
-  } catch (_) {}
-  return getFullProductsCatalogWithStock();
-};
-

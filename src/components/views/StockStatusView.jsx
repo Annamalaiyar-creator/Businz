@@ -1434,41 +1434,33 @@ export default function StockStatusView(props) {
         setItemsLoading(true);
         const backendItems = await getItems();
         if (isMounted && Array.isArray(backendItems) && backendItems.length > 0) {
-          setItemsList(prev => {
-            const itemMap = new Map();
-            (prev || []).forEach(it => {
-              const key = it.code || it.sku || it.itemId || it.id || it.name;
-              if (key) itemMap.set(String(key).toLowerCase().trim(), it);
-            });
-            backendItems.forEach(it => {
-              const key = it.code || it.sku || it.itemId || it.id || it.name;
-              if (key) {
-                const k = String(key).toLowerCase().trim();
-                itemMap.set(k, { ...itemMap.get(k), ...it });
-              }
-            });
-            return Array.from(itemMap.values());
+          const seen = new Set();
+          const clean = [];
+          backendItems.forEach(it => {
+            const c = String(it.code || it.sku || it.itemId || it.id || '').toLowerCase().trim();
+            const n = String(it.name || '').toLowerCase().trim();
+            const k = c ? `c:${c}` : `n:${n}`;
+            if (seen.has(k)) return;
+            seen.add(k);
+            clean.push(it);
           });
+          setItemsList(clean);
         } else {
           const response = await fetch('/api/items').catch(() => null);
           if (response && response.ok) {
             const zItems = await response.json().catch(() => []);
             if (isMounted && Array.isArray(zItems) && zItems.length > 0) {
-              setItemsList(prev => {
-                const itemMap = new Map();
-                (prev || []).forEach(it => {
-                  const key = it.code || it.sku || it.itemId || it.id || it.name;
-                  if (key) itemMap.set(String(key).toLowerCase().trim(), it);
-                });
-                zItems.forEach(it => {
-                  const key = it.code || it.sku || it.itemId || it.id || it.name;
-                  if (key) {
-                    const k = String(key).toLowerCase().trim();
-                    itemMap.set(k, { ...itemMap.get(k), ...it });
-                  }
-                });
-                return Array.from(itemMap.values());
+              const seen = new Set();
+              const clean = [];
+              zItems.forEach(it => {
+                const c = String(it.code || it.sku || it.itemId || it.id || '').toLowerCase().trim();
+                const n = String(it.name || '').toLowerCase().trim();
+                const k = c ? `c:${c}` : `n:${n}`;
+                if (seen.has(k)) return;
+                seen.add(k);
+                clean.push(it);
               });
+              setItemsList(clean);
             }
           }
         }
