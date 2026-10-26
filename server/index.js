@@ -8298,11 +8298,11 @@ const distPath = fs.existsSync(path.resolve(__dirname, '../dist'))
   : path.resolve(process.cwd(), 'dist');
 
 if (fs.existsSync(distPath)) {
+  app.use('/assets', express.static(path.join(distPath, 'assets')));
   const rootAssets = path.resolve(__dirname, '../assets');
   if (fs.existsSync(rootAssets)) {
     app.use('/assets', express.static(rootAssets));
   }
-  app.use('/assets', express.static(path.join(distPath, 'assets')));
   app.use(express.static(distPath));
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {

@@ -81,6 +81,15 @@ class AppErrorBoundary extends Component {
   }
   componentDidCatch(error, errorInfo) {
     console.error('App render error caught by boundary:', error, errorInfo);
+    if (error?.message && (error.message.includes('dynamically imported module') || error.message.includes('Failed to fetch dynamically imported module'))) {
+      const reloadKey = 'businz_chunk_reload_ts';
+      const lastReload = Number(sessionStorage.getItem(reloadKey) || 0);
+      if (Date.now() - lastReload > 8000) {
+        sessionStorage.setItem(reloadKey, String(Date.now()));
+        console.warn('[BUSINZ] Dynamic chunk missing (deployment update). Auto-refreshing...');
+        window.location.reload();
+      }
+    }
   }
   render() {
     if (this.state.hasError) {

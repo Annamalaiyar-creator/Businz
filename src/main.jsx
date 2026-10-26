@@ -66,6 +66,12 @@ document.addEventListener('wheel', (e) => {
   }
 }, { passive: true });
 
+// Auto-heal on new deployment: reload the page when a stale lazy-loaded chunk is requested
+window.addEventListener('vite:preloadError', (event) => {
+  console.warn('[BUSINZ] New bundle version detected on server. Automatically reloading page...', event);
+  window.location.reload();
+});
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {sentryDsn ? (
