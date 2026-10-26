@@ -1,3 +1,5 @@
+import fs from 'fs';
+import { getStoreFilePath } from './runtimePaths.js';
 import { pool, query } from './db.js';
 
 /**
@@ -759,8 +761,8 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
 
     // 2. Determine recipients
     let recipients = [];
-    if (type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
-      // STRICT REQUIREMENT: Status not changed within 24 hours -> Alert CEO and Tech Support
+    if (type === 'UNATTENDED_2H' || type === 'STATUS_UNCHANGED_2H' || type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
+      // STRICT REQUIREMENT: Status not changed within 2 hours -> Alert CEO and Tech Support
       recipients.push({ id: 'CEO-001', role: 'CEO' });
       recipients.push({ id: 'CEO-1000', role: 'CEO' });
       recipients.push({ id: 'TA-VRM001', role: 'Technical Administrator' });
@@ -804,7 +806,7 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
   if (typeof realtimeNotificationBroadcaster === 'function') {
     try {
       let targetRoles = [];
-      if (type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
+      if (type === 'UNATTENDED_2H' || type === 'STATUS_UNCHANGED_2H' || type === 'UNATTENDED_24H' || type === 'STATUS_UNCHANGED_24H' || type === 'ESCALATION_48H') {
         targetRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Tech Support', 'Technical Support'];
       } else {
         targetRoles = [
@@ -820,9 +822,9 @@ export async function createLeadNotification({ leadId = null, incidentId = null,
         message,
         targetTab: 'CRM Leads',
         targetRoles,
-        role: specificRecipientRole || (type.includes('24H') || type.includes('48H') ? 'Tech Support' : 'Sales Executive'),
+        role: specificRecipientRole || (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'Tech Support' : 'Sales Executive'),
         type: type === 'ASSIGNMENT' ? 'success' : (type.includes('ESCALATION') || type.includes('UNATTENDED') || type.includes('STATUS_UNCHANGED') ? 'alert' : 'info'),
-        soundType: type === 'ASSIGNMENT' ? 'success' : (type.includes('24H') || type.includes('48H') ? 'alert' : 'chime'),
+        soundType: type === 'ASSIGNMENT' ? 'success' : (type.includes('2H') || type.includes('24H') || type.includes('48H') ? 'alert' : 'chime'),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: new Date().toISOString(),
         metadata: {
@@ -895,42 +897,105 @@ export async function markNotificationRead(notificationId, employeeCode) {
 }
 
 /**
- * Automatic 24-Hour & 48-Hour Inactivity Monitoring Engine
+ * Automatic 2-Hour Inactivity Monitoring Engine
  * Scans for leads where:
- * 1. Status is 'Assigned' or 'New'
- * 2. Assigned time is > 24 hours ago
- * 3. No qualifying customer activity recorded within 24 hours of assignment
+ * 1. Status is 'New', 'Assigned', 'Contacted', or 'In Progress'
+ * 2. Inactive / not making progress for > 2 hours
+ * 3. No qualifying customer activity recorded within 2 hours
  * Idempotently creates incidents and alerts CEO & Tech Support
  */
 export async function checkAndProcessLeadInactivity() {
   const now = new Date();
-  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
   const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
-  // 1. Query candidates for 24-Hour Unattended Alert / Status Unchanged Alert
-  const candidates24 = await dbQuery(`
-    SELECT l.*
-    FROM public.leads l
-    WHERE (
-        (l.assigned_at IS NOT NULL AND l.assigned_at <= $1 AND l.status IN ('New', 'Assigned'))
-        OR
-        (l.created_at <= $1 AND l.status = 'New')
-        OR
-        (l.updated_at <= $1 AND l.status IN ('New', 'Assigned'))
-      )
-      AND l.last_qualifying_activity_at IS NULL
-      AND l.is_unattended_24h = false
-  `, [twentyFourHoursAgo]);
+  // 1. Query candidates for 2-Hour Inactivity / Status Unchanged Alert
+  let candidates2h = { rows: [] };
+  try {
+    candidates2h = await dbQuery(`
+      SELECT l.*
+      FROM public.leads l
+      WHERE (
+          (l.assigned_at IS NOT NULL AND l.assigned_at <= $1 AND l.status IN ('New', 'Assigned', 'Contacted', 'In Progress'))
+          OR
+          (l.created_at <= $1 AND l.status = 'New')
+          OR
+          (l.updated_at <= $1 AND l.status IN ('New', 'Assigned', 'Contacted', 'In Progress'))
+        )
+        AND (l.last_qualifying_activity_at IS NULL OR l.last_qualifying_activity_at <= $1)
+        AND l.is_unattended_24h = false
+    `, [twoHoursAgo]);
+  } catch (dbErr) {
+    console.warn('[Inactivity Engine] PostgreSQL query notice:', dbErr.message);
+  }
 
-  for (const lead of candidates24.rows) {
+  // Also check disk store leads if any match 2 hours without activity
+  try {
+    const diskPath = getStoreFilePath('crm_leads.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskData)) {
+        let modified = false;
+        for (const lead of diskData) {
+          const isNotCompleted = ['New', 'Assigned', 'Contacted', 'In Progress'].includes(lead.status);
+          const assignedTime = lead.assigned_at ? new Date(lead.assigned_at).getTime() : 0;
+          const createdTime = lead.created_at ? new Date(lead.created_at).getTime() : 0;
+          const updatedTime = lead.updated_at ? new Date(lead.updated_at).getTime() : 0;
+          const lastActivityTime = lead.last_qualifying_activity_at ? new Date(lead.last_qualifying_activity_at).getTime() : 0;
+          const referenceTime = Math.max(assignedTime, createdTime, updatedTime);
+
+          if (
+            isNotCompleted &&
+            !lead.is_unattended_24h &&
+            !lead.is_unattended_2h &&
+            referenceTime > 0 &&
+            referenceTime <= twoHoursAgo.getTime() &&
+            (!lastActivityTime || lastActivityTime <= twoHoursAgo.getTime())
+          ) {
+            lead.is_unattended_24h = true;
+            lead.is_unattended_2h = true;
+            lead.unattended_alert_sent_at = new Date().toISOString();
+            modified = true;
+
+            // Trigger notification to CEO and Tech Support
+            await createLeadNotification({
+              leadId: lead.id,
+              type: 'STATUS_UNCHANGED_2H',
+              title: `⚠️ Lead Inactivity Alert (2 Hours): ${lead.company_name || lead.lead_number}`,
+              message: `Lead ${lead.lead_number} (${lead.company_name || 'Customer'}) has had NO progress or status change for over 2 hours (Current Status: "${lead.status}"). Assigned: ${lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned'}. Immediate attention required.`,
+              metadata: {
+                leadId: lead.id,
+                leadNumber: lead.lead_number,
+                companyName: lead.company_name,
+                currentStatus: lead.status,
+                salesperson: lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned',
+                assignedBy: lead.assigned_by_name ? `${lead.assigned_by_name} (${lead.assigned_by_role})` : 'System',
+                assignedAt: lead.assigned_at,
+                isCeoTechSupportAlert: true,
+                step: 'STATUS_UNCHANGED_2H'
+              }
+            });
+            console.log(`[Inactivity Engine] 2h inactivity alert sent to CEO & Tech Support for lead ${lead.lead_number} (${lead.company_name}).`);
+          }
+        }
+        if (modified) {
+          fs.writeFileSync(diskPath, JSON.stringify(diskData, null, 2), 'utf8');
+        }
+      }
+    }
+  } catch (diskErr) {
+    console.warn('[Inactivity Engine] Disk store check notice:', diskErr.message);
+  }
+
+  for (const lead of (candidates2h.rows || [])) {
     try {
-      const incidentId = `INC-24H-${lead.id}-${Date.now()}`;
+      const incidentId = `INC-2H-${lead.id}-${Date.now()}`;
       await withTransaction(async (client) => {
         // Record incident idempotently
         await client.query(`
           INSERT INTO public.lead_inactivity_incidents (
             id, lead_id, salesperson_id, salesperson_name, incident_type, assigned_at, alerted_at, details
-          ) VALUES ($1, $2, $3, $4, '24_HOUR_UNATTENDED', $5, NOW(), $6)
+          ) VALUES ($1, $2, $3, $4, '2_HOUR_UNATTENDED', $5, NOW(), $6)
           ON CONFLICT (lead_id, incident_type, salesperson_id, assigned_at) DO NOTHING
         `, [
           incidentId,
@@ -941,7 +1006,7 @@ export async function checkAndProcessLeadInactivity() {
           JSON.stringify({ leadNumber: lead.lead_number, companyName: lead.company_name, source: lead.source, status: lead.status })
         ]);
 
-        // Mark lead as 24h unattended
+        // Mark lead as 2h unattended
         await client.query(`
           UPDATE public.leads
           SET is_unattended_24h = true, unattended_alert_sent_at = NOW(), updated_at = NOW()
@@ -952,9 +1017,9 @@ export async function checkAndProcessLeadInactivity() {
       // Dispatch Persistent Notification to CEO & Tech Support
       await createLeadNotification({
         leadId: lead.id,
-        type: 'STATUS_UNCHANGED_24H',
-        title: `⚠️ Status Unchanged (24 Hours): ${lead.company_name || lead.lead_number}`,
-        message: `Lead ${lead.lead_number} (${lead.company_name || 'Customer'}) has had NO status change for 24 hours (Current Status: "${lead.status}"). Assigned: ${lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned'}. Immediate follow-up required.`,
+        type: 'STATUS_UNCHANGED_2H',
+        title: `⚠️ Lead Inactivity Alert (2 Hours): ${lead.company_name || lead.lead_number}`,
+        message: `Lead ${lead.lead_number} (${lead.company_name || 'Customer'}) has had NO progress or status change for over 2 hours (Current Status: "${lead.status}"). Assigned: ${lead.assigned_to_name || lead.assigned_salesperson || 'Unassigned'}. Immediate attention required.`,
         metadata: {
           leadId: lead.id,
           leadNumber: lead.lead_number,
@@ -964,12 +1029,12 @@ export async function checkAndProcessLeadInactivity() {
           assignedBy: lead.assigned_by_name ? `${lead.assigned_by_name} (${lead.assigned_by_role})` : 'System',
           assignedAt: lead.assigned_at,
           isCeoTechSupportAlert: true,
-          step: 'STATUS_UNCHANGED_24H'
+          step: 'STATUS_UNCHANGED_2H'
         }
       });
-      console.log(`[Inactivity Engine] 24h status unchanged alert generated for lead ${lead.lead_number} (${lead.company_name}).`);
+      console.log(`[Inactivity Engine] 2h status unchanged alert generated for lead ${lead.lead_number} (${lead.company_name}).`);
     } catch (err) {
-      console.warn(`[Inactivity Engine] Error processing 24h alert for lead ${lead.id}:`, err.message);
+      console.warn(`[Inactivity Engine] Error processing 2h alert for lead ${lead.id}:`, err.message);
     }
   }
 

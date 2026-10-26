@@ -232,7 +232,7 @@ export default function CrmLeadsView({
     const revisions = list.reduce((sum, l) => sum + Number(l.total_revisions || 0), 0);
     const converted = list.filter(l => l.status === 'Converted' || Number(l.quotes_accepted || 0) > 0).length;
     const dropped = list.filter(l => ['Dropped', 'Lost', 'Disqualified'].includes(l.status)).length;
-    const unattended24h = list.filter(l => l.is_unattended_24h).length;
+    const unattended2h = list.filter(l => l.is_unattended_2h || l.is_unattended_24h).length;
     const escalated48h = list.filter(l => l.is_unattended_48h).length;
 
     const followupsToday = list.filter(l => {
@@ -252,7 +252,7 @@ export default function CrmLeadsView({
       { label: 'Quote Revisions', val: revisions, color: '#9333EA', bg: '#FAF5FF', icon: RotateCcw },
       { label: 'Converted Won', val: converted, color: '#059669', bg: '#ECFDF5', icon: Award },
       { label: 'Dropped / Lost', val: dropped, color: '#64748B', bg: '#F1F5F9', icon: Trash2 },
-      { label: '24h Inactive', val: unattended24h, color: '#EA580C', bg: '#FFF7ED', icon: Clock },
+      { label: '2h Inactive', val: unattended2h, color: '#EA580C', bg: '#FFF7ED', icon: Clock },
       { label: '48h Escalated', val: escalated48h, color: '#DC2626', bg: '#FEF2F2', icon: AlertCircle },
       { label: 'Follow-ups Today', val: followupsToday, color: '#0891B2', bg: '#ECFEFF', icon: Calendar },
       { label: 'IndiaMART Inbound', val: indiamartLeads, color: '#B45309', bg: '#FFFBEB', icon: Compass }
@@ -267,7 +267,7 @@ export default function CrmLeadsView({
     const inProgress = list.filter(l => ['Assigned', 'Contacted', 'In Progress'].includes(l.status)).length;
     const proposals = list.filter(l => l.status === 'Proposal Sent').length;
     const converted = list.filter(l => l.status === 'Converted').length;
-    const inactive24h = list.filter(l => l.is_unattended_24h && !l.is_unattended_48h).length;
+    const inactive2h = list.filter(l => (l.is_unattended_2h || l.is_unattended_24h) && !l.is_unattended_48h).length;
     const escalated48h = list.filter(l => l.is_unattended_48h).length;
     const dropped = list.filter(l => ['Dropped', 'Lost', 'Disqualified'].includes(l.status)).length;
 
@@ -277,7 +277,7 @@ export default function CrmLeadsView({
       { id: 'Contacted', label: 'In Progress', count: inProgress, bg: '#E0F2FE', color: '#0369A1' },
       { id: 'Proposal Sent', label: 'Proposals', count: proposals, bg: '#F3E8FF', color: '#7E22CE' },
       { id: 'Converted', label: 'Converted', count: converted, bg: '#DCFCE7', color: '#15803D' },
-      { id: '24h Inactive', label: '24h Inactive', count: inactive24h, bg: '#FFF7ED', color: '#EA580C' },
+      { id: '2h Inactive', label: '2h Inactive', count: inactive2h, bg: '#FFF7ED', color: '#EA580C' },
       { id: '48h Escalated', label: '48h Escalated', count: escalated48h, bg: '#FEF2F2', color: '#DC2626' },
       { id: 'Dropped', label: 'Dropped', count: dropped, bg: '#F1F5F9', color: '#64748B' }
     ];
@@ -308,8 +308,8 @@ export default function CrmLeadsView({
         matchStatus = !lead.assigned_to_user_id || lead.status === 'New';
       } else if (statusFilter === 'Contacted') {
         matchStatus = ['Assigned', 'Contacted', 'In Progress'].includes(lead.status);
-      } else if (statusFilter === '24h Inactive') {
-        matchStatus = lead.is_unattended_24h;
+      } else if (statusFilter === '2h Inactive' || statusFilter === '24h Inactive') {
+        matchStatus = lead.is_unattended_2h || lead.is_unattended_24h;
       } else if (statusFilter === '48h Escalated') {
         matchStatus = lead.is_unattended_48h;
       } else if (statusFilter === 'Dropped') {
@@ -738,7 +738,7 @@ export default function CrmLeadsView({
       });
       const data = await res.json();
       if (data?.success) {
-        showToast(data.timerCleared ? 'Activity logged! 24h unattended timer cleared!' : 'Activity logged successfully!');
+        showToast(data.timerCleared ? 'Activity logged! Inactivity SLA timer cleared!' : 'Activity logged successfully!');
         setShowActivityModal(false);
         setActivityForm({
           activityType: 'CALL',
@@ -796,7 +796,7 @@ export default function CrmLeadsView({
     const headers = [
       'Lead Number', 'Company Name', 'Contact Person', 'Phone', 'Email',
       'Location', 'Product Requirement', 'Estimated kW', 'Source',
-      'Assigned To', 'Assigned By', 'Status', '24h Inactive', 'Created At'
+      'Assigned To', 'Assigned By', 'Status', '2h Inactive', 'Created At'
     ];
 
     const targetList = selectedLeadIds.length > 0
@@ -816,7 +816,7 @@ export default function CrmLeadsView({
       l.assigned_to_name ? `${l.assigned_to_name} (${l.assigned_to_user_id})` : 'Unassigned',
       l.assigned_by_name ? `${l.assigned_by_name} (${l.assigned_by_role || ''})` : '-',
       l.status || '',
-      l.is_unattended_24h ? 'YES' : 'NO',
+      (l.is_unattended_2h || l.is_unattended_24h) ? 'YES' : 'NO',
       l.created_at ? new Date(l.created_at).toLocaleString() : ''
     ]);
 
@@ -1422,9 +1422,9 @@ export default function CrmLeadsView({
                                 <div style={{ fontSize: '10px', fontWeight: 700, color: '#DC2626', marginTop: '3px' }}>
                                   48h Escalated
                                 </div>
-                              ) : lead.is_unattended_24h ? (
+                              ) : (lead.is_unattended_2h || lead.is_unattended_24h) ? (
                                 <div style={{ fontSize: '10px', fontWeight: 700, color: '#EA580C', marginTop: '3px' }}>
-                                  24h Unattended
+                                  2h Unattended
                                 </div>
                               ) : null}
                             </div>
@@ -1940,7 +1940,7 @@ export default function CrmLeadsView({
                   {editingLead ? `Edit Lead: ${editingLead.lead_number || editingLead.company_name || 'Details'}` : 'Create New Lead'}
                 </h3>
                 <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748B' }}>
-                  {editingLead ? 'Update lead profile, customer contact details, and technical scope.' : 'Auto-sequenced sequence number with 24-hour inactivity SLA.'}
+                  {editingLead ? 'Update lead profile, customer contact details, and technical scope.' : 'Auto-sequenced sequence number with 2-hour inactivity SLA.'}
                 </p>
               </div>
               <button onClick={() => { setShowCreateModal(false); setEditingLead(null); }} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
@@ -2454,7 +2454,7 @@ export default function CrmLeadsView({
                 fontSize: '11px',
                 color: '#15803D'
               }}>
-                <strong>Qualifying Interaction:</strong> Submitting this customer activity will verify engagement and immediately clear any pending 24-hour unattended warnings.
+                <strong>Qualifying Interaction:</strong> Submitting this customer activity will verify engagement and immediately clear any pending 2-hour unattended warnings.
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -2565,15 +2565,15 @@ export default function CrmLeadsView({
             <div style={{
               padding: '14px 18px',
               borderRadius: '10px',
-              backgroundColor: leadDetailData?.is_unattended_24h ? '#FFF7ED' : '#F0FDF4',
-              border: `1px solid ${leadDetailData?.is_unattended_24h ? '#FED7AA' : '#BBF7D0'}`,
+              backgroundColor: (leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '#FFF7ED' : '#F0FDF4',
+              border: `1px solid ${(leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '#FED7AA' : '#BBF7D0'}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between'
             }}>
               <div>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: leadDetailData?.is_unattended_24h ? '#C2410C' : '#15803D' }}>
-                  {leadDetailData?.is_unattended_48h ? '48-Hour Escalation Triggered' : leadDetailData?.is_unattended_24h ? '24-Hour Inactivity Warning Active' : 'SLA Active & Compliant'}
+                <span style={{ fontSize: '13px', fontWeight: 700, color: (leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '#C2410C' : '#15803D' }}>
+                  {leadDetailData?.is_unattended_48h ? '48-Hour Escalation Triggered' : (leadDetailData?.is_unattended_2h || leadDetailData?.is_unattended_24h) ? '2-Hour Inactivity Warning Active' : 'SLA Active & Compliant'}
                 </span>
                 <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
                   Last Qualifying Activity: {leadDetailData?.last_qualifying_activity_at ? new Date(leadDetailData.last_qualifying_activity_at).toLocaleString() : 'No qualifying call/interaction yet'}
