@@ -668,20 +668,62 @@ export default function BomOrdersView(props) {
     const rawList = (bomStore || []).filter(b => {
       if (!b) return false;
       const code = String(b.bomCode || b.code || b.id || '').trim();
-      if (/^BOM-6\d{2}$/i.test(code)) return false;
-      if (/^BOM-(STAGING|USER|POST)/i.test(code)) return false;
+      if (/^BOM-(STAGING|USER|POST|DEV-TEST)/i.test(code)) return false;
       return true;
     });
     if (!isRestrictedSalesUser) return rawList;
 
-    const curCode = (currentEmpId || '').toUpperCase();
+    const curCode = (currentEmpId || '').trim().toUpperCase();
     const effectiveCurName = (currentEmpName || (defaultSalesPersonName && !['Sales Executive', 'Sales'].includes(defaultSalesPersonName) ? defaultSalesPersonName : '') || '').trim();
     const curName = effectiveCurName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-    const curEmail = currentLoggedEmail;
+    const curEmail = (currentLoggedEmail || '').trim().toLowerCase();
 
-    // Helper to normalize names (handles 'Mohit' vs 'Mohith', spaces, punctuation)
-    const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/h/g, '');
+    // Collect all employee aliases (e.g. SE-004, SE-VRM004, EMP-SE-004, Amit Verma)
+    const userAliases = new Set([curCode, curName, curEmail].filter(Boolean));
+    try {
+      const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const matchedEmp = emps.find(e => {
+        if (!e) return false;
+        const eCode = String(e.employee_code || e.code || '').trim().toUpperCase();
+        const eId = String(e.id || '').trim().toUpperCase();
+        const eEmail = String(e.email || '').trim().toLowerCase();
+        const eName = String(e.employee_name || e.name || '').trim().toLowerCase();
+        return (curCode && (eCode === curCode || eId === curCode)) ||
+               (curEmail && eEmail === curEmail) ||
+               (curName && eName === curName);
+      });
+      if (matchedEmp) {
+        if (matchedEmp.employee_code) userAliases.add(String(matchedEmp.employee_code).trim().toUpperCase());
+        if (matchedEmp.code) userAliases.add(String(matchedEmp.code).trim().toUpperCase());
+        if (matchedEmp.id) userAliases.add(String(matchedEmp.id).trim().toUpperCase());
+        if (matchedEmp.employee_name) userAliases.add(String(matchedEmp.employee_name).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+        if (matchedEmp.name) userAliases.add(String(matchedEmp.name).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+        if (matchedEmp.email) userAliases.add(String(matchedEmp.email).trim().toLowerCase());
+        if (Array.isArray(matchedEmp.aliases)) {
+          matchedEmp.aliases.forEach(a => userAliases.add(String(a).trim().toLowerCase()));
+        }
+      }
+    } catch (_) {}
+
+    const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanCurNorm = normA(curName);
+
+    // Code matching helper: exact match or normalized matching (e.g. SE-004 vs SE-VRM004 vs EMP-SE-004)
+    const isCodeMatch = (testCode) => {
+      if (!testCode) return false;
+      const tc = String(testCode).trim().toUpperCase();
+      if (!tc) return false;
+      if (userAliases.has(tc)) return true;
+      if (curCode && (tc === curCode || tc.includes(curCode) || curCode.includes(tc))) return true;
+
+      // Extract numeric ID and dept prefix (e.g., 'SE' and '4')
+      if (curCode && curCode.includes('SE')) {
+        const curDigits = curCode.replace(/\D/g, '').replace(/^0+/, '');
+        const testDigits = tc.replace(/\D/g, '').replace(/^0+/, '');
+        if (tc.includes('SE') && curDigits && curDigits === testDigits) return true;
+      }
+      return false;
+    };
 
     return rawList.filter(b => {
       if (!b) return false;
@@ -698,27 +740,47 @@ export default function BomOrdersView(props) {
         if (sPi === tPi) return true;
       }
 
-      const spCode = (b.salesPersonCode || b.createdById || '').trim().toUpperCase();
+      // 1. Check all possible salesperson / creator / converter codes on the BOM
+      const bomCodes = [
+        b.salesPersonCode,
+        b.createdById,
+        b.convertedById,
+        b.sales_person_code,
+        b.created_by_id,
+        b.converted_by_id,
+        b._extra_data?.salesPersonCode,
+        b._extra_data?.createdById,
+        b._extra_data?.convertedById
+      ].filter(Boolean);
 
-      // Primary Isolation Rule: Strict EMP Code matching
-      if (curCode && spCode) {
-        return spCode === curCode;
-      }
-
-      // If BOM belongs to a different EMP Code, strictly exclude
-      if (curCode && spCode && spCode !== curCode) {
-        return false;
-      }
-
-      // Exact email match
-      if (curEmail && (b.salesPersonEmail || b.email || '').trim().toLowerCase() === curEmail) {
+      if (bomCodes.some(isCodeMatch)) {
         return true;
       }
 
-      // Strict exact name match ONLY if no employee code is on the BOM
-      const spName = (b.salesPerson || b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      const creatorName = (b.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
-      if (!spCode && curName && (spName === curName || creatorName === curName)) {
+      // 2. Exact or normalized email match
+      const bomEmails = [b.salesPersonEmail, b.email, b.creatorEmail].filter(Boolean).map(e => String(e).trim().toLowerCase());
+      if (curEmail && bomEmails.some(e => e === curEmail || userAliases.has(e))) {
+        return true;
+      }
+
+      // 3. Name matching across salesperson / creator / converter
+      const bomNames = [
+        b.salesPerson,
+        b.createdBy,
+        b.convertedBy,
+        b.sales_person,
+        b.created_by,
+        b.converted_by
+      ].filter(Boolean).map(n => String(n).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase());
+
+      if (bomNames.some(n => {
+        if (userAliases.has(n)) return true;
+        if (cleanCurNorm) {
+          const normN = normA(n);
+          if (normN === cleanCurNorm || normN.includes(cleanCurNorm) || cleanCurNorm.includes(normN)) return true;
+        }
+        return false;
+      })) {
         return true;
       }
 
