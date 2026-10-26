@@ -1993,7 +1993,7 @@ export function VRMProformaInvoicePrintSheet({
                           </td>
                         )}
 
-                        {/* RATE COLUMN: Merged vertically at top for Preset Kit */}
+                        {/* RATE COLUMN: Merged vertically in middle for Preset Kit */}
                         {hasRate && (
                           it.isPresetItem ? (
                             it.isFirstInGroup ? (
@@ -2004,7 +2004,7 @@ export function VRMProformaInvoicePrintSheet({
                                   padding: '6px 6px',
                                   textAlign: 'right',
                                   fontSize: '10.5px',
-                                  verticalAlign: 'top',
+                                  verticalAlign: 'middle',
                                   backgroundColor: '#F8FAFC',
                                   fontWeight: '700'
                                 }}
@@ -2040,7 +2040,7 @@ export function VRMProformaInvoicePrintSheet({
                           )
                         )}
 
-                        {/* TAX COLUMNS: Merged vertically at top for Preset Kit */}
+                        {/* TAX COLUMNS: Merged vertically in middle for Preset Kit */}
                         {hasGst && (
                           isIntra ? (
                             it.isPresetItem ? (
@@ -2048,25 +2048,25 @@ export function VRMProformaInvoicePrintSheet({
                                 <>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'top', backgroundColor: '#F8FAFC' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
                                   >
                                     {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'top', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
                                   >
                                     {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'top', backgroundColor: '#F8FAFC' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
                                   >
                                     {it.gRate ? `${(it.gRate / 2).toFixed(1).replace(/\.0$/, '')}%` : '9%'}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'top', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
                                   >
                                     {((it.groupGst || (it.groupTaxable * (it.gRate / 100))) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
@@ -2094,13 +2094,13 @@ export function VRMProformaInvoicePrintSheet({
                                 <>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'top', backgroundColor: '#F8FAFC' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 3px', textAlign: 'center', fontSize: '9.5px', verticalAlign: 'middle', backgroundColor: '#F8FAFC' }}
                                   >
                                     {it.gRate ? `${it.gRate}%` : '18%'}
                                   </td>
                                   <td
                                     rowSpan={it.groupCount}
-                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'top', backgroundColor: '#F8FAFC', fontWeight: '600' }}
+                                    style={{ border: '1px solid #CBD5E1', padding: '6px 5px', textAlign: 'right', fontSize: '10px', verticalAlign: 'middle', backgroundColor: '#F8FAFC', fontWeight: '600' }}
                                   >
                                     {(it.groupGst || (it.groupTaxable * (it.gRate / 100))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
@@ -2119,7 +2119,7 @@ export function VRMProformaInvoicePrintSheet({
                           )
                         )}
 
-                        {/* AMOUNT COLUMN: Merged vertically at top for Preset Kit */}
+                        {/* AMOUNT COLUMN: Merged vertically in middle for Preset Kit */}
                         {hasAmt && (
                           it.isPresetItem ? (
                             it.isFirstInGroup ? (
@@ -2132,7 +2132,7 @@ export function VRMProformaInvoicePrintSheet({
                                   fontWeight: '800',
                                   color: '#0F172A',
                                   fontSize: '10.5px',
-                                  verticalAlign: 'top',
+                                  verticalAlign: 'middle',
                                   backgroundColor: '#F8FAFC'
                                 }}
                               >
