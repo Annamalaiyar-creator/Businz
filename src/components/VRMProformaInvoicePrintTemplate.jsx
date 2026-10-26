@@ -46,7 +46,7 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   // Theme & Identity
   accentColor: '#0E7490', // Default VRM Teal
   documentTitle: 'Proforma Invoice',
-  companyName: 'VRM Structures India Pvt Ltd.',
+  companyName: 'VRM STRUCTURES INDIA PRIVATE LIMITED',
   companyTagline: '',
   showLogo: true,
   customLogoUrl: VRM_OFFICIAL_LOGO, // Official VRM Logo base64
@@ -1342,11 +1342,11 @@ export function VRMProformaInvoicePrintSheet({
                 </RemovableBlock>
               )}
               <div>
-                {cfg.showCompanyName && cfg.companyName && (
-                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.3px', marginBottom: '3px' }}>
+                {cfg.showCompanyName !== false && (
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px', marginBottom: '3px' }}>
                     <EditableText
-                      value={cfg.companyName}
-                      fallback="VRM Structures India Pvt Ltd."
+                      value={cfg.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED'}
+                      fallback="VRM STRUCTURES INDIA PRIVATE LIMITED"
                       onSave={(v) => onUpdateSetting?.({ companyName: v })}
                       onRemove={() => {
                         onUpdateSetting?.({ showCompanyName: false, companyName: '' });
@@ -1473,6 +1473,28 @@ export function VRMProformaInvoicePrintSheet({
                   </div>
                 </>
               )}
+              {(() => {
+                const phoneVal = (pi.phone || pi.contactPhone || pi.customerPhone || pi.mobileNumber || pi.mobile || '').toString().replace(/[()]/g, '').trim();
+                return (
+                  <>
+                    <div style={{ color: '#64748B', fontWeight: '500' }}>
+                      <EditableText
+                        value={cfg.phoneLabel || 'Mobile No.'}
+                        fallback="Mobile No."
+                        onSave={(v) => onUpdateSetting?.({ phoneLabel: v })}
+                      />
+                    </div>
+                    <div style={{ color: '#94A3B8' }}>:</div>
+                    <div style={{ fontWeight: '600', color: '#0F172A' }}>
+                      <EditableText
+                        value={phoneVal}
+                        fallback="98847 20789"
+                        onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '').trim() })}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -1632,9 +1654,9 @@ export function VRMProformaInvoicePrintSheet({
               {(pi.phone || pi.contactPhone) && (
                 <div>
                   <EditableText
-                    value={`(${pi.phone || pi.contactPhone})`}
-                    fallback="(9341 5621 2461)"
-                    onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '') })}
+                    value={(pi.phone || pi.contactPhone || '').toString().replace(/[()]/g, '').trim()}
+                    fallback="9341 5621 2461"
+                    onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '').trim() })}
                   />
                 </div>
               )}
@@ -1904,13 +1926,12 @@ export function VRMProformaInvoicePrintSheet({
                             style={{
                               border: '1px solid #CBD5E1',
                               padding: '3px 8px',
-                              backgroundColor: it.presetGroupNum % 2 === 1 ? '#F0FDFA' : '#EEF2FF',
-                              borderTop: `2px solid ${it.presetGroupNum % 2 === 1 ? '#0E7490' : '#6366F1'}`
+                              backgroundColor: '#F0FDFA',
+                              borderTop: `2px solid ${cfg.accentColor || '#0E7490'}`
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span style={{ fontWeight: '800', color: it.presetGroupNum % 2 === 1 ? '#0E7490' : '#4338CA', fontSize: '10px' }}>
-                                PRESET {it.presetGroupNum}:{' '}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                              <span style={{ fontWeight: '800', color: cfg.accentColor || '#0E7490', fontSize: '10px' }}>
                                 <EditableText
                                   value={it.presetName}
                                   fallback="Solar Structure MMS Kit"
@@ -1919,9 +1940,6 @@ export function VRMProformaInvoicePrintSheet({
                                   }}
                                 />
                                 {' '}(Total Quantity: {it.setCount || 1} Set{(it.setCount || 1) > 1 ? 's' : ''} — {it.groupCount} Components)
-                              </span>
-                              <span style={{ fontSize: '9px', color: '#475569', fontWeight: '700' }}>
-                                Kit Subtotal: ₹{Number(it.groupPrice || it.groupTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                           </td>
@@ -2224,26 +2242,26 @@ export function VRMProformaInvoicePrintSheet({
                     onSave={(v) => onUpdateSetting?.({ bankHeading: v })}
                   />
                 </div>
-                <div style={{ fontSize: '10px', color: '#334155', lineHeight: '1.45' }}>
+                <div style={{ fontSize: '10px', color: '#0F172A', lineHeight: '1.5', fontWeight: '700' }}>
                   <div>
-                    <span style={{ color: '#64748B' }}>Beneficiary: </span>
-                    <EditableText value={cfg.bankBeneficiary || 'VRM Structures India Private Limited'} fallback="VRM Structures India Private Limited" onSave={(v) => onUpdateSetting?.({ bankBeneficiary: v })} style={{ fontWeight: '600', color: '#0F172A' }} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>Beneficiary: </span>
+                    <EditableText value={cfg.bankBeneficiary || 'VRM Structures India Private Limited'} fallback="VRM Structures India Private Limited" onSave={(v) => onUpdateSetting?.({ bankBeneficiary: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>A/c No: </span>
-                    <EditableText value={cfg.bankAccountNo || '50200031629272'} fallback="50200031629272" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '700', color: '#0F172A' }} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>A/c No: </span>
+                    <EditableText value={cfg.bankAccountNo || '50200031629272'} fallback="50200031629272" onSave={(v) => onUpdateSetting?.({ bankAccountNo: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>Bank: </span>
-                    <EditableText value={cfg.bankName || 'HDFC Bank'} fallback="HDFC Bank" onSave={(v) => onUpdateSetting?.({ bankName: v })} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>Bank: </span>
+                    <EditableText value={cfg.bankName || 'HDFC Bank'} fallback="HDFC Bank" onSave={(v) => onUpdateSetting?.({ bankName: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>Branch: </span>
-                    <EditableText value={cfg.bankBranch || 'Kodambakkam'} fallback="Kodambakkam" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>Branch: </span>
+                    <EditableText value={cfg.bankBranch || 'Kodambakkam'} fallback="Kodambakkam" onSave={(v) => onUpdateSetting?.({ bankBranch: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                   <div>
-                    <span style={{ color: '#64748B' }}>IFSC: </span>
-                    <EditableText value={cfg.bankIfsc || 'HDFC0000574'} fallback="HDFC0000574" onSave={(v) => onUpdateSetting?.({ bankIfsc: v })} style={{ fontWeight: '700', color: '#0F172A' }} />
+                    <span style={{ color: '#0F172A', fontWeight: '800' }}>IFSC: </span>
+                    <EditableText value={cfg.bankIfsc || 'HDFC0000574'} fallback="HDFC0000574" onSave={(v) => onUpdateSetting?.({ bankIfsc: v })} style={{ fontWeight: '800', color: '#0F172A' }} />
                   </div>
                 </div>
               </div>
@@ -3514,7 +3532,9 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
       let initial = { ...DEFAULT_PI_TEMPLATE_SETTINGS };
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.companyName === 'VRM Structures India Pvt Ltd') parsed.companyName = '';
+        if (!parsed.companyName || parsed.companyName === 'VRM Structures India Pvt Ltd' || parsed.companyName === 'VRM Structures India Pvt Ltd.') {
+          parsed.companyName = 'VRM STRUCTURES INDIA PRIVATE LIMITED';
+        }
         if (parsed.companyTagline === 'Engineered Solar Mounting Structures & Solutions') parsed.companyTagline = '';
         if (parsed.companyCin === 'U28112TN2020PTC135489') parsed.companyCin = '';
         if (parsed.signatureMode === 'vector' && !parsed.customSignatureUrl) parsed.signatureMode = 'none';
@@ -3522,7 +3542,7 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         if (parsed.bankBranch === 'Kodambakkam, Chennai' || parsed.bankBranch === 'Kodambakkam' || parsed.bankBranch?.includes('Ambattur')) parsed.bankBranch = 'Vinayagapuram Branch';
         if (parsed.bankAccountNo === '50200088912456') parsed.bankAccountNo = '50200031629272';
         if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd') parsed.bankName = 'HDFC Bank';
-        parsed.showCompanyName = false;
+        parsed.showCompanyName = true;
         parsed.showCompanyTagline = false;
         parsed.companyUdyam = '';
         if (parsed.companyAddressLine1 === '1427, GNT Road, Nagappa Industrial Estate,' || parsed.companyAddressLine2?.startsWith('Puzhal,') || parsed.companyAddressLine2?.startsWith('Puzhal,\n')) {
@@ -3531,6 +3551,8 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         }
         initial = { ...initial, ...parsed };
       }
+      initial.companyName = initial.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
+      initial.showCompanyName = true;
 
       // Merge master company branding (logo, stamp, signatory details)
       if (branding) {
