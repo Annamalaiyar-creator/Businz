@@ -7811,7 +7811,7 @@ app.post('/api/crm/leads/simulate-inbound', async (req, res) => {
 // ==========================================
 app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
   try {
-    const userRole = req.headers['x-user-role'] || req.query.userRole || 'Sales Executive';
+    const userRole = req.headers['x-user-role'] || req.query.userRole || '';
     const userEmpId = req.headers['x-user-emp-id'] || req.query.userEmpId || '';
     const userName = req.headers['x-user-name'] || req.query.userName || '';
     const { search, status, source, assignedTo, unassignedOnly } = req.query;

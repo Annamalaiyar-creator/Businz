@@ -228,6 +228,7 @@ export function canViewAllLeads(role = '', employeeCode = '') {
   const r = String(role || '').toLowerCase().trim();
   const code = String(employeeCode || '').toUpperCase().trim();
   return (
+    !r ||
     r.includes('ceo') ||
     r.includes('md') ||
     r.includes('managing director') ||
@@ -235,9 +236,16 @@ export function canViewAllLeads(role = '', employeeCode = '') {
     r.includes('technical admin') ||
     r.includes('tech support') ||
     r.includes('technical support') ||
+    r.includes('tech_support') ||
+    r.includes('admin') ||
+    r.includes('super admin') ||
+    r.includes('developer') ||
+    r.includes('sales head') ||
     code.startsWith('CEO-') ||
     code.startsWith('TA-') ||
-    code.startsWith('TS-')
+    code.startsWith('TS-') ||
+    code.startsWith('SH-') ||
+    code.startsWith('ADM-')
   );
 }
 

@@ -37,19 +37,20 @@ export default function CrmLeadsView({
   const loggedInEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
 
   // Role Checks
-  const effectiveRole = (userRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '').toLowerCase();
-  const isCeo = ['ceo', 'md', 'managing director'].some(r => effectiveRole.includes(r));
-  const isTechSupport = ['tech support', 'technical support', 'tech_support'].some(r => effectiveRole.includes(r));
-  const isSalesHead = effectiveRole.includes('sales head');
-  const isTechAdmin = ['technical administrator', 'technical admin', 'developer', 'ta'].some(r => effectiveRole.includes(r));
+  const effectiveRole = (typeof window !== 'undefined' ? (localStorage.getItem('controlroom_user_role') || userRole) : userRole) || '';
+  const effectiveRoleLower = effectiveRole.toLowerCase();
+  const isCeo = ['ceo', 'md', 'managing director'].some(r => effectiveRoleLower.includes(r));
+  const isTechSupport = ['tech support', 'technical support', 'tech_support'].some(r => effectiveRoleLower.includes(r));
+  const isSalesHead = effectiveRoleLower.includes('sales head');
+  const isTechAdmin = ['technical administrator', 'technical admin', 'developer', 'ta', 'admin', 'super admin'].some(r => effectiveRoleLower.includes(r));
+  const isSalesPerson = effectiveRoleLower.includes('sales') && !isSalesHead;
   const isSalesExec = !isCeo && !isTechSupport && !isSalesHead && !isTechAdmin;
-  const isSalesPerson = effectiveRole.includes('sales');
 
   // Lead Creation Privilege: strictly CEO/MD and Tech Support / Tech Admin alone (NEVER sales person / sales executive / sales head)
   const canCreateLead = (isCeo || isTechSupport || isTechAdmin) && !isSalesPerson;
 
-  // Global Visibility Privileges: strictly CEO/MD and Tech Support / Tech Admin alone
-  const hasGlobalView = isCeo || isTechSupport || isTechAdmin;
+  // Global Visibility Privileges: strictly CEO/MD and Tech Support / Tech Admin / Sales Head / Admin
+  const hasGlobalView = isCeo || isTechSupport || isTechAdmin || isSalesHead;
   const canAssign = isCeo || isTechSupport || isTechAdmin;
 
   // Master State from Authoritative PostgreSQL API
@@ -139,7 +140,7 @@ export default function CrmLeadsView({
     try {
       setIsLoading(true);
       const headers = {
-        'x-user-role': userRole,
+        'x-user-role': effectiveRole || userRole,
         'x-user-emp-id': loggedInEmpId,
         'x-user-name': loggedInUserName
       };
@@ -461,7 +462,7 @@ export default function CrmLeadsView({
     try {
       const headers = {
         'Content-Type': 'application/json',
-        'x-user-role': userRole,
+        'x-user-role': effectiveRole || userRole,
         'x-user-emp-id': loggedInEmpId,
         'x-user-name': loggedInUserName
       };
@@ -507,6 +508,8 @@ export default function CrmLeadsView({
       if (data?.success) {
         showToast(`Lead ${data.lead.lead_number} created successfully!`);
         setShowCreateModal(false);
+        setStatusFilter('All');
+        setSearchQuery('');
         setCreateForm({
           companyName: '',
           contactPerson: '',
