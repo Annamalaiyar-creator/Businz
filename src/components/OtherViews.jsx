@@ -191,10 +191,12 @@ export default function OtherViews(props) {
         {(activeTab === 'Dispatch Dashboard' || (userRole === 'Dispatch Head' && activeTab === 'Dashboard')) && <DispatchDashboardView {...props} />}
 
         {/* Sales CRM Master Engine (Individual Dedicated Tabs) */}
-        {['Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration'].includes(activeTab) && (
+        {['Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration'].includes(activeTab) && (
           <SalesCrmEngine
             userRole={userRole}
             activeTab={activeTab}
+            targetCustomerCode={props.targetCustomerCode}
+            clearTargetCustomer={props.clearTargetCustomer}
             onNavigateTab={props.onChangeTab || props.onSelectTab}
           />
         )}
@@ -239,14 +241,14 @@ export default function OtherViews(props) {
           'Dispatch Dashboard', 'BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing',
           'Preset Management', 'Presets', 'BOM Presets',
           'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault',
-          'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration',
+          'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration',
           'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Facebook Leads', 'Facebook Messenger',
           'Integration', 'Integrations', 'Integration Hub', 'Omnichannel Integrations'
         ].includes(activeTab) || ['Work Orders', 'Planning & Scheduling', 'Production Monitoring',
           'Quality Control', 'Machine Maintenance', 'Inventory',
           'Production Reports', 'Efficiency Reports', 'Downtime Analytics',
           'Add Work Order', 'Record Production', 'Report Downtime', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management', 'Delivery Challans'
-        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault', 'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Integration', 'Integrations', 'IndiaMART', 'IndiaMART Integration', 'Leads', 'Leads Directory'].includes(activeTab) && (
+        ].includes(activeTab)) && activeTab !== 'Dispatch Dashboard' && !['BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing', 'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault', 'Mail Inbox', 'Mail', 'Support Mail', 'Email Inbox', 'Email', 'Facebook & Meta', 'Facebook', 'Meta Integration', 'Integration', 'Integrations', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration', 'Leads', 'Leads Directory'].includes(activeTab) && (
           <ProductionViewsEngine {...props} />
         )}
       </div>

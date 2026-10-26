@@ -10,8 +10,8 @@ import {
 import * as XLSX from 'xlsx';
 import NotificationToast from '../NotificationToast';
 import { addLiveNotification } from '../Header';
-import Customer360PageView from './Customer360PageView';
 import { saveCloudStore, fetchCloudStore } from '../../utils/supabaseDataSync';
+import { getNextSequence, formatSequenceCode } from '../../utils/sequenceGenerator';
 
 export default function CrmCustomersView({
   customers = [],
@@ -22,10 +22,12 @@ export default function CrmCustomersView({
   onBatchUpdateCustomers,
   onOpenWhatsAppChat,
   onNavigateTab,
+  targetCustomerCode = null,
+  clearTargetCustomer,
   isLoading = false
 }) {
-  // Page mode: 'table' | 'create' | 'details' (Dedicated full-page views)
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'create' | 'details'
+  // Page mode: 'table' | 'create'
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'create'
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
 
@@ -37,7 +39,7 @@ export default function CrmCustomersView({
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [profileTab, setProfileTab] = useState('Timeline');
+  const [profileTab, setProfileTab] = useState('Overview');
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [dupError, setDupError] = useState(null);
 
@@ -83,6 +85,53 @@ export default function CrmCustomersView({
     });
     return () => { active = false; };
   }, []);
+
+  // Listen for navigation events with targeted search customer
+  useEffect(() => {
+    const handleNav = (e) => {
+      const code = e?.detail?.searchCustomer || e?.detail?.targetCustomer;
+      const shouldOpenDetails = Boolean(e?.detail?.openDetails || e?.detail?.openViewDetails);
+      if (code) {
+        const cleanCode = String(code).trim();
+        setSearchTerm(cleanCode);
+        setActiveSubTab('All');
+        setFilterCustomerType('All');
+        setCurrentPage(1);
+        setViewMode('table');
+
+        // Only open details modal if explicitly requested by action
+        if (shouldOpenDetails) {
+          const match = customers.find(c => 
+            (c.customerCode && String(c.customerCode).trim().toLowerCase() === cleanCode.toLowerCase()) || 
+            (c.id && String(c.id).trim().toLowerCase() === cleanCode.toLowerCase()) || 
+            (c.code && String(c.code).trim().toLowerCase() === cleanCode.toLowerCase()) ||
+            (c.customerName && c.customerName.toLowerCase() === cleanCode.toLowerCase()) ||
+            (c.companyName && c.companyName.toLowerCase() === cleanCode.toLowerCase())
+          );
+          if (match) {
+            setSelectedCustomer(match);
+          }
+        } else {
+          setSelectedCustomer(null);
+        }
+      }
+    };
+    window.addEventListener('controlroom_navigate_tab', handleNav);
+    return () => window.removeEventListener('controlroom_navigate_tab', handleNav);
+  }, [customers]);
+
+  // Also react to targetCustomerCode prop directly when component mounts or receives it
+  useEffect(() => {
+    if (targetCustomerCode) {
+      const cleanCode = String(targetCustomerCode).trim();
+      setSearchTerm(cleanCode);
+      setActiveSubTab('All');
+      setFilterCustomerType('All');
+      setCurrentPage(1);
+      setViewMode('table');
+      setSelectedCustomer(null);
+    }
+  }, [targetCustomerCode]);
 
   const handleAddCustomerTask = (custId) => {
     if (!newTaskInput.trim()) return;
@@ -166,7 +215,8 @@ export default function CrmCustomersView({
     creditLimit: '',
     creditDays: '',
     paymentTerms: '',
-    source: '',
+    source: 'Direct Client',
+    billingAddressType: 'Registered Office',
     notes: '',
     altPhone: '',
     primaryContact: {
@@ -314,6 +364,8 @@ export default function CrmCustomersView({
       const matchesSearch = !searchTerm ||
         c.companyName?.toLowerCase().includes(q) ||
         c.customerCode?.toLowerCase().includes(q) ||
+        c.id?.toLowerCase().includes(q) ||
+        c.code?.toLowerCase().includes(q) ||
         c.primaryContact?.name?.toLowerCase().includes(q) ||
         c.primaryContact?.phone?.includes(q) ||
         c.gstNumber?.toLowerCase().includes(q) ||
@@ -594,9 +646,11 @@ export default function CrmCustomersView({
         pincode
       };
 
+      const seq = getNextSequence('CS', customers || []);
+      const autoCode = seq?.code ? formatSequenceCode('CS', seq.nextNum + idx) : `VRM-CS-${new Date().getFullYear()}-${String(idx + 1).padStart(2, '0')}`;
       return {
-        id: 'CUST-VRM-' + String(100 + customers.length + idx + 1),
-        customerCode: 'CUST-VRM-' + String(100 + customers.length + idx + 1),
+        id: autoCode,
+        customerCode: autoCode,
         companyName: companyName || customerName || ('Customer ' + (idx + 1)),
         customerName: customerName || companyName || ('Customer ' + (idx + 1)),
         customerType,
@@ -742,7 +796,8 @@ export default function CrmCustomersView({
       creditLimit: cust.creditLimit !== undefined && cust.creditLimit !== null ? cust.creditLimit : '',
       creditDays: cust.creditDays !== undefined && cust.creditDays !== null ? cust.creditDays : '',
       paymentTerms: cust.paymentTerms || '',
-      source: cust.source || '',
+      source: cust.source || 'Direct Client',
+      billingAddressType: cust.billingAddressType || 'Registered Office',
       notes: cust.notes || '',
       altPhone: cust.altPhone || cust.altNumber || cust.primaryContact?.altPhone || '',
       primaryContact: {
@@ -761,12 +816,17 @@ export default function CrmCustomersView({
   const handleSaveCustomerForm = async (e) => {
     if (e) e.preventDefault();
 
-    if (!formCust.customerName || !formCust.customerName.trim()) {
-      alert('⚠️ Customer Name is mandatory.');
+    const resolvedName = (formCust.companyName || formCust.customerName || '').trim();
+    if (!resolvedName) {
+      alert('⚠️ Company / Organization Legal Name is mandatory.');
       return;
     }
-    if (!formCust.companyName || !formCust.companyName.trim()) {
-      alert('⚠️ Company / Organization Legal Name is mandatory.');
+    if (!formCust.source || !formCust.source.trim()) {
+      alert('⚠️ Acquisition Source is mandatory.');
+      return;
+    }
+    if (!formCust.customerType || !formCust.customerType.trim()) {
+      alert('⚠️ Customer Account Type is mandatory.');
       return;
     }
     if (!formCust.primaryContact.name || !formCust.primaryContact.name.trim()) {
@@ -777,10 +837,14 @@ export default function CrmCustomersView({
       alert('⚠️ Contact Phone Number is mandatory.');
       return;
     }
+    if (!formCust.address1 || !formCust.address1.trim()) {
+      alert('⚠️ Billing Address 1 (Building / Street) is mandatory.');
+      return;
+    }
 
     const customerCode = editingCustomer
       ? (editingCustomer.customerCode || editingCustomer.id)
-      : `CUST-VRM-${String(100 + customers.length + 1)}`;
+      : (getNextSequence('CS', customers || []).code || `VRM-CS-${new Date().getFullYear()}-01`);
 
     const formatAddr = (addr, city, state, pin) => {
       const parts = [];
@@ -830,8 +894,10 @@ export default function CrmCustomersView({
       id: customerCode,
       customerCode: customerCode,
       ...formCust,
-      code: formCust.customerName || formCust.companyName,
-      c2: formCust.companyName || formCust.customerName,
+      customerName: resolvedName,
+      companyName: resolvedName,
+      code: resolvedName,
+      c2: resolvedName,
       c3: formCust.primaryContact?.name || '',
       c4: formCust.primaryContact?.phone || '',
       c5: formCust.primaryContact?.email || '',
@@ -925,7 +991,7 @@ export default function CrmCustomersView({
   if (viewMode === 'create') {
     const nextCodePreview = editingCustomer
       ? (editingCustomer.customerCode || editingCustomer.id)
-      : `CUST-VRM-${String(100 + customers.length + 1)}`;
+      : (getNextSequence('CS', customers || []).code || `VRM-CS-${new Date().getFullYear()}-01`);
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
@@ -1029,10 +1095,13 @@ export default function CrmCustomersView({
             </div>
 
             <div>
-              <label htmlFor="crm-customers-acquisition-source" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Acquisition Source</label>
+              <label htmlFor="crm-customers-acquisition-source" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Acquisition Source <span style={{ color: '#EF4444' }}>*</span>
+              </label>
               <select id="crm-customers-acquisition-source" name="acquisitionSource" aria-label="Acquisition Source"
                 value={formCust.source}
                 onChange={(e) => setFormCust({ ...formCust, source: e.target.value })}
+                required
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
               >
                 <option value="Direct Client">Direct Client / Walk-in</option>
@@ -1057,24 +1126,7 @@ export default function CrmCustomersView({
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div>
-              <label htmlFor="crm-customers-customer-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Customer Name <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-              <input id="crm-customers-customer-name" name="customerName" aria-label="Customer Name"
-                type="text"
-                required
-                placeholder="e.g. Vikram Solar"
-                value={formCust.customerName}
-                onChange={(e) => {
-                  setFormCust({ ...formCust, customerName: e.target.value });
-                  validateDuplicates('companyName', e.target.value, editingCustomer?.id);
-                }}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-               />
-            </div>
-
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div>
               <label htmlFor="crm-customers-vikram-solar-limited" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 Company / Organization Legal Name <span style={{ color: '#EF4444' }}>*</span>
@@ -1085,22 +1137,21 @@ export default function CrmCustomersView({
                 placeholder="e.g. Vikram Solar Limited"
                 value={formCust.companyName}
                 onChange={(e) => {
-                  setFormCust({ ...formCust, companyName: e.target.value });
+                  setFormCust({ ...formCust, companyName: e.target.value, customerName: e.target.value });
                   validateDuplicates('companyName', e.target.value, editingCustomer?.id);
                 }}
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
                />
             </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label htmlFor="crm-customers-customer-account-type" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                Customer Account Type
+                Customer Account Type <span style={{ color: '#EF4444' }}>*</span>
               </label>
               <select id="crm-customers-customer-account-type" name="customerAccountType" aria-label="Customer Account Type"
                 value={formCust.customerType}
                 onChange={(e) => setFormCust({ ...formCust, customerType: e.target.value })}
+                required
                 style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: 'white', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
               >
                 <option value="EPC Contractor">EPC Contractor</option>
@@ -1237,11 +1288,12 @@ export default function CrmCustomersView({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Billing Address 1 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Building / Door / Flat / Street)</span>
+                <label htmlFor="crm-customers-address1" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Billing Address 1 <span style={{ color: '#EF4444' }}>*</span> <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '500' }}>(Building / Door / Flat / Street)</span>
                 </label>
                 <input id="crm-customers-address1" name="address1" aria-label="No 1427, GNT Road, Nagappa Industrial Estate"
                   type="text"
+                  required
                   placeholder="e.g. No 1427, GNT Road, Nagappa Industrial Estate"
                   value={formCust.address1}
                   onChange={(e) => {
@@ -1535,29 +1587,7 @@ export default function CrmCustomersView({
   }
 
   // =========================================================================
-  // RENDER 2: DEDICATED SEPARATE PAGE - CUSTOMER 360° INTELLIGENCE VIEW
-  // =========================================================================
-  if (viewMode === 'details' && selectedCustomer) {
-    return (
-      <Customer360PageView
-        customer={selectedCustomer}
-        onBack={() => {
-          setViewMode('table');
-          setSelectedCustomer(null);
-        }}
-        onEditCustomer={(cust) => handleOpenEditPage(cust)}
-        onOpenWhatsAppChat={onOpenWhatsAppChat}
-        onNavigateTab={onNavigateTab}
-        opportunities={opportunities}
-        quotations={quotations}
-        boms={boms}
-        activeAccountUser={activeAccountUser}
-      />
-    );
-  }
-
-  // =========================================================================
-  // RENDER 3: DEFAULT CUSTOMER DIRECTORY TABLE
+  // RENDER 2: DEFAULT CUSTOMER DIRECTORY TABLE
   // =========================================================================
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
@@ -1577,7 +1607,7 @@ export default function CrmCustomersView({
             Customer Directory
           </h2>
           <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-            Centralized repository with 11-point 360° account intelligence, credit limits & automatic database synchronization
+            Centralized B2B customer directory, KYC records, credit limits & statutory tax compliance
           </span>
         </div>
 
@@ -1882,11 +1912,10 @@ export default function CrmCustomersView({
                       <td
                         onClick={() => {
                           setSelectedCustomer(cust);
-                          setViewMode('details');
-                          setProfileTab('Timeline');
+                          setProfileTab('Overview');
                         }}
                         style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
-                        title="Click to view full 360° details"
+                        title="Click to view details"
                       >
                         {cust.customerCode || cust.id}
                       </td>
@@ -1895,11 +1924,10 @@ export default function CrmCustomersView({
                       <td
                         onClick={() => {
                           setSelectedCustomer(cust);
-                          setViewMode('details');
-                          setProfileTab('Timeline');
+                          setProfileTab('Overview');
                         }}
                         style={{ padding: '12px 14px', cursor: 'pointer' }}
-                        title="Click to view full 360° details"
+                        title="Click to view details"
                       >
                         <div style={{ fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{cust.companyName}</span>
@@ -2094,11 +2122,10 @@ export default function CrmCustomersView({
                 setSelectedRows([]);
                 if (targetCust) {
                   setSelectedCustomer(targetCust);
-                  setViewMode('details');
-                  setProfileTab('Timeline');
+                  setProfileTab('Overview');
                 }
               } else {
-                alert('Please select a single customer to view 360° details.');
+                alert('Please select a single customer to view details.');
               }
             }}
             style={{
@@ -2116,7 +2143,7 @@ export default function CrmCustomersView({
               boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
             }}
           >
-            <Eye size={14} style={{ color: '#0E7490' }} /> View 360°
+            <Eye size={14} style={{ color: '#0E7490' }} /> View Details
           </button>
 
           <button
@@ -2126,6 +2153,527 @@ export default function CrmCustomersView({
           >
             <X size={16} />
           </button>
+        </div>
+      )}
+
+      {/* 5. CUSTOMER VIEW DETAILS MODAL */}
+      {selectedCustomer && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedCustomer(null);
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '940px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+              border: '1px solid #E2E8F0'
+            }}
+          >
+            {/* Modal Header Banner */}
+            <div
+              style={{
+                padding: '20px 24px',
+                background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+                color: '#FFFFFF',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    backgroundColor: '#0E7490',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '900',
+                    fontSize: '18px',
+                    boxShadow: '0 4px 10px rgba(14,116,144,0.35)'
+                  }}
+                >
+                  {(selectedCustomer.companyName || 'C').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#FFFFFF' }}>
+                      {selectedCustomer.companyName}
+                    </h3>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#334155',
+                        color: '#94A3B8',
+                        fontWeight: '700'
+                      }}
+                    >
+                      {selectedCustomer.customerCode || selectedCustomer.id}
+                    </span>
+                    {selectedCustomer.source === 'Zoho Books' && (
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: '#7E22CE',
+                          color: '#FFFFFF',
+                          fontWeight: '800'
+                        }}
+                      >
+                        ZOHO CONNECTED
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#94A3B8', margin: '4px 0 0 0' }}>
+                    {selectedCustomer.customerType || 'B2B Solar Customer'} • {selectedCustomer.city || '—'}, {selectedCustomer.state || ''} • Source: {selectedCustomer.source || 'Direct Client'}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenWhatsAppChat) onOpenWhatsAppChat(selectedCustomer);
+                    else if (onNavigateTab) onNavigateTab('WhatsApp Inbox');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: '#10B981',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <MessageSquare size={14} /> WhatsApp Chat
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = selectedCustomer;
+                    setSelectedCustomer(null);
+                    handleOpenEditPage(c);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Edit3 size={14} /> Edit Customer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedCustomer(null)}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    border: 'none',
+                    color: '#94A3B8',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Sub-Tabs */}
+            <div
+              style={{
+                display: 'flex',
+                borderBottom: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                padding: '0 20px',
+                gap: '8px'
+              }}
+            >
+              {[
+                { id: 'Overview', label: 'Company Overview', icon: Building2 },
+                { id: 'Contacts', label: 'Authorized Contact', icon: Users },
+                { id: 'Address', label: 'Billing & Delivery Address', icon: MapPin },
+                { id: 'Commercial', label: 'Commercial & Statutory', icon: FileText },
+                { id: 'Orders', label: 'Connected BOM & Quotes', icon: Layers }
+              ].map(t => {
+                const Icon = t.icon;
+                const isActive = profileTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setProfileTab(t.id)}
+                    style={{
+                      padding: '12px 14px',
+                      border: 'none',
+                      backgroundColor: 'transparent',
+                      borderBottom: isActive ? '3px solid #0E7490' : '3px solid transparent',
+                      color: isActive ? '#0E7490' : '#64748B',
+                      fontWeight: isActive ? '800' : '600',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Icon size={14} />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', flex: 1, overflowY: 'auto', backgroundColor: '#FFFFFF' }}>
+              {/* TAB 1: OVERVIEW */}
+              {profileTab === 'Overview' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Company / Organization Name
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                      {selectedCustomer.companyName}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Customer Code
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', fontFamily: 'monospace' }}>
+                      {selectedCustomer.customerCode || selectedCustomer.id}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Customer Account Type
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {selectedCustomer.customerType || 'EPC Contractor'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Acquisition Source
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {selectedCustomer.source || 'Direct Client'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Assigned Sales Representative
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {selectedCustomer.assignedSalesperson || 'VRM Sales Desk'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Location
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(', ') || '—'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: AUTHORIZED CONTACT */}
+              {profileTab === 'Contacts' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Primary Contact Person
+                    </div>
+                    <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
+                      {selectedCustomer.primaryContact?.name || '—'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Mobile / Phone
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0E7490' }}>
+                      {selectedCustomer.primaryContact?.phone ? (
+                        <a href={`tel:${selectedCustomer.primaryContact.phone}`} style={{ color: '#0E7490', textDecoration: 'none' }}>
+                          {selectedCustomer.primaryContact.phone}
+                        </a>
+                      ) : '—'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Alternate Phone / Landline
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {selectedCustomer.primaryContact?.altPhone || selectedCustomer.altPhone || '—'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Email Address
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0E7490' }}>
+                      {selectedCustomer.primaryContact?.email ? (
+                        <a href={`mailto:${selectedCustomer.primaryContact.email}`} style={{ color: '#0E7490', textDecoration: 'none' }}>
+                          {selectedCustomer.primaryContact.email}
+                        </a>
+                      ) : '—'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: BILLING & DELIVERY ADDRESS */}
+              {profileTab === 'Address' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>
+                      <FileText size={16} color="#0E7490" />
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Billing Address</h4>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#334155' }}>
+                      <div><strong>Address Line 1:</strong> {selectedCustomer.address1 || selectedCustomer.address || '—'}</div>
+                      {selectedCustomer.address2 && <div><strong>Address Line 2:</strong> {selectedCustomer.address2}</div>}
+                      <div><strong>City, State, Pincode:</strong> {[selectedCustomer.city, selectedCustomer.state, selectedCustomer.pincode].filter(Boolean).join(', ') || '—'}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '18px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>
+                      <Truck size={16} color="#0E7490" />
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Delivery / Dispatch Address</h4>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#334155' }}>
+                      <div><strong>Address Line 1:</strong> {selectedCustomer.dispatchAddress1 || selectedCustomer.dispatchAddress || selectedCustomer.shippingAddress1 || selectedCustomer.address1 || selectedCustomer.address || '—'}</div>
+                      {(selectedCustomer.dispatchAddress2 || selectedCustomer.shippingAddress2) && (
+                        <div><strong>Address Line 2:</strong> {selectedCustomer.dispatchAddress2 || selectedCustomer.shippingAddress2}</div>
+                      )}
+                      <div><strong>City, State, Pincode:</strong> {[selectedCustomer.dispatchCity || selectedCustomer.city, selectedCustomer.dispatchState || selectedCustomer.state, selectedCustomer.dispatchPincode || selectedCustomer.pincode].filter(Boolean).join(', ') || '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: COMMERCIAL & STATUTORY */}
+              {profileTab === 'Commercial' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      GSTIN / Tax ID
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', fontFamily: 'monospace' }}>
+                      {selectedCustomer.gstNumber || 'Not Registered'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      PAN
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', fontFamily: 'monospace' }}>
+                      {selectedCustomer.panNumber || (selectedCustomer.gstNumber && selectedCustomer.gstNumber.length >= 12 ? selectedCustomer.gstNumber.substring(2, 12) : '—')}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Payment Terms
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {selectedCustomer.paymentTerms || 'Immediate / Advance'}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Credit Limit
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#16A34A' }}>
+                      ₹ {Number(selectedCustomer.creditLimit || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Credit Days
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>
+                      {selectedCustomer.creditDays || 0} Days
+                    </div>
+                  </div>
+
+                  {selectedCustomer.zohoContactId && (
+                    <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#FAFBFC' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Zoho Books Contact ID
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: '700', color: '#7E22CE', fontFamily: 'monospace' }}>
+                        {selectedCustomer.zohoContactId}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 5: CONNECTED BOM & QUOTES */}
+              {profileTab === 'Orders' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Linked BOM Orders */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Connected Sales BOM Orders
+                    </h4>
+                    {(() => {
+                      const linkedBoms = (boms || []).filter(b => 
+                        (b.customerName && b.customerName.toLowerCase() === (selectedCustomer.companyName || '').toLowerCase()) ||
+                        (b.clientName && b.clientName.toLowerCase() === (selectedCustomer.companyName || '').toLowerCase())
+                      );
+                      if (linkedBoms.length === 0) {
+                        return <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>No BOM orders connected to this customer yet.</p>;
+                      }
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {linkedBoms.map(b => (
+                            <div key={b.id || b.bomNumber} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFBFC' }}>
+                              <div>
+                                <span style={{ fontWeight: '800', color: '#0E7490', fontSize: '13px' }}>{b.bomNumber || b.orderNumber || b.id}</span>
+                                <span style={{ marginLeft: '10px', fontSize: '12px', color: '#334155' }}>{b.projectName || 'Solar Structure BOM'}</span>
+                              </div>
+                              <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', backgroundColor: '#ECFEFF', color: '#0E7490' }}>
+                                {b.status || 'Active'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Linked Commercial Quotations */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Commercial Quotations
+                    </h4>
+                    {(() => {
+                      const linkedQuotes = (quotations || []).filter(q => 
+                        (q.customerName && q.customerName.toLowerCase() === (selectedCustomer.companyName || '').toLowerCase()) ||
+                        (q.companyName && q.companyName.toLowerCase() === (selectedCustomer.companyName || '').toLowerCase())
+                      );
+                      if (linkedQuotes.length === 0) {
+                        return <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>No commercial quotations issued for this customer yet.</p>;
+                      }
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {linkedQuotes.map(q => (
+                            <div key={q.id || q.quotationNo} style={{ border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAFBFC' }}>
+                              <div>
+                                <span style={{ fontWeight: '800', color: '#2563EB', fontSize: '13px' }}>{q.quotationNo || q.id}</span>
+                                <span style={{ marginLeft: '10px', fontSize: '12px', color: '#334155' }}>{q.subject || 'Solar Quotation'}</span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>₹ {Number(q.totalAmount || q.dealValue || 0).toLocaleString('en-IN')}</span>
+                                <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569' }}>
+                                  {q.stage || 'Draft'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                padding: '14px 24px',
+                borderTop: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+            >
+              <div style={{ fontSize: '12px', color: '#64748B' }}>
+                Customer Record: <strong>{selectedCustomer.customerCode || selectedCustomer.id}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#334155',
+                  fontWeight: '700',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

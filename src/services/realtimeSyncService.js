@@ -124,7 +124,7 @@ export const initRealtimeSync = () => {
           }
 
           // 8. CRM Leads, Opportunities, Quotations, and Customers
-          if (type === 'crm_updated' || (type === 'store_updated' && (payload?.key?.startsWith('crm_') || payload?.key === 'customer_store'))) {
+          if (type === 'crm_updated' || type === 'crm_lead_created' || type === 'crm_lead_updated' || type === 'crm_lead_assigned' || (type === 'store_updated' && (payload?.key?.startsWith('crm_') || payload?.key === 'customer_store'))) {
             window.dispatchEvent(new CustomEvent('controlroom_crm_updated', { detail: payload }));
             window.dispatchEvent(new CustomEvent('controlroom_customer_update', { detail: payload }));
             emitStorageUpdate();
@@ -139,6 +139,12 @@ export const initRealtimeSync = () => {
           if (type === 'workflow_notification' || (type === 'store_updated' && payload?.key === 'notifications_store')) {
             const notif = payload?.notification || (Array.isArray(payload?.storeData) ? payload.storeData[0] : null);
             if (notif) {
+              try {
+                const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
+                if (!existing.some(e => e.id === notif.id)) {
+                  localStorage.setItem('vrm_live_notifications', JSON.stringify([notif, ...existing].slice(0, 50)));
+                }
+              } catch (_) {}
               window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: { ...notif, fromBroadcast: true } }));
               window.dispatchEvent(new Event('vrm_notifications_updated'));
             }

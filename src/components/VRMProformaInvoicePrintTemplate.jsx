@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchMasterBranding, getCachedBranding, saveCompanyBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { isTamilNaduIntra } from '../utils/gstHelper';
+import { getHsnCode } from '../utils/hsnCodeService';
 import {
   Printer,
   Download,
@@ -638,7 +639,7 @@ export function VRMProformaInvoicePrintSheet({
     {
       name: pi.productName || 'Solar Mounting Structures & Fasteners',
       description: pi.productDescription || (pi.productName ? `Supply of ${pi.productName} as per technical specifications` : 'Standard VRM Solar Structure & Accessories Kit'),
-      hsn: pi.hsn || '73089090',
+      hsn: pi.hsn || getHsnCode(pi.productName || 'Solar Mounting Structures & Fasteners'),
       qty: pi.quantity || 1,
       uom: pi.uom || 'Nos',
       rate: Number(pi.unitValue || (typeof pi.amount === 'string' ? parseFloat(pi.amount.replace(/[^0-9.]/g, '')) : pi.amount) || 0),
@@ -750,11 +751,15 @@ export function VRMProformaInvoicePrintSheet({
       if (tQty > 0) {
         gItems.forEach(it => {
           const itShare = grpSub * ((parseFloat(it.qty) || 1) / tQty);
-          const itRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 0;
+          const rawItRate = it.gstRate ?? grp.gstRate ?? '18%';
+          const cleanedItRate = String(rawItRate).replace('%', '').trim();
+          const itRate = isNaN(parseFloat(cleanedItRate)) ? 18 : parseFloat(cleanedItRate);
           grpGst += itShare * (itRate / 100);
         });
       } else {
-        const rPct = parseFloat(String(grp.gstRate || '18%').replace('%', '')) || 18;
+        const rawGrpRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18%';
+        const cleanedGrpRate = String(rawGrpRate).replace('%', '').trim();
+        const rPct = isNaN(parseFloat(cleanedGrpRate)) ? 18 : parseFloat(cleanedGrpRate);
         grpGst = grpSub * (rPct / 100);
       }
       groupMetaMap[grpId] = {
@@ -781,7 +786,9 @@ export function VRMProformaInvoicePrintSheet({
     let grpGst = 0;
     rawItems.forEach(it => {
       const itShare = grpSub * ((parseFloat(it.qty) || 1) / (tQty || 1));
-      const itRate = parseFloat(String(it.gstRate || '18%').replace('%', '')) || 18;
+      const rawItRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18%';
+      const cleanedItRate = String(rawItRate).replace('%', '').trim();
+      const itRate = isNaN(parseFloat(cleanedItRate)) ? 18 : parseFloat(cleanedItRate);
       grpGst += itShare * (itRate / 100);
     });
     groupMetaMap['implicit_preset_1'] = {
@@ -886,7 +893,9 @@ export function VRMProformaInvoicePrintSheet({
     const discPct = parseFloat(it.discountPct || it.discount) || 0;
     const discAmt = gross * (discPct / 100);
     const taxable = isPreset ? 0 : (gross - discAmt);
-    const gRate = parseFloat(String(it.gstRate || grpMeta?.gstRateStr || '18%').replace('%', '')) || 18;
+    const rawGRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : (grpMeta?.gstRateStr || '18%');
+    const cleanedGRate = String(rawGRate).replace('%', '').trim();
+    const gRate = isNaN(parseFloat(cleanedGRate)) ? 18 : parseFloat(cleanedGRate);
     const gstAmt = isPreset ? 0 : (taxable * (gRate / 100));
     const lineTotal = taxable + gstAmt;
 
@@ -900,7 +909,7 @@ export function VRMProformaInvoicePrintSheet({
       totalPresetsCount: distinctPrintGroupIds.length,
       name: it.name || it.productName || 'Item',
       description: it.description || it.specifications || '',
-      hsn: it.hsn || '73089090',
+      hsn: it.hsn || getHsnCode(it),
       qty: q,
       uom: it.uom || it.unit || 'Nos',
       rate: r,
@@ -930,7 +939,7 @@ export function VRMProformaInvoicePrintSheet({
   const customGst = items.filter(it => !it.isPresetItem).reduce((sum, item) => sum + item.gstAmt, 0);
 
   const subTotal = (presetSubtotalSum + customSubtotal) || (Number(pi.unitValue) || 0);
-  const totalGst = (presetGstSum + customGst) || (subTotal * 0.18);
+  const totalGst = presetGstSum + customGst;
   const grandTotal = subTotal + totalGst;
 
   // Group GST by rate tier (e.g. 5%, 18%)
@@ -938,7 +947,9 @@ export function VRMProformaInvoicePrintSheet({
 
   // From preset groups
   Object.values(groupMetaMap).forEach(grp => {
-    const rate = parseFloat(String(grp.gstRateStr || grp.gstRate || '18').replace('%', '')) || 18;
+    const rawRate = grp.gstRateStr || grp.gstRate || '18';
+    const cleanedRate = String(rawRate).replace('%', '').trim();
+    const rate = isNaN(parseFloat(cleanedRate)) ? 18 : parseFloat(cleanedRate);
     if (!gstTiersMap[rate]) gstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
     gstTiersMap[rate].taxable += (grp.groupSubtotal || 0);
     gstTiersMap[rate].gstAmt += (grp.groupGst || 0);
@@ -946,19 +957,17 @@ export function VRMProformaInvoicePrintSheet({
 
   // From custom non-preset line items
   items.filter(it => !it.isPresetItem).forEach(it => {
-    const rate = it.gRate || 18;
+    const rate = it.gRate !== undefined && !isNaN(it.gRate) ? it.gRate : 18;
     if (!gstTiersMap[rate]) gstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
     gstTiersMap[rate].taxable += (it.taxable || 0);
     gstTiersMap[rate].gstAmt += (it.gstAmt || 0);
   });
 
   const rawGstTiers = Object.values(gstTiersMap)
-    .filter(t => t.gstAmt > 0 || t.taxable > 0)
+    .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
     .sort((a, b) => a.rate - b.rate);
 
-  const gstTiers = rawGstTiers.length > 0
-    ? rawGstTiers
-    : (totalGst > 0 ? [{ rate: 18, taxable: subTotal, gstAmt: totalGst }] : []);
+  const gstTiers = rawGstTiers;
 
   const piGst = pi.gstNo || pi.gstin || pi.gst || pi.customerGst || '';
   const piState = (typeof pi.deliveryAddress === 'object' ? pi.deliveryAddress?.state : pi.deliveryState) ||
@@ -1664,7 +1673,7 @@ export function VRMProformaInvoicePrintSheet({
             const hasHsn = cfg.showHsn !== false;
             const hasQty = cfg.showQty !== false;
             const hasRate = cfg.showRateCol !== false;
-            const hasGst = cfg.showGstCol !== false;
+            const hasGst = cfg.showGstCol !== false && (totalGst > 0 || (gstTiers && gstTiers.length > 0));
             const hasAmt = cfg.showTotalCol !== false;
 
             const computedColSpan = (hasSno ? 1 : 0) +
@@ -1956,8 +1965,8 @@ export function VRMProformaInvoicePrintSheet({
                         {hasHsn && (
                           <td style={{ border: '1px solid #CBD5E1', padding: '2.5px 3px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', verticalAlign: it.isPresetItem ? 'middle' : 'top' }}>
                             <EditableText
-                              value={it.hsn || '73089090'}
-                              fallback="73089090"
+                              value={it.hsn || getHsnCode(it)}
+                              fallback={getHsnCode(it)}
                               onSave={(v) => handleUpdateItem(it.rawIndex !== undefined ? it.rawIndex : idx, { hsn: v })}
                             />
                           </td>

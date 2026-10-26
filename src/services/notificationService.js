@@ -272,7 +272,16 @@ export function getPorterVoiceCue(titleOrMessage, metadata = {}) {
 
   // 2. Determine Status cleanly
   let status = 'New Order';
-  if (step.includes('BOM_SENT_TO_DISPATCH') || upperText.includes('RECEIVED FOR DISPATCH') || upperText.includes('RECEIVED TO PACK') || upperText.includes('NEW BOM RECEIVED') || upperText.includes('RECEIVED TO DISPATCH')) {
+  if (step.includes('STOCK_SHORTAGE') || upperText.includes('OUT OF STOCK') || upperText.includes('STOCK SHORTAGE') || upperText.includes('LOW STOCK') || upperText.includes('MATERIAL SHORTAGE')) {
+    const rawItem = metadata?.itemName || metadata?.name || cleanCompany || 'Material';
+    return `${rawItem}, Stock Shortage Alert`;
+  } else if (step.includes('NEW_LEAD') || upperText.includes('NEW LEAD') || upperText.includes('LEAD CREATED')) {
+    status = 'New Lead Received';
+  } else if (step.includes('ASSIGNMENT') || upperText.includes('LEAD ASSIGNED')) {
+    status = 'Lead Assigned to You';
+  } else if (step.includes('BOM_CREATED') || upperText.includes('BOM CREATED')) {
+    status = 'BOM Created';
+  } else if (step.includes('BOM_SENT_TO_DISPATCH') || upperText.includes('RECEIVED FOR DISPATCH') || upperText.includes('RECEIVED TO PACK') || upperText.includes('NEW BOM RECEIVED') || upperText.includes('RECEIVED TO DISPATCH')) {
     status = 'You have received a BOM for dispatch';
   } else if (step.includes('BOM_PACKED') || upperText.includes('PACKED AND SENT') || upperText.includes('PACKED & SENT') || upperText.includes('BOM PACKED') || upperText.includes('ORDER PACKED') || upperText.includes('PACKING COMPLETED')) {
     status = 'Order Packed';
@@ -446,6 +455,75 @@ export function isRoleTargeted(userRole, targetRoles, metadata = {}) {
     return normUserRole.includes('dispatch') || normUserRole === 'dh' || normUserRole === 'dispatch head' || normUserRole === 'dispatch executive';
   }
 
+  // STRICT USER REQUIREMENT: Stock shortage / Out of stock / Low stock / Procurement alerts
+  // MANDATE: "if stock is not there means should not be in the notification for the sales person it should be for the procument"
+  // SALES PERSONS MUST NEVER RECEIVE STOCK SHORTAGE / OUT OF STOCK NOTIFICATIONS!
+  const metaTitle = String(metadata?.title || metadata?.name || '').toUpperCase();
+  const metaMsg = String(metadata?.message || '').toUpperCase();
+  const isStockAlert = 
+    Boolean(metadata?.isStockAlert) ||
+    Boolean(metadata?.isProcurementOnly) ||
+    metadata?.type === 'OUT_OF_STOCK' ||
+    metadata?.type === 'LOW_STOCK' ||
+    metadata?.type === 'STOCK_SHORTAGE' ||
+    metadata?.step === 'STOCK_SHORTAGE' ||
+    metaTitle.includes('OUT OF STOCK') ||
+    metaTitle.includes('LOW STOCK') ||
+    metaTitle.includes('STOCK SHORTAGE') ||
+    metaTitle.includes('MATERIAL SHORTAGE') ||
+    metaMsg.includes('OUT OF STOCK') ||
+    metaMsg.includes('STOCK SHORTAGE') ||
+    metaMsg.includes('IMMEDIATE PROCUREMENT REQUIRED') ||
+    (Array.isArray(metadata?.targetDepartments) &&
+      metadata.targetDepartments.some(d => String(d).toLowerCase().includes('procurement')) &&
+      !metadata.targetDepartments.some(d => String(d).toLowerCase().includes('sales')));
+
+  if (isStockAlert) {
+    // If the active logged-in user has any sales role, STRICTLY DO NOT SHOW THIS NOTIFICATION
+    if (normUserRole.includes('sales') || normUserRole === 'se' || normUserRole === 'sh') {
+      return false;
+    }
+    // Strictly routed to Procurement, Purchase, Production Head, and Executive Leadership
+    return (
+      normUserRole.includes('procurement') ||
+      normUserRole.includes('purchase') ||
+      normUserRole === 'pr' ||
+      normUserRole.includes('production head') ||
+      normUserRole === 'ph' ||
+      normUserRole === 'ceo' ||
+      normUserRole === 'managing director' ||
+      normUserRole === 'md' ||
+      normUserRole === 'technical administrator' ||
+      normUserRole.startsWith('ta')
+    );
+  }
+
+  // STRICT USER REQUIREMENT: 24-Hour Status Unchanged Inactivity Alert
+  // MANDATE: "within 24 hrs the status is not changes for the lead means the notification will be send for CEO and Tech support"
+  const isCeoTechSupportAlert = 
+    Boolean(metadata?.isCeoTechSupportAlert) ||
+    metadata?.type === 'STATUS_UNCHANGED_24H' ||
+    metadata?.type === 'UNATTENDED_24H' ||
+    metadata?.type === 'ESCALATION_48H' ||
+    metadata?.step === 'STATUS_UNCHANGED_24H' ||
+    metaTitle.includes('STATUS UNCHANGED (24 HOURS)') ||
+    metaTitle.includes('LEAD NOT ATTENDED – 24 HOURS') ||
+    metaTitle.includes('ESCALATION: LEAD UNATTENDED');
+
+  if (isCeoTechSupportAlert) {
+    // Strictly routed to CEO / MD and Tech Support
+    return (
+      normUserRole.includes('ceo') ||
+      normUserRole.includes('managing director') ||
+      normUserRole === 'md' ||
+      normUserRole.includes('tech support') ||
+      normUserRole.includes('technical support') ||
+      normUserRole.includes('technical administrator') ||
+      normUserRole.startsWith('ta') ||
+      normUserRole.startsWith('ts')
+    );
+  }
+
   // Executive Leadership & Tech Admins have global visibility for general system notifications
   const adminRoles = ['CEO', 'Managing Director', 'MD', 'Technical Administrator', 'Developer'];
   if (adminRoles.includes(userRole) || (userRole || '').startsWith('TA')) {
@@ -515,6 +593,18 @@ export function isRoleTargeted(userRole, targetRoles, metadata = {}) {
       return true;
     }
     
+    // Tech Support department
+    if ((norm.includes('tech support') || norm.includes('technical support')) && 
+        (normalizedUserRole.includes('tech support') || normalizedUserRole.includes('technical support') || normalizedUserRole.startsWith('ts'))) {
+      return true;
+    }
+
+    // Procurement department
+    if ((norm.includes('procurement') || norm.includes('purchase')) && 
+        (normalizedUserRole.includes('procurement') || normalizedUserRole.includes('purchase') || normalizedUserRole === 'pr')) {
+      return true;
+    }
+    
     // Sales department
     if (norm.includes('sales') && normalizedUserRole.includes('sales')) {
       // If notification has a specific salesPerson and this user is a Sales Executive:
@@ -564,7 +654,7 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const currentRole = (typeof window !== 'undefined' && window.localStorage)
             ? (localStorage.getItem('controlroom_user_role') || '')
             : '';
-          const isTargeted = isRoleTargeted(currentRole, notif.targetRoles, notif.metadata);
+          const isTargeted = isRoleTargeted(currentRole, notif.targetRoles, { ...notif.metadata, title: notif.title, message: notif.message, type: notif.type });
           if (isTargeted) {
             playPorterOrderAlert();
             setTimeout(() => {
@@ -625,7 +715,7 @@ export function sendWorkflowNotification({
   const currentRole = (typeof window !== 'undefined' && window.localStorage)
     ? (localStorage.getItem('controlroom_user_role') || '')
     : '';
-  const isTargetedToCurrentSession = isRoleTargeted(currentRole, targetRoles, metadata);
+  const isTargetedToCurrentSession = isRoleTargeted(currentRole, targetRoles, { ...metadata, title, message, type });
 
   if (isTargetedToCurrentSession) {
     playPorterOrderAlert();
@@ -706,6 +796,90 @@ export function clearAllLiveNotifications() {
 // ===================================================================================
 // DEDICATED WORKFLOW HELPERS AS REQUESTED
 // ===================================================================================
+
+/**
+ * STOCK SHORTAGE / LOW STOCK NOTIFICATION (Strictly for Procurement)
+ * Sales persons are NEVER notified for stock shortage/reorder alerts.
+ * Voice alert: "[Item Name], Stock Shortage Alert!"
+ * Target: Procurement Head, Procurement Executive, Procurement Admin, Purchase Manager.
+ */
+export function notifyStockShortageToProcurement({
+  itemName,
+  itemCode,
+  currentStock,
+  minLevel,
+  uom = 'Nos',
+  reason = 'Below minimum level'
+}) {
+  const safeName = itemName || 'Material';
+  const safeCode = itemCode || 'SKU';
+  const safeUom = uom || 'Nos';
+
+  return sendWorkflowNotification({
+    title: `⚠️ Stock Shortage Alert: ${safeName}`,
+    message: `${safeName} (${safeCode}) stock is at ${currentStock} ${safeUom} (${reason}). Immediate procurement action required.`,
+    targetTab: 'Raw Material Inventory',
+    targetRoles: [
+      'Procurement Head',
+      'Procurement Executive',
+      'Procurement Admin',
+      'Purchase Manager',
+      'Production Head',
+      'CEO',
+      'Managing Director',
+      'Technical Administrator'
+    ],
+    type: 'alert',
+    soundType: 'alert',
+    metadata: {
+      itemName: safeName,
+      itemCode: safeCode,
+      currentStock,
+      minLevel,
+      uom: safeUom,
+      isProcurementOnly: true,
+      isStockAlert: true,
+      type: 'STOCK_SHORTAGE',
+      step: 'STOCK_SHORTAGE'
+    }
+  });
+}
+
+/**
+ * BOM CREATED NOTIFICATION FOR SALES
+ * When a BOM is created, the Sales Person (and Sales Team) receives real-time confirmation.
+ * Voice alert: "[Customer Name], BOM Created!"
+ */
+export function notifyBomCreatedToSales({ bomCode, customerName, salesPerson, salesPersonCode }) {
+  const safeCustomer = customerName || 'Customer';
+  const cleanSalesPerson = (salesPerson || '').replace(/\s*\([^)]*\)/g, '').trim();
+
+  const salesTargets = [
+    cleanSalesPerson,
+    salesPersonCode,
+    'Sales Executive',
+    'Sales Head',
+    'CEO',
+    'Managing Director',
+    'Technical Administrator'
+  ].filter(Boolean);
+
+  return sendWorkflowNotification({
+    title: `📋 BOM Created: ${bomCode}`,
+    message: `BOM ${bomCode} (${safeCustomer}) has been created by ${cleanSalesPerson || 'Sales'} and submitted to Dispatch for packing.`,
+    targetTab: 'BOM Orders',
+    targetRoles: salesTargets,
+    type: 'success',
+    soundType: 'success',
+    metadata: {
+      bomCode,
+      customerName: safeCustomer,
+      salesPerson: cleanSalesPerson,
+      salesPersonCode: salesPersonCode || '',
+      step: 'BOM_CREATED'
+    }
+  });
+}
 
 /**
  * STEP 1: Sales person creates/proceeds with a BOM to Dispatch / Production.

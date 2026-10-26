@@ -8,7 +8,7 @@ import {
   Receipt, ArrowRight, Clock, BarChart3, Database, Zap,
   ShoppingCart, Truck, Factory, UserCheck, AlertTriangle, Sparkles, ChevronRight,
   Users, User, Briefcase, Search, Award, Target, Phone, Mail, Eye, Activity,
-  LayoutDashboard, Wrench, Boxes, FileCheck, ClipboardList, Calculator, CheckCircle, Warehouse
+  LayoutDashboard, Wrench, Boxes, FileCheck, ClipboardList, Calculator, CheckCircle, Warehouse, Edit3
 } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';

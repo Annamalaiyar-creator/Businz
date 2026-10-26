@@ -293,6 +293,7 @@ function App() {
   const [targetPoTab, setTargetPoTab] = useState(null);
   const [targetBomCode, setTargetBomCode] = useState(null);
   const [targetPiNo, setTargetPiNo] = useState(null);
+  const [targetCustomerCode, setTargetCustomerCode] = useState(null);
   const [convertingPiData, setConvertingPiData] = useState(null);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [itemsList, setItemsList] = useState([]);
@@ -306,12 +307,14 @@ function App() {
       if (typeof e.detail === 'string') {
         handleTabChange(e.detail);
       } else if (typeof e.detail === 'object') {
-        const { tab, targetPo, targetBom, targetPi, poTabTarget } = e.detail;
+        const { tab, targetPo, targetBom, targetPi, poTabTarget, searchCustomer, targetCustomer } = e.detail;
         if (targetPo) setTargetPoNo(targetPo);
         if (targetBom) setTargetBomCode(targetBom);
         if (targetPi) setTargetPiNo(targetPi);
         if (poTabTarget) setTargetPoTab(poTabTarget);
-        if (tab) handleTabChange(tab, targetPo, poTabTarget);
+        const resolvedCustomer = searchCustomer || targetCustomer;
+        if (resolvedCustomer) setTargetCustomerCode(resolvedCustomer);
+        if (tab) handleTabChange(tab, targetPo, poTabTarget, resolvedCustomer);
       }
     };
     window.addEventListener('controlroom_navigate_tab', handleCustomNavigate);
@@ -348,12 +351,20 @@ function App() {
     setShowLoginModal(false);
   };
 
-  const handleTabChange = (tab, targetPo = null, poTabTarget = null) => {
+  const handleTabChange = (tab, targetPo = null, poTabTarget = null, targetCustomer = null) => {
     if (targetPo) {
-      setTargetPoNo(targetPo);
+      if (typeof targetPo === 'object' && (targetPo.searchCustomer || targetPo.targetCustomer)) {
+        setTargetCustomerCode(targetPo.searchCustomer || targetPo.targetCustomer);
+      } else {
+        setTargetPoNo(targetPo);
+      }
     }
     if (poTabTarget) {
       setTargetPoTab(poTabTarget);
+    }
+    if (targetCustomer) {
+      const resolvedCust = typeof targetCustomer === 'object' ? (targetCustomer.searchCustomer || targetCustomer.targetCustomer) : targetCustomer;
+      if (resolvedCust) setTargetCustomerCode(resolvedCust);
     }
     setActiveTab(tab);
     try {
@@ -755,6 +766,8 @@ function App() {
                   targetBomCode={targetBomCode}
                   clearTargetBom={() => setTargetBomCode(null)}
                   targetPiNo={targetPiNo}
+                  targetCustomerCode={targetCustomerCode}
+                  clearTargetCustomer={() => setTargetCustomerCode(null)}
                   itemsList={itemsList}
                   purchaseOrders={purchaseOrders}
                 />

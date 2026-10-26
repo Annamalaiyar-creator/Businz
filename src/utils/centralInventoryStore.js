@@ -1,5 +1,6 @@
 import { VRM_PRODUCTS, resolveProductCode, normalizeProductName, CANONICAL_PRODUCT_ALIASES } from './vrmProductsData.js';
 import { fetchCloudStore, saveCloudStore } from './supabaseDataSync.js';
+import { sendWorkflowNotification } from '../services/notificationService.js';
 
 // Initial Seed Item Master derived strictly from official VRM catalog (All items initialized with 5000 units stock)
 export const INITIAL_CENTRAL_ITEMS = VRM_PRODUCTS.map((p, idx) => ({
@@ -570,36 +571,73 @@ class CentralInventoryStore {
           type: 'OUT_OF_STOCK',
           title: `OUT OF STOCK ALERT: ${item.name} (${item.code})`,
           message: `Current Stock is 0 ${item.uom}. Production may be blocked. Immediate procurement required!`,
-          targetDepartments: ['Procurement', 'Production']
+          targetDepartments: ['Procurement'],
+          itemName: item.name,
+          itemCode: item.code
         });
       } else if (item.onHand <= item.minLevel) {
         this.addNotification({
           type: 'LOW_STOCK',
           title: `LOW STOCK ALERT: ${item.name} (${item.code})`,
           message: `Current Stock (${item.onHand} ${item.uom}) is below Minimum Level (${item.minLevel} ${item.uom}). Purchase action required.`,
-          targetDepartments: ['Procurement', 'Production']
+          targetDepartments: ['Procurement'],
+          itemName: item.name,
+          itemCode: item.code
         });
       }
     });
   }
 
-  addNotification({ type, title, message, targetDepartments }) {
+  addNotification({ type, title, message, targetDepartments, itemName, itemCode }) {
     const exists = this.notifications.some(n => n.title === title && !n.read && n.date === new Date().toISOString().split('T')[0]);
     if (!exists) {
+      const isStockAlert = type === 'OUT_OF_STOCK' || type === 'LOW_STOCK' || type === 'STOCK_SHORTAGE';
+      const targetRoles = isStockAlert
+        ? ['Procurement Head', 'Procurement Executive', 'Procurement Admin', 'Purchase Manager', 'Production Head', 'Technical Administrator', 'CEO', 'MD']
+        : ['Procurement', 'Production'];
+
       const newNotif = {
         id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         type: type || 'INFO',
         title,
         message,
+        targetTab: 'Raw Material Inventory',
+        targetRoles,
+        targetDepartments: isStockAlert ? ['Procurement'] : (targetDepartments || ['Procurement', 'Production']),
+        metadata: {
+          isProcurementOnly: isStockAlert,
+          isStockAlert: isStockAlert,
+          type: type || 'INFO',
+          step: isStockAlert ? 'STOCK_SHORTAGE' : '',
+          itemName: itemName || '',
+          itemCode: itemCode || ''
+        },
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         date: new Date().toISOString().split('T')[0],
-        targetDepartments: targetDepartments || ['Procurement', 'Production'],
         read: false
       };
       this.notifications.unshift(newNotif);
       this.saveNotifications();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('central_notification_added'));
+        if (isStockAlert) {
+          sendWorkflowNotification({
+            title,
+            message,
+            targetTab: 'Raw Material Inventory',
+            targetRoles,
+            type: 'alert',
+            soundType: 'alert',
+            metadata: {
+              isProcurementOnly: true,
+              isStockAlert: true,
+              type,
+              step: 'STOCK_SHORTAGE',
+              itemName: itemName || '',
+              itemCode: itemCode || ''
+            }
+          });
+        }
       }
     }
   }

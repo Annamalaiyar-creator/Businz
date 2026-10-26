@@ -777,7 +777,10 @@ export default function ProductionViewsEngine(props) {
     );
 
     if (!isDraft && isPaymentProofRequired) {
-      if (!newBomPaymentProofDoc) {
+      const hasPaymentProof = Array.isArray(newBomPaymentProofDoc)
+        ? newBomPaymentProofDoc.length > 0
+        : Boolean(newBomPaymentProofDoc);
+      if (!hasPaymentProof) {
         errors.paymentProof = `Payment Attachment / Slip * is strictly mandatory for ${newBomPaymentType}`;
         missingList.push({
           field: 'Payment Attachment / Slip *',

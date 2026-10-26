@@ -3,6 +3,7 @@ import { Printer, Mail, FileText, X } from 'lucide-react';
 import { getCachedBranding, fetchMasterBranding, subscribeBrandingUpdates } from '../services/brandingService';
 import { VRM_OFFICIAL_LOGO, VRM_OFFICIAL_STAMP } from '../utils/vrmOfficialAssets';
 import { isTamilNaduIntra } from '../utils/gstHelper';
+import { getHsnCode } from '../utils/hsnCodeService';
 
 // Helper function to format currency into Indian Rupees words
 export function numberToWordsINR(num) {
@@ -243,7 +244,7 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
       sNo: idx + 1,
       name: it.name || it.item || it.productName || `Item ${idx + 1}`,
       description: it.description || it.specifications || '',
-      hsn: it.hsn || it.hsnCode || '76109010',
+      hsn: it.hsn || it.hsnCode || getHsnCode(it),
       qty,
       unit: it.unit || it.uom || "no's",
       rate,

@@ -14,7 +14,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "2",
@@ -26,7 +27,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "3",
@@ -38,7 +40,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "4",
@@ -50,7 +53,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "5",
@@ -62,7 +66,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "6",
@@ -74,7 +79,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "7",
@@ -86,7 +92,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "8",
@@ -98,7 +105,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "9",
@@ -110,7 +118,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "10",
@@ -122,7 +131,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "11",
@@ -134,7 +144,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "12",
@@ -146,7 +157,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "13",
@@ -158,7 +170,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "14",
@@ -170,7 +183,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "15",
@@ -182,7 +196,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "16",
@@ -194,7 +209,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "17",
@@ -206,7 +222,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "18",
@@ -218,7 +235,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "19",
@@ -230,7 +248,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "20",
@@ -242,7 +261,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "21",
@@ -254,7 +274,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "22",
@@ -266,7 +287,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "23",
@@ -278,7 +300,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "24",
@@ -290,7 +313,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "25",
@@ -302,7 +326,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "26",
@@ -314,7 +339,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "27",
@@ -326,7 +352,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "28",
@@ -338,7 +365,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "29",
@@ -350,7 +378,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "30",
@@ -362,7 +391,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "31",
@@ -374,7 +404,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "32",
@@ -386,7 +417,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "32B",
@@ -398,7 +430,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 140,
     "rate": 140,
-    "description": "Mini Rail - 300 mm Solar Mounting Profile"
+    "description": "Mini Rail - 300 mm Solar Mounting Profile",
+    "hsn": "76109090"
   },
   {
     "sno": "33",
@@ -410,7 +443,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "34",
@@ -422,7 +456,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "35",
@@ -434,7 +469,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "36",
@@ -446,7 +482,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "37",
@@ -458,7 +495,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "38",
@@ -470,7 +508,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "39",
@@ -482,7 +521,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "40",
@@ -494,7 +534,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "41",
@@ -506,7 +547,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "42",
@@ -518,7 +560,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "43",
@@ -530,7 +573,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "44",
@@ -542,7 +586,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "45",
@@ -554,7 +599,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "46",
@@ -566,7 +612,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "47",
@@ -578,7 +625,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "48",
@@ -590,7 +638,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "49",
@@ -602,7 +651,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "50",
@@ -614,7 +664,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "51",
@@ -626,7 +677,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "52",
@@ -638,7 +690,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "53",
@@ -650,7 +703,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "54",
@@ -662,7 +716,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76161000"
   },
   {
     "sno": "55",
@@ -674,7 +729,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76161000"
   },
   {
     "sno": "56",
@@ -686,7 +742,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76169990"
   },
   {
     "sno": "57",
@@ -698,7 +755,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "40169990"
   },
   {
     "sno": "58",
@@ -710,7 +768,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "40169990"
   },
   {
     "sno": "59",
@@ -722,7 +781,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "40169990"
   },
   {
     "sno": "60",
@@ -734,7 +794,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "40169990"
   },
   {
     "sno": "61",
@@ -746,7 +807,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "62",
@@ -758,7 +820,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "63",
@@ -770,7 +833,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "64",
@@ -782,7 +846,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "65",
@@ -794,7 +859,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "66",
@@ -806,7 +872,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "67",
@@ -818,7 +885,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "68",
@@ -830,7 +898,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "69",
@@ -842,7 +911,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "70",
@@ -854,7 +924,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73182100"
   },
   {
     "sno": "71",
@@ -866,7 +937,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "72",
@@ -878,7 +950,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "73",
@@ -890,7 +963,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181600"
   },
   {
     "sno": "74",
@@ -902,7 +976,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73182200"
   },
   {
     "sno": "75",
@@ -914,7 +989,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181600"
   },
   {
     "sno": "76",
@@ -926,7 +1002,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "77",
@@ -938,7 +1015,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "78",
@@ -950,7 +1028,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "79",
@@ -962,7 +1041,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "80",
@@ -974,7 +1054,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "81",
@@ -986,7 +1067,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73182200"
   },
   {
     "sno": "82",
@@ -998,7 +1080,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73182100"
   },
   {
     "sno": "83",
@@ -1010,7 +1093,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181600"
   },
   {
     "sno": "84",
@@ -1022,7 +1106,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "85",
@@ -1034,7 +1119,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "86",
@@ -1046,7 +1132,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73182200"
   },
   {
     "sno": "87",
@@ -1058,7 +1145,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "88",
@@ -1070,7 +1158,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "89",
@@ -1082,7 +1171,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "90",
@@ -1094,7 +1184,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "91",
@@ -1106,7 +1197,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181500"
   },
   {
     "sno": "92",
@@ -1118,7 +1210,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "93",
@@ -1130,7 +1223,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "94",
@@ -1142,7 +1236,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181400"
   },
   {
     "sno": "95",
@@ -1154,7 +1249,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181400"
   },
   {
     "sno": "96",
@@ -1166,7 +1262,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73181400"
   },
   {
     "sno": "97",
@@ -1178,7 +1275,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "98",
@@ -1190,7 +1288,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "99",
@@ -1202,7 +1301,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "100",
@@ -1214,7 +1314,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "101",
@@ -1226,7 +1327,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "102",
@@ -1238,7 +1340,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "101",
@@ -1250,7 +1353,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "102",
@@ -1262,7 +1366,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85354010"
   },
   {
     "sno": "105",
@@ -1274,7 +1379,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "106",
@@ -1286,7 +1392,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "103",
@@ -1298,7 +1405,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73269099"
   },
   {
     "sno": "104",
@@ -1310,7 +1418,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85354010"
   },
   {
     "sno": "105",
@@ -1322,7 +1431,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "39269099"
   },
   {
     "sno": "106",
@@ -1334,7 +1444,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "38249900"
   },
   {
     "sno": "107",
@@ -1346,7 +1457,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "72123090"
   },
   {
     "sno": "108",
@@ -1358,7 +1470,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "109",
@@ -1370,7 +1483,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "110",
@@ -1382,7 +1496,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "111",
@@ -1394,7 +1509,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "112",
@@ -1406,7 +1522,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "113",
@@ -1418,7 +1535,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "114",
@@ -1430,7 +1548,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "115",
@@ -1442,7 +1561,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "116",
@@ -1454,7 +1574,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "117",
@@ -1466,7 +1587,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "118",
@@ -1478,7 +1600,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85444999"
   },
   {
     "sno": "119",
@@ -1490,7 +1613,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "120",
@@ -1502,7 +1626,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "121",
@@ -1514,7 +1639,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "122",
@@ -1526,7 +1652,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "123",
@@ -1538,7 +1665,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "124",
@@ -1550,7 +1678,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "125",
@@ -1562,7 +1691,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "126",
@@ -1574,7 +1704,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "127",
@@ -1586,7 +1717,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "128",
@@ -1598,7 +1730,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "129",
@@ -1610,7 +1743,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "130",
@@ -1622,7 +1756,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "131",
@@ -1634,7 +1769,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "132",
@@ -1646,7 +1782,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "133",
@@ -1658,7 +1795,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "134",
@@ -1670,7 +1808,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "135",
@@ -1682,7 +1821,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "136",
@@ -1694,7 +1834,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "137",
@@ -1706,7 +1847,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "138",
@@ -1718,7 +1860,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "139",
@@ -1730,7 +1873,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "140",
@@ -1742,7 +1886,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "141",
@@ -1754,7 +1899,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "142",
@@ -1766,7 +1912,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "143",
@@ -1778,7 +1925,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "144",
@@ -1790,7 +1938,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "145",
@@ -1802,7 +1951,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "146",
@@ -1814,7 +1964,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "147",
@@ -1826,7 +1977,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "148",
@@ -1838,7 +1990,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "149",
@@ -1850,7 +2003,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "150",
@@ -1862,7 +2016,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "151",
@@ -1874,7 +2029,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "152",
@@ -1886,7 +2042,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "153",
@@ -1898,7 +2055,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "154",
@@ -1910,7 +2068,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "155",
@@ -1922,7 +2081,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "156",
@@ -1934,7 +2094,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "157",
@@ -1946,7 +2107,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "158",
@@ -1958,7 +2120,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "159",
@@ -1970,7 +2133,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "160",
@@ -1982,7 +2146,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "161",
@@ -1994,7 +2159,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "162",
@@ -2006,7 +2172,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "163",
@@ -2018,7 +2185,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "164",
@@ -2030,7 +2198,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "165",
@@ -2042,7 +2211,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "166",
@@ -2054,7 +2224,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "167",
@@ -2066,7 +2237,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "168",
@@ -2078,7 +2250,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "169",
@@ -2090,7 +2263,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "170",
@@ -2102,7 +2276,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "171",
@@ -2114,7 +2289,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "172",
@@ -2126,7 +2302,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "173",
@@ -2138,7 +2315,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "174",
@@ -2150,7 +2328,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "175",
@@ -2162,7 +2341,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "176",
@@ -2174,7 +2354,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "177",
@@ -2186,7 +2367,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "178",
@@ -2198,7 +2380,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "179",
@@ -2210,7 +2393,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "180",
@@ -2222,7 +2406,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "73089090"
   },
   {
     "sno": "181",
@@ -2234,7 +2419,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "182",
@@ -2246,7 +2432,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "183",
@@ -2258,7 +2445,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "184",
@@ -2270,7 +2458,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "185",
@@ -2282,7 +2471,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "186",
@@ -2294,7 +2484,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "187",
@@ -2306,7 +2497,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "188",
@@ -2318,7 +2510,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "189",
@@ -2330,7 +2523,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "190",
@@ -2342,7 +2536,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "191",
@@ -2354,7 +2549,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "192",
@@ -2366,7 +2562,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "193",
@@ -2378,7 +2575,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "194",
@@ -2390,7 +2588,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "195",
@@ -2402,7 +2601,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "196",
@@ -2414,7 +2614,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "197",
@@ -2426,7 +2627,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "198",
@@ -2438,7 +2640,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "199",
@@ -2450,7 +2653,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "200",
@@ -2462,7 +2666,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "201",
@@ -2474,7 +2679,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "202",
@@ -2486,7 +2692,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "203",
@@ -2498,7 +2705,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "204",
@@ -2510,7 +2718,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "205",
@@ -2522,7 +2731,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "206",
@@ -2534,7 +2744,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "207",
@@ -2546,7 +2757,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "208",
@@ -2558,7 +2770,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "209",
@@ -2570,7 +2783,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "210",
@@ -2582,7 +2796,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "211",
@@ -2594,7 +2809,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "212",
@@ -2606,7 +2822,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "213",
@@ -2618,7 +2835,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "214",
@@ -2630,7 +2848,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "215",
@@ -2642,7 +2861,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "216",
@@ -2654,7 +2874,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "217",
@@ -2666,7 +2887,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "218",
@@ -2678,7 +2900,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "219",
@@ -2690,7 +2913,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "220",
@@ -2702,7 +2926,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "221",
@@ -2714,7 +2939,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "222",
@@ -2726,7 +2952,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "223",
@@ -2738,7 +2965,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "224",
@@ -2750,7 +2978,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "225",
@@ -2762,7 +2991,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "226",
@@ -2774,7 +3004,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "227",
@@ -2786,7 +3017,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85044090"
   },
   {
     "sno": "228",
@@ -2798,7 +3030,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "35069190"
   },
   {
     "sno": "229",
@@ -2810,7 +3043,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "82055990"
   },
   {
     "sno": "230",
@@ -2822,7 +3056,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "231",
@@ -2834,7 +3069,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "232",
@@ -2846,7 +3082,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "233",
@@ -2858,7 +3095,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "234",
@@ -2870,7 +3108,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "235",
@@ -2882,7 +3121,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "236",
@@ -2894,7 +3134,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "237",
@@ -2906,7 +3147,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "238",
@@ -2918,7 +3160,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "239",
@@ -2930,7 +3173,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "240",
@@ -2942,7 +3186,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "241",
@@ -2954,7 +3199,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "242",
@@ -2966,7 +3212,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "243",
@@ -2978,7 +3225,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "244",
@@ -2990,7 +3238,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "245",
@@ -3002,7 +3251,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "246",
@@ -3014,7 +3264,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "247",
@@ -3026,7 +3277,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "248",
@@ -3038,7 +3290,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "249",
@@ -3050,7 +3303,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "250",
@@ -3062,7 +3316,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "251",
@@ -3074,7 +3329,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "252",
@@ -3086,7 +3342,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "253",
@@ -3098,7 +3355,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "254",
@@ -3110,7 +3368,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "255",
@@ -3122,7 +3381,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "256",
@@ -3134,7 +3394,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "257",
@@ -3146,7 +3407,8 @@ export const VRM_PRODUCTS = [
     "gst": "5%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85414300"
   },
   {
     "sno": "258",
@@ -3158,7 +3420,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "39259090"
   },
   {
     "sno": "259",
@@ -3170,7 +3433,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "39259090"
   },
   {
     "sno": "260",
@@ -3182,7 +3446,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "39269099"
   },
   {
     "sno": "261",
@@ -3194,7 +3459,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85369090"
   },
   {
     "sno": "262",
@@ -3206,7 +3472,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85369090"
   },
   {
     "sno": "263",
@@ -3218,7 +3485,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "39259090"
   },
   {
     "sno": "264",
@@ -3230,7 +3498,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85366990"
   },
   {
     "sno": "265",
@@ -3242,7 +3511,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "266",
@@ -3254,7 +3524,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "267",
@@ -3266,7 +3537,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "268",
@@ -3278,7 +3550,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "269",
@@ -3290,7 +3563,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "270",
@@ -3302,7 +3576,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "271",
@@ -3314,7 +3589,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "272",
@@ -3326,7 +3602,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "273",
@@ -3338,7 +3615,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "274",
@@ -3350,7 +3628,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "275",
@@ -3362,7 +3641,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "276",
@@ -3374,7 +3654,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "76109090"
   },
   {
     "sno": "277",
@@ -3386,7 +3667,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "278",
@@ -3398,7 +3680,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "279",
@@ -3410,7 +3693,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "280",
@@ -3422,7 +3706,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "85371000"
   },
   {
     "sno": "285",
@@ -3434,7 +3719,8 @@ export const VRM_PRODUCTS = [
     "gst": "18%",
     "price": 0,
     "rate": 0,
-    "description": ""
+    "description": "",
+    "hsn": "39259090"
   }
 ];
 

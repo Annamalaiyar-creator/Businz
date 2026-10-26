@@ -1,5 +1,6 @@
 import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName } from './vrmProductsData.js';
 import { centralInventoryStore } from './centralInventoryStore.js';
+import { getHsnCode } from './hsnCodeService.js';
 
 const getDeletedCodes = () => {
   try {
@@ -152,6 +153,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
       rate: String(p.price || p.rate || '0'),
       price: String(p.price || p.rate || '0'),
       gstRate: p.gst || '18%',
+      hsn: p.hsn || getHsnCode(p),
       stock: realStock,
       availableStock: realStock,
       physicalStock: baseStock,
@@ -179,6 +181,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
     rate: '140',
     price: '140',
     gstRate: '18%',
+    hsn: '76109090',
     stock: mr300Stock,
     availableStock: mr300Stock,
     physicalStock: 2000,
@@ -247,6 +250,7 @@ export const getFullProductsCatalogWithStock = (directItems = null) => {
             rate: String(ci.rate || ci.price || '0'),
             price: String(ci.rate || ci.price || '0'),
             gstRate: ci.gstRate || ci.gst || '18%',
+            hsn: ci.hsn || ci.hsn_or_sac || ci.hsnCode || getHsnCode(ci),
             stock: realStock,
             availableStock: realStock,
             physicalStock: realStock,

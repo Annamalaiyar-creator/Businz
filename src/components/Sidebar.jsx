@@ -253,8 +253,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'Leads', icon: Users, badge: 'New' },
             { label: 'Customers', icon: Building2 },
-            { label: 'Opportunities', icon: Briefcase },
-            { label: 'Follow-ups', icon: Calendar },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
             { label: 'Quotations', icon: FileText }
           ]
@@ -268,6 +266,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Raw Material Directory', icon: Layers }
           ]
         },
+
         {
           category: 'ANALYTICS',
           items: [
@@ -300,12 +299,12 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SUPPORT CHANNELS & CRM',
           items: [
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
-            { label: 'IndiaMART Integration', targetTab: 'IndiaMART', icon: Globe },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
             { label: 'Mail Inbox', icon: Mail },
             { label: 'Facebook & Meta', icon: Share2 }
           ]
-        }
+        },
+
       ];
     } else if (role === 'Invoice Executive' || role === 'Billing') {
       sections = [
@@ -344,13 +343,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users }
           ]
         },
-        {
-          category: 'INTEGRATIONS & CONFIG',
-          items: [
-            { label: 'IndiaMART Integration', targetTab: 'IndiaMART', icon: Globe },
-            { label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck }
-          ]
-        }
+
       ];
       return sections;
     } else {
@@ -375,22 +368,15 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     const templateBadge = isProcurementRole ? 'PO' : 'Studio';
 
     const hasTemplates = sections.some(s => s.items && s.items.some(i => i.label === 'Templates' || i.label === 'Print Templates' || i.label === 'PO Template' || i.targetTab === 'Templates'));
-    const hasBackupVault = sections.some(s => s.items && s.items.some(i => i.label === 'Backup & Vault' || i.targetTab === 'Backup & Vault'));
     const sysSection = sections.find(s => s.category === 'SYSTEM & CONFIG');
     const showTemplates = !hasTemplates && !isCeo && !isTechSupport && !isAccounts;
 
     if (sysSection) {
       if (showTemplates) sysSection.items.unshift({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
-      if (!hasBackupVault) sysSection.items.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck });
-    } else {
-      const sysItems = [];
-      if (showTemplates) {
-        sysItems.push({ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge });
-      }
-      sysItems.push({ label: 'Backup & Vault', targetTab: 'Backup & Vault', icon: ShieldCheck });
+    } else if (showTemplates) {
       sections.push({
         category: 'SYSTEM & CONFIG',
-        items: sysItems
+        items: [{ label: templateLabel, targetTab: 'Templates', icon: templateIcon, badge: templateBadge }]
       });
     }
 
@@ -429,6 +415,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
     if (tab === 'Print Templates' || tab === 'Template Studio' || tab === 'Template Customizer' || tab === 'Templetes' || tab === 'PO Template') return 'Templates';
     if (tab === 'Store Inventory' || tab === 'Inventory Stores') return 'Store Inventory';
     if (tab === 'Raw Material Inventory' || tab === 'Raw Material Directory') return 'Raw Material Inventory';
+    if (tab === 'IndiaMART' || tab === 'IndiaMART Integration' || tab === 'IndiaMART CRM Integration') return 'IndiaMART';
     return tab;
   };
 

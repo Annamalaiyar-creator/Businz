@@ -16,6 +16,7 @@ import SearchablePresetSelector from "../SearchablePresetSelector";
 import TypeableProductSelect from "../TypeableProductSelect";
 import { getNextSequence } from "../../utils/sequenceGenerator";
 import { isFixedQuantityPreset, VRM_HDG_PRESETS } from "../../vrmHdgProposalPresets";
+import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
 
 export default function CreateBomFormPage(props) {
   const {
@@ -39,6 +40,92 @@ export default function CreateBomFormPage(props) {
     bomConfirmModal, setBomConfirmModal, showCustomAlert
   } = props;
   const [newBomPartialAmount, setNewBomPartialAmount] = React.useState(props.newBomPartialAmount || '');
+
+  // Normalize multi-image proofs for Delivery Address and Payment (target: at least 4 images)
+  const deliveryDocs = React.useMemo(() => {
+    if (!newBomDeliveryProofDoc) return [];
+    return Array.isArray(newBomDeliveryProofDoc) ? newBomDeliveryProofDoc : [newBomDeliveryProofDoc];
+  }, [newBomDeliveryProofDoc]);
+
+  const paymentDocs = React.useMemo(() => {
+    if (!newBomPaymentProofDoc) return [];
+    return Array.isArray(newBomPaymentProofDoc) ? newBomPaymentProofDoc : [newBomPaymentProofDoc];
+  }, [newBomPaymentProofDoc]);
+
+  const handleUploadDeliveryProofFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    files.forEach((file) => {
+      try {
+        validateClientFile(file);
+        compressAndSaveFile(file, (res) => {
+          if (res) {
+            if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+            const docObj = {
+              ...res,
+              _rawFile: file,
+              dataUrl: res.dataUrl || null,
+              previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+            };
+            setNewBomDeliveryProofDoc(prev => {
+              const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+              if (current.some(d => d.name === docObj.name && d.size === docObj.size)) return current;
+              return [...current, docObj];
+            });
+          }
+        });
+      } catch (err) {
+        alert(`⚠️ Cannot Proceed with ${file.name}: ${err.message}`);
+      }
+    });
+  };
+
+  const handleRemoveDeliveryDoc = (index) => {
+    setNewBomDeliveryProofDoc(prev => {
+      const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+      const updated = current.filter((_, i) => i !== index);
+      return updated.length > 0 ? updated : null;
+    });
+  };
+
+  const handleUploadPaymentProofFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    files.forEach((file) => {
+      try {
+        validateClientFile(file);
+        compressAndSaveFile(file, (res) => {
+          if (res) {
+            if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
+            const docObj = {
+              ...res,
+              _rawFile: file,
+              dataUrl: res.dataUrl || null,
+              previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
+            };
+            setNewBomPaymentProofDoc(prev => {
+              const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+              if (current.some(d => d.name === docObj.name && d.size === docObj.size)) return current;
+              return [...current, docObj];
+            });
+            if (setBomFormErrors) {
+              setBomFormErrors(prev => ({ ...prev, paymentProof: null }));
+            }
+          }
+        });
+      } catch (err) {
+        alert(`⚠️ Cannot Proceed with ${file.name}: ${err.message}`);
+      }
+    });
+  };
+
+  const handleRemovePaymentDoc = (index) => {
+    setNewBomPaymentProofDoc(prev => {
+      const current = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+      const updated = current.filter((_, i) => i !== index);
+      return updated.length > 0 ? updated : null;
+    });
+  };
 
   // Live unified catalog with real-time stock balances
   const [itemsList, setItemsList] = React.useState(() => {
@@ -676,108 +763,98 @@ export default function CreateBomFormPage(props) {
                             </span>
                           </div>
                         </div>
-                        {newBomDeliveryProofDoc && (
+                        {deliveryDocs.length >= 4 ? (
                           <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
+                            <CheckCircle style={{ width: '12px', height: '12px' }} /> {deliveryDocs.length} Images Attached (Target 4+ Met)
                           </span>
-                        )}
+                        ) : deliveryDocs.length > 0 ? (
+                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            📷 {deliveryDocs.length} / 4 Images Attached (Add {4 - deliveryDocs.length} more)
+                          </span>
+                        ) : null}
                       </div>
 
-                      {newBomDeliveryProofDoc ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FECACA' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <FileText style={{ width: '16px', height: '16px', color: '#DC2626' }} />
-                            <div>
-                              <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>{newBomDeliveryProofDoc.name}</div>
-                              <div style={{ fontSize: '10px', color: '#64748B' }}>{newBomDeliveryProofDoc.size || '1.2 MB'} • Uploaded</div>
+                      {/* Attached Delivery Address Proof Images List */}
+                      {deliveryDocs.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                          {deliveryDocs.map((doc, idx) => (
+                            <div key={idx} style={{ border: '1px solid #FECACA', borderRadius: '10px', padding: '8px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                              <div style={{ position: 'relative', height: '100px', backgroundColor: '#FEF2F2', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {(doc.previewUrl || doc.dataUrl) ? (
+                                  <img src={doc.previewUrl || doc.dataUrl} alt={doc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <FileText style={{ width: '32px', height: '32px', color: '#DC2626' }} />
+                                )}
+                                <span style={{ position: 'absolute', top: '4px', left: '4px', backgroundColor: 'rgba(15, 23, 42, 0.75)', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', padding: '1px 6px', borderRadius: '4px' }}>
+                                  Image #{idx + 1}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={doc.name}>
+                                {doc.name}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#64748B', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>{doc.size || 'Attached'}</span>
+                                <span style={{ color: '#166534', fontWeight: '700' }}>✓ Attached</span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDocModal({ title: `Delivery Address Proof #${idx + 1}: ${doc.name}`, doc })}
+                                  style={{ flex: 1, border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '5px', borderRadius: '6px' }}
+                                >
+                                  <Eye style={{ width: '12px', height: '12px' }} /> View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDeliveryDoc(idx)}
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 8px', borderRadius: '6px' }}
+                                  title="Remove this image"
+                                >
+                                  <Trash2 style={{ width: '12px', height: '12px' }} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewDocModal({ title: 'Delivery Address Proof Document', doc: newBomDeliveryProofDoc })}
-                              style={{ border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '6px' }}
-                            >
-                              <Eye style={{ width: '13px', height: '13px' }} /> View Image
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setNewBomDeliveryProofDoc(null)}
-                              style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            const file = e.dataTransfer.files && e.dataTransfer.files[0];
-                            if (file) {
-                              try {
-                                validateClientFile(file);
-                                compressAndSaveFile(file, (res) => {
-                                  if (res) {
-                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                    setNewBomDeliveryProofDoc({
-                                      ...res,
-                                      _rawFile: file,
-                                      dataUrl: res.dataUrl || null,
-                                      previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                                    });
-                                  }
-                                });
-                              } catch (err) {
-                                setNewBomDeliveryProofDoc(null);
-                                alert(`⚠️ Cannot Proceed: ${err.message}`);
-                              }
-                            }
-                          }}
-                          style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '16px 20px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
-                        >
-                          <UploadCloud style={{ width: '28px', height: '28px', color: '#DC2626' }} />
-                          <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
-                            Drag & drop address proof document here or
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                              <Upload style={{ width: '13px', height: '13px' }} />
-                              Browse Files
-                              <input id="create-bom-form-input-3" name="input3" aria-label="Input 3"
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  const file = e.target.files && e.target.files[0];
-                                  if (file) {
-                                    try {
-                                      validateClientFile(file);
-                                      compressAndSaveFile(file, (res) => {
-                                        if (res) {
-                                          if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                          setNewBomDeliveryProofDoc({
-                                            ...res,
-                                            _rawFile: file,
-                                            dataUrl: res.dataUrl || null,
-                                            previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                                          });
-                                        }
-                                      });
-                                    } catch (err) {
-                                      e.target.value = '';
-                                      setNewBomDeliveryProofDoc(null);
-                                      alert(`⚠️ Cannot Proceed: ${err.message}`);
-                                    }
-                                  }
-                                }}
-                               />
-                            </label>
-                          </div>
-                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: PDF, JPG, PNG, DOC (Max 5 MB)</span>
+                          ))}
                         </div>
                       )}
+
+                      {/* Dropzone to Add / Upload Images (Multiple allowed) */}
+                      <div
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                            handleUploadDeliveryProofFiles(e.dataTransfer.files);
+                          }
+                        }}
+                        style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: deliveryDocs.length > 0 ? '12px 16px' : '16px 20px', textAlign: 'center', backgroundColor: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
+                      >
+                        <UploadCloud style={{ width: deliveryDocs.length > 0 ? '22px' : '28px', height: deliveryDocs.length > 0 ? '22px' : '28px', color: '#DC2626' }} />
+                        <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
+                          {deliveryDocs.length > 0
+                            ? `Attach more delivery address images (Select multiple files to reach 4+ images)`
+                            : `Drag & drop delivery address images here (Upload at least 4 images e.g. Site front, Entrance, Access road, Premises proof)`}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                            <Upload style={{ width: '13px', height: '13px' }} />
+                            {deliveryDocs.length > 0 ? '+ Add More Images' : 'Browse / Select Files (Multi-Select)'}
+                            <input id="create-bom-form-input-3" name="input3" aria-label="Input 3"
+                              type="file"
+                              multiple
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files.length > 0) {
+                                  handleUploadDeliveryProofFiles(e.target.files);
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <span style={{ fontSize: '10px', color: '#94A3B8' }}>Supported formats: JPG, PNG, PDF, DOC (Multi-select enabled • At least 4 images recommended)</span>
+                      </div>
                     </div>
                   ) : (
                     <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -1228,10 +1305,10 @@ export default function CreateBomFormPage(props) {
                         }}
                         style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
                       >
-                        <option value="18%">18% GST</option>
-                        <option value="12%">12% GST</option>
-                        <option value="5%">5% GST</option>
-                        <option value="0%">0% Exempt</option>
+                        <option value="18%">18%</option>
+                        <option value="12%">12%</option>
+                        <option value="5%">5%</option>
+                        <option value="0%">0%</option>
                       </select>
                     </td>
                     <td style={{ padding: '12px 10px', color: '#475569', textAlign: 'right', fontWeight: '600' }}>
@@ -1486,143 +1563,124 @@ export default function CreateBomFormPage(props) {
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
                     Payment Attachment / Slip <span style={{ color: '#EF4444' }}>*</span>
                   </label>
-                  {newBomPaymentProofDoc && (
+                  {paymentDocs.length >= 4 ? (
                     <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
+                      <CheckCircle style={{ width: '12px', height: '12px' }} /> {paymentDocs.length} Images Attached (Target 4+ Met)
                     </span>
-                  )}
+                  ) : paymentDocs.length > 0 ? (
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      📷 {paymentDocs.length} / 4 Images Attached (Add {4 - paymentDocs.length} more)
+                    </span>
+                  ) : null}
                 </div>
 
-                {newBomPaymentProofDoc ? (
-                  <div style={{ border: '1px solid #86EFAC', borderRadius: '12px', padding: '16px', backgroundColor: '#F0FDF4', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <FileCheck style={{ width: '18px', height: '18px' }} />
+                {/* Attached Payment Proof Images List */}
+                {paymentDocs.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                    {paymentDocs.map((doc, idx) => (
+                      <div key={idx} style={{ border: '1px solid #86EFAC', borderRadius: '10px', padding: '8px', backgroundColor: '#F0FDF4', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                        <div style={{ position: 'relative', height: '100px', backgroundColor: '#DCFCE7', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {(doc.previewUrl || doc.dataUrl) ? (
+                            <img src={doc.previewUrl || doc.dataUrl} alt={doc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <FileCheck style={{ width: '32px', height: '32px', color: '#166534' }} />
+                          )}
+                          <span style={{ position: 'absolute', top: '4px', left: '4px', backgroundColor: 'rgba(15, 23, 42, 0.75)', color: '#FFFFFF', fontSize: '10px', fontWeight: '800', padding: '1px 6px', borderRadius: '4px' }}>
+                            Image #{idx + 1}
+                          </span>
                         </div>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{newBomPaymentProofDoc.name}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>{newBomPaymentProofDoc.size || '1.2 MB'} • Payment Document Attached</div>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={doc.name}>
+                          {doc.name}
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#64748B', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>{doc.size || 'Attached'}</span>
+                          <span style={{ color: '#166534', fontWeight: '700' }}>✓ Verified</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDocModal({ title: `Payment Proof #${idx + 1}: ${doc.name}`, doc })}
+                            style={{ flex: 1, border: '1px solid #BBF7D0', background: '#DCFCE7', color: '#166534', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '5px', borderRadius: '6px' }}
+                          >
+                            <Eye style={{ width: '12px', height: '12px' }} /> View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePaymentDoc(idx)}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 8px', borderRadius: '6px' }}
+                            title="Remove this image"
+                          >
+                            <Trash2 style={{ width: '12px', height: '12px' }} />
+                          </button>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewDocModal({ title: 'Payment Proof Document', doc: newBomPaymentProofDoc })}
-                          style={{ border: '1px solid #BBF7D0', background: '#DCFCE7', color: '#166534', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Eye style={{ width: '13px', height: '13px' }} /> View Image
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewBomPaymentProofDoc(null)}
-                          style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
-                        </button>
-                      </div>
-                    </div>
-                    {(newBomPaymentProofDoc.previewUrl || newBomPaymentProofDoc.dataUrl) && (
-                      <div style={{ borderTop: '1px solid #BBF7D0', paddingTop: '10px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', padding: '10px' }}>
-                        <img src={newBomPaymentProofDoc.previewUrl || newBomPaymentProofDoc.dataUrl} alt="Payment Proof Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }} />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files && e.dataTransfer.files[0];
-                      if (file) {
-                        try {
-                          validateClientFile(file);
-                          compressAndSaveFile(file, (res) => {
-                            if (res) {
-                              if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                              setNewBomPaymentProofDoc({
-                                ...res,
-                                _rawFile: file,
-                                dataUrl: res.dataUrl || null,
-                                previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                              });
-                            }
-                          });
-                        } catch (err) {
-                          setNewBomPaymentProofDoc(null);
-                          alert(`⚠️ Cannot Proceed: ${err.message}`);
-                        }
-                      }
-                    }}
-                    id="prod-field-newBomPaymentProofDoc"
-                    style={{
-                      border: (bomFormErrors?.paymentProof) ? '2px dashed #EF4444' : '2px dashed #CBD5E1',
-                      borderRadius: '12px',
-                      padding: '24px 16px',
-                      textAlign: 'center',
-                      backgroundColor: (bomFormErrors?.paymentProof) ? '#FEF2F2' : '#FAFAFA',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '10px',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <UploadCloud style={{ width: '34px', height: '34px', color: (bomFormErrors?.paymentProof) ? '#EF4444' : '#6366F1' }} />
-                    <span style={{ fontSize: '13px', color: (bomFormErrors?.paymentProof) ? '#DC2626' : '#475569', fontWeight: '700' }}>
-                      Drag & drop payment slip / bank advice here or
-                    </span>
-                    {bomFormErrors?.paymentProof && (
-                      <div style={{ color: '#DC2626', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertCircle style={{ width: '14px', height: '14px' }} /> {bomFormErrors.paymentProof}
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <label style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '6px',
-                        backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4F46E5',
-                        padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
-                        cursor: 'pointer'
-                      }}>
-                        <Upload style={{ width: '13px', height: '13px' }} />
-                        Browse Files
-                        <input id="create-bom-form-input-4" name="input4" aria-label="Input 4"
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                          style={{ display: "none" }}
-                          onChange={(e) => {
-                            const file = e.target.files && e.target.files[0];
-                            if (file) {
-                              try {
-                                validateClientFile(file);
-                                compressAndSaveFile(file, (res) => {
-                                  if (res) {
-                                    if (res.name && res.dataUrl) saveMediaToCache(res.name, res.dataUrl);
-                                    setNewBomPaymentProofDoc({
-                                      ...res,
-                                      _rawFile: file,
-                                      dataUrl: res.dataUrl || null,
-                                      previewUrl: res.dataUrl || (typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null)
-                                    });
-                                  }
-                                });
-                              } catch (err) {
-                                e.target.value = '';
-                                setNewBomPaymentProofDoc(null);
-                                alert(`⚠️ Cannot Proceed: ${err.message}`);
-                              }
-                            }
-                          }}
-                         />
-                      </label>
-                    </div>
-
-                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                      Supported formats: PDF, JPG, PNG (Max 5 MB)
-                    </span>
+                    ))}
                   </div>
                 )}
+
+                {/* Dropzone to Add / Upload Payment Slips (Multiple allowed) */}
+                <div
+                  id="prod-field-newBomPaymentProofDoc"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleUploadPaymentProofFiles(e.dataTransfer.files);
+                    }
+                  }}
+                  style={{
+                    border: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '2px dashed #EF4444' : '2px dashed #CBD5E1',
+                    borderRadius: '12px',
+                    padding: paymentDocs.length > 0 ? '14px 16px' : '24px 16px',
+                    textAlign: 'center',
+                    backgroundColor: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '#FEF2F2' : '#FAFAFA',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '10px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <UploadCloud style={{ width: paymentDocs.length > 0 ? '24px' : '34px', height: paymentDocs.length > 0 ? '24px' : '34px', color: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '#EF4444' : '#6366F1' }} />
+                  <span style={{ fontSize: '13px', color: (bomFormErrors?.paymentProof && paymentDocs.length === 0) ? '#DC2626' : '#475569', fontWeight: '700' }}>
+                    {paymentDocs.length > 0
+                      ? `Attach more payment slips / receipts (Select multiple files to reach 4+ images)`
+                      : `Drag & drop payment slip / bank advice here (Upload at least 4 images e.g. Transfer receipt, Bank statement, RTGS voucher)`}
+                  </span>
+                  {bomFormErrors?.paymentProof && paymentDocs.length === 0 && (
+                    <div style={{ color: '#DC2626', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle style={{ width: '14px', height: '14px' }} /> {bomFormErrors.paymentProof}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <label style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4F46E5',
+                      padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
+                      cursor: 'pointer'
+                    }}>
+                      <Upload style={{ width: '13px', height: '13px' }} />
+                      {paymentDocs.length > 0 ? '+ Add More Payment Slips' : 'Browse / Select Files (Multi-Select)'}
+                      <input id="create-bom-form-input-4" name="input4" aria-label="Input 4"
+                        type="file"
+                        multiple
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleUploadPaymentProofFiles(e.target.files);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                    Supported formats: PDF, JPG, PNG (Multi-select enabled • Upload at least 4 images recommended)
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -1913,7 +1971,8 @@ export default function CreateBomFormPage(props) {
                       billingAddressObj: billingObj,
                       deliveryAddress: deliveryFull,
                       deliveryAddressObj: deliveryObj,
-                      deliveryAddressProofDoc: sameAsBilling ? null : (newBomDeliveryProofDoc || null),
+                      deliveryAddressProofDoc: sameAsBilling ? null : (deliveryDocs[0] || null),
+                      deliveryAddressProofDocs: sameAsBilling ? [] : deliveryDocs,
                       transportMode: newBomTransportMode || 'Transport',
                       transporterName: newBomTransporterName || '',
                       destination: (newBomDestination || '').trim(),
@@ -1924,8 +1983,9 @@ export default function CreateBomFormPage(props) {
                       balanceAmount: (newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') ? Math.max(0, (totals.grand || 0) - (parseFloat(newBomPartialAmount) || 0)) : (['100% Paid', '100% Advance'].includes(newBomPaymentType) ? 0 : totals.grand),
                       creditDays: newBomPaymentType === 'Credit Payment' ? (parseInt(newBomCreditDays) || 7) : null,
                       creditDueDate: newBomPaymentType === 'Credit Payment' ? new Date(Date.now() + (parseInt(newBomCreditDays) || 7) * 86400000).toISOString().split('T')[0] : null,
-                      paymentProofDoc: newBomPaymentProofDoc || null,
-                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && Boolean(newBomPaymentProofDoc),
+                      paymentProofDoc: paymentDocs[0] || null,
+                      paymentProofDocs: paymentDocs,
+                      paymentUpdated: (newBomPaymentType === '100% Paid' || newBomPaymentType === 'Partial Paid' || newBomPaymentType === 'Partial Payment') && paymentDocs.length > 0,
                       remarks: newBomRemarks || '',
                       status: isDraft ? 'Draft' : 'Sales Confirmed - Sent to Dispatch',
                       salesConfirmed: !isDraft,
@@ -1951,9 +2011,11 @@ export default function CreateBomFormPage(props) {
                         dispatch50Uploaded: false,
                         advance100Uploaded: newBomPaymentType === '100% Paid' && hasPaymentProof,
                         net30Uploaded: false,
-                        proofDoc: newBomPaymentProofDoc ? newBomPaymentProofDoc.name : null,
-                        proofDocObj: newBomPaymentProofDoc || null,
-                        paymentUpdated: newBomPaymentType === '100% Paid' && Boolean(newBomPaymentProofDoc)
+                        proofDoc: paymentDocs[0] ? paymentDocs[0].name : null,
+                        proofDocObj: paymentDocs[0] || null,
+                        proofDocs: paymentDocs.map(d => d.name),
+                        proofDocObjs: paymentDocs,
+                        paymentUpdated: newBomPaymentType === '100% Paid' && paymentDocs.length > 0
                       },
                       dispatchPacking: (bomMaterialsList || []).map(item => ({
                         name: item.name || 'Custom Item',
@@ -1995,54 +2057,73 @@ export default function CreateBomFormPage(props) {
                     sanitizedNewBom.code = finalAssignedCode;
                     sanitizedNewBom.id = finalAssignedCode;
 
-                    // Upload any attached files to private Supabase Storage under the final BOM code
-                    if (newBomDeliveryProofDoc && newBomDeliveryProofDoc._rawFile && !sameAsBilling) {
+                    // Upload any attached delivery proof files to private Supabase Storage
+                    if (deliveryDocs.length > 0 && !sameAsBilling) {
                       try {
-                        const meta = await uploadBomDocumentFile({
-                          file: newBomDeliveryProofDoc._rawFile,
-                          bomCode: finalAssignedCode,
-                          category: 'delivery-proof'
-                        });
-                        sanitizedNewBom.deliveryAddressProofDoc = meta;
-                      } catch (upErr) {
-                        console.warn('Storage upload fallback, keeping local delivery proof:', upErr);
-                        sanitizedNewBom.deliveryAddressProofDoc = {
-                          name: newBomDeliveryProofDoc.name || 'Delivery_Address_Proof',
-                          size: newBomDeliveryProofDoc.size || 'Attached',
-                          mimeType: newBomDeliveryProofDoc.mimeType || 'image/jpeg',
-                          uploadedAt: new Date().toISOString(),
-                          dataUrl: newBomDeliveryProofDoc.dataUrl || null,
-                          previewUrl: newBomDeliveryProofDoc.previewUrl || null
-                        };
+                        const uploadedDeliveryDocs = await Promise.all(deliveryDocs.map(async (doc, idx) => {
+                          if (doc && doc._rawFile) {
+                            try {
+                              const meta = await uploadBomDocumentFile({
+                                file: doc._rawFile,
+                                bomCode: finalAssignedCode,
+                                category: `delivery-proof-${idx + 1}`
+                              });
+                              return meta;
+                            } catch (upErr) {
+                              console.warn('Storage upload fallback, keeping local delivery proof:', upErr);
+                            }
+                          }
+                          return {
+                            name: doc.name || `Delivery_Address_Proof_${idx + 1}`,
+                            size: doc.size || 'Attached',
+                            mimeType: doc.mimeType || 'image/jpeg',
+                            uploadedAt: new Date().toISOString(),
+                            dataUrl: doc.dataUrl || null,
+                            previewUrl: doc.previewUrl || null
+                          };
+                        }));
+                        sanitizedNewBom.deliveryAddressProofDocs = uploadedDeliveryDocs;
+                        sanitizedNewBom.deliveryAddressProofDoc = uploadedDeliveryDocs[0] || null;
+                      } catch (err) {
+                        console.warn('Error uploading delivery proof docs:', err);
                       }
                     }
 
-                    if (newBomPaymentProofDoc && newBomPaymentProofDoc._rawFile) {
+                    // Upload any attached payment proof files to private Supabase Storage
+                    if (paymentDocs.length > 0) {
                       try {
-                        const meta = await uploadBomDocumentFile({
-                          file: newBomPaymentProofDoc._rawFile,
-                          bomCode: finalAssignedCode,
-                          category: 'payment-proof'
-                        });
-                        sanitizedNewBom.paymentProofDoc = meta;
+                        const uploadedPaymentDocs = await Promise.all(paymentDocs.map(async (doc, idx) => {
+                          if (doc && doc._rawFile) {
+                            try {
+                              const meta = await uploadBomDocumentFile({
+                                file: doc._rawFile,
+                                bomCode: finalAssignedCode,
+                                category: `payment-proof-${idx + 1}`
+                              });
+                              return meta;
+                            } catch (upErr) {
+                              console.warn('Storage upload fallback, keeping local payment proof:', upErr);
+                            }
+                          }
+                          return {
+                            name: doc.name || `Payment_Slip_${idx + 1}`,
+                            size: doc.size || 'Attached',
+                            mimeType: doc.mimeType || 'image/jpeg',
+                            uploadedAt: new Date().toISOString(),
+                            dataUrl: doc.dataUrl || null,
+                            previewUrl: doc.previewUrl || null
+                          };
+                        }));
+                        sanitizedNewBom.paymentProofDocs = uploadedPaymentDocs;
+                        sanitizedNewBom.paymentProofDoc = uploadedPaymentDocs[0] || null;
                         if (sanitizedNewBom.payments) {
-                          sanitizedNewBom.payments.proofDocObj = meta;
-                          sanitizedNewBom.payments.proofDoc = meta.originalName || newBomPaymentProofDoc.name;
+                          sanitizedNewBom.payments.proofDocObjs = uploadedPaymentDocs;
+                          sanitizedNewBom.payments.proofDocObj = uploadedPaymentDocs[0] || null;
+                          sanitizedNewBom.payments.proofDocs = uploadedPaymentDocs.map(d => d.originalName || d.name);
+                          sanitizedNewBom.payments.proofDoc = uploadedPaymentDocs[0]?.originalName || uploadedPaymentDocs[0]?.name || null;
                         }
-                      } catch (upErr) {
-                        console.warn('Storage upload fallback, keeping local payment proof:', upErr);
-                        sanitizedNewBom.paymentProofDoc = {
-                              name: newBomPaymentProofDoc.name || 'Payment_Slip',
-                              size: newBomPaymentProofDoc.size || 'Attached',
-                              mimeType: newBomPaymentProofDoc.mimeType || 'image/jpeg',
-                              uploadedAt: new Date().toISOString(),
-                              dataUrl: newBomPaymentProofDoc.dataUrl || null,
-                              previewUrl: newBomPaymentProofDoc.previewUrl || null
-                        };
-                        if (sanitizedNewBom.payments) {
-                          sanitizedNewBom.payments.proofDocObj = sanitizedNewBom.paymentProofDoc;
-                          sanitizedNewBom.payments.proofDoc = newBomPaymentProofDoc.name || 'Payment_Slip';
-                        }
+                      } catch (err) {
+                        console.warn('Error uploading payment proof docs:', err);
                       }
                     }
 
@@ -2165,6 +2246,12 @@ export default function CreateBomFormPage(props) {
                         bomCode: finalAssignedCode,
                         customerName: sanitizedNewBom.companyName || sanitizedNewBom.customerName,
                         salesPerson: sanitizedNewBom.salesPerson
+                      });
+                      notifyBomCreatedToSales({
+                        bomCode: finalAssignedCode,
+                        customerName: sanitizedNewBom.companyName || sanitizedNewBom.customerName,
+                        salesPerson: sanitizedNewBom.salesPerson,
+                        salesPersonCode: sanitizedNewBom.salesPersonCode || sanitizedNewBom.createdById
                       });
                       alert(`✅ BOM (${finalAssignedCode}) created successfully and sent to Dispatch for packing!`);
                     } else {

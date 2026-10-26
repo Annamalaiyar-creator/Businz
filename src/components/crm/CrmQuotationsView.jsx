@@ -5,7 +5,8 @@ import {
   Building2, Printer, X, DollarSign, Calendar, Tag, ChevronRight,
   RotateCcw, Edit3, Trash2, CheckCircle, Clock, AlertCircle, Layers,
   Truck, ArrowRight, Copy, RefreshCw, Send, Mail, Boxes, User, Landmark,
-  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap
+  AlertTriangle, ShoppingCart, ShieldCheck, Smartphone, QrCode, Zap,
+  ChevronDown, ChevronUp, GripVertical
 } from 'lucide-react';
 import HdgStructureConfiguratorModal from './HdgStructureConfiguratorModal';
 import { VRM_HDG_PRESETS, getAllActivePresets, isFixedQuantityPreset } from '../../vrmHdgProposalPresets';
@@ -23,6 +24,7 @@ import {
   getWhatsAppStatus,
   sendDirectWhatsApp
 } from '../../utils/whatsappDispatchService';
+import { getHsnCode } from '../../utils/hsnCodeService';
 
 const QUOTATION_TERMS_PRESETS = [
   {
@@ -373,6 +375,8 @@ export default function CrmQuotationsView({
 
   // Line items
   const [quoteItems, setQuoteItems] = useState([]);
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+  const [dragOverItemIndex, setDragOverItemIndex] = useState(null);
   const [validationAlert, setValidationAlert] = useState(null);
 
   // Transport & Logistics
@@ -639,7 +643,7 @@ export default function CrmQuotationsView({
 
   // Helper handlers for Presets and Items
   const handleAddMaterialRow = () => {
-    setQuoteItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%' }]);
+    setQuoteItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
   };
 
   const handleAddPresetToOrder = (presetId, targetPreset, setsCount) => {
@@ -682,6 +686,7 @@ export default function CrmQuotationsView({
         qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: is5PctSolarProduct(it.name, it.category || it.specs) ? '5%' : (it.gstRate || initialGstRate),
+        hsn: it.hsn || it.hsn_or_sac || getHsnCode(it),
         isPresetItem: true
       };
     });
@@ -751,6 +756,55 @@ export default function CrmQuotationsView({
         }
       }
       return updated;
+    });
+  };
+
+  const handleReorderQuoteItem = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    setQuoteItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleMoveQuoteItemStep = (fromIndex, direction) => {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= quoteItems.length) return;
+    handleReorderQuoteItem(fromIndex, toIndex);
+  };
+
+  const handleMovePresetGroupBlock = (groupId, direction) => {
+    setQuoteItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const distinctGroups = [];
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        if (!distinctGroups.includes(g)) distinctGroups.push(g);
+      });
+      const curIdx = distinctGroups.indexOf(groupId);
+      if (curIdx === -1) return prev;
+      const targetIdx = curIdx + direction;
+      if (targetIdx < 0 || targetIdx >= distinctGroups.length) return prev;
+
+      const groupItemsMap = {};
+      distinctGroups.forEach(g => { groupItemsMap[g] = []; });
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        groupItemsMap[g].push(it);
+      });
+
+      const newOrder = [...distinctGroups];
+      const [movedGroup] = newOrder.splice(curIdx, 1);
+      newOrder.splice(targetIdx, 0, movedGroup);
+
+      const result = [];
+      newOrder.forEach(g => {
+        if (groupItemsMap[g]) result.push(...groupItemsMap[g]);
+      });
+      return result;
     });
   };
 
@@ -1046,6 +1100,7 @@ export default function CrmQuotationsView({
       deliveryPincode: sameAsBilling ? billingPincode : deliveryPincode,
       items: quoteItems.map(it => ({
         ...it,
+        hsn: it.hsn || getHsnCode(it),
         description: it.category || it.name,
         amount: (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)
       })),
@@ -1870,6 +1925,9 @@ export default function CrmQuotationsView({
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                    <th style={{ padding: '12px 4px', width: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
+                      <GripVertical size={14} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                    </th>
                     <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
                       <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                         type="checkbox"
@@ -1884,25 +1942,26 @@ export default function CrmQuotationsView({
                         style={{ accentColor: '#0E7490', cursor: 'pointer' }}
                        />
                     </th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '30%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>UOM</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '24%' }}>Product / Item <span style={{ color: '#EF4444' }}>*</span></th>
+                    <th style={{ padding: '12px 6px', fontWeight: '700', width: '10%', textAlign: 'center' }}>HSN / SAC</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%' }}>UOM</th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '8%', textAlign: 'center' }}>Qty <span style={{ color: '#EF4444' }}>*</span></th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%' }}>Price (₹) <span style={{ color: '#EF4444' }}>*</span></th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'center' }}>GST Rate</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '9%', textAlign: 'center' }}>GST Rate</th>
                     {quoteItems.some(it => it.isPresetItem) && (
                       <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', color: '#0E7490', backgroundColor: '#ECFEFF' }}>
                         Preset Amt (₹) <span style={{ color: '#EF4444' }}>*</span>
                       </th>
                     )}
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Taxable (₹)</th>
-                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '11%', textAlign: 'right' }}>Total (₹)</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Taxable (₹)</th>
+                    <th style={{ padding: '12px 10px', fontWeight: '700', width: '10%', textAlign: 'right' }}>Total (₹)</th>
                     <th style={{ padding: '12px 10px', fontWeight: '700', width: '4%', textAlign: 'center' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {quoteItems.length === 0 ? (
                     <tr>
-                      <td colSpan={quoteItems.some(it => it.isPresetItem) ? 10 : 9} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
+                      <td colSpan={quoteItems.some(it => it.isPresetItem) ? 12 : 11} style={{ padding: '36px', textAlign: 'center', color: '#94A3B8' }}>
                         No items added yet. Pick a preset above or click <strong>+ Add Product / Item</strong> below.
                       </td>
                     </tr>
@@ -1931,7 +1990,100 @@ export default function CrmQuotationsView({
                       };
 
                       return (
-                        <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: isChecked ? '#ECFEFF' : (i % 2 === 1 ? '#FAFBFC' : 'white') }}>
+                        <tr
+                          key={i}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('text/plain', String(i));
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggedItemIndex(i);
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dragOverItemIndex !== i) setDragOverItemIndex(i);
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverItemIndex === i) setDragOverItemIndex(null);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const fromIdx = draggedItemIndex !== null ? draggedItemIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
+                            if (!isNaN(fromIdx) && fromIdx !== i) {
+                              handleReorderQuoteItem(fromIdx, i);
+                            }
+                            setDraggedItemIndex(null);
+                            setDragOverItemIndex(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedItemIndex(null);
+                            setDragOverItemIndex(null);
+                          }}
+                          style={{
+                            borderBottom: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex < i)
+                              ? '3px solid #0E7490'
+                              : '1px solid #F1F5F9',
+                            borderTop: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex > i)
+                              ? '3px solid #0E7490'
+                              : 'none',
+                            backgroundColor: draggedItemIndex === i
+                              ? '#F8FAFC'
+                              : (dragOverItemIndex === i
+                                ? '#ECFEFF'
+                                : (isChecked ? '#ECFEFF' : (i % 2 === 1 ? '#FAFBFC' : 'white'))),
+                            opacity: draggedItemIndex === i ? 0.35 : 1,
+                            transition: 'background-color 0.15s ease, opacity 0.15s ease'
+                          }}
+                        >
+                          <td
+                            style={{
+                              padding: '8px 4px',
+                              textAlign: 'center',
+                              cursor: 'grab',
+                              userSelect: 'none',
+                              verticalAlign: 'middle',
+                              borderLeft: (draggedItemIndex === i || dragOverItemIndex === i) ? '3px solid #0E7490' : 'none'
+                            }}
+                            title="Click and drag to reorder / align product, or use arrows"
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                              <GripVertical size={16} style={{ color: '#94A3B8', cursor: 'grab' }} />
+                              <div style={{ display: 'flex', gap: '2px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMoveQuoteItemStep(i, -1); }}
+                                  disabled={i === 0}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: i === 0 ? 'not-allowed' : 'pointer',
+                                    padding: '1px',
+                                    color: i === 0 ? '#CBD5E1' : '#64748B',
+                                    lineHeight: 1
+                                  }}
+                                  title="Move product up"
+                                >
+                                  <ChevronUp size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMoveQuoteItemStep(i, 1); }}
+                                  disabled={i === quoteItems.length - 1}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: i === quoteItems.length - 1 ? 'not-allowed' : 'pointer',
+                                    padding: '1px',
+                                    color: i === quoteItems.length - 1 ? '#CBD5E1' : '#64748B',
+                                    lineHeight: 1
+                                  }}
+                                  title="Move product down"
+                                >
+                                  <ChevronDown size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
                           <td style={{ padding: '12px 10px', textAlign: 'center', borderLeft: isChecked ? '4px solid #0E7490' : '4px solid transparent' }}>
                             <input id="crm-quotations-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                               type="checkbox"
@@ -1952,8 +2104,14 @@ export default function CrmQuotationsView({
                                 placeholder="Type or select product / item..."
                                 accentColor="#4F46E5"
                                 onChange={(val, matched) => {
-                                  const pName = matched ? matched.name : val;
-                                  const pCat = matched ? (matched.category || matched.description || item.category) : item.category;
+                                  if (!matched) {
+                                    const dynamicHsn = getHsnCode({ name: val, category: item.category });
+                                    setQuoteItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val, hsn: dynamicHsn } : mat));
+                                    return;
+                                  }
+                                  const pName = matched.name;
+                                  const pCat = matched.category || matched.description || item.category;
+                                  const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
                                   const isSolar5 = is5PctSolarProduct(pName, pCat);
                                   setQuoteItems(prev => prev.map((mat, idx) => idx === i ? {
                                     ...mat,
@@ -1961,7 +2119,8 @@ export default function CrmQuotationsView({
                                     rate: matched ? String(matched.price || matched.rate || mat.rate) : mat.rate,
                                     uom: matched ? (matched.uom || matched.unit || mat.uom) : mat.uom,
                                     category: pCat,
-                                    gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%')
+                                    gstRate: isSolar5 ? '5%' : (mat.gstRate || '18%'),
+                                    hsn: pHsn
                                   } : mat));
                                 }}
                               />
@@ -1975,16 +2134,43 @@ export default function CrmQuotationsView({
                                    setQuoteItems(prev => prev.map((mat, idx) => {
                                      if (idx !== i) return mat;
                                      const isSolar5 = is5PctSolarProduct(mat.name, val);
+                                     const dynamicHsn = getHsnCode({ name: mat.name, category: val }) || mat.hsn;
                                      return {
                                        ...mat,
                                        category: val,
-                                       gstRate: isSolar5 ? '5%' : mat.gstRate
+                                       gstRate: isSolar5 ? '5%' : mat.gstRate,
+                                       hsn: dynamicHsn
                                      };
                                    }));
                                  }}
                                  style={{ width: '100%', height: '28px', borderRadius: '6px', border: '1px solid #E2E8F0', padding: '0 10px', fontSize: '11px', color: '#64748B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', cursor: 'text' }}
                                 />
                              </div>
+                           </td>
+                           <td style={{ padding: '12px 6px' }}>
+                             <input id={`crm-quotations-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
+                               type="text"
+                               readOnly
+                               tabIndex={-1}
+                               placeholder={getHsnCode(item) || 'HSN Code'}
+                               value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
+                               style={{
+                                 width: '100%',
+                                 height: '38px',
+                                 borderRadius: '8px',
+                                 border: '1px solid #E2E8F0',
+                                 padding: '0 6px',
+                                 fontSize: '12px',
+                                 fontWeight: '700',
+                                 color: '#475569',
+                                 backgroundColor: '#F8FAFC',
+                                 outline: 'none',
+                                 boxSizing: 'border-box',
+                                 textAlign: 'center',
+                                 cursor: 'not-allowed'
+                               }}
+                               title="HSN / SAC Code (Auto-populated from master catalog; read-only)"
+                             />
                            </td>
                            <td style={{ padding: '12px 10px' }}>
                              <input id={`crm-quotations-uom-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uOM_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="UOM"
@@ -2048,10 +2234,10 @@ export default function CrmQuotationsView({
                               }}
                               style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
                             >
-                              <option value="18%">18% GST</option>
-                              <option value="12%">12% GST</option>
-                              <option value="5%">5% GST</option>
-                              <option value="0%">0% Exempt</option>
+                              <option value="18%">18%</option>
+                              <option value="12%">12%</option>
+                              <option value="5%">5%</option>
+                              <option value="0%">0%</option>
                             </select>
                           </td>
                           {hasAnyPreset && (() => {
@@ -2216,24 +2402,65 @@ export default function CrmQuotationsView({
                                       </div>
 
                                       {groupId && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemovePresetGroup(groupId)}
-                                          style={{
-                                            border: 'none',
-                                            backgroundColor: 'transparent',
-                                            color: '#EF4444',
-                                            fontSize: '10px',
-                                            fontWeight: '700',
-                                            cursor: 'pointer',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            marginTop: '2px'
-                                          }}
-                                          title={`Remove entire ${currentGroup.presetName} preset`}
-                                        >
-                                          Remove Kit
-                                        </button>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMovePresetGroupBlock(groupId, -1)}
+                                            style={{
+                                              border: '1px solid #C7D2FE',
+                                              backgroundColor: '#FFFFFF',
+                                              color: '#4338CA',
+                                              fontSize: '10px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer',
+                                              padding: '2px 5px',
+                                              borderRadius: '4px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '2px'
+                                            }}
+                                            title={`Move ${currentGroup.presetName} preset block up`}
+                                          >
+                                            <ChevronUp size={10} /> Up
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMovePresetGroupBlock(groupId, 1)}
+                                            style={{
+                                              border: '1px solid #C7D2FE',
+                                              backgroundColor: '#FFFFFF',
+                                              color: '#4338CA',
+                                              fontSize: '10px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer',
+                                              padding: '2px 5px',
+                                              borderRadius: '4px',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '2px'
+                                            }}
+                                            title={`Move ${currentGroup.presetName} preset block down`}
+                                          >
+                                            <ChevronDown size={10} /> Down
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemovePresetGroup(groupId)}
+                                            style={{
+                                              border: 'none',
+                                              backgroundColor: 'transparent',
+                                              color: '#EF4444',
+                                              fontSize: '10px',
+                                              fontWeight: '700',
+                                              cursor: 'pointer',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px'
+                                            }}
+                                            title={`Remove entire ${currentGroup.presetName} preset`}
+                                          >
+                                            Remove Kit
+                                          </button>
+                                        </div>
                                       )}
                                     </div>
                                   </td>

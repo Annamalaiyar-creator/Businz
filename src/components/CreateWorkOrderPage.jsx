@@ -23,6 +23,7 @@ import { prodModuleEngine } from '../utils/productionModuleEngine';
 import { VRM_PRODUCTS } from '../utils/vrmProductsData';
 import NotificationToast from './NotificationToast';
 import { addLiveNotification } from './Header';
+import { notifyStockShortageToProcurement } from '../services/notificationService';
 
 export const PRODUCT_CATALOG_OPTIONS = [
   { label: "Double C Rail NEW", code: "CC4.8N", totalLen: 4800, defaultCutLen: 4800, profileGroup: "double_c" },
@@ -541,6 +542,14 @@ export default function CreateWorkOrderPage({ onBack, onWorkOrderCreated }) {
         type: 'error',
         title: 'Insufficient Raw Material Stock',
         message: 'There is no raw material available'
+      });
+      notifyStockShortageToProcurement({
+        itemName: matCalc?.recipe?.rawMaterialName || selectedProductCode,
+        itemCode: matCalc?.recipe?.rawMaterialCode || selectedProductCode,
+        currentStock: matCalc?.availableStock || 0,
+        minLevel: matCalc?.physicalMatToIssue || 0,
+        uom: matCalc?.recipe?.rawMaterialUnit || 'Nos',
+        reason: `Work Order blocked: required ${matCalc?.physicalMatToIssue || 0}, shortage ${matCalc?.shortageQty || 0}`
       });
       return;
     }

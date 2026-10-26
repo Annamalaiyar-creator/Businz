@@ -8,6 +8,7 @@ import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorag
 import { resolveDocumentUrl } from "../../utils/documentResolver";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
+import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
 
 export default function ConfirmingBomModal({
   confirmingBomModal,
@@ -211,6 +212,7 @@ export default function ConfirmingBomModal({
                   deliveryAddress: dStr,
                   deliveryAddressObj: finalDObj,
                   deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
+                  deliveryAddressProofDocs: confirmingBomModal.sameAsBilling ? [] : (confirmingBomModal.deliveryAddressProofDocs || (confirmingBomModal.deliveryAddressProofDoc ? [confirmingBomModal.deliveryAddressProofDoc] : [])),
                   items: finalizedItems,
                   dispatchPacking: packingItems,
                   status: 'Sent to Production',
@@ -290,6 +292,12 @@ export default function ConfirmingBomModal({
                   bomCode: confirmingBomModal.bomCode,
                   customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
                   salesPerson: confirmingBomModal.salesPerson
+                });
+                notifyBomCreatedToSales({
+                  bomCode: confirmingBomModal.bomCode,
+                  customerName: confirmingBomModal.companyName || confirmingBomModal.customerName,
+                  salesPerson: confirmingBomModal.salesPerson,
+                  salesPersonCode: confirmingBomModal.salesPersonCode || confirmingBomModal.createdById
                 });
 
                 setConfirmingBomModal(null);
@@ -831,109 +839,146 @@ export default function ConfirmingBomModal({
                           </span>
                         </div>
                       </div>
-                      {confirmingBomModal.deliveryAddressProofDoc && (
-                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <CheckCircle style={{ width: '12px', height: '12px' }} /> Attached
-                        </span>
-                      )}
+                      {(() => {
+                        const addrDocs = Array.isArray(confirmingBomModal.deliveryAddressProofDocs) && confirmingBomModal.deliveryAddressProofDocs.length > 0
+                          ? confirmingBomModal.deliveryAddressProofDocs
+                          : confirmingBomModal.deliveryAddressProofDoc
+                            ? [confirmingBomModal.deliveryAddressProofDoc]
+                            : [];
+                        return (
+                          <>
+                            {addrDocs.length >= 4 ? (
+                              <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle style={{ width: '12px', height: '12px' }} /> {addrDocs.length} Images Attached
+                              </span>
+                            ) : addrDocs.length > 0 ? (
+                              <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', padding: '3px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                📷 {addrDocs.length} / 4 Images Attached
+                              </span>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                     </div>
 
-                    {confirmingBomModal.deliveryAddressProofDoc ? (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FECACA' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <FileText style={{ width: '16px', height: '16px', color: '#DC2626' }} />
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>{confirmingBomModal.deliveryAddressProofDoc.name}</div>
-                            <div style={{ fontSize: '10px', color: '#64748B' }}>{confirmingBomModal.deliveryAddressProofDoc.size || '1.2 MB'} • Uploaded</div>
+                    {(() => {
+                      const addrDocs = Array.isArray(confirmingBomModal.deliveryAddressProofDocs) && confirmingBomModal.deliveryAddressProofDocs.length > 0
+                        ? confirmingBomModal.deliveryAddressProofDocs
+                        : confirmingBomModal.deliveryAddressProofDoc
+                          ? [confirmingBomModal.deliveryAddressProofDoc]
+                          : [];
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {addrDocs.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
+                              {addrDocs.map((doc, idx) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', padding: '8px 10px', borderRadius: '8px', border: '1px solid #FECACA' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                    <FileText style={{ width: '14px', height: '14px', color: '#DC2626', flexShrink: 0 }} />
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={doc.name}>#{idx + 1} {doc.name}</div>
+                                      <div style={{ fontSize: '9.5px', color: '#64748B' }}>{doc.size || 'Attached'}</div>
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const url = resolveDocumentUrl(doc) || doc.dataUrl || doc.previewUrl || doc.url || getMediaFromCache(doc.name);
+                                        setActiveMediaPreviewModal({
+                                          type: (doc.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(doc.name)) ? 'image' : 'document',
+                                          url,
+                                          name: doc.name
+                                        });
+                                      }}
+                                      style={{ border: 'none', background: '#EFF6FF', color: '#1D4ED8', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '10.5px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '2px' }}
+                                    >
+                                      <Eye style={{ width: '11px', height: '11px' }} /> View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = addrDocs.filter((_, i) => i !== idx);
+                                        setConfirmingBomModal(prev => ({
+                                          ...prev,
+                                          deliveryAddressProofDocs: updated,
+                                          deliveryAddressProofDoc: updated[0] || null
+                                        }));
+                                      }}
+                                      style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: '10.5px', fontWeight: '700', display: 'flex', alignItems: 'center', padding: '3px' }}
+                                    >
+                                      <Trash2 style={{ width: '12px', height: '12px' }} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <label style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '6px',
+                              backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626',
+                              padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
+                              cursor: 'pointer'
+                            }}>
+                              <Upload style={{ width: '13px', height: '13px' }} />
+                              {addrDocs.length > 0 ? '+ Add More Images (Multi-Select)' : 'Upload Address Proof Images (At least 4 recommended)'}
+                              <input id="confirming-bom-input-1" name="input1" aria-label="Input 1"
+                                type="file"
+                                multiple
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  const files = e.target.files ? Array.from(e.target.files) : [];
+                                  if (files.length > 0) {
+                                    files.forEach((file) => {
+                                      try {
+                                        validateClientFile(file);
+                                        compressAndSaveFile(file, async (meta) => {
+                                          if (meta) {
+                                            if (meta.name && meta.dataUrl) {
+                                              saveMediaToCache(meta.name, meta.dataUrl);
+                                            }
+                                            let finalMeta = { ...meta, _rawFile: file };
+                                            const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
+                                            if (bCode) {
+                                              try {
+                                                const uploadedMeta = await uploadBomDocumentFile({
+                                                  file,
+                                                  bomCode: bCode,
+                                                  category: `delivery-proof-${Date.now()}`
+                                                });
+                                                if (uploadedMeta) finalMeta = { ...finalMeta, ...uploadedMeta };
+                                              } catch (upErr) {
+                                                console.warn('[ConfirmingBOM] Server storage upload fallback:', upErr);
+                                              }
+                                            }
+                                            setConfirmingBomModal(prev => {
+                                              const cur = Array.isArray(prev.deliveryAddressProofDocs) ? prev.deliveryAddressProofDocs : (prev.deliveryAddressProofDoc ? [prev.deliveryAddressProofDoc] : []);
+                                              const updated = [...cur, finalMeta];
+                                              return {
+                                                ...prev,
+                                                deliveryAddressProofDocs: updated,
+                                                deliveryAddressProofDoc: updated[0] || null
+                                              };
+                                            });
+                                          }
+                                        });
+                                      } catch (err) {
+                                        alert(`⚠️ Cannot attach file ${file.name}: ${err.message}`);
+                                      }
+                                    });
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const doc = confirmingBomModal.deliveryAddressProofDoc;
-                              const url = resolveDocumentUrl(doc) || doc.dataUrl || doc.previewUrl || doc.url || getMediaFromCache(doc.name);
-                              setActiveMediaPreviewModal({
-                                type: (doc.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(doc.name)) ? 'image' : 'document',
-                                url,
-                                name: doc.name
-                              });
-                            }}
-                            style={{ border: 'none', background: '#EFF6FF', color: '#1D4ED8', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Eye style={{ width: '13px', height: '13px' }} /> View
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingBomModal({ ...confirmingBomModal, deliveryAddressProofDoc: null })}
-                            style={{ border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Trash2 style={{ width: '13px', height: '13px' }} /> Remove
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        <label style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '6px',
-                          backgroundColor: '#FFFFFF', border: '1px solid #DC2626', color: '#DC2626',
-                          padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700',
-                          cursor: 'pointer'
-                        }}>
-                          <Upload style={{ width: '13px', height: '13px' }} />
-                          Upload Address Proof Document
-                          <input id="confirming-bom-input-1" name="input1" aria-label="Input 1"
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              const file = e.target.files && e.target.files[0];
-                              if (file) {
-                                try {
-                                  validateClientFile(file);
-                                  compressAndSaveFile(file, async (meta) => {
-                                    if (meta) {
-                                      if (meta.name && meta.dataUrl) {
-                                        saveMediaToCache(meta.name, meta.dataUrl);
-                                      }
-                                      setConfirmingBomModal(prev => ({
-                                        ...prev,
-                                        deliveryAddressProofDoc: meta
-                                      }));
-
-                                      // Upload to server storage so Accounts and Billing logins can access it immediately
-                                      const bCode = confirmingBomModal.bomCode || confirmingBomModal.code || confirmingBomModal.id;
-                                      if (bCode) {
-                                        try {
-                                          const uploadedMeta = await uploadBomDocumentFile({
-                                            file,
-                                            bomCode: bCode,
-                                            category: 'delivery-proof'
-                                          });
-                                          if (uploadedMeta) {
-                                            setConfirmingBomModal(prev => ({
-                                              ...prev,
-                                              deliveryAddressProofDoc: {
-                                                ...meta,
-                                                ...uploadedMeta
-                                              }
-                                            }));
-                                          }
-                                        } catch (upErr) {
-                                          console.warn('[ConfirmingBOM] Server storage upload fallback:', upErr);
-                                        }
-                                      }
-                                    }
-                                  });
-                                } catch (err) {
-                                  alert(`⚠️ Cannot attach file: ${err.message}`);
-                                }
-                              }
-                            }}
-                           />
-                        </label>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -1593,6 +1638,7 @@ export default function ConfirmingBomModal({
                     deliveryAddress: dStr,
                     deliveryAddressObj: finalDObj,
                     deliveryAddressProofDoc: confirmingBomModal.sameAsBilling ? null : (confirmingBomModal.deliveryAddressProofDoc || null),
+                    deliveryAddressProofDocs: confirmingBomModal.sameAsBilling ? [] : (confirmingBomModal.deliveryAddressProofDocs || (confirmingBomModal.deliveryAddressProofDoc ? [confirmingBomModal.deliveryAddressProofDoc] : [])),
                     items: allCheckedItems,
                     status: 'Pending Confirmation',
                     subTotal: orderSubTotal,

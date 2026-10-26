@@ -14,6 +14,7 @@ import DocPreviewModal from "./DocPreviewModal";
 import { isTamilNaduIntra } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch } from "../../services/notificationService";
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
+import { getHsnCode } from "../../utils/hsnCodeService";
 
 export default function InvoiceDetailModal({
   viewingInvoiceModal,
@@ -784,7 +785,7 @@ export default function InvoiceDetailModal({
                         minLevel: 50,
                         status: newSt === 0 ? 'Out of Stock' : (newSt <= 50 ? 'Low Stock' : 'In Stock'),
                         store: 'Main Store',
-                        hsn: '7616',
+                        hsn: pItem.hsn || pItem.hsnCode || getHsnCode(pItem),
                         lastUpdated: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
                         reserved: 0,
                         openingStock: startStock,

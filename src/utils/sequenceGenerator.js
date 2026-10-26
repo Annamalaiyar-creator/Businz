@@ -33,14 +33,19 @@ export function getFinancialYear(date = new Date()) {
 
 /**
  * Formats a sequence code with standard company prefix, module abbreviation, FY, and 2-digit minimum padding
- * @param {string} moduleType - e.g. 'PI', 'PO', 'BOM', 'INV', 'QT', 'LEAD', 'DC', 'GRN', 'WO'
+ * @param {string} moduleType - e.g. 'PI', 'PO', 'BOM', 'INV', 'QT', 'LD'/'LEAD', 'DC', 'GRN', 'WO'
  * @param {number} seqNumber - Sequential positive integer (1, 2, ..., 99, 100, ..., 2000)
  * @param {Date|string|number} [date=new Date()]
- * @returns {string} e.g. 'VRM-PI-2026-01'
+ * @returns {string} e.g. 'VRM-LD-2026-01'
  */
 export function formatSequenceCode(moduleType, seqNumber, date = new Date()) {
   const fy = getFinancialYear(date);
-  const cleanType = String(moduleType || '').toUpperCase().trim();
+  let cleanType = String(moduleType || '').toUpperCase().trim();
+  if (cleanType === 'LEAD' || cleanType === 'LD') {
+    cleanType = 'LD';
+  } else if (cleanType === 'CS' || cleanType === 'CUST' || cleanType === 'CUSTOMER') {
+    cleanType = 'CS';
+  }
   const num = Math.max(1, parseInt(seqNumber, 10) || 1);
   const padded = String(num).padStart(2, '0');
   return `VRM-${cleanType}-${fy}-${padded}`;
@@ -56,12 +61,22 @@ export function formatSequenceCode(moduleType, seqNumber, date = new Date()) {
 export function extractMaxSequence(moduleType, fy, records = []) {
   if (!Array.isArray(records) || records.length === 0) return 0;
 
-  const cleanType = String(moduleType || '').toUpperCase().trim();
-  const regex = new RegExp(`^VRM-${cleanType}-${fy}-(\\d+)$`, 'i');
+  let cleanType = String(moduleType || '').toUpperCase().trim();
+  let regex;
+  if (cleanType === 'LEAD' || cleanType === 'LD') {
+    cleanType = 'LD';
+    regex = new RegExp(`^VRM-(?:LD|LEAD)-${fy}-(\\d+)$`, 'i');
+  } else if (cleanType === 'CS' || cleanType === 'CUST' || cleanType === 'CUSTOMER') {
+    cleanType = 'CS';
+    regex = new RegExp(`^VRM-CS-${fy}-(\\d+)$`, 'i');
+  } else {
+    regex = new RegExp(`^VRM-${cleanType}-${fy}-(\\d+)$`, 'i');
+  }
   let maxSeq = 0;
 
   const candidateKeys = [
     'code', 'bomCode', 'bom_code', 'convertedBomCode', 'converted_bom_code',
+    'customerCode', 'customer_code', 'customerId',
     'poNo', 'po_no', 'purchaseorder_number',
     'piNo', 'pi_no', 'estimate_number', 'estimateNo',
     'sourcePiNo', 'source_pi_no',

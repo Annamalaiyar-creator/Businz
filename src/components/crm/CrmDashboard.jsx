@@ -33,6 +33,11 @@ export default function CrmDashboard({
     !['Sales Head', 'CEO', 'MD', 'Managing Director', 'Technical Administrator', 'Dispatch Head', 'Dispatch', 'Dispatch Team', 'Production Head', 'Accounts Head', 'Accounts Executive', 'Billing', 'Floor Supervisor', 'Procurement Head', 'Admin', 'Super Admin'].some(r => r.toLowerCase() === effectiveRole.toLowerCase().trim())
   );
 
+  const isCeo = ['ceo', 'md', 'managing director'].some(r => (effectiveRole || '').toLowerCase().includes(r));
+  const isTechSupport = ['tech support', 'technical support', 'technical administrator', 'technical admin', 'developer', 'admin'].some(r => (effectiveRole || '').toLowerCase().includes(r));
+  const isSalesPerson = (effectiveRole || '').toLowerCase().includes('sales');
+  const canCreateLead = (isCeo || isTechSupport) && !isSalesPerson;
+
   const effectiveUserDisplayName = currentEmpName || (currentLoggedEmail ? currentLoggedEmail.split('@')[0] : '') || currentEmpId || 'Sales Executive';
 
   const [pipelineViewMode, setPipelineViewMode] = useState('kanban'); // 'kanban' | 'summary'
@@ -200,17 +205,19 @@ export default function CrmDashboard({
             <MessageSquare size={15} /> WhatsApp Inbox
           </button>
 
-          <button
-            onClick={onCreateLead}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              backgroundColor: '#FFFFFF', color: '#0E7490', border: '1px solid #CBD5E1',
-              padding: '9px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '700',
-              cursor: 'pointer', transition: 'all 0.15s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-            }}
-          >
-            <Plus size={15} /> New Lead
-          </button>
+          {canCreateLead && (
+            <button
+              onClick={onCreateLead}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#FFFFFF', color: '#0E7490', border: '1px solid #CBD5E1',
+                padding: '9px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '700',
+                cursor: 'pointer', transition: 'all 0.15s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+              }}
+            >
+              <Plus size={15} /> New Lead
+            </button>
+          )}
 
           <button
             onClick={onCreateOpportunity}

@@ -75,12 +75,25 @@ export const addLiveNotification = (notif) => {
     localStorage.setItem('vrm_live_notifications', JSON.stringify(updated));
     window.dispatchEvent(new Event('vrm_notifications_updated'));
 
-    // Play Porter order alert chime and speak short punchy voice cue
-    playPorterOrderAlert();
-    setTimeout(() => {
-      const cue = getPorterVoiceCue(notifWithId);
-      speakNotificationVoice(cue, { rate: 1.12, pitch: 1.05 });
-    }, 320);
+    const currentRole = (typeof window !== 'undefined' && window.localStorage)
+      ? (localStorage.getItem('controlroom_user_role') || '')
+      : '';
+    const isTargeted = isRoleTargeted(currentRole, notifWithId.targetRoles, {
+      ...notifWithId.metadata,
+      title: notifWithId.title,
+      message: notifWithId.message,
+      type: notifWithId.type
+    });
+
+    if (isTargeted) {
+      // Play Porter order alert chime and speak short punchy voice cue
+      playPorterOrderAlert();
+      setTimeout(() => {
+        const cue = getPorterVoiceCue(notifWithId, notifWithId.metadata);
+        speakNotificationVoice(cue, { rate: 1.12, pitch: 1.05 });
+      }, 320);
+      window.dispatchEvent(new CustomEvent('vrm_workflow_toast', { detail: notifWithId }));
+    }
   } catch (e) {
     console.error('Error adding live notification:', e);
   }
@@ -148,7 +161,12 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
 
   // Filter notifications based on active user login role (or show system-wide alerts)
   const roleNotifications = liveNotifications.filter(n => {
-    return isRoleTargeted(userRole, n.targetRoles || n.role, n.metadata);
+    return isRoleTargeted(userRole, n.targetRoles || n.role, {
+      ...n.metadata,
+      title: n.title,
+      message: n.message,
+      type: n.type
+    });
   });
 
   const unreadNotifications = roleNotifications.filter(n => {
@@ -730,7 +748,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
                         Live
                       </span>
                     </span>
-                    <span className="bz-menu-sub">WhatsApp, Mail, Meta & Zoho APIs</span>
+                    <span className="bz-menu-sub">IndiaMART, WhatsApp, Meta & Zoho APIs</span>
                   </span>
                   <ChevronRight size={15} style={{ color: '#CBD5E1' }} />
                 </button>

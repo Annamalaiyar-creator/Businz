@@ -37,6 +37,7 @@ function TypeableProductSelect({
   const containerRef = useRef(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const justSelectedRef = useRef(false);
 
   // Sync internal search query with external value changes
   useEffect(() => {
@@ -184,22 +185,35 @@ function TypeableProductSelect({
   };
 
   const handleSelectItem = (item) => {
+    justSelectedRef.current = true;
     setSearchQuery(item.name);
     setIsOpen(false);
+    setHighlightedIndex(-1);
+    if (inputRef.current) {
+      inputRef.current.blur();
+    }
     if (onChange) {
       onChange(item.name, item);
     }
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    setTimeout(() => {
+      justSelectedRef.current = false;
+    }, 200);
   };
 
   const handleCustomSelect = () => {
     if (!searchQuery.trim()) return;
+    justSelectedRef.current = true;
     setIsOpen(false);
+    setHighlightedIndex(-1);
+    if (inputRef.current) {
+      inputRef.current.blur();
+    }
     if (onChange) {
       onChange(searchQuery.trim(), null);
     }
+    setTimeout(() => {
+      justSelectedRef.current = false;
+    }, 200);
   };
 
   const handleKeyDown = (e) => {
@@ -259,7 +273,7 @@ function TypeableProductSelect({
           placeholder={placeholder}
           onChange={handleInputChange}
           onFocus={() => {
-            if (!disabled) {
+            if (!disabled && !justSelectedRef.current) {
               setIsOpen(true);
               updateMenuPosition();
             }
@@ -358,7 +372,13 @@ function TypeableProductSelect({
           {/* Custom Typed Option (if user typed something not matching exactly) */}
           {searchQuery.trim() && !isExactMatch && (
             <div
-              onClick={handleCustomSelect}
+              onMouseDown={(e) => {
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCustomSelect();
+              }}
               style={{
                 padding: '10px 12px',
                 borderBottom: '1px solid #F1F5F9',
@@ -405,7 +425,13 @@ function TypeableProductSelect({
               return (
                 <div
                   key={prod.code || prod.id || `${prod.name}-${idx}`}
-                  onClick={() => handleSelectItem(prod)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectItem(prod);
+                  }}
                   onMouseEnter={() => setHighlightedIndex(idx)}
                   style={{
                     padding: '9px 12px',

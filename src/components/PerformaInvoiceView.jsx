@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, Lock } from 'lucide-react';
+import { Plus, Check, Hourglass, Edit3, Trash2, Eye, FileText, X, UploadCloud, CheckCircle, Search, AlertTriangle, ArrowLeft, ArrowRight, MoreVertical, Edit, Info, Calendar, Filter, ChevronLeft, ChevronRight, RotateCcw, Layers, Tag, MoreHorizontal, Download, Building2, Truck, Boxes, User, Landmark, ShieldCheck, Upload, FileCheck, ShoppingCart, Clock, Printer, Palette, Copy, AlertCircle, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import SearchablePresetSelector from './SearchablePresetSelector';
 import TypeableProductSelect from './TypeableProductSelect';
@@ -15,6 +15,7 @@ import { notifyPiCreated } from '../services/notificationService';
 import { fetchCustomersDeduplicated, searchCustomers, getCustomerDetails } from '../services/customerService';
 import { isTamilNaduIntra, calculateGstTiers } from '../utils/gstHelper';
 import { getNextSequence } from '../utils/sequenceGenerator';
+import { getHsnCode } from '../utils/hsnCodeService';
 
 const defaultSalesPIs = [];
 
@@ -1406,6 +1407,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Structured Line Items State (Fresh empty default)
   const [piItems, setPiItems] = useState([]);
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+  const [dragOverItemIndex, setDragOverItemIndex] = useState(null);
 
   // Transport & Logistics
   const [transportMode, setTransportMode] = useState('Transport');
@@ -1672,15 +1675,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
     const sub = itemsSub + kitSubtotal;
 
-    // 3. GST: Custom item GSTs + Preset kits GST grouped by rate (e.g. 5%, 18%)
+    // 3. GST: Custom item GSTs + Preset kits GST grouped by rate (e.g. 0%, 5%, 18%)
     const gstTiersMap = {};
+    const extractRate = (val, fallback = 18) => {
+      if (val === undefined || val === null || val === '') return fallback;
+      const str = String(val).replace('%', '').trim();
+      const n = parseFloat(str);
+      return isNaN(n) ? fallback : n;
+    };
 
     (piItems || []).forEach(item => {
       if (item.isPresetItem) return;
       const q = parseFloat(item.qty) || 0;
       const r = parseFloat(item.rate) || 0;
       const rowTot = q * r;
-      const pct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+      const pct = extractRate(item.gstRate, 18);
       const amt = rowTot * (pct / 100);
       if (!gstTiersMap[pct]) gstTiersMap[pct] = { rate: pct, taxable: 0, gstAmt: 0 };
       gstTiersMap[pct].taxable += rowTot;
@@ -1701,15 +1710,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           groupItems.forEach(it => {
             const itQty = parseFloat(it.qty) || 1;
             const itemShare = groupTotal * (itQty / totalQty);
-            const itGstRate = parseFloat(String(it.gstRate || grp.gstRate || '18%').replace('%', '')) || 18;
+            const itGstRate = extractRate(it.gstRate ?? grp.gstRate, 18);
             const itAmt = itemShare * (itGstRate / 100);
             if (!gstTiersMap[itGstRate]) gstTiersMap[itGstRate] = { rate: itGstRate, taxable: 0, gstAmt: 0 };
             gstTiersMap[itGstRate].taxable += itemShare;
             gstTiersMap[itGstRate].gstAmt += itAmt;
           });
         } else {
-          const gRateStr = grp?.gstRate || '18%';
-          const gPct = parseFloat(String(gRateStr).replace('%', '')) || 18;
+          const gPct = extractRate(grp?.gstRate, 18);
           const gAmt = groupTotal * (gPct / 100);
           if (!gstTiersMap[gPct]) gstTiersMap[gPct] = { rate: gPct, taxable: 0, gstAmt: 0 };
           gstTiersMap[gPct].taxable += groupTotal;
@@ -1721,11 +1729,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const targetState = sameAsBilling ? billingState : (deliveryState || billingState);
     const isIntra = isTamilNaduIntra(gstNo, targetState, billingState);
 
+    // Only include tax tiers with rate > 0 so that 0% rate incurs 0 tax and does not appear as a tax deduction
     const gstTiers = Object.values(gstTiersMap)
-      .filter(t => t.gstAmt > 0 || t.taxable > 0)
+      .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
       .sort((a, b) => a.rate - b.rate);
 
-    const formattedTiers = (gstTiers.length > 0 ? gstTiers : [{ rate: 18, taxable: sub, gstAmt: sub * 0.18 }]).map(t => ({
+    const formattedTiers = gstTiers.map(t => ({
       ...t,
       cgstRate: t.rate / 2,
       cgstAmt: t.gstAmt / 2,
@@ -1769,9 +1778,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         {
           name: joinedProducts,
           description: 'Standard VRM Solar Structure & Accessories Kit',
-          hsn: '73089090',
+          hsn: getHsnCode(joinedProducts || 'Solar Structure Kit'),
           qty: 1,
-          uom: 'Set',
+          uom: 'NOS',
           rate: totals.sub || 100000,
           gstRate: '18%',
           amount: totals.sub || 100000
@@ -1808,7 +1817,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const handleAddMaterialRow = () => {
-    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '73089090' }]);
+    setPiItems(prev => [...(prev || []), { name: '', category: '', uom: 'NOS', qty: '1', rate: '', gstRate: '18%', hsn: '' }]);
   };
 
   const handleAddPresetItem = (groupId) => {
@@ -1824,7 +1833,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: grp.gstRate || '18%',
-      hsn: grp.hsn || grp.hsn_or_sac || '73089090',
+      hsn: '',
       isPresetItem: true,
       presetGroupId: targetGid,
       presetName: grp.presetName
@@ -1846,6 +1855,55 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
   };
 
+  const handleReorderPiItem = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    setPiItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleMovePiItemStep = (fromIndex, direction) => {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= piItems.length) return;
+    handleReorderPiItem(fromIndex, toIndex);
+  };
+
+  const handleMovePresetGroupBlock = (groupId, direction) => {
+    setPiItems(prev => {
+      if (!prev || prev.length <= 1) return prev;
+      const distinctGroups = [];
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        if (!distinctGroups.includes(g)) distinctGroups.push(g);
+      });
+      const curIdx = distinctGroups.indexOf(groupId);
+      if (curIdx === -1) return prev;
+      const targetIdx = curIdx + direction;
+      if (targetIdx < 0 || targetIdx >= distinctGroups.length) return prev;
+
+      const groupItemsMap = {};
+      distinctGroups.forEach(g => { groupItemsMap[g] = []; });
+      prev.forEach(it => {
+        const g = it.presetGroupId || (it.isPresetItem ? 'legacy' : 'custom_items');
+        groupItemsMap[g].push(it);
+      });
+
+      const newOrder = [...distinctGroups];
+      const [movedGroup] = newOrder.splice(curIdx, 1);
+      newOrder.splice(targetIdx, 0, movedGroup);
+
+      const result = [];
+      newOrder.forEach(g => {
+        if (groupItemsMap[g]) result.push(...groupItemsMap[g]);
+      });
+      return result;
+    });
+  };
+
   const handleCreateCustomSet = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
@@ -1862,7 +1920,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         setCount: count,
         kitPrice: newSetPrice ? String(newSetPrice) : '',
         gstRate: setGst,
-        hsn: '73089090',
+        hsn: getHsnCode(cleanName),
         isCustomSet: true
       }
     }));
@@ -1875,7 +1933,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       baseQty: 1,
       rate: '0',
       gstRate: setGst,
-      hsn: '73089090',
+      hsn: '',
       isPresetItem: true,
       presetGroupId: groupId,
       presetName: cleanName
@@ -1906,7 +1964,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const presetName = targetPreset.label || presetId;
     const isDcrBosKit = targetPreset.category === 'DCR BOS Solar Kits' || targetPreset.category === 'BOS Solar Kits' || (targetPreset.label && targetPreset.label.includes('BOS KITS'));
     const initialGstRate = isDcrBosKit ? '5%' : (targetPreset.gstRate || targetPreset.gst || '18%');
-    const presetHsn = targetPreset.hsn || targetPreset.hsn_or_sac || '73089090';
+    const presetHsn = targetPreset.hsn || targetPreset.hsn_or_sac || getHsnCode(targetPreset.label || presetName);
 
     setPresetGroups(prev => ({
       ...prev,
@@ -1934,7 +1992,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         qty: isFixedKit ? String(baseQ) : String(Math.round(baseQ * multiplier)),
         rate: '0',
         gstRate: (isDcrBosKit || is5PctSolarProduct(it.name, it.category || it.specs)) ? '5%' : (it.gstRate || initialGstRate),
-        hsn: it.hsn || it.hsn_or_sac || presetHsn,
+        hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || presetHsn,
         isPresetItem: true
       };
     });
@@ -2167,21 +2225,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       }
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (!validUntilDate || !validUntilDate.trim()) {
-      missingList.push({
-        field: 'Valid Until Date',
-        message: 'Please select a Valid Until Date.',
-        targetId: 'pi-field-validUntil'
-      });
-    } else if (validUntilDate < todayStr) {
-      missingList.push({
-        field: 'Valid Until Date',
-        message: 'Valid Until date cannot be in the past or a finished date.',
-        targetId: 'pi-field-validUntil'
-      });
-    }
-
     return {
       isValid: missingList.length === 0,
       missingList
@@ -2288,7 +2331,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
       const sanitizedItems = (piItems || []).map(it => ({
         ...it,
-        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || '73089090').trim()
+        hsn: String(it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it)).trim()
       }));
 
       const newPI = {
@@ -2301,7 +2344,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         email,
         gstNo: (gstNo || '').toUpperCase(),
         productName: joinedProducts,
-        hsn: sanitizedItems.find(it => it.hsn)?.hsn || '73089090',
+        hsn: sanitizedItems.find(it => it.hsn)?.hsn || getHsnCode(joinedProducts),
         items: sanitizedItems,
         presetGroups,
         billingAddress: {
@@ -2510,18 +2553,18 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (Array.isArray(pi.items) && pi.items.length > 0) {
       setPiItems(pi.items.map(it => ({
         ...it,
-        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || pi.hsn || '73089090'
+        hsn: it.hsn || it.hsn_or_sac || it.hsnCode || getHsnCode(it) || pi.hsn
       })));
     } else {
       setPiItems([
         {
           name: pi.productName || 'Solar Mounting Structures & Fasteners',
           category: 'Structure Kit',
-          uom: 'SET',
+          uom: 'NOS',
           qty: String(pi.quantity || 1),
           rate: String(pi.unitValue || 25000),
           gstRate: '18%',
-          hsn: pi.hsn || '73089090'
+          hsn: pi.hsn || getHsnCode(pi.productName)
         }
       ]);
     }
@@ -3970,29 +4013,6 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 </div>
 
                 <div>
-                  <label htmlFor="pi-field-validUntil" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Valid Until Date <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input name="validUntilDate" aria-label="Valid Until Date"
-                    id="pi-field-validUntil"
-                    type="date"
-                    required
-                    value={validUntilDate}
-                    min={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const todayStr = new Date().toISOString().split('T')[0];
-                      if (val && val < todayStr) {
-                        setValidUntilDate(todayStr);
-                      } else {
-                        setValidUntilDate(val);
-                      }
-                    }}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }}
-                   />
-                </div>
-
-                <div>
                   <label htmlFor="performa-invoice-pi-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                     PI Number
                   </label>
@@ -4216,26 +4236,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   {isCustomerDropdownOpen && (
                     <div style={{
                       position: 'absolute',
-                      top: 'calc(100% + 4px)',
+                      top: 'calc(100% + 6px)',
                       left: 0,
-                      right: 0,
+                      minWidth: 'min(500px, 92vw)',
+                      width: 'max(100%, 500px)',
+                      maxWidth: '92vw',
                       backgroundColor: '#FFFFFF',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       border: '1px solid #CBD5E1',
-                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      boxShadow: '0 14px 35px -4px rgba(0, 0, 0, 0.18), 0 6px 14px -2px rgba(0, 0, 0, 0.08)',
                       zIndex: 9999,
-                      maxHeight: '280px',
+                      maxHeight: '380px',
                       overflowY: 'auto',
-                      padding: '4px'
+                      padding: '6px'
                     }}>
                       <div style={{
-                        padding: '6px 10px',
-                        fontSize: '11px',
+                        padding: '8px 12px',
+                        fontSize: '11.5px',
                         fontWeight: '700',
                         color: '#64748B',
                         backgroundColor: '#F8FAFC',
-                        borderRadius: '6px',
-                        marginBottom: '4px',
+                        borderRadius: '8px',
+                        marginBottom: '6px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
@@ -4248,7 +4270,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               e.stopPropagation();
                               setVendorName('');
                             }}
-                            style={{ border: 'none', background: 'transparent', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: 0 }}
+                            style={{ border: 'none', background: 'transparent', color: '#0E7490', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
                           >
                             Clear
                           </button>
@@ -4256,7 +4278,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </div>
 
                       {filteredCustomerSuggestions.length === 0 ? (
-                        <div style={{ padding: '14px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
                           No matching customers found for "{vendorName}". You can continue typing to use this new company.
                         </div>
                       ) : (
@@ -4281,7 +4303,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 setIsCustomerDropdownOpen(false);
                               }}
                               style={{
-                                padding: '9px 12px',
+                                padding: '10px 14px',
                                 borderRadius: '8px',
                                 cursor: 'pointer',
                                 backgroundColor: isSelected ? '#ECFEFF' : 'transparent',
@@ -4290,7 +4312,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
                                 transition: 'background-color 0.1s ease',
-                                gap: '8px'
+                                gap: '12px',
+                                marginBottom: '2px'
                               }}
                               onMouseEnter={(e) => {
                                 if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC';
@@ -4300,17 +4323,17 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               }}
                             >
                               <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontSize: '13px', fontWeight: '700', color: isSelected ? '#0E7490' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ fontSize: '13.5px', fontWeight: '700', color: isSelected ? '#0E7490' : '#0F172A', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.3' }}>
                                   {name}
                                 </div>
-                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                  {contact && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><User size={11} style={{ color: '#64748B' }} /> {contact}</span>}
-                                  {phone && <span>📞 {phone}</span>}
-                                  {city && <span>📍 {city}</span>}
+                                <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {contact && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><User size={12} style={{ color: '#64748B' }} /> {contact}</span>}
+                                  {phone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>📞 {phone}</span>}
+                                  {city && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>📍 {city}</span>}
                                 </div>
                               </div>
                               {gst && (
-                                <span style={{ fontSize: '10px', fontWeight: '700', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '3px 8px', borderRadius: '5px', whiteSpace: 'nowrap', alignSelf: 'center' }}>
                                   GST: {gst}
                                 </span>
                               )}
@@ -4702,6 +4725,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ color: '#475569', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                      <th style={{ padding: '12px 4px', width: '38px', textAlign: 'center', color: '#64748B' }} title="Drag handle to reorder / align products">
+                        <GripVertical size={14} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                      </th>
                       <th style={{ padding: '12px 14px', width: '30px', textAlign: 'center' }}>
                         <input id="performa-invoice-checkbox" name={`checkbox_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Checkbox"
                           type="checkbox"
@@ -4735,7 +4761,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                   <tbody>
                     {piItems.length === 0 ? (
                       <tr>
-                        <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '48px 16px', textAlign: 'center', color: '#94A3B8' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <Boxes size={28} style={{ color: '#CBD5E1' }} />
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748B' }}>No products or materials in Proforma Invoice</span>
@@ -4782,14 +4808,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         const q = parseFloat(item.qty) || 0;
                         const r = parseFloat(item.rate) || 0;
                         const taxable = isPresetItem ? 0 : q * r;
-                        const gstPct = parseFloat(String(item.gstRate || '18%').replace('%', '')) || 18;
+                        const cleanedGstStr = String(item.gstRate !== undefined && item.gstRate !== null && item.gstRate !== '' ? item.gstRate : '18%').replace('%', '').trim();
+                        const gstPct = isNaN(parseFloat(cleanedGstStr)) ? 18 : parseFloat(cleanedGstStr);
                         const itemTotal = taxable + (taxable * (gstPct / 100));
 
                         return (
                           <React.Fragment key={i}>
                             {isFirstInGroup && (
                               <tr key={`preset-hdr-${groupId}`} style={{ backgroundColor: theme.bg, borderTop: `2.5px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <span style={{
@@ -4822,7 +4849,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                         Total Quantity: {currentGroup?.setCount || 1} Set{(currentGroup?.setCount || 1) > 1 ? 's' : ''} ({groupCount} components)
                                       </span>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
                                         {(parseInt(currentGroup?.setCount) || 1) > 1 ? (
                                           <>Kit Rate: <strong style={{ color: '#334155' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> | Total: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {(Number(currentGroup?.kitPrice || 0) * (parseInt(currentGroup?.setCount) || 1)).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
@@ -4830,6 +4857,54 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                           <>Kit Amount: <strong style={{ color: theme.primary, fontSize: '12px' }}>₹ {Number(currentGroup?.kitPrice || 0).toLocaleString('en-IN')}</strong> + {currentGroup?.gstRate || '18%'} GST</>
                                         )}
                                       </span>
+
+                                      {/* Move entire preset group up / down buttons */}
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px 4px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMovePresetGroupBlock(groupId, -1)}
+                                          disabled={groupIndex === 0}
+                                          style={{
+                                            border: 'none',
+                                            backgroundColor: 'transparent',
+                                            color: groupIndex === 0 ? '#CBD5E1' : theme.primary,
+                                            cursor: groupIndex === 0 ? 'not-allowed' : 'pointer',
+                                            padding: '2px 5px',
+                                            borderRadius: '4px',
+                                            fontSize: '10px',
+                                            fontWeight: '700',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '2px'
+                                          }}
+                                          title={`Move ${theme.badge} up`}
+                                        >
+                                          <ChevronUp size={11} /> Move Up
+                                        </button>
+                                        <span style={{ color: '#E2E8F0' }}>|</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMovePresetGroupBlock(groupId, 1)}
+                                          disabled={groupIndex === distinctPresetGroupIds.length - 1}
+                                          style={{
+                                            border: 'none',
+                                            backgroundColor: 'transparent',
+                                            color: groupIndex === distinctPresetGroupIds.length - 1 ? '#CBD5E1' : theme.primary,
+                                            cursor: groupIndex === distinctPresetGroupIds.length - 1 ? 'not-allowed' : 'pointer',
+                                            padding: '2px 5px',
+                                            borderRadius: '4px',
+                                            fontSize: '10px',
+                                            fontWeight: '700',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '2px'
+                                          }}
+                                          title={`Move ${theme.badge} down`}
+                                        >
+                                          <ChevronDown size={11} /> Move Down
+                                        </button>
+                                      </div>
+
                                       <button
                                         type="button"
                                         onClick={() => handleAddPresetItem(groupId)}
@@ -4857,7 +4932,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             {isFirstCustomItem && distinctPresetGroupIds.length > 0 && (
                               <tr key="custom-items-banner" style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                                <td colSpan={hasAnyPreset ? 11 : 10} style={{ padding: '8px 14px' }}>
+                                <td colSpan={hasAnyPreset ? 12 : 11} style={{ padding: '8px 14px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span style={{
                                       padding: '2px 8px',
@@ -4879,12 +4954,98 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                             )}
                             <tr
                               key={i}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', String(i));
+                                e.dataTransfer.effectAllowed = 'move';
+                                setDraggedItemIndex(i);
+                              }}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (dragOverItemIndex !== i) setDragOverItemIndex(i);
+                              }}
+                              onDragLeave={() => {
+                                if (dragOverItemIndex === i) setDragOverItemIndex(null);
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                const fromIdx = draggedItemIndex !== null ? draggedItemIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
+                                if (!isNaN(fromIdx) && fromIdx !== i) {
+                                  handleReorderPiItem(fromIdx, i);
+                                }
+                                setDraggedItemIndex(null);
+                                setDragOverItemIndex(null);
+                              }}
+                              onDragEnd={() => {
+                                setDraggedItemIndex(null);
+                                setDragOverItemIndex(null);
+                              }}
                               style={{
-                                borderBottom: '1px solid #F1F5F9',
-                                backgroundColor: isChecked ? '#ECFEFF' : (isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : 'transparent'),
-                                transition: 'background-color 0.15s ease'
+                                borderBottom: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex < i)
+                                  ? '3px solid #0E7490'
+                                  : '1px solid #F1F5F9',
+                                borderTop: (dragOverItemIndex === i && draggedItemIndex !== null && draggedItemIndex > i)
+                                  ? '3px solid #0E7490'
+                                  : 'none',
+                                backgroundColor: draggedItemIndex === i
+                                  ? '#F8FAFC'
+                                  : (dragOverItemIndex === i
+                                    ? '#ECFEFF'
+                                    : (isChecked ? '#ECFEFF' : (isPresetItem ? (groupIndex % 2 === 1 ? '#F5F3FF' : '#F0FDFA') : 'transparent'))),
+                                opacity: draggedItemIndex === i ? 0.35 : 1,
+                                transition: 'background-color 0.15s ease, opacity 0.15s ease'
                               }}
                             >
+                              <td
+                                style={{
+                                  padding: '8px 4px',
+                                  textAlign: 'center',
+                                  cursor: 'grab',
+                                  userSelect: 'none',
+                                  verticalAlign: 'middle',
+                                  borderLeft: (draggedItemIndex === i || dragOverItemIndex === i) ? '3px solid #0E7490' : 'none'
+                                }}
+                                title="Click and drag to reorder / align product, or use arrows"
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                                  <GripVertical size={16} style={{ color: '#94A3B8', cursor: 'grab' }} />
+                                  <div style={{ display: 'flex', gap: '2px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleMovePiItemStep(i, -1); }}
+                                      disabled={i === 0}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: i === 0 ? 'not-allowed' : 'pointer',
+                                        padding: '1px',
+                                        color: i === 0 ? '#CBD5E1' : '#64748B',
+                                        lineHeight: 1
+                                      }}
+                                      title="Move product up"
+                                    >
+                                      <ChevronUp size={11} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleMovePiItemStep(i, 1); }}
+                                      disabled={i === piItems.length - 1}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: i === piItems.length - 1 ? 'not-allowed' : 'pointer',
+                                        padding: '1px',
+                                        color: i === piItems.length - 1 ? '#CBD5E1' : '#64748B',
+                                        lineHeight: 1
+                                      }}
+                                      title="Move product down"
+                                    >
+                                      <ChevronDown size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
                               <td style={{
                                 padding: '12px 14px',
                                 textAlign: 'center',
@@ -4914,22 +5075,21 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     accentColor={theme.primary}
                                     onChange={(val, matched) => {
                                       if (!matched) {
-                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val } : mat));
+                                        const dynamicHsn = getHsnCode({ name: val, category: item.category });
+                                        setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, name: val, hsn: dynamicHsn } : mat));
                                         return;
                                       }
                                       const pName = matched.name;
                                       const pCat = matched.category || matched.description || item.category;
                                       const pCode = matched.code || matched.sku || resolveProductCode(matched) || item.code;
-                                      const pHsn = matched.hsn || matched.hsn_or_sac || item.hsn || '73089090';
+                                      const pHsn = matched.hsn || matched.hsn_or_sac || getHsnCode(matched || { name: pName, category: pCat });
                                       const isSolar5 = is5PctSolarProduct(pName, pCat);
                                       let rawUom = matched.uom || matched.unit || mat.uom || 'NOS';
                                       const u = String(rawUom).trim().toUpperCase();
-                                      let resolvedUom = rawUom;
+                                      let resolvedUom = 'NOS';
                                       if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(u)) resolvedUom = 'MTR';
                                       else if (['PIECES', 'PIECE', 'PCS', 'PC'].includes(u)) resolvedUom = 'PCS';
-                                      else if (['NUMBERS', 'NUMBER', 'NOS', 'NO'].includes(u)) resolvedUom = 'NOS';
-                                      else if (['SET', 'SETS'].includes(u)) resolvedUom = 'SET';
-                                      else if (['KW', 'KILOWATT', 'KILOWATTS', 'KWP'].includes(u)) resolvedUom = 'KW';
+                                      else resolvedUom = 'NOS';
                                       setPiItems(prev => prev.map((mat, idx) => idx === i ? {
                                         ...mat,
                                         code: pCode || mat.code,
@@ -4951,10 +5111,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                       setPiItems(prev => prev.map((mat, idx) => {
                                         if (idx !== i) return mat;
                                         const isSolar5 = is5PctSolarProduct(mat.name, val);
+                                        const dynamicHsn = getHsnCode({ name: mat.name, category: val }) || mat.hsn;
                                         return {
                                           ...mat,
                                           category: val,
-                                          gstRate: isSolar5 ? '5%' : mat.gstRate
+                                          gstRate: isSolar5 ? '5%' : mat.gstRate,
+                                          hsn: dynamicHsn
                                         };
                                       }));
                                     }}
@@ -4984,12 +5146,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               <td style={{ padding: '12px 6px' }}>
                                 <input id={`performa-invoice-hsn-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`hsn_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="HSN / SAC"
                                   type="text"
-                                  placeholder="73089090"
-                                  value={item.hsn !== undefined ? item.hsn : '73089090'}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, hsn: val } : mat));
-                                  }}
+                                  readOnly
+                                  tabIndex={-1}
+                                  placeholder={getHsnCode(item) || 'HSN Code'}
+                                  value={item.hsn !== undefined && item.hsn !== '' ? item.hsn : (item.name ? getHsnCode(item) : '')}
                                   style={{
                                     width: '100%',
                                     height: '38px',
@@ -4997,19 +5157,20 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     border: '1px solid #E2E8F0',
                                     padding: '0 6px',
                                     fontSize: '12px',
-                                    fontWeight: '600',
-                                    color: '#0F172A',
-                                    backgroundColor: '#FFFFFF',
+                                    fontWeight: '700',
+                                    color: '#475569',
+                                    backgroundColor: '#F8FAFC',
                                     outline: 'none',
                                     boxSizing: 'border-box',
-                                    textAlign: 'center'
+                                    textAlign: 'center',
+                                    cursor: 'not-allowed'
                                   }}
-                                  title="HSN / SAC Tariff Code"
+                                  title="HSN / SAC Code (Auto-populated from master catalog; read-only)"
                                 />
                               </td>
                               <td style={{ padding: '12px 10px' }}>
                                 <select id={`performa-invoice-uom-nos-${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} name={`uomNOS_${typeof i !== 'undefined' ? i : (typeof idx !== 'undefined' ? idx : 0)}`} aria-label="Uom NOS"
-                                  value={item.uom || 'NOS'}
+                                  value={['MTR', 'PCS', 'NOS'].includes(item.uom) ? item.uom : 'NOS'}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     setPiItems(prev => prev.map((mat, idx) => idx === i ? { ...mat, uom: val } : mat));
@@ -5030,14 +5191,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                     textAlign: 'center'
                                   }}
                                 >
-                                  <option value="MTR">MTR (Meter)</option>
-                                  <option value="PCS">PCS (Pieces)</option>
-                                  <option value="NOS">NOS (Numbers)</option>
-                                  <option value="SET">SET (Sets)</option>
-                                  <option value="KW">KW (Kilowatt)</option>
-                                  {item.uom && !['MTR', 'PCS', 'NOS', 'SET', 'KW', 'Kw'].includes(item.uom) && (
-                                    <option value={item.uom}>{item.uom}</option>
-                                  )}
+                                  <option value="MTR">MTR</option>
+                                  <option value="PCS">PCS</option>
+                                  <option value="NOS">NOS</option>
                                 </select>
                               </td>
                               <td style={{ padding: '12px 10px', verticalAlign: 'middle' }}>
@@ -5088,10 +5244,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   }}
                                   style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #C7D2FE', padding: '0 6px', fontSize: '12px', fontWeight: '700', color: '#4338CA', backgroundColor: '#EEF2FF', outline: 'none', cursor: 'pointer', textAlign: 'center' }}
                                 >
-                                  <option value="18%">18% GST</option>
-                                  <option value="12%">12% GST</option>
-                                  <option value="5%">5% GST</option>
-                                  <option value="0%">0% Exempt</option>
+                                  <option value="18%">18%</option>
+                                  <option value="12%">12%</option>
+                                  <option value="5%">5%</option>
+                                  <option value="0%">0%</option>
                                 </select>
                               </td>
                               {hasAnyPreset && (() => {
@@ -5538,33 +5694,37 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                     <span>₹{totals.sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
-                  {/* Dynamic GST Tiers Breakdown */}
-                  {totals.isIntra ? (
-                    (totals.gstTiers || []).map(tier => (
-                      <React.Fragment key={tier.rate}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
-                          <span>CGST ({tier.cgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
-                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.cgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
-                          <span>SGST ({tier.sgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
-                          <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.sgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                      </React.Fragment>
-                    ))
-                  ) : (
-                    (totals.gstTiers || []).map(tier => (
-                      <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
-                        <span>IGST ({tier.rate}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
-                        <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    ))
-                  )}
+                  {/* Dynamic GST Tiers Breakdown - Only shown when GST > 0 */}
+                  {totals.gst > 0 && (totals.gstTiers || []).length > 0 && (
+                    <>
+                      {totals.isIntra ? (
+                        (totals.gstTiers || []).map(tier => (
+                          <React.Fragment key={tier.rate}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                              <span>CGST ({tier.cgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                              <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.cgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                              <span>SGST ({tier.sgstRate || (tier.rate / 2)}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                              <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{(tier.sgstAmt ?? (tier.gstAmt / 2)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        (totals.gstTiers || []).map(tier => (
+                          <div key={tier.rate} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', paddingLeft: '4px' }}>
+                            <span>IGST ({tier.rate}%){(totals.gstTiers || []).length > 1 ? ` (on ${tier.rate}% items)` : ''}:</span>
+                            <span style={{ fontWeight: '600', color: '#0F172A' }}>₹{tier.gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        ))
+                      )}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '7px 12px', borderRadius: '8px' }}>
-                    <span>Total GST Amount:</span>
-                    <span>₹{totals.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#0E7490', fontWeight: '700', backgroundColor: '#ECFEFF', padding: '7px 12px', borderRadius: '8px' }}>
+                        <span>Total GST Amount:</span>
+                        <span>₹{totals.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </>
+                  )}
 
                   <div
                     style={{
@@ -5702,7 +5862,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           const q = parseFloat(it.qty) || 1;
           const r = parseFloat(it.rate) || 0;
           const taxable = it.taxable !== undefined ? parseFloat(it.taxable) : (q * r);
-          const rate = parseFloat(String(it.gstRate || '18').replace('%', '')) || 18;
+          const rawRate = it.gstRate !== undefined && it.gstRate !== null && it.gstRate !== '' ? it.gstRate : '18';
+          const cleaned = String(rawRate).replace('%', '').trim();
+          const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
           const amt = taxable * (rate / 100);
           if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
           modalGstTiersMap[rate].taxable += taxable;
@@ -5714,7 +5876,9 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
             const unitPrice = parseFloat(grp.kitPrice) || 0;
             const multiplier = parseInt(grp.setCount) || 1;
             const groupTotal = unitPrice * multiplier;
-            const rate = parseFloat(String(grp.gstRate || '18').replace('%', '')) || 18;
+            const rawRate = grp.gstRate !== undefined && grp.gstRate !== null && grp.gstRate !== '' ? grp.gstRate : '18';
+            const cleaned = String(rawRate).replace('%', '').trim();
+            const rate = isNaN(parseFloat(cleaned)) ? 18 : parseFloat(cleaned);
             const amt = groupTotal * (rate / 100);
             if (!modalGstTiersMap[rate]) modalGstTiersMap[rate] = { rate, taxable: 0, gstAmt: 0 };
             modalGstTiersMap[rate].taxable += groupTotal;
@@ -5727,7 +5891,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const isModalIntra = isTamilNaduIntra(modalTargetGst, modalTargetState, bState);
 
         const modalGstTiers = Object.values(modalGstTiersMap)
-          .filter(t => t.gstAmt > 0 || t.taxable > 0)
+          .filter(t => t.rate > 0 && (t.gstAmt > 0 || t.taxable > 0))
           .sort((a, b) => a.rate - b.rate);
 
         return (
@@ -6294,7 +6458,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                                   </div>
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569', fontSize: '11px', fontFamily: 'monospace', fontWeight: '600' }}>
-                                  {it.hsn || it.hsn_or_sac || selectedPi.hsn || '73089090'}
+                                  {it.hsn || it.hsn_or_sac || getHsnCode(it) || selectedPi.hsn}
                                 </td>
                                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                   {(() => {
@@ -6439,10 +6603,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                         ))
                       )
                     ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                        <span>Applicable GST (Taxes):</span>
-                        <strong style={{ color: '#0F172A' }}>₹ {totalGstVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                      </div>
+                      totalGstVal > 0 ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                          <span>Applicable GST (Taxes):</span>
+                          <strong style={{ color: '#0F172A' }}>₹ {totalGstVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        </div>
+                      ) : null
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #0E7490', marginTop: '4px' }}>
                       <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>Total Invoice Amount:</span>
@@ -7113,10 +7279,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       outline: 'none', boxSizing: 'border-box', backgroundColor: 'white'
                     }}
                   >
-                    <option value="18%">18% (Standard)</option>
+                    <option value="18%">18%</option>
                     <option value="12%">12%</option>
-                    <option value="5%">5% (Solar / TopCon)</option>
-                    <option value="0%">0% (Exempt)</option>
+                    <option value="5%">5%</option>
+                    <option value="0%">0%</option>
                   </select>
                 </div>
               </div>

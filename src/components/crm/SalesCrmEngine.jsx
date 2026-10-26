@@ -49,7 +49,9 @@ function areListsEqual(a, b, idKey = 'id') {
 export default function SalesCrmEngine({
   userRole = 'Sales Executive',
   activeTab: controlledTab,
-  onNavigateTab
+  onNavigateTab,
+  targetCustomerCode: initialTargetCustomer = null,
+  clearTargetCustomer
 }) {
   const mapInitialTab = (tab) => {
     if (tab === 'Leads' || tab === 'Leads Directory') return 'Leads';
@@ -60,17 +62,58 @@ export default function SalesCrmEngine({
     if (tab === 'Quotations') return 'Quotations';
     if (tab === 'Product Catalog' || tab === 'Products') return 'Products';
     if (tab === 'Sales Reports') return 'Reports';
-    if (tab === 'IndiaMART' || tab === 'IndiaMART Integration') return 'IndiaMART';
+    if (tab === 'IndiaMART' || tab === 'IndiaMART Integration' || tab === 'IndiaMART CRM Integration') return 'IndiaMART';
     return 'Dashboard';
   };
 
   const [activeTab, setActiveTab] = useState(() => mapInitialTab(controlledTab));
+  const [targetCustomerCode, setTargetCustomerCode] = useState(() => initialTargetCustomer || null);
 
   useEffect(() => {
     if (controlledTab) {
       setActiveTab(mapInitialTab(controlledTab));
     }
   }, [controlledTab]);
+
+  useEffect(() => {
+    if (initialTargetCustomer) {
+      setTargetCustomerCode(initialTargetCustomer);
+    }
+  }, [initialTargetCustomer]);
+
+  const handleCrmNavigate = (tab, payload = null) => {
+    const searchCode = typeof payload === 'string'
+      ? payload
+      : (payload?.searchCustomer || payload?.targetCustomer || null);
+
+    if (searchCode) {
+      setTargetCustomerCode(searchCode);
+    }
+
+    let outerTab = tab;
+    if (tab === 'BOM' || tab === 'Sales BOM') outerTab = 'BOM Orders';
+    else if (tab === 'PI' || tab === 'Performa Invoice') outerTab = 'Proforma Invoice';
+    else if (tab === 'WhatsApp') outerTab = 'WhatsApp Inbox';
+
+    // 1. Notify parent App so top Header & Sidebar switch to the target tab
+    if (typeof onNavigateTab === 'function') {
+      onNavigateTab(outerTab, payload);
+    }
+
+    // 2. Dispatch global navigation event for any listeners
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('controlroom_navigate_tab', {
+        detail: {
+          tab: outerTab,
+          searchCustomer: searchCode,
+          targetCustomer: searchCode
+        }
+      }));
+    }
+
+    // 3. Update internal active tab state for instant UI response
+    setActiveTab(mapInitialTab(tab));
+  };
 
   // Synchronized States
   const [customers, setCustomers] = useState(() => getCrmStore('customers', INITIAL_CRM_CUSTOMERS));
@@ -642,48 +685,64 @@ export default function SalesCrmEngine({
   };
 
   // Convert Lead to Customer & Opportunity
-  const handleConvertLead = (lead) => {
+  const handleConvertLead = async (lead, customCustomer) => {
     // 1. Create or link Customer
-    const nextCode = `CUST-VRM-${String(100 + customers.length + 1)}`;
-    const newCustomer = {
+    let nextCode;
+    try {
+      const seq = getNextSequence('CS', customers || []);
+      nextCode = seq?.code;
+    } catch (_) {}
+    if (!nextCode) {
+      const fy = new Date().getFullYear();
+      nextCode = `VRM-CS-${fy}-01`;
+    }
+    const compName = lead.companyName || lead.company_name || 'Converted Customer';
+    const contactName = lead.contactPerson || lead.contact_name || compName;
+    const phoneVal = lead.phone || lead.phone_number || '';
+    const emailVal = lead.email || '';
+    const assignedRep = lead.assignedSalesperson || lead.assigned_to_name || localStorage.getItem('controlroom_logged_user_name') || '';
+
+    const newCustomer = customCustomer || {
       id: nextCode,
       customerCode: nextCode,
-      companyName: lead.companyName,
+      code: nextCode,
+      companyName: compName,
+      customerName: contactName,
       customerType: 'EPC Contractor',
       industry: 'Solar Energy / Utility Scale',
-      gstNumber: '',
-      panNumber: '',
-      address: '',
-      city: 'Chennai',
-      state: 'Tamil Nadu',
-      pincode: '600001',
+      gstNumber: lead.gstNumber || lead.gst_number || '',
+      panNumber: lead.panNumber || lead.pan_number || '',
+      address: lead.address || '',
+      city: lead.city || 'Chennai',
+      state: lead.state || 'Tamil Nadu',
+      pincode: lead.pincode || '600001',
       creditLimit: 2500000,
       creditDays: 30,
       paymentTerms: '50% Advance + 50% Dispatch',
-      assignedSalesperson: lead.assignedSalesperson || localStorage.getItem('controlroom_logged_user_name') || '',
-      source: lead.source,
+      assignedSalesperson: assignedRep,
+      source: lead.source || 'Lead Conversion',
       primaryContact: {
-        name: lead.contactPerson,
+        name: contactName,
         designation: lead.designation || 'Project Head',
-        phone: lead.phone,
-        whatsapp: lead.whatsapp || lead.phone,
-        email: lead.email
+        phone: phoneVal,
+        whatsapp: lead.whatsapp || phoneVal,
+        email: emailVal
       },
       createdAt: new Date().toISOString()
     };
-    handleSaveCustomer(newCustomer);
+    await handleSaveCustomer(newCustomer);
 
     // 2. Create Opportunity
     const nextOppId = `OPP-2026-${String(100 + opportunities.length + 1)}`;
     const newOpp = {
       id: nextOppId,
       customerId: newCustomer.id,
-      companyName: lead.companyName,
-      title: `${lead.estimatedKw || 100} kW ${lead.category || 'Aluminium Mounting Structure'}`,
-      dealValue: (lead.estimatedKw || 100) * 2800, // estimated ₹ 2,800/kW
+      companyName: compName,
+      title: `${lead.estimatedKw || lead.estimated_kw || 100} kW ${lead.category || 'Aluminium Mounting Structure'}`,
+      dealValue: (lead.estimatedKw || lead.estimated_kw || 100) * 2800, // estimated ₹ 2,800/kW
       stage: 'Requirement Received',
       probability: 40,
-      assignedSalesperson: lead.assignedSalesperson || localStorage.getItem('controlroom_logged_user_name') || '',
+      assignedSalesperson: assignedRep,
       targetCloseDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
       createdAt: new Date().toISOString()
     };
@@ -695,8 +754,8 @@ export default function SalesCrmEngine({
       status: 'Converted'
     });
 
-    // Navigate to Opportunities view
-    setActiveTab('Opportunities');
+    // 4. Navigate directly to Customers view so user can follow the customer
+    handleCrmNavigate('Customers', { searchCustomer: newCustomer.customerCode });
   };
 
   // Auto Create Lead from WhatsApp Conversation
@@ -721,7 +780,7 @@ export default function SalesCrmEngine({
     };
 
     handleSaveLead(newLead);
-    setActiveTab('Leads');
+    handleCrmNavigate('Leads');
   };
 
   const navItems = [
@@ -734,9 +793,7 @@ export default function SalesCrmEngine({
     { id: 'Quotations', label: 'Quotations', icon: FileText },
     { id: 'Products', label: 'Product Master', icon: Boxes },
     { id: 'Reports', label: 'Analytics & Reports', icon: BarChart3 },
-    ...( ['ceo', 'md', 'tech support', 'technical administrator', 'admin', 'sales head'].some(r =>
-      (userRole || '').toLowerCase().includes(r)
-    ) ? [{ id: 'IndiaMART', label: 'IndiaMART Integration', icon: Globe }] : [])
+    ...( activeTab === 'IndiaMART' ? [{ id: 'IndiaMART', label: 'IndiaMART CRM Integration', icon: Globe }] : [] )
   ];
 
   function Building2Icon(props) {
@@ -755,19 +812,13 @@ export default function SalesCrmEngine({
             followups={followups}
             quotations={quotations}
             isLoading={isCloudSyncing}
-            onNavigateTab={(tab) => {
-              if (tab === 'Sales BOM' || tab === 'BOM' || tab === 'Items Directory') {
-                onNavigateTab(tab);
-              } else {
-                setActiveTab(tab);
-              }
-            }}
+            onNavigateTab={handleCrmNavigate}
             onUpdateOpportunityStage={(oppId, newStage) => {
               const opp = opportunities.find(o => o.id === oppId);
               if (opp) handleUpdateOpportunity({ ...opp, stage: newStage });
             }}
-            onCreateLead={() => setActiveTab('Leads')}
-            onCreateOpportunity={() => setActiveTab('Opportunities')}
+            onCreateLead={() => handleCrmNavigate('Leads')}
+            onCreateOpportunity={() => handleCrmNavigate('Opportunities')}
           />
         )}
 
@@ -775,6 +826,9 @@ export default function SalesCrmEngine({
           <CrmLeadsView
             leads={leads}
             customers={customers}
+            quotations={quotations}
+            opportunities={opportunities}
+            boms={boms}
             userRole={userRole}
             isLoading={isCloudSyncing}
             onSaveLead={handleSaveLead}
@@ -782,11 +836,8 @@ export default function SalesCrmEngine({
             onUpdateLeadStatus={handleUpdateLeadStatus}
             onBatchUpdateLeads={handleBatchUpdateLeads}
             onDeleteLeads={handleDeleteLeads}
-            onNavigateTab={(tab) => {
-              if (tab === 'Sales BOM' || tab === 'BOM') onNavigateTab(tab);
-              else setActiveTab(tab);
-            }}
-            onOpenWhatsAppChat={(contact) => setActiveTab('WhatsApp')}
+            onNavigateTab={handleCrmNavigate}
+            onOpenWhatsAppChat={(contact) => handleCrmNavigate('WhatsApp')}
           />
         )}
 
@@ -799,11 +850,13 @@ export default function SalesCrmEngine({
             isLoading={isCloudSyncing}
             onSaveCustomer={handleSaveCustomer}
             onBatchUpdateCustomers={handleBatchUpdateCustomers}
-            onNavigateTab={(tab) => {
-              if (tab === 'Sales BOM' || tab === 'BOM') onNavigateTab(tab);
-              else setActiveTab(tab);
+            onNavigateTab={handleCrmNavigate}
+            targetCustomerCode={targetCustomerCode}
+            clearTargetCustomer={() => {
+              setTargetCustomerCode(null);
+              if (typeof clearTargetCustomer === 'function') clearTargetCustomer();
             }}
-            onOpenWhatsAppChat={() => setActiveTab('WhatsApp')}
+            onOpenWhatsAppChat={() => handleCrmNavigate('WhatsApp')}
           />
         )}
 
@@ -815,10 +868,7 @@ export default function SalesCrmEngine({
             onUpdateOpportunity={handleUpdateOpportunity}
             onCreateOpportunity={handleSaveOpportunity}
             onDeleteOpportunity={handleDeleteOpportunity}
-            onNavigateTab={(tab) => {
-              if (tab === 'Sales BOM' || tab === 'BOM') onNavigateTab(tab);
-              else setActiveTab(tab);
-            }}
+            onNavigateTab={handleCrmNavigate}
           />
         )}
 
@@ -826,8 +876,8 @@ export default function SalesCrmEngine({
           <CrmFollowupsView
             followups={followups}
             onSaveFollowup={handleSaveFollowup}
-            onOpenWhatsAppChat={() => setActiveTab('WhatsApp')}
-            onNavigateTab={setActiveTab}
+            onOpenWhatsAppChat={() => handleCrmNavigate('WhatsApp')}
+            onNavigateTab={handleCrmNavigate}
           />
         )}
 
@@ -837,10 +887,7 @@ export default function SalesCrmEngine({
             templates={templates}
             onSendMessage={handleSendWhatsAppMessage}
             onAutoCreateLead={handleAutoCreateLeadFromWhatsApp}
-            onNavigateTab={(tab) => {
-              if (tab === 'Sales BOM' || tab === 'BOM') onNavigateTab(tab);
-              else setActiveTab(tab);
-            }}
+            onNavigateTab={handleCrmNavigate}
           />
         )}
 
@@ -850,23 +897,14 @@ export default function SalesCrmEngine({
             quotations={quotations}
             isLoading={isCloudSyncing}
             onSaveQuotation={handleSaveQuotation}
-            onNavigateTab={(tab) => {
-              if (['Performa Invoice', 'Proforma Invoice', 'Sales BOM', 'BOM', 'Items Directory', 'BOM Orders'].includes(tab) || (onNavigateTab && !['Leads', 'Customers', 'Opportunities', 'Follow-ups', 'WhatsApp', 'Quotations', 'Products', 'Reports', 'Dashboard'].includes(tab))) {
-                if (onNavigateTab) onNavigateTab(tab);
-              } else {
-                setActiveTab(tab);
-              }
-            }}
-            onOpenWhatsAppChat={() => setActiveTab('WhatsApp')}
+            onNavigateTab={handleCrmNavigate}
+            onOpenWhatsAppChat={() => handleCrmNavigate('WhatsApp')}
           />
         )}
 
         {activeTab === 'Products' && (
           <CrmProductCatalog
-            onNavigateTab={(tab) => {
-              if (tab === 'Items Directory' || tab === 'BOM' || tab === 'Sales BOM') onNavigateTab(tab);
-              else setActiveTab(tab);
-            }}
+            onNavigateTab={handleCrmNavigate}
           />
         )}
 

@@ -79,13 +79,15 @@ import {
   getLeads as getDbLeads,
   getLeadDetail,
   createLead as createDbLead,
+  updateLead as updateDbLead,
   assignLead as assignDbLead,
   recordLeadActivity,
   updateLeadStatus as updateDbLeadStatus,
   scheduleLeadFollowup,
   getNotificationsForEmployee,
   markNotificationRead,
-  checkAndProcessLeadInactivity
+  checkAndProcessLeadInactivity,
+  setRealtimeNotificationBroadcaster
 } from './leadManagementService.js';
 import {
   getIndiaMartConfig,
@@ -172,16 +174,38 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
     return supabaseMemoryStore.customer_store;
   }
   try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select(`
-        id, customer_code, company_name, customer_name, customer_type, industry,
-        gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
-        dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
-        same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-        source, primary_contact, email, phone, status, notes, created_at, updated_at
-      `)
-      .order('company_name', { ascending: true });
+    let data = null;
+    try {
+      const dbRes = await query(`
+        SELECT 
+          id, customer_code, company_name, customer_name, customer_type, industry,
+          gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
+          dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
+          same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
+          source, primary_contact, email, phone, status, notes, created_at, updated_at
+        FROM public.customers
+        ORDER BY company_name ASC
+      `);
+      if (dbRes && Array.isArray(dbRes.rows) && dbRes.rows.length > 0) {
+        data = dbRes.rows;
+      }
+    } catch (_) {}
+
+    if (!data) {
+      const { data: sbData, error } = await supabase
+        .from('customers')
+        .select(`
+          id, customer_code, company_name, customer_name, customer_type, industry,
+          gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
+          dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
+          same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
+          source, primary_contact, email, phone, status, notes, created_at, updated_at
+        `)
+        .order('company_name', { ascending: true });
+      if (!error && Array.isArray(sbData) && sbData.length > 0) {
+        data = sbData;
+      }
+    }
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map(c => {
@@ -1095,6 +1119,11 @@ const broadcastRealtimeEvent = (eventType, payload) => {
     }
   }
 };
+
+// Hook realtime broadcaster to CRM lead notifications for sub-second WhatsApp-style alerts
+try {
+  setRealtimeNotificationBroadcaster(broadcastRealtimeEvent);
+} catch (_) {}
 
 const saveLocalCustomers = async (customers) => {
   if (!customers) return;
@@ -2858,7 +2887,11 @@ app.post('/api/customers', async (req, res) => {
 
   incomingList.forEach(incoming => {
     if (!incoming || typeof incoming !== 'object') return;
-    const customerId = incoming.customerCode || incoming.id || `CUST-VRM-${100 + nextCounter++}`;
+    let customerId = incoming.customerCode || incoming.id;
+    if (!customerId || customerId.startsWith('CUST-VRM-')) {
+      const { code } = getNextSequence('CS', localCustomers);
+      customerId = code || `VRM-CS-${getFinancialYear()}-${String(nextCounter++).padStart(2, '0')}`;
+    }
     const localCustomerRecord = {
       id: customerId,
       customerCode: customerId,
@@ -2930,6 +2963,88 @@ app.post('/api/customers', async (req, res) => {
     existingMap.set(k, { ...(existingMap.get(k) || {}), ...localCustomerRecord });
     savedRecords.push(localCustomerRecord);
   });
+
+  // Targeted INSERT/UPSERT each customer into authoritative PostgreSQL public.customers (Rule 2)
+  for (const record of savedRecords) {
+    try {
+      await query(`
+        INSERT INTO public.customers (
+          id, customer_code, company_name, customer_name, customer_type, industry,
+          gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
+          dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
+          same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
+          source, primary_contact, email, phone, status, notes, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11, $12, $13,
+          $14, $15, $16, $17, $18,
+          $19, $20, $21, $22, $23,
+          $24, $25, $26, $27, $28, $29, NOW(), NOW()
+        )
+        ON CONFLICT (customer_code) DO UPDATE SET
+          company_name = EXCLUDED.company_name,
+          customer_name = EXCLUDED.customer_name,
+          customer_type = EXCLUDED.customer_type,
+          industry = EXCLUDED.industry,
+          gst_number = EXCLUDED.gst_number,
+          pan_number = EXCLUDED.pan_number,
+          billing_address = EXCLUDED.billing_address,
+          city = EXCLUDED.city,
+          state = EXCLUDED.state,
+          pincode = EXCLUDED.pincode,
+          billing_address_obj = EXCLUDED.billing_address_obj,
+          dispatch_address = EXCLUDED.dispatch_address,
+          dispatch_city = EXCLUDED.dispatch_city,
+          dispatch_state = EXCLUDED.dispatch_state,
+          dispatch_pincode = EXCLUDED.dispatch_pincode,
+          delivery_address_obj = EXCLUDED.delivery_address_obj,
+          same_as_billing = EXCLUDED.same_as_billing,
+          credit_limit = EXCLUDED.credit_limit,
+          credit_days = EXCLUDED.credit_days,
+          payment_terms = EXCLUDED.payment_terms,
+          assigned_salesperson = EXCLUDED.assigned_salesperson,
+          source = EXCLUDED.source,
+          primary_contact = EXCLUDED.primary_contact,
+          email = EXCLUDED.email,
+          phone = EXCLUDED.phone,
+          status = EXCLUDED.status,
+          notes = EXCLUDED.notes,
+          updated_at = NOW()
+      `, [
+        record.id,
+        record.customerCode,
+        record.companyName,
+        record.customerName,
+        record.customerType,
+        record.industry,
+        record.gstNumber,
+        record.panNumber,
+        record.address,
+        record.city,
+        record.state,
+        record.pincode,
+        JSON.stringify(record.billingAddressObj || {}),
+        record.dispatchAddress,
+        record.dispatchCity,
+        record.dispatchState,
+        record.dispatchPincode,
+        JSON.stringify(record.deliveryAddressObj || {}),
+        Boolean(record.sameAsBilling),
+        Number(record.creditLimit || 0),
+        Number(record.creditDays || 0),
+        record.paymentTerms,
+        record.assignedSalesperson,
+        record.source,
+        JSON.stringify(record.primaryContact || {}),
+        record.email,
+        record.phone,
+        record.status,
+        record.notes || ''
+      ]);
+    } catch (pgErr) {
+      console.warn('[POST /api/customers Postgres write notice]:', pgErr.message);
+    }
+  }
 
   const updatedCustomers = Array.from(existingMap.values());
   saveLocalCustomers(updatedCustomers);
@@ -5138,16 +5253,43 @@ app.get(['/api/next-quotation-number', '/api/next-quote-number'], async (req, re
   }
 });
 
-// CRM Leads endpoint: Returns next sequential lead number matching VRM-LEAD-[YYYY]-[SEQ] (e.g. VRM-LEAD-2026-01)
-app.get('/api/next-lead-number', async (req, res) => {
+// CRM Leads endpoint: Returns next sequential lead number matching VRM-LD-[YYYY]-[SEQ] (e.g. VRM-LD-2026-01)
+app.get(['/api/next-lead-number', '/api/crm/leads/next-number'], async (req, res) => {
   try {
     const fy = getFinancialYear();
     const leads = await loadDatabaseLeads();
-    const { code, nextNum } = getNextSequence('LEAD', leads);
+    const { code, nextNum } = getNextSequence('LD', leads);
     res.json({ nextLeadNo: code, nextLeadNumber: code, nextNum, financialYear: fy });
   } catch (err) {
     const fy = getFinancialYear();
-    res.json({ nextLeadNo: `VRM-LEAD-${fy}-01`, nextLeadNumber: `VRM-LEAD-${fy}-01`, nextNum: 1, financialYear: fy });
+    res.json({ nextLeadNo: `VRM-LD-${fy}-01`, nextLeadNumber: `VRM-LD-${fy}-01`, nextNum: 1, financialYear: fy });
+  }
+});
+
+// Customer Code endpoint: Returns next sequential Customer Code matching VRM-CS-[YYYY]-[SEQ] (e.g. VRM-CS-2026-01)
+app.get(['/api/next-customer-number', '/api/crm/customers/next-number'], async (req, res) => {
+  try {
+    const fy = getFinancialYear();
+    let records = [];
+    try {
+      const dbRes = await query('SELECT customer_code, id FROM public.customers');
+      if (dbRes && Array.isArray(dbRes.rows)) records = dbRes.rows;
+    } catch (_) {}
+
+    if (records.length === 0) {
+      const diskPath = getStoreFilePath('customer_store.json');
+      if (fs.existsSync(diskPath)) {
+        try {
+          const d = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+          if (Array.isArray(d)) records = d;
+        } catch (_) {}
+      }
+    }
+    const { code, nextNum } = getNextSequence('CS', records);
+    res.json({ nextCustomerCode: code, nextCode: code, nextNum, financialYear: fy });
+  } catch (err) {
+    const fy = getFinancialYear();
+    res.json({ nextCustomerCode: `VRM-CS-${fy}-01`, nextCode: `VRM-CS-${fy}-01`, nextNum: 1, financialYear: fy });
   }
 });
 
@@ -7671,11 +7813,13 @@ app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
   try {
     const userRole = req.headers['x-user-role'] || req.query.userRole || 'Sales Executive';
     const userEmpId = req.headers['x-user-emp-id'] || req.query.userEmpId || '';
+    const userName = req.headers['x-user-name'] || req.query.userName || '';
     const { search, status, source, assignedTo, unassignedOnly } = req.query;
 
     const leads = await getDbLeads({
       userRole,
       userEmpId,
+      userName,
       search,
       status,
       source,
@@ -7740,10 +7884,43 @@ app.post(['/api/crm/leads', '/api/leads'], async (req, res) => {
       role: req.headers['x-user-role'] || req.body.creatorRole || 'Sales Executive'
     };
 
+    const userRoleLower = (creatorUser.role || '').toLowerCase();
+    const isCeo = ['ceo', 'md', 'managing director'].some(r => userRoleLower.includes(r));
+    const isTechSupport = ['tech support', 'technical support', 'technical administrator', 'technical admin', 'developer', 'admin'].some(r => userRoleLower.includes(r));
+    const isSalesPerson = userRoleLower.includes('sales');
+
+    if (isSalesPerson && !isCeo && !isTechSupport) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access Denied: Only Tech Support and CEO/MD are authorized to create leads.'
+      });
+    }
+
     const createdLead = await createDbLead(leadData, creatorUser);
     broadcastRealtimeEvent('crm_lead_created', { lead: createdLead });
 
     res.json({ success: true, message: 'Lead created successfully', lead: createdLead, data: createdLead });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update Existing Lead
+app.put(['/api/crm/leads/:id', '/api/leads/:id'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const leadData = (req.body && req.body.lead) ? req.body.lead : req.body;
+    if (!leadData || Object.keys(leadData).length === 0) {
+      return res.status(400).json({ success: false, error: 'No update data provided' });
+    }
+
+    const updated = await updateDbLead(id, leadData);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Lead not found' });
+    }
+
+    broadcastRealtimeEvent('crm_lead_updated', { lead: updated });
+    res.json({ success: true, message: 'Lead updated successfully', lead: updated, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -7813,11 +7990,15 @@ app.post(['/api/crm/leads/:id/activity', '/api/leads/:id/activity'], async (req,
   }
 });
 
-// Status Transition with Audit Trail
-app.post(['/api/crm/leads/:id/status', '/api/leads/:id/status'], async (req, res) => {
+// Status Transition with Audit Trail & Customer Conversion Linking
+app.all(['/api/crm/leads/:id/status', '/api/leads/:id/status'], async (req, res, next) => {
+  if (req.method !== 'POST' && req.method !== 'PATCH' && req.method !== 'PUT') return next();
   try {
     const { id } = req.params;
-    const { status, remarks } = req.body;
+    const status = req.body.newStatus || req.body.status;
+    const remarks = req.body.remarks;
+    const convertedCustomerId = req.body.convertedCustomerId || req.body.converted_customer_id || null;
+    const convertedCustomerCode = req.body.convertedCustomerCode || req.body.converted_customer_code || null;
 
     if (!status) return res.status(400).json({ success: false, error: 'New status is required.' });
 
@@ -7831,8 +8012,29 @@ app.post(['/api/crm/leads/:id/status', '/api/leads/:id/status'], async (req, res
       leadId: id,
       newStatus: status,
       remarks: remarks || '',
+      convertedCustomerId,
+      convertedCustomerCode,
       user
     });
+
+    // Also update server/crm_leads.json for disk persistence
+    try {
+      const diskPath = getStoreFilePath('crm_leads.json');
+      if (fs.existsSync(diskPath)) {
+        let leads = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+        leads = leads.map(l => (l.id === id || l.lead_number === id) ? {
+          ...l,
+          status,
+          converted_customer_id: convertedCustomerId || l.converted_customer_id,
+          converted_customer_code: convertedCustomerCode || l.converted_customer_code,
+          convertedCustomerCode: convertedCustomerCode || l.convertedCustomerCode,
+          updated_at: new Date().toISOString()
+        } : l);
+        fs.writeFileSync(diskPath, JSON.stringify(leads, null, 2), 'utf8');
+      }
+    } catch (diskErr) {
+      console.warn('crm_leads.json update notice:', diskErr.message);
+    }
 
     broadcastRealtimeEvent('crm_lead_status_updated', { leadId: id, ...result });
     res.json({ success: true, message: 'Status updated', ...result });
@@ -7977,14 +8179,31 @@ app.get('/api/integrations/indiamart/logs', async (req, res) => {
   }
 });
 
-// Automatic 24h & 48h Inactivity Background Checker (Runs every 10 minutes)
+// Automatic 24h & 48h Inactivity Background Checker (Runs every 5 minutes and on startup)
+setTimeout(async () => {
+  try {
+    await checkAndProcessLeadInactivity();
+  } catch (err) {
+    console.warn('[Initial Lead Inactivity Check Error]:', err.message);
+  }
+}, 5000);
+
 setInterval(async () => {
   try {
     await checkAndProcessLeadInactivity();
   } catch (err) {
     console.warn('[Background Lead Inactivity Check Error]:', err.message);
   }
-}, 10 * 60 * 1000);
+}, 5 * 60 * 1000);
+
+app.post('/api/crm/leads/check-inactivity', async (req, res) => {
+  try {
+    await checkAndProcessLeadInactivity();
+    res.json({ success: true, message: 'Inactivity check completed successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // 🛡️ ENTERPRISE DISASTER RECOVERY & BACKUP API
 

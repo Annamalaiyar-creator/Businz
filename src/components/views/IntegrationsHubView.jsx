@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import {
   Share2, MessageSquare, Mail, Sliders,
   RefreshCw, ArrowRight, ShieldCheck,
-  Check, Copy, Settings, Building2
+  Check, Copy, Settings, Building2, Globe, ArrowLeft
 } from 'lucide-react';
 import ZohoConfigModal from './ZohoConfigModal';
+import IndiaMartSettingsView from '../crm/IndiaMartSettingsView';
 
-export default function IntegrationsHubView({ _userRole = 'Tech Support', onNavigateTab }) {
+export default function IntegrationsHubView({ _userRole = 'Tech Support', userRole, onNavigateTab }) {
   const [copiedKey, setCopiedKey] = useState(null);
   const [testingChannel, setTestingChannel] = useState(null);
   const [testResult, setTestResult] = useState({});
   const [zohoConfig, setZohoConfig] = useState(null);
   const [isZohoModalOpen, setIsZohoModalOpen] = useState(false);
   const [zohoVerifiedOrg, setZohoVerifiedOrg] = useState(null);
+  const [activeSubView, setActiveSubView] = useState(null);
 
   // Fetch live Zoho configuration on mount
   useEffect(() => {
@@ -165,8 +167,60 @@ export default function IntegrationsHubView({ _userRole = 'Tech Support', onNavi
         { label: 'Org ID', value: zohoConfig?.orgId || '60082137608' },
         { label: 'Numbering', value: 'PO-000XX' }
       ]
+    },
+    {
+      id: 'indiamart',
+      name: 'IndiaMART CRM Integration',
+      category: 'B2B Lead Generation & Sourcing',
+      icon: Globe,
+      iconColor: '#EA580C',
+      iconBg: '#FFF7ED',
+      iconBorder: '#FFEDD5',
+      status: 'Live API Sync',
+      statusColor: '#059669',
+      statusBg: '#ECFDF5',
+      statusBorder: '#A7F3D0',
+      description: 'Automated CRM lead ingestion from IndiaMART buyers, real-time push webhook listeners, and instant salesperson assignment.',
+      endpoint: 'https://api.businz.com/api/indiamart/leads',
+      authType: 'API Key / Webhook Secret',
+      targetTab: 'IndiaMART',
+      metrics: [
+        { label: 'Sync Engine', value: 'Instant Webhook' },
+        { label: 'Auto-Routing', value: 'Sales Desk' },
+        { label: 'Duplicate Check', value: 'Active' }
+      ]
     }
   ];
+
+  if (activeSubView === 'indiamart') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+        <button
+          type="button"
+          onClick={() => setActiveSubView(null)}
+          style={{
+            alignSelf: 'flex-start',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #CBD5E1',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: '700',
+            color: '#0E7490',
+            cursor: 'pointer',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <ArrowLeft size={16} /> Back to Integrations Hub
+        </button>
+        <IndiaMartSettingsView userRole={userRole || _userRole} />
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -262,6 +316,7 @@ export default function IntegrationsHubView({ _userRole = 'Tech Support', onNavi
           const isTesting = testingChannel === item.id;
           const isTested = testResult[item.id];
           const isZoho = item.id === 'zoho';
+          const isIndiaMart = item.id === 'indiamart';
 
           return (
             <div
@@ -269,15 +324,15 @@ export default function IntegrationsHubView({ _userRole = 'Tech Support', onNavi
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '16px',
-                border: isZoho ? '1.5px solid #CFFAFE' : '1px solid #E2E8F0',
+                border: isZoho ? '1.5px solid #CFFAFE' : isIndiaMart ? '1.5px solid #FFEDD5' : '1px solid #E2E8F0',
                 padding: '20px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
                 gap: '16px',
-                boxShadow: isZoho ? '0 4px 14px rgba(14, 116, 144, 0.08)' : '0 2px 10px rgba(15, 23, 42, 0.03)',
+                boxShadow: isZoho ? '0 4px 14px rgba(14, 116, 144, 0.08)' : isIndiaMart ? '0 4px 14px rgba(234, 88, 12, 0.08)' : '0 2px 10px rgba(15, 23, 42, 0.03)',
                 transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                background: isZoho ? 'linear-gradient(180deg, #FFFFFF 0%, #FAFEFF 100%)' : '#FFFFFF'
+                background: isZoho ? 'linear-gradient(180deg, #FFFFFF 0%, #FAFEFF 100%)' : isIndiaMart ? 'linear-gradient(180deg, #FFFFFF 0%, #FFFDFB 100%)' : '#FFFFFF'
               }}
             >
               <div>
@@ -513,10 +568,38 @@ export default function IntegrationsHubView({ _userRole = 'Tech Support', onNavi
                       <span>Configure</span>
                     </button>
                   )}
+
+                  {isIndiaMart && (
+                    <button
+                      onClick={() => setActiveSubView('indiamart')}
+                      style={{
+                        backgroundColor: '#FFF7ED',
+                        border: '1px solid #FFEDD5',
+                        color: '#EA580C',
+                        padding: '7px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11.5px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <Settings size={13} />
+                      <span>Configure</span>
+                    </button>
+                  )}
                 </div>
 
                 <button
-                  onClick={() => onNavigateTab && onNavigateTab(item.targetTab)}
+                  onClick={() => {
+                    if (isIndiaMart) {
+                      setActiveSubView('indiamart');
+                    } else if (onNavigateTab) {
+                      onNavigateTab(item.targetTab);
+                    }
+                  }}
                   style={{
                     backgroundColor: item.iconColor,
                     border: 'none',
