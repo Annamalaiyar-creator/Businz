@@ -319,6 +319,9 @@ export default function BomOrdersView(props) {
     };
   }, []);
 
+  // Executive Role Check (CEO / MD is View-Only for BOM Orders)
+  const isCeo = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director';
+
   // Form & Modals State
   const [showBOMForm, setShowBOMForm] = useState(false);
   const bomCustSearchTimerRef = useRef(null);
@@ -992,10 +995,10 @@ export default function BomOrdersView(props) {
     }
   };
 
-  // Permission Check for Cancel BOM (Strictly Dispatch, Production, and Billing Logins)
-  const canCancelBom = [
+  // Permission Check for Cancel BOM (Strictly Dispatch, Production, and Billing Logins — Excludes CEO View-Only)
+  const canCancelBom = !isCeo && [
     'Dispatch Head', 'Dispatch Executive',
-    'Production Head', 'Technical Administrator', 'CEO', 'Floor Supervisor',
+    'Production Head', 'Technical Administrator', 'Floor Supervisor',
     'Billing', 'Invoice Executive', 'Accounts Head', 'Accounts Executive'
   ].includes(userRole);
 
@@ -1566,12 +1569,14 @@ export default function BomOrdersView(props) {
   // Config for BOM Orders Table
   const isSalesBOM = activeTab === 'Sales BOM' || userRole === 'Sales Executive' || activeTab === 'Create BOM';
   const pageConfig = {
-    title: activeTab === 'Sales BOM' ? 'Sales Bill of Materials (BOM)' :
+    title: isCeo ? 'All Bill of Materials (BOM) — Master Register' :
+           activeTab === 'Sales BOM' ? 'Sales Bill of Materials (BOM)' :
            activeTab === 'BOM' ? 'Bill of Materials (BOM)' :
            activeTab === 'BOM / Routing' ? 'Bill of Materials & Production Routing' :
            activeTab === 'Create BOM' ? 'Create BOM' :
            'BOM Orders & Client Specifications',
-    subtitle: (activeTab === 'Sales BOM' || isSalesBOM) ? 'Customer order BOMs, product specifications and sales quotations' :
+    subtitle: isCeo ? 'Complete company-wide master list of customer BOM orders across all sales representatives (Executive View-Only)' :
+              (activeTab === 'Sales BOM' || isSalesBOM) ? 'Customer order BOMs, product specifications and sales quotations' :
               activeTab === 'BOM' ? 'Standard raw material consumption lists and component requirements' :
               activeTab === 'BOM / Routing' ? 'Multi-level BOM definitions, component ratios, and sequential routing processes' :
               'Create and manage customer order BOMs, product specifications, and payment terms',
@@ -5340,6 +5345,7 @@ export default function BomOrdersView(props) {
       (typeof confirmingBomModal.status === 'string' && confirmingBomModal.status.toLowerCase().includes('cancel'))
     );
     const isEditMode = Boolean(
+      !isCeo &&
       !isCancelled &&
       confirmingBomModal.isEditMode !== false &&
       ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'ACTIVE', 'Active', 'Pending Verification', 'Pending'].includes(confirmingBomModal.status || 'Pending Sales Confirmation')
@@ -5482,6 +5488,16 @@ export default function BomOrdersView(props) {
                   CANCELLED • VIEW ONLY
                 </span>
               )}
+              {isCeo && (
+                <span style={{
+                  backgroundColor: '#ECFEFF', color: '#0E7490',
+                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                  borderRadius: '12px', border: '1px solid #A5F3FC',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  👁️ EXECUTIVE VIEW ONLY
+                </span>
+              )}
             </div>
             <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px', display: 'block' }}>
               {isCancelled
@@ -5590,7 +5606,7 @@ export default function BomOrdersView(props) {
             )}
 
 
-            {isAlreadyForwarded && ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
+            {isAlreadyForwarded && !isCeo && ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
               <button
                 type="button"
                 onClick={() => {
@@ -7443,7 +7459,7 @@ export default function BomOrdersView(props) {
                       <td
                         onClick={() => {
                           const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-                          const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+                          const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
                           setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
                         }}
                         style={{ padding: '12px 14px', fontWeight: 'bold', color: '#2563EB', cursor: 'pointer' }}
@@ -7485,7 +7501,7 @@ export default function BomOrdersView(props) {
                       <td
                         onClick={() => {
                           const isSentToDispatch = row.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(row.status);
-                          const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+                          const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
                           setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending });
                         }}
                         style={{ padding: '12px 14px', color: '#475569', fontWeight: '500', whiteSpace: 'nowrap', cursor: 'pointer' }}
@@ -7878,7 +7894,7 @@ export default function BomOrdersView(props) {
               targetRow.status === 'AWAITING LR COPY' ||
               targetRow.tabGroup === 'AwaitingLrCopy'
             );
-            if (!isAwaitingLr) return null;
+            if (!isAwaitingLr || isCeo) return null;
             return (
               <button
                 onClick={() => {
@@ -8054,7 +8070,7 @@ export default function BomOrdersView(props) {
                     const rec = quickPreviewRecord;
                     setQuickPreviewRecord(null);
                     const isSentToDispatch = rec.salesConfirmed || ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Awaiting Vehicle Loading & Dispatch'].includes(rec.status);
-                    const isDraftOrPending = !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(rec.status);
+                    const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(rec.status);
                     setConfirmingBomModal({ ...rec, isEditMode: isDraftOrPending });
                   }}
                   style={{ border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#1E293B', padding: '6px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
@@ -8795,7 +8811,7 @@ export default function BomOrdersView(props) {
                     </div>
                   )}
 
-                  {(!hasProof || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
+                  {!isCeo && (!hasProof || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
                     <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F766E' }}>
                         {(uploadPaymentModal.paymentType === 'Partial Paid' || uploadPaymentModal.paymentType === 'Partial Payment')
@@ -8860,7 +8876,12 @@ export default function BomOrdersView(props) {
               >
                 Close
               </button>
-              {(!uploadPaymentModal.paymentProofDoc || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
+              {isCeo && (
+                <span style={{ fontSize: '12px', color: '#0E7490', fontWeight: '700', alignSelf: 'center', marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  ℹ️ Executive View Only — Payment records managed by Accounts & Sales
+                </span>
+              )}
+              {!isCeo && (!uploadPaymentModal.paymentProofDoc || ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(uploadPaymentModal.paymentType)) && (
                 <button
                   disabled={uploadingPayment}
                   onClick={async () => {

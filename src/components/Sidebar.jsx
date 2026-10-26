@@ -335,6 +335,12 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Executive Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
             { 
+              label: 'BOM Orders', 
+              targetTab: 'BOM Orders', 
+              icon: GitBranch, 
+              badge: realBOMCount > 0 ? String(realBOMCount) : undefined 
+            },
+            { 
               label: 'Purchase Order Approvals', 
               targetTab: 'Purchase Orders', 
               icon: ShoppingCart, 
@@ -343,7 +349,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Leads Directory', targetTab: 'Leads', icon: Users }
           ]
         },
-
       ];
       return sections;
     } else {
