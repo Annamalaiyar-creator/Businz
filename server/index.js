@@ -1466,7 +1466,9 @@ const saveDatabaseStore = async (key, storeData) => {
       broadcastRealtimeEvent('bom_updated', { bomList: storeData });
     } else if (cleanKey === 'notifications_store') {
       const latestNotif = Array.isArray(storeData) ? storeData[0] : storeData;
-      broadcastRealtimeEvent('workflow_notification', { notification: latestNotif, storeData });
+      if (latestNotif && latestNotif.id !== 'NOTIF-001' && !String(latestNotif.title || '').includes('System Central Inventory Initialized')) {
+        broadcastRealtimeEvent('workflow_notification', { notification: latestNotif, storeData });
+      }
     }
   } catch (_) {}
 

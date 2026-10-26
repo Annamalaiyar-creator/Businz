@@ -306,24 +306,14 @@ class CentralInventoryStore {
     const savedNotif = safeStorageGet(this.storageKeyNotifications);
     if (savedNotif) {
       try {
-        this.notifications = JSON.parse(savedNotif);
+        this.notifications = (JSON.parse(savedNotif) || []).filter(
+          n => n && n.id !== 'NOTIF-001' && !String(n.title || '').includes('System Central Inventory Initialized')
+        );
       } catch (e) {
         this.notifications = [];
       }
     } else {
-      this.notifications = [
-        {
-          id: 'NOTIF-001',
-          type: 'INFO',
-          title: 'System Central Inventory Initialized',
-          message: 'Single-source-of-truth transaction ledger active.',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          date: new Date().toISOString().split('T')[0],
-          targetDepartments: ['Procurement', 'Production', 'Sales'],
-          read: false
-        }
-      ];
-      this.saveNotifications();
+      this.notifications = [];
     }
   }
 
@@ -353,10 +343,13 @@ class CentralInventoryStore {
     saveCloudStore('reservations_store', this.reservations);
   }
   saveNotifications() {
-    try { localStorage.setItem(this.storageKeyNotifications, JSON.stringify(this.notifications)); } catch (_) {}
+    const validNotifs = (this.notifications || []).filter(
+      n => n && n.id !== 'NOTIF-001' && !String(n.title || '').includes('System Central Inventory Initialized')
+    );
+    try { localStorage.setItem(this.storageKeyNotifications, JSON.stringify(validNotifs)); } catch (_) {}
     if (this._saveNotifsTimer) clearTimeout(this._saveNotifsTimer);
     this._saveNotifsTimer = setTimeout(() => {
-      saveCloudStore('notifications_store', this.notifications);
+      saveCloudStore('notifications_store', validNotifs);
     }, 2000);
   }
 

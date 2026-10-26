@@ -138,7 +138,7 @@ export const initRealtimeSync = () => {
           // 10. Real-time Workflow Notifications (Instant push across different logins / machines)
           if (type === 'workflow_notification' || (type === 'store_updated' && payload?.key === 'notifications_store')) {
             const notif = payload?.notification || (Array.isArray(payload?.storeData) ? payload.storeData[0] : null);
-            if (notif) {
+            if (notif && notif.id !== 'NOTIF-001' && !String(notif.title || '').includes('System Central Inventory Initialized')) {
               try {
                 const existing = JSON.parse(localStorage.getItem('vrm_live_notifications') || '[]');
                 if (!existing.some(e => e.id === notif.id)) {

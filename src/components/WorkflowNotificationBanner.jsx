@@ -9,8 +9,11 @@ export default function WorkflowNotificationBanner({ userRole, onNavigate }) {
 
   useEffect(() => {
     const handleWorkflowToast = (event) => {
-      const notif = event.detail;
+      const notif = event?.detail;
       if (!notif) return;
+      if (notif.id === 'NOTIF-001' || String(notif.title || '').includes('System Central Inventory Initialized')) {
+        return;
+      }
 
       // 1. Role-based targeting filter: Only show if matches user's active role
       if (!isRoleTargeted(userRole, notif.targetRoles, { ...notif.metadata, title: notif.title, message: notif.message, type: notif.type })) {
