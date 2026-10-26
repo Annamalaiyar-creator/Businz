@@ -1645,22 +1645,13 @@ export function VRMProformaInvoicePrintSheet({
               />
             </div>
             <div style={{ padding: '8px 14px', lineHeight: '1.4', color: '#334155', fontSize: '10.5px' }}>
-              <div style={{ fontWeight: '700', color: '#0F172A', marginBottom: '2px' }}>
+              <div>
                 <EditableText
-                  value={pi.shippingName || pi.contactPerson || customerName}
-                  fallback="V N Vigneshwar"
-                  onSave={(v) => onUpdatePiData?.({ shippingName: v })}
+                  value={dStreet}
+                  fallback="8/90, 4th Street,"
+                  onSave={(v) => onUpdatePiData?.({ deliveryStreet: v, deliveryAddress: { ...(pi.deliveryAddress || {}), street: v } })}
                 />
               </div>
-              {dStreet ? (
-                <div>
-                  <EditableText
-                    value={dStreet}
-                    fallback="8/90, 4th Street,"
-                    onSave={(v) => onUpdatePiData?.({ deliveryStreet: v, deliveryAddress: { ...(pi.deliveryAddress || {}), street: v } })}
-                  />
-                </div>
-              ) : null}
               {dCity && !dStreetHasCity ? (
                 <div>
                   <EditableText
