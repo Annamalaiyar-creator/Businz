@@ -203,7 +203,7 @@ export default function CrmWhatsAppInbox({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '320px 1fr 300px',
+      gridTemplateColumns: '340px 1fr',
       gap: '16px',
       height: 'calc(100vh - 170px)',
       width: '100%',
@@ -573,148 +573,7 @@ export default function CrmWhatsAppInbox({
         </form>
       </div>
 
-      {/* 3. RIGHT PANEL: Customer Intelligence & Quick Actions */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '12px',
-        border: '1px solid #E2E8F0',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        overflowY: 'auto'
-      }}>
-        <div>
-          <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', margin: '0 0 10px' }}>
-            Customer Profile
-          </h4>
-          <div style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-            <div style={{ fontWeight: '800', fontSize: '13px', color: '#0F172A' }}>{activeConv?.companyName}</div>
-            <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>{activeConv?.customerName}</div>
-            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Phone size={12} /> {activeConv?.phone}
-            </div>
-          </div>
-        </div>
 
-        <div>
-          <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', margin: '0 0 8px' }}>
-            Quick CRM Actions
-          </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button
-              onClick={() => onNavigateTab('Sales BOM')}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid #E2E8F0',
-                backgroundColor: '#FFFFFF',
-                color: '#0F172A',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Layers size={13} color="#0E7490" />
-                <span>Calculate BOM Order</span>
-              </div>
-              <ChevronRight size={14} />
-            </button>
-
-            <button
-              onClick={() => onNavigateTab('Quotations')}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid #E2E8F0',
-                backgroundColor: '#FFFFFF',
-                color: '#0F172A',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <FileText size={13} color="#0E7490" />
-                <span>Create Quotation</span>
-              </div>
-              <ChevronRight size={14} />
-            </button>
-
-            <button
-              onClick={() => onNavigateTab('Follow-ups')}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid #E2E8F0',
-                backgroundColor: '#FFFFFF',
-                color: '#0F172A',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Clock size={13} color="#0E7490" />
-                <span>Set Follow-up Reminder</span>
-              </div>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
-
-        <div style={{ padding: '14px', backgroundColor: waSession?.status === 'CONNECTED' ? '#F0FDF4' : '#F8FAFC', borderRadius: '10px', border: waSession?.status === 'CONNECTED' ? '1px solid #BBF7D0' : '1px solid #E2E8F0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <div style={{ fontSize: '12px', fontWeight: '800', color: waSession?.status === 'CONNECTED' ? '#166534' : '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Smartphone size={14} color={waSession?.status === 'CONNECTED' ? '#16A34A' : '#64748B'} />
-              My WhatsApp Device
-            </div>
-            <span style={{ fontSize: '10px', fontWeight: '800', color: waSession?.status === 'CONNECTED' ? '#15803D' : '#64748B' }}>
-              {waSession?.status === 'CONNECTED' ? 'Active' : 'Unlinked'}
-            </span>
-          </div>
-
-          <div style={{ fontSize: '11.5px', color: '#475569', lineHeight: '1.4', marginBottom: '10px' }}>
-            {waSession?.status === 'CONNECTED' ? (
-              <span>Your phone <strong>+{waSession.phoneNumber}</strong> is linked. Quotations and messages will send directly from your personal number.</span>
-            ) : (
-              <span>Link your WhatsApp to send official Quotations, PIs, and BOM documents directly in 1 click without downloading to your phone.</span>
-            )}
-          </div>
-
-          <button
-            onClick={() => setIsQrModalOpen(true)}
-            style={{
-              width: '100%',
-              padding: '7px 12px',
-              borderRadius: '6px',
-              border: 'none',
-              backgroundColor: waSession?.status === 'CONNECTED' ? '#16A34A' : '#0E7490',
-              color: '#FFFFFF',
-              fontSize: '11px',
-              fontWeight: '800',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px'
-            }}
-          >
-            <QrCode size={13} />
-            {waSession?.status === 'CONNECTED' ? 'Manage Connection / Switch' : 'Link WhatsApp (Scan QR)'}
-          </button>
-        </div>
-      </div>
 
       {/* WhatsApp QR Pairing & Multi-Session Modal */}
       <WhatsAppQrModal
