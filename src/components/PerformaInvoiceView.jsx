@@ -997,6 +997,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   const [presetSetCount, setPresetSetCount] = useState(1);
   const [presetKitPrice, setPresetKitPrice] = useState('');
   const [presetGroups, setPresetGroups] = useState({});
+  // Nested Sub-Preset (Preset inside a Preset) State
+  const [subPresetModalGroup, setSubPresetModalGroup] = useState(null);
+  const [nestedSubPresetVal, setNestedSubPresetVal] = useState('');
+  const [nestedSubPresetCount, setNestedSubPresetCount] = useState(1);
+  // Convert selected standalone items into a PI-only preset
+  const [showConvertPresetModal, setShowConvertPresetModal] = useState(false);
+  const [convertPresetName, setConvertPresetName] = useState('');
+  const [convertPresetPrice, setConvertPresetPrice] = useState('');
+  const [convertPresetGst, setConvertPresetGst] = useState('18%');
   const [selectedItemIndexes, setSelectedItemIndexes] = useState([]);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [showCreateSetModal, setShowCreateSetModal] = useState(false);
@@ -1904,6 +1913,60 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     });
   };
 
+  const selectedStandaloneIndexes = (selectedItemIndexes || []).filter(i => piItems[i] && !piItems[i].isPresetItem);
+
+  const handleConvertSelectedToPreset = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (selectedStandaloneIndexes.length === 0) return;
+    const cleanName = (convertPresetName || '').trim() || `Custom Preset ${Object.keys(presetGroups || {}).length + 1}`;
+    const groupId = 'custom_set_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const gst = convertPresetGst || '18%';
+    const idxSet = new Set(selectedStandaloneIndexes);
+
+    setPresetGroups(prev => ({
+      ...prev,
+      [groupId]: {
+        groupId,
+        presetId: 'custom_set',
+        presetName: cleanName,
+        setCount: 1,
+        kitPrice: convertPresetPrice ? String(convertPresetPrice) : '',
+        gstRate: gst,
+        hsn: getHsnCode(cleanName),
+        isCustomSet: true
+      }
+    }));
+
+    setPiItems(prev => {
+      const list = prev || [];
+      const converted = [];
+      const rest = [];
+      list.forEach((it, i) => {
+        if (idxSet.has(i)) {
+          const baseQ = parseFloat(it.qty) || 1;
+          converted.push({
+            ...it,
+            isPresetItem: true,
+            presetGroupId: groupId,
+            presetName: cleanName,
+            baseQty: baseQ,
+            rate: '0',
+            gstRate: it.gstRate || gst
+          });
+        } else {
+          rest.push(it);
+        }
+      });
+      return [...rest, ...converted];
+    });
+
+    setSelectedItemIndexes([]);
+    setConvertPresetName('');
+    setConvertPresetPrice('');
+    setConvertPresetGst('18%');
+    setShowConvertPresetModal(false);
+  };
+
   const handleCreateCustomSet = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const cleanName = (newSetName || '').trim() || `Custom Set ${Object.keys(presetGroups || {}).length + 1}`;
@@ -2009,6 +2072,60 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       delete updated[groupId];
       return updated;
     });
+  };
+
+  const handleAttachSubPresetToGroup = (parentGroupId, subPresetId, targetPreset, subSetsCount) => {
+    if (!targetPreset || !targetPreset.items || targetPreset.items.length === 0) return;
+    const parentGroup = presetGroups[parentGroupId];
+    if (!parentGroup) return;
+
+    const multiplier = Math.max(1, parseInt(subSetsCount) || 1);
+    const subPresetName = targetPreset.label || subPresetId;
+    const parentPresetName = parentGroup.presetName;
+
+    const newSubItems = targetPreset.items.map(it => {
+      const baseQ = parseFloat(it.qty) || 1;
+      const resCode = resolveProductCode(it);
+      return {
+        ...it,
+        code: it.code || resCode,
+        presetGroupId: parentGroupId,
+        presetName: parentPresetName,
+        isSubPreset: true,
+        subPresetId,
+        subPresetName,
+        baseQty: baseQ,
+        qty: String(Math.round(baseQ * multiplier)),
+        rate: '0',
+        gstRate: it.gstRate || parentGroup.gstRate || '18%',
+        hsn: it.hsn || it.hsn_or_sac || getHsnCode(it) || parentGroup.hsn,
+        isPresetItem: true
+      };
+    });
+
+    setPiItems(prev => [...(prev || []), ...newSubItems]);
+    setPresetGroups(prev => {
+      const existingGrp = prev[parentGroupId];
+      const existingNested = existingGrp.nestedSubPresets || [];
+      return {
+        ...prev,
+        [parentGroupId]: {
+          ...existingGrp,
+          nestedSubPresets: [
+            ...existingNested,
+            {
+              id: subPresetId,
+              name: subPresetName,
+              setCount: multiplier
+            }
+          ]
+        }
+      };
+    });
+
+    setSubPresetModalGroup(null);
+    setNestedSubPresetVal('');
+    setNestedSubPresetCount(1);
   };
 
   const handleRemoveMaterialRow = (idx) => {
@@ -4706,6 +4823,31 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setSubPresetModalGroup(grp.groupId);
+                          setNestedSubPresetVal('');
+                          setNestedSubPresetCount(1);
+                        }}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#0284C7',
+                          color: '#FFFFFF',
+                          borderRadius: '4px',
+                          fontSize: '10.5px',
+                          fontWeight: '800',
+                          padding: '1px 7px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          marginLeft: '2px'
+                        }}
+                        title={`Select a second preset to nest inside ${grp.presetName}`}
+                      >
+                        <Layers size={11} /> + Nest Sub-Preset
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleRemovePresetGroup(grp.groupId)}
                         style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0 0 0 2px', display: 'flex', alignItems: 'center', color: '#0891B2' }}
                         title={`Remove ${grp.presetName}`}
@@ -5068,6 +5210,23 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                               </td>
                               <td style={{ padding: '12px 10px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {item.isSubPreset && (
+                                    <div style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      backgroundColor: '#F0FDFA',
+                                      color: '#0D9488',
+                                      border: '1px solid #99F6E4',
+                                      borderRadius: '4px',
+                                      padding: '1px 6px',
+                                      fontSize: '10.5px',
+                                      fontWeight: 800,
+                                      width: 'fit-content'
+                                    }}>
+                                      ↳ Sub-Kit: {item.subPresetName}
+                                    </div>
+                                  )}
                                   <TypeableProductSelect
                                     value={item.name || ''}
                                     itemsList={itemsList}
@@ -7157,6 +7316,254 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
                 style={{ padding: '8px 18px', borderRadius: '8px', backgroundColor: '#E11D48', color: 'white', border: 'none', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
               >
                 Yes, Clear All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== FLOATING ACTION BAR: CONVERT SELECTED TO PRESET ==================== */}
+      {selectedStandaloneIndexes.length > 0 && !showConvertPresetModal && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '50px',
+          boxShadow: '0 10px 30px -5px rgba(0,0,0,0.15), 0 4px 6px -2px rgba(0,0,0,0.05)',
+          padding: '8px 16px',
+          display: 'flex',
+          flexDirection: 'row',
+          flexWrap: 'nowrap',
+          alignItems: 'center',
+          whiteSpace: 'nowrap',
+          gap: '10px',
+          zIndex: 10000,
+          width: 'max-content',
+          maxWidth: 'calc(100vw - 32px)'
+        }}>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0E7490', backgroundColor: '#ECFEFF', padding: '4px 12px', borderRadius: '20px' }}>
+            {selectedStandaloneIndexes.length} Selected
+          </span>
+          <button
+            type="button"
+            onClick={() => { setConvertPresetName(''); setConvertPresetPrice(''); setShowConvertPresetModal(true); }}
+            style={{ border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', height: '34px', padding: '0 14px', borderRadius: '20px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800 }}
+          >
+            <Layers size={14} /> Convert to Preset
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPiItems(prev => (prev || []).filter((_, idx) => !selectedStandaloneIndexes.includes(idx)));
+              setSelectedItemIndexes([]);
+            }}
+            style={{ border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#DC2626', height: '34px', padding: '0 14px', borderRadius: '20px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800 }}
+          >
+            <Trash2 size={14} /> Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedItemIndexes([])}
+            title="Clear selection"
+            style={{ border: 'none', background: '#F1F5F9', color: '#64748B', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* ==================== CONVERT STANDALONE ITEMS TO PI-ONLY PRESET ==================== */}
+      {showConvertPresetModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <form onSubmit={handleConvertSelectedToPreset} style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', width: '480px', maxWidth: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0' }}>
+            <div style={{ padding: '18px 20px', backgroundColor: '#F0FDFA', borderBottom: '1px solid #CCFBF1', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="#0D9488" /> Convert to Preset
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#0D9488' }}>
+                  {selectedStandaloneIndexes.length} standalone item(s) · applies to this PI only
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowConvertPresetModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Preset Name</label>
+                <input autoFocus type="text" value={convertPresetName} onChange={(e) => setConvertPresetName(e.target.value)} placeholder="e.g. Site A Fasteners Kit" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Preset Amount (₹)</label>
+                  <input type="number" min="0" value={convertPresetPrice} onChange={(e) => setConvertPresetPrice(e.target.value)} placeholder="Full preset price" style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>GST</label>
+                  <select value={convertPresetGst} onChange={(e) => setConvertPresetGst(e.target.value)} style={{ width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 8px', fontSize: '13px', boxSizing: 'border-box', backgroundColor: '#FFFFFF' }}>
+                    <option value="0%">0%</option>
+                    <option value="5%">5%</option>
+                    <option value="12%">12%</option>
+                    <option value="18%">18%</option>
+                    <option value="28%">28%</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '14px 20px', backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" onClick={() => setShowConvertPresetModal(false)} style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>Cancel</button>
+              <button type="submit" style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', backgroundColor: '#0D9488', color: '#FFFFFF', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}>Convert to Preset</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ==================== NESTED SUB-PRESET MODAL (PRESET INSIDE PRESET) ==================== */}
+      {subPresetModalGroup && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            width: '520px',
+            maxWidth: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            overflow: 'visible',
+            border: '1px solid #E2E8F0'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 20px',
+              backgroundColor: '#F0FDFA',
+              borderTopLeftRadius: '16px',
+              borderTopRightRadius: '16px',
+              borderBottom: '1px solid #CCFBF1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F766E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="#0D9488" />
+                  Nest Sub-Preset Kit
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#0D9488' }}>
+                  Embedding inside <strong>{presetGroups[subPresetModalGroup]?.presetName || 'Primary Preset'}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSubPresetModalGroup(null)}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Select Secondary Preset to Nest Inside:
+                </label>
+                <SearchablePresetSelector
+                  value={nestedSubPresetVal}
+                  activePresetsMap={activePresetsMap}
+                  accentColor="#0D9488"
+                  width="100%"
+                  placeholder="Search and pick secondary preset to nest..."
+                  onChange={(val) => {
+                    setNestedSubPresetVal(val);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                  Sub-Preset Multiplier (Quantity / Sets)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={nestedSubPresetCount}
+                  onChange={(e) => setNestedSubPresetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  style={{
+                    width: '100%',
+                    height: '38px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    padding: '0 12px',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 20px',
+              backgroundColor: '#F8FAFC',
+              borderBottomLeftRadius: '16px',
+              borderBottomRightRadius: '16px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setSubPresetModalGroup(null)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!nestedSubPresetVal}
+                onClick={() => {
+                  const target = activePresetsMap?.[nestedSubPresetVal] || VRM_HDG_PRESETS?.[nestedSubPresetVal];
+                  if (target) {
+                    handleAttachSubPresetToGroup(subPresetModalGroup, nestedSubPresetVal, target, nestedSubPresetCount);
+                  }
+                }}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: nestedSubPresetVal ? '#0D9488' : '#94A3B8',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: nestedSubPresetVal ? 'pointer' : 'not-allowed',
+                  boxShadow: nestedSubPresetVal ? '0 2px 6px rgba(13, 148, 136, 0.3)' : 'none'
+                }}
+              >
+                Bundle Inside Preset
               </button>
             </div>
           </div>

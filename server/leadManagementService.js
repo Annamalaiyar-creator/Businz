@@ -76,7 +76,9 @@ export async function ensureLeadsSchema() {
         ADD COLUMN IF NOT EXISTS is_unattended_2h BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS is_unattended_48h BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS unattended_alert_sent_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ;
+        ADD COLUMN IF NOT EXISTS escalation_alert_sent_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS converted_customer_id TEXT,
+        ADD COLUMN IF NOT EXISTS converted_customer_code TEXT;
 
       CREATE TABLE IF NOT EXISTS public.lead_assignment_history (
         id TEXT PRIMARY KEY,
@@ -808,6 +810,8 @@ export async function recordLeadActivity({ leadId, activityType, summary, custom
 export async function updateLeadStatus({ leadId, newStatus, remarks = '', convertedCustomerId = null, convertedCustomerCode = null, user }) {
   const userId = user?.employee_code || user?.id || 'USER';
   const userName = user?.employee_name || user?.name || 'Sales Rep';
+
+  await ensureLeadsSchema();
 
   return await withTransaction(async (client) => {
     const leadRes = await client.query(`SELECT status, converted_customer_id, converted_customer_code FROM public.leads WHERE id = $1 OR lead_number = $1 FOR UPDATE`, [leadId]);
