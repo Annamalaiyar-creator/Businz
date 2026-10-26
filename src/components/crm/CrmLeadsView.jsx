@@ -322,18 +322,20 @@ export default function CrmLeadsView({
         matchStatus = lead.status === statusFilter;
       }
 
-      // Strict salesperson data isolation: Sales persons see only leads assigned to them
+      // Salesperson data isolation: Sales persons see leads assigned to them + unassigned leads
       if (!hasGlobalView) {
         const myEmp = (loggedInEmpId || '').toLowerCase().trim();
         const myName = (loggedInUserName || '').toLowerCase().trim();
         const assignedId = (lead.assigned_to_user_id || '').toLowerCase().trim();
         const assignedName = (lead.assigned_to_name || lead.assigned_salesperson || '').toLowerCase().trim();
 
+        const isUnassigned = !lead.assigned_to_user_id || lead.status === 'New';
         const isAssignedToMe = (
-          (myEmp && (assignedId === myEmp || assignedName.includes(myEmp))) ||
-          (myName && (assignedName.includes(myName) || (myEmp && assignedId === myEmp)))
+          isUnassigned ||
+          (myEmp && (assignedId === myEmp || assignedName.includes(myEmp) || (assignedId && myEmp.includes(assignedId)))) ||
+          (myName && (assignedName.includes(myName) || (assignedName && myName.includes(assignedName))))
         );
-        if (!isAssignedToMe) return false;
+        if ((myEmp || myName) && !isAssignedToMe) return false;
       }
 
       const matchSource = sourceFilter === 'All' || lead.source === sourceFilter;

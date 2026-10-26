@@ -326,6 +326,22 @@ function App() {
     localStorage.setItem('controlroom_user_role', newRole);
     localStorage.setItem('controlroom_is_authenticated', 'true');
     setIsAuthenticated(true);
+
+    const norm = (newRole || '').toLowerCase();
+    if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
+      localStorage.setItem('controlroom_logged_emp_id', 'CEO-001');
+      localStorage.setItem('controlroom_logged_user_name', 'Executive Leadership (CEO)');
+    } else if (norm.includes('tech support') || norm.includes('technical support')) {
+      localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
+      localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');
+    } else if (norm.includes('sales head')) {
+      localStorage.setItem('controlroom_logged_emp_id', 'SH-001');
+      localStorage.setItem('controlroom_logged_user_name', 'Sales Head');
+    } else if (norm.includes('technical admin') || norm.includes('technical administrator')) {
+      localStorage.setItem('controlroom_logged_emp_id', 'TA-001');
+      localStorage.setItem('controlroom_logged_user_name', 'Technical Administrator');
+    }
+
     const defaultTab = 'Dashboard';
     setActiveTab(defaultTab);
     localStorage.setItem('controlroom_active_tab', defaultTab);

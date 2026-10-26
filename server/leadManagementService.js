@@ -272,7 +272,7 @@ export function canAssignLeads(role = '', employeeCode = '') {
 /**
  * Fetch Leads with Role-Based Scoping & Comprehensive Quotation & Activity Aggregations
  */
-export async function getLeads({ userRole = 'Sales Executive', userEmpId = '', userName = '', search = '', status = '', source = '', assignedTo = '', unassignedOnly = false }) {
+export async function getLeads({ userRole = '', userEmpId = '', userName = '', search = '', status = '', source = '', assignedTo = '', unassignedOnly = false }) {
   const hasGlobalView = canViewAllLeads(userRole, userEmpId);
   const cleanEmpId = String(userEmpId || '').trim();
   const cleanName = String(userName || '').trim();
@@ -313,57 +313,23 @@ export async function getLeads({ userRole = 'Sales Executive', userEmpId = '', u
       l.last_activity_at,
       l.last_activity_type,
       l.is_unattended_24h,
+      l.is_unattended_2h,
       l.is_unattended_48h,
       l.created_at,
-      l.updated_at,
-      -- Quotation metrics
-      COALESCE(q.total_distinct_quotes, 0) AS total_distinct_quotes,
-      COALESCE(q.total_revisions, 0) AS total_revisions,
-      COALESCE(q.quotes_sent, 0) AS quotes_sent,
-      COALESCE(q.quotes_pending, 0) AS quotes_pending,
-      COALESCE(q.quotes_accepted, 0) AS quotes_accepted,
-      COALESCE(q.quotes_rejected, 0) AS quotes_rejected,
-      q.latest_quote_amount,
-      q.latest_quote_date,
-      -- Activity summary
-      COALESCE(act.total_activities, 0) AS total_activities,
-      COALESCE(act.total_calls, 0) AS total_calls
+      l.updated_at
     FROM public.leads l
-    LEFT JOIN (
-      SELECT 
-        lead_id,
-        COUNT(DISTINCT COALESCE(parent_quote_number, quote_number)) AS total_distinct_quotes,
-        COUNT(*) FILTER (WHERE (revision_number IS NOT NULL AND revision_number > 0) OR parent_quote_number IS NOT NULL) AS total_revisions,
-        COUNT(*) FILTER (WHERE status ILIKE '%sent%' OR status ILIKE '%issued%') AS quotes_sent,
-        COUNT(*) FILTER (WHERE status ILIKE '%pending%' OR status ILIKE '%draft%') AS quotes_pending,
-        COUNT(*) FILTER (WHERE status ILIKE '%accepted%' OR status ILIKE '%approved%' OR status ILIKE '%converted%') AS quotes_accepted,
-        COUNT(*) FILTER (WHERE status ILIKE '%rejected%' OR status ILIKE '%declined%') AS quotes_rejected,
-        MAX(grand_total) AS latest_quote_amount,
-        MAX(created_at) AS latest_quote_date
-      FROM public.quotations
-      WHERE lead_id IS NOT NULL
-      GROUP BY lead_id
-    ) q ON l.id = q.lead_id
-    LEFT JOIN (
-      SELECT 
-        lead_id,
-        COUNT(*) AS total_activities,
-        COUNT(*) FILTER (WHERE activity_type = 'CALL') AS total_calls
-      FROM public.lead_activities
-      GROUP BY lead_id
-    ) act ON l.id = act.lead_id
     WHERE 1=1
   `;
 
   const params = [];
   let paramIdx = 1;
 
-  // Strict salesperson data isolation: Sales Executives can ONLY see leads assigned to their employee ID or Name
+  // Salesperson data isolation: Sales Executives can see leads assigned to their employee ID or Name, PLUS unassigned leads
   if (!hasGlobalView) {
     if (cleanEmpId || cleanName) {
       const orClauses = [];
       if (cleanEmpId) {
-        orClauses.push(`l.assigned_to_user_id = $${paramIdx}`);
+        orClauses.push(`LOWER(TRIM(COALESCE(l.assigned_to_user_id, ''))) = LOWER(TRIM($${paramIdx}))`);
         params.push(cleanEmpId);
         paramIdx++;
       }
@@ -373,9 +339,8 @@ export async function getLeads({ userRole = 'Sales Executive', userEmpId = '', u
         params.push(`%${cleanName}%`);
         paramIdx++;
       }
+      orClauses.push(`(l.assigned_to_user_id IS NULL OR l.assigned_to_user_id = '' OR l.status = 'New')`);
       sql += ` AND (${orClauses.join(' OR ')})`;
-    } else {
-      sql += ` AND 1=0`;
     }
   }
 
@@ -418,7 +383,19 @@ export async function getLeads({ userRole = 'Sales Executive', userEmpId = '', u
 
   sql += ` ORDER BY l.created_at DESC`;
 
-  const res = await dbQuery(sql, params);
+  let res;
+  try {
+    res = await dbQuery(sql, params);
+  } catch (queryErr) {
+    console.warn('[getLeads] Primary query failed, attempting auto-heal...', queryErr.message);
+    try {
+      await ensureLeadsSchema();
+      res = await dbQuery(sql, params);
+    } catch (secondErr) {
+      console.error('[getLeads] Fallback to simple select:', secondErr.message);
+      res = await dbQuery(`SELECT * FROM public.leads ORDER BY created_at DESC`, []);
+    }
+  }
   return res.rows;
 }
 

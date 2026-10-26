@@ -447,6 +447,13 @@ export async function initPostgresDatabase() {
           read_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'quotations') THEN
+            ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS lead_id TEXT;
+          END IF;
+        END $$;
       `);
       console.log('✅ [PostgreSQL] Ensured public.leads columns (location, etc.) and CRM tables exist.');
     } catch (leadsErr) {
