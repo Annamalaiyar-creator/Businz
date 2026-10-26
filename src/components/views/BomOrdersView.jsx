@@ -8407,9 +8407,6 @@ export default function BomOrdersView(props) {
                       </div>
                     )}
                   </div>
-                </>
-              );
-            })()}
 
             {/* Itemized List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
@@ -8535,6 +8532,9 @@ export default function BomOrdersView(props) {
                 </table>
               </div>
             </div>
+          </>
+        );
+      })()}
 
             {/* Dispatch Packed Items Media Section in Quick Preview */}
             {(() => {
