@@ -3923,54 +3923,95 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         style={{
           width: '100%',
           maxWidth: showCustomizer ? '1260px' : '850px',
-          backgroundColor: '#0F172A',
-          borderRadius: '10px 10px 0 0',
-          padding: '12px 20px',
+          background: 'linear-gradient(180deg, #1E293B 0%, #0F172A 100%)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderBottom: '1px solid rgba(15, 23, 42, 0.9)',
+          borderRadius: '12px 12px 0 0',
+          padding: '10px 18px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           color: '#FFFFFF',
           boxSizing: 'border-box',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-          transition: 'max-width 0.2s ease-in-out'
+          boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+          transition: 'max-width 0.2s ease-in-out',
+          gap: '12px',
+          flexWrap: 'wrap'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <FileText size={18} style={{ color: '#38BDF8' }} />
-          <span style={{ fontWeight: '800', fontSize: '14px' }}>
-            {templateSettings.documentTitle} — {piData.piNo || 'SPI-2025'}
-          </span>
-          <span style={{
-            fontSize: '11px',
-            backgroundColor: templateSettings.accentColor || '#0E7490',
-            color: '#FFFFFF',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontWeight: '700'
+        {/* LEFT: ICON, TITLE, NUMBER & STATUS BADGE */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flexShrink: 1 }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.35) 0%, rgba(56, 189, 248, 0.15) 100%)',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
           }}>
-            Official PDF
-          </span>
+            <FileText size={15} style={{ color: '#38BDF8' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '700', fontSize: '13.5px', color: '#F1F5F9', letterSpacing: '-0.2px' }}>
+              {templateSettings.documentTitle || 'Proforma Invoice'}
+            </span>
+            <span style={{
+              fontSize: '12px',
+              fontWeight: '700',
+              color: '#38BDF8',
+              background: 'rgba(56, 189, 248, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.22)',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace'
+            }}>
+              {piData.piNo || 'SPI-2025'}
+            </span>
+            <span style={{
+              fontSize: '10.5px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              background: 'linear-gradient(135deg, rgba(14, 116, 144, 0.25) 0%, rgba(14, 116, 144, 0.1) 100%)',
+              color: '#67E8F9',
+              border: '1px solid rgba(14, 116, 144, 0.45)',
+              padding: '3px 9px',
+              borderRadius: '20px',
+              fontWeight: '700',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#22D3EE', boxShadow: '0 0 6px #22D3EE' }} />
+              Official PDF
+            </span>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        {/* RIGHT: ACTION CONTROLS */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
           {/* CUSTOMIZE TOGGLE BUTTON */}
           <button
             onClick={() => setShowCustomizer(!showCustomizer)}
             style={{
-              backgroundColor: showCustomizer ? '#334155' : 'transparent',
-              color: '#FFFFFF',
-              border: '1px solid #475569',
-              borderRadius: '6px',
-              padding: '7px 14px',
-              fontSize: '12.5px',
-              fontWeight: '700',
+              background: showCustomizer ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+              color: showCustomizer ? '#38BDF8' : '#CBD5E1',
+              border: showCustomizer ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: '600',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Sliders size={14} style={{ color: '#38BDF8' }} />
+            <Sliders size={13} style={{ color: showCustomizer ? '#38BDF8' : '#94A3B8' }} />
             {showCustomizer ? 'Hide Customizer' : 'Customize Template'}
           </button>
 
@@ -3980,45 +4021,58 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             disabled={isSavingPi}
             title={hasUnsavedChanges ? 'Click to save your edits to the database' : 'All changes are permanently saved'}
             style={{
-              backgroundColor: hasUnsavedChanges ? '#0E7490' : '#1E293B',
-              color: '#FFFFFF',
-              border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid #334155',
-              borderRadius: '6px',
-              padding: '7px 14px',
-              fontSize: '12.5px',
-              fontWeight: '700',
+              background: hasUnsavedChanges
+                ? 'linear-gradient(135deg, #0284C7 0%, #0E7490 100%)'
+                : 'rgba(255, 255, 255, 0.04)',
+              color: hasUnsavedChanges ? '#FFFFFF' : '#94A3B8',
+              border: hasUnsavedChanges ? '1px solid #38BDF8' : '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: '600',
               cursor: isSavingPi ? 'wait' : 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: hasUnsavedChanges ? '0 0 12px rgba(14, 116, 144, 0.5)' : 'none',
-              transition: 'all 0.2s ease-in-out'
+              boxShadow: hasUnsavedChanges ? '0 0 14px rgba(56, 189, 248, 0.45)' : 'none',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Save size={14} style={{ color: hasUnsavedChanges ? '#38BDF8' : '#94A3B8' }} />
+            {hasUnsavedChanges ? (
+              <Save size={13} style={{ color: '#FFFFFF' }} />
+            ) : (
+              <CheckCircle size={13} style={{ color: '#10B981' }} />
+            )}
             {isSavingPi ? 'Saving...' : (hasUnsavedChanges ? 'Save Changes' : (lastSavedNotice || 'Saved ✓'))}
           </button>
+
+          {/* DIVIDER */}
+          <div style={{ width: '1px', height: '18px', backgroundColor: 'rgba(255, 255, 255, 0.12)', margin: '0 2px' }} />
 
           {/* DOWNLOAD PDF */}
           <button
             onClick={handleDownloadPdf}
             disabled={isExporting}
             style={{
-              backgroundColor: '#059669',
+              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
               color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 16px',
-              fontSize: '12.5px',
+              border: '1px solid rgba(52, 211, 153, 0.35)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 13px',
+              fontSize: '12px',
               fontWeight: '700',
               cursor: isExporting ? 'wait' : 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              opacity: isExporting ? 0.7 : 1
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.28)',
+              opacity: isExporting ? 0.7 : 1,
+              transition: 'all 0.15s ease'
             }}
           >
-            <Download size={14} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
+            <Download size={13} /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
           </button>
 
           {/* SEND VIA WHATSAPP (1-CLICK) */}
@@ -4026,42 +4080,47 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             onClick={handleOpenWhatsAppModal}
             disabled={isSendingWhatsApp}
             style={{
-              backgroundColor: '#16A34A',
+              background: 'linear-gradient(135deg, #22C55E 0%, #15803D 100%)',
               color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 16px',
-              fontSize: '12.5px',
+              border: '1px solid rgba(134, 239, 172, 0.4)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 13px',
+              fontSize: '12px',
               fontWeight: '700',
               cursor: isSendingWhatsApp ? 'wait' : 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: '0 2px 6px rgba(22,163,74,0.3)',
-              opacity: isSendingWhatsApp ? 0.7 : 1
+              boxShadow: '0 2px 8px rgba(34, 197, 94, 0.28)',
+              opacity: isSendingWhatsApp ? 0.7 : 1,
+              transition: 'all 0.15s ease'
             }}
           >
-            <MessageSquare size={14} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
+            <MessageSquare size={13} /> {isSendingWhatsApp ? 'Sending...' : 'Send PI via WhatsApp'}
           </button>
 
           {/* NATIVE PRINT */}
           <button
             onClick={handlePrint}
             style={{
-              backgroundColor: templateSettings.accentColor || '#0E7490',
+              background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
               color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 16px',
-              fontSize: '12.5px',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              borderRadius: '8px',
+              height: '32px',
+              padding: '0 13px',
+              fontSize: '12px',
               fontWeight: '700',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              boxShadow: '0 2px 8px rgba(14, 116, 144, 0.28)',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Printer size={14} /> Print
+            <Printer size={13} /> Print
           </button>
 
           {/* CLOSE */}
@@ -4069,18 +4128,20 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
             onClick={handleClose}
             title="Close Preview"
             style={{
-              backgroundColor: '#334155',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '7px 10px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              color: '#CBD5E1',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              width: '32px',
+              height: '32px',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              transition: 'all 0.15s ease'
             }}
           >
-            <X size={17} />
+            <X size={16} />
           </button>
         </div>
       </div>
