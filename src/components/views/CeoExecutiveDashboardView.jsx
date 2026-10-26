@@ -175,7 +175,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       if (Array.isArray(localPresets) && localPresets.length > 0) setPresetsList(localPresets);
 
       // 2. Fetch primary live operational records
-      const [pos, pis, boms, invs, workOrders, dispatches, challans, quotes, payments, customers, presets] = await Promise.all([
+      const [pos, pis, boms, invs, workOrders, dispatches, challans, quotes, payments, customers, presets, liveLeads] = await Promise.all([
         fetchWithTimeout('/api/purchaseorders', { timeout: 8000 })
           .then(r => r.json())
           .catch(() => fetchCloudStore('po_store', [])),
@@ -196,7 +196,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         fetchCloudStore('crm_quotations', []).catch(() => fetchCloudStore('quotations_store', [])).catch(() => []),
         fetchCloudStore('payment_store', []).catch(() => []),
         fetchCloudStore('customer_store', []).catch(() => []),
-        fetchCloudStore('presets_store', []).catch(() => [])
+        fetchCloudStore('presets_store', []).catch(() => []),
+        fetchWithTimeout('/api/crm/leads', { timeout: 5000 })
+          .then(r => r.json())
+          .then(j => Array.isArray(j?.data) ? j.data : [])
+          .catch(() => [])
       ]);
 
       if (Array.isArray(pos)) setPoList(pos);
@@ -210,6 +214,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       if (Array.isArray(payments)) setPaymentsList(payments);
       if (Array.isArray(customers)) setCustomersList(customers);
       if (Array.isArray(presets)) setPresetsList(presets);
+      if (Array.isArray(liveLeads) && liveLeads.length > 0) setLeadsList(liveLeads);
     } catch (err) {
       console.error('Error loading CEO dashboard data:', err);
     } finally {

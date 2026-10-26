@@ -39,11 +39,14 @@ export default function CrmLeadsView({
   // Role Checks
   const effectiveRole = (typeof window !== 'undefined' ? (localStorage.getItem('controlroom_user_role') || userRole) : userRole) || '';
   const effectiveRoleLower = effectiveRole.toLowerCase();
-  const isCeo = ['ceo', 'md', 'managing director'].some(r => effectiveRoleLower.includes(r));
-  const isTechSupport = ['tech support', 'technical support', 'tech_support'].some(r => effectiveRoleLower.includes(r));
-  const isSalesHead = effectiveRoleLower.includes('sales head');
-  const isTechAdmin = ['technical administrator', 'technical admin', 'developer', 'ta', 'admin', 'super admin'].some(r => effectiveRoleLower.includes(r));
-  const isSalesPerson = effectiveRoleLower.includes('sales') && !isSalesHead;
+  const empCodeUpper = (loggedInEmpId || '').toUpperCase().trim();
+  const userNameLower = (loggedInUserName || '').toLowerCase().trim();
+
+  const isCeo = ['ceo', 'md', 'managing director'].some(r => effectiveRoleLower.includes(r)) || empCodeUpper.startsWith('CEO-') || userNameLower.includes('ceo') || userNameLower.includes('md');
+  const isTechSupport = ['tech support', 'technical support', 'tech_support'].some(r => effectiveRoleLower.includes(r)) || empCodeUpper.startsWith('TS-') || userNameLower.includes('tech support') || userNameLower.includes('support');
+  const isSalesHead = effectiveRoleLower.includes('sales head') || empCodeUpper.startsWith('SH-');
+  const isTechAdmin = ['technical administrator', 'technical admin', 'developer', 'ta', 'admin', 'super admin'].some(r => effectiveRoleLower.includes(r)) || empCodeUpper.startsWith('TA-') || empCodeUpper.startsWith('ADM-');
+  const isSalesPerson = (effectiveRoleLower.includes('sales') && !isSalesHead && !isCeo && !isTechSupport && !isTechAdmin);
   const isSalesExec = !isCeo && !isTechSupport && !isSalesHead && !isTechAdmin;
 
   // Lead Creation Privilege: strictly CEO/MD and Tech Support / Tech Admin alone (NEVER sales person / sales executive / sales head)
