@@ -38,8 +38,12 @@ export function getDeviceInfo() {
  */
 export function createNewSessionId() {
   const sesId = 'SES-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-  localStorage.setItem('controlroom_device_session_id', sesId);
-  localStorage.setItem('controlroom_session_start_time', String(Date.now()));
+  try {
+    localStorage.setItem('controlroom_device_session_id', sesId);
+    localStorage.setItem('controlroom_session_start_time', String(Date.now()));
+  } catch (e) {
+    console.warn('[sessionService] Failed to persist session to localStorage:', e);
+  }
   return sesId;
 }
 

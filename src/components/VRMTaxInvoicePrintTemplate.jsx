@@ -420,8 +420,7 @@ export function VRMTaxInvoicePrintSheet({ invoiceData, id = "printable-tax-invoi
                   VRM Structures India Pvt Ltd.
                 </div>
                 <div style={{ fontSize: '10px', color: '#1E293B', lineHeight: '1.38' }}>
-                  <div>1427, GNT Road, Nagappa Industrial Estate,</div>
-                  <div>Puzhal,</div>
+                  <div>1427, GNT Road, Nagappa Industrial Estate, Puzhal,</div>
                   <div>Chennai, Tamil Nadu 600066</div>
                   <div>India</div>
                   <div style={{ marginTop: '2px' }}>

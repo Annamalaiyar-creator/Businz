@@ -20,6 +20,7 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [personDeptFilter, setPersonDeptFilter] = useState('all');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [activePersonModal, setActivePersonModal] = useState(null);
+  const [viewingRepBomsModal, setViewingRepBomsModal] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState(null);
   const [hoveredBarIdx, setHoveredBarIdx] = useState(null);
@@ -77,11 +78,11 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const [currentLoggedName, setCurrentLoggedName] = useState(() => {
     try {
       const stored = localStorage.getItem('controlroom_logged_user_name');
-      if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim()) {
+      if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() && !stored.includes('Executive Leadership')) {
         return stored.trim();
       }
       const storedUser = localStorage.getItem('controlroom_logged_user');
-      if (storedUser && storedUser !== 'undefined' && storedUser !== 'null' && storedUser.trim()) {
+      if (storedUser && storedUser !== 'undefined' && storedUser !== 'null' && storedUser.trim() && !storedUser.includes('Executive Leadership')) {
         const clean = storedUser.split('@')[0].replace(/[._-]/g, ' ');
         return clean.charAt(0).toUpperCase() + clean.slice(1);
       }
@@ -93,12 +94,12 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
     const handleUserUpdate = () => {
       try {
         const stored = localStorage.getItem('controlroom_logged_user_name');
-        if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim()) {
+        if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() && !stored.includes('Executive Leadership')) {
           setCurrentLoggedName(stored.trim());
           return;
         }
         const storedUser = localStorage.getItem('controlroom_logged_user');
-        if (storedUser && storedUser !== 'undefined' && storedUser !== 'null' && storedUser.trim()) {
+        if (storedUser && storedUser !== 'undefined' && storedUser !== 'null' && storedUser.trim() && !storedUser.includes('Executive Leadership')) {
           const clean = storedUser.split('@')[0].replace(/[._-]/g, ' ');
           setCurrentLoggedName(clean.charAt(0).toUpperCase() + clean.slice(1));
           return;
@@ -647,12 +648,15 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
         matchedQuotes = quotesList.filter(q => 
           isMatch(q.salesPerson || q.createdBy || q.salesPersonCode, emp.aliases)
         );
+        matchedBoms = bomList.filter(b => 
+          isMatch(b.salesPerson || b.sales_person || b.createdBy || b.createdById || b.salesPersonCode || b.sales_person_code, emp.aliases)
+        );
 
         const piTotal = matchedPis.reduce((acc, p) => acc + parseAmt(p.grandTotal || p.amount || p.total), 0);
         const qTotal = matchedQuotes.reduce((acc, q) => acc + parseAmt(q.amount || q.total || q.grandTotal), 0);
 
         achievedVal = (piTotal + qTotal) * periodMultiplier;
-        recordCount = matchedPis.length + matchedQuotes.length;
+        recordCount = matchedPis.length + matchedQuotes.length + matchedBoms.length;
       } else if (emp.department === 'Procurement') {
         matchedPos = poList.filter(po => 
           isMatch(po.buyer || po.purchaser || po.createdBy || po.vendor, emp.aliases)
@@ -803,6 +807,109 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
   const totalProductionTonnage = useMemo(() => {
     return bomList.reduce((acc, b) => acc + (parseFloat(b.totalWeight || b.weight || 0) || 0), 0);
   }, [bomList]);
+
+  // Person-by-Person BOM Generation Breakdown for the CEO Dashboard
+  const salesPersonBomBreakdown = useMemo(() => {
+    const salesTeam = teamDirectory.filter(emp => emp.department === 'Sales');
+    const repMap = new Map();
+
+    salesTeam.forEach(emp => {
+      repMap.set(emp.name.toLowerCase().trim(), {
+        name: emp.name,
+        code: emp.code,
+        role: emp.role || 'Sales Executive',
+        designation: emp.designation,
+        avatarBg: emp.avatarBg || '#0E7490',
+        aliases: emp.aliases || [emp.name.toLowerCase()],
+        boms: []
+      });
+    });
+
+    const isMatch = (itemVal, aliases) => {
+      if (!itemVal) return false;
+      const s = String(itemVal).toLowerCase().trim();
+      return aliases.some(a => s === a || s.includes(a) || a.includes(s));
+    };
+
+    bomList.forEach(bom => {
+      if (!bom) return;
+      const spName = (bom.salesPerson || bom.sales_person || bom.createdBy || '').replace(/\s*\([^)]*\)/g, '').trim();
+      const spCode = (bom.salesPersonCode || bom.sales_person_code || bom.createdById || '').trim();
+
+      let matchedRep = null;
+      for (const rep of repMap.values()) {
+        if (isMatch(spName, rep.aliases) || isMatch(spCode, rep.aliases)) {
+          matchedRep = rep;
+          break;
+        }
+      }
+
+      if (matchedRep) {
+        matchedRep.boms.push(bom);
+      } else if (spName && !['admin', 'system', 'technical administrator', 'super admin', 'plant head'].includes(spName.toLowerCase())) {
+        const cleanKey = spName.toLowerCase();
+        if (!repMap.has(cleanKey)) {
+          repMap.set(cleanKey, {
+            name: spName,
+            code: spCode || 'SE-REP',
+            role: 'Sales Executive',
+            designation: 'Sales Representative',
+            avatarBg: '#0891B2',
+            aliases: [cleanKey, spCode.toLowerCase()].filter(Boolean),
+            boms: []
+          });
+        }
+        repMap.get(cleanKey).boms.push(bom);
+      }
+    });
+
+    return Array.from(repMap.values()).map(rep => {
+      const boms = rep.boms || [];
+      const totalBoms = boms.length;
+      const totalAmount = boms.reduce((acc, b) => acc + parseAmt(b.totalAmount || b.amount || b.grandTotal || b.value || b.val || 0), 0);
+      const totalTonnage = boms.reduce((acc, b) => acc + (parseFloat(b.totalWeight || b.weight || 0) || 0), 0);
+
+      const inProductionCount = boms.filter(b => {
+        const s = String(b.status || '').toLowerCase();
+        return s.includes('production') || s.includes('extrusion') || s.includes('approved') || s.includes('confirmed') || s.includes('in-production');
+      }).length;
+
+      const dispatchedOrDoneCount = boms.filter(b => {
+        const s = String(b.status || '').toLowerCase();
+        return s.includes('dispatch') || s.includes('invoiced') || s.includes('completed') || s.includes('delivered') || b.invoiceConfirmed;
+      }).length;
+
+      const pendingCount = boms.filter(b => {
+        const s = String(b.status || '').toLowerCase();
+        return s.includes('pending') || s.includes('draft') || s.includes('waiting') || s.includes('ready for accounts');
+      }).length;
+
+      const latestBom = boms[0] || null;
+
+      return {
+        ...rep,
+        totalBoms,
+        totalAmount,
+        totalTonnage,
+        inProductionCount,
+        dispatchedOrDoneCount,
+        pendingCount,
+        latestBom
+      };
+    }).sort((a, b) => b.totalBoms - a.totalBoms);
+  }, [teamDirectory, bomList]);
+
+  const totalBomsFromReps = useMemo(() => {
+    return salesPersonBomBreakdown.reduce((sum, r) => sum + r.totalBoms, 0);
+  }, [salesPersonBomBreakdown]);
+
+  const totalBomValueFromReps = useMemo(() => {
+    return salesPersonBomBreakdown.reduce((sum, r) => sum + r.totalAmount, 0);
+  }, [salesPersonBomBreakdown]);
+
+  const totalBomTonnageFromReps = useMemo(() => {
+    return salesPersonBomBreakdown.reduce((sum, r) => sum + r.totalTonnage, 0);
+  }, [salesPersonBomBreakdown]);
 
   // Real Product categories breakdown for SVG Donut from live PO line items and BOM profiles
   const productCategories = useMemo(() => {
@@ -1865,6 +1972,290 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
             </div>
           </div>
 
+          {/* ======================================================== */}
+          {/* ROW B.5: SALES PERSON-BY-PERSON BOM CONVERSION HUB       */}
+          {/* ======================================================== */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #EAEFEF',
+            padding: '16px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  backgroundColor: '#ECFEFF',
+                  color: '#0E7490',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Boxes size={20} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Sales Person BOM Performance (Person-by-Person)
+                    </span>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: '800',
+                      color: '#0E7490',
+                      backgroundColor: '#ECFEFF',
+                      border: '1px solid #A5F3FC',
+                      padding: '2px 8px',
+                      borderRadius: '10px'
+                    }}>
+                      LIVE TRACKING
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                    Real-time Bill of Materials (BOM) orders raised by each sales representative across the organization
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary KPIs */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  fontSize: '11px'
+                }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Total BOMs Given:</span>
+                  <strong style={{ color: '#0E7490', fontSize: '12px' }}>{totalBomsFromReps} Orders</strong>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  fontSize: '11px'
+                }}>
+                  <span style={{ color: '#166534', fontWeight: '600' }}>Order Value:</span>
+                  <strong style={{ color: '#15803D', fontSize: '12px' }}>
+                    {totalBomValueFromReps >= 10000000 
+                      ? `₹ ${(totalBomValueFromReps / 10000000).toFixed(2)} Cr`
+                      : `₹ ${(totalBomValueFromReps / 100000).toFixed(2)} L`}
+                  </strong>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  fontSize: '11px'
+                }}>
+                  <span style={{ color: '#1E40AF', fontWeight: '600' }}>Total Tonnage:</span>
+                  <strong style={{ color: '#2563EB', fontSize: '12px' }}>{totalBomTonnageFromReps.toFixed(1)} MT</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Person-by-Person Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
+              gap: '12px',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box'
+            }}>
+              {salesPersonBomBreakdown.map((rep) => {
+                const hasBoms = rep.totalBoms > 0;
+                const formattedAmt = rep.totalAmount >= 10000000
+                  ? `₹ ${(rep.totalAmount / 10000000).toFixed(2)} Cr`
+                  : `₹ ${(rep.totalAmount / 100000).toFixed(2)} L`;
+
+                return (
+                  <div
+                    key={rep.code || rep.name}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '14px',
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.02)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {/* Top Row: Rep Details + Big BOM Count Badge */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        <div style={{
+                          width: '38px',
+                          height: '38px',
+                          borderRadius: '10px',
+                          backgroundColor: rep.avatarBg || '#0E7490',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          flexShrink: 0
+                        }}>
+                          {rep.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {rep.name}
+                            </span>
+                            <span style={{
+                              fontSize: '9.5px',
+                              fontWeight: '700',
+                              color: '#64748B',
+                              backgroundColor: '#F1F5F9',
+                              padding: '1px 5px',
+                              borderRadius: '4px'
+                            }}>
+                              {rep.code}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
+                            {rep.role}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Prominent BOM Count Chip */}
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        backgroundColor: hasBoms ? '#ECFEFF' : '#F8FAFC',
+                        border: `1px solid ${hasBoms ? '#A5F3FC' : '#E2E8F0'}`,
+                        borderRadius: '8px',
+                        padding: '4px 8px',
+                        flexShrink: 0
+                      }}>
+                        <span style={{ fontSize: '16px', fontWeight: '900', color: hasBoms ? '#0E7490' : '#64748B', lineHeight: '1' }}>
+                          {rep.totalBoms}
+                        </span>
+                        <span style={{ fontSize: '9px', fontWeight: '700', color: hasBoms ? '#0891B2' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: '2px' }}>
+                          BOMs Given
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Middle: Metric Stats (Value + Tonnage) */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '8px',
+                      backgroundColor: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      border: '1px solid #F1F5F9'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>Order Value</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A', marginTop: '1px' }}>
+                          {formattedAmt}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: '600' }}>Tonnage Output</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#0284C7', marginTop: '1px' }}>
+                          {rep.totalTonnage.toFixed(1)} MT
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pipeline Status Breakdown */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', fontSize: '10px' }}>
+                      <span style={{
+                        padding: '2px 6px',
+                        borderRadius: '6px',
+                        backgroundColor: '#EFF6FF',
+                        color: '#1D4ED8',
+                        fontWeight: '700'
+                      }}>
+                        {rep.inProductionCount} In Production
+                      </span>
+                      <span style={{
+                        padding: '2px 6px',
+                        borderRadius: '6px',
+                        backgroundColor: '#F0FDF4',
+                        color: '#15803D',
+                        fontWeight: '700'
+                      }}>
+                        {rep.dispatchedOrDoneCount} Dispatched
+                      </span>
+                      <span style={{
+                        padding: '2px 6px',
+                        borderRadius: '6px',
+                        backgroundColor: '#FFFBEB',
+                        color: '#B45309',
+                        fontWeight: '700'
+                      }}>
+                        {rep.pendingCount} Pending
+                      </span>
+                    </div>
+
+                    {/* Bottom: Latest BOM + View Orders Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
+                        {rep.latestBom ? (
+                          <span>Latest: <strong>{rep.latestBom.bomCode || rep.latestBom.code || 'BOM'}</strong> ({rep.latestBom.customer || rep.latestBom.customerName || 'Client'})</span>
+                        ) : (
+                          <span>No BOMs assigned yet</span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => setViewingRepBomsModal(rep)}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#0E7490',
+                          color: '#FFFFFF',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '10.5px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                      >
+                        View BOMs <ChevronRight size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* ROW C: TOP CLIENTS & CRITICAL RISK WATCHLIST */}
           <div style={{
             display: 'grid',
@@ -2229,9 +2620,24 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                         {emp.department} • {emp.unit}
                       </span>
 
-                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>
-                        {emp.recordCount} Active Records
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {emp.department === 'Sales' && (
+                          <span style={{
+                            fontSize: '10.5px',
+                            fontWeight: '800',
+                            color: '#0E7490',
+                            backgroundColor: '#ECFEFF',
+                            border: '1px solid #A5F3FC',
+                            padding: '1px 6px',
+                            borderRadius: '6px'
+                          }}>
+                            📦 {emp.records?.boms?.length || 0} BOMs
+                          </span>
+                        )}
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>
+                          {emp.recordCount} Active Records
+                        </span>
+                      </div>
                     </div>
 
                     {/* Value Metrics & Progress Bar */}
@@ -3954,29 +4360,36 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                       </tr>
                     </thead>
                     <tbody>
-                      {/* If Sales: show their PIs or Quotes */}
+                      {/* If Sales: show their PIs, Quotes, and BOM Orders */}
                       {activePersonModal.department === 'Sales' && (
-                        (activePersonModal.records?.pis?.length > 0 || activePersonModal.records?.quotes?.length > 0) ? (
-                          [...(activePersonModal.records?.pis || []), ...(activePersonModal.records?.quotes || [])].slice(0, 5).map((rec, rIdx) => (
-                            <tr key={rIdx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#0E7490' }}>{rec.piNo || rec.quoteNo || rec.id}</td>
-                              <td style={{ padding: '8px 10px', fontWeight: '700' }}>{rec.customerName || rec.customer || 'Key Client'}</td>
-                              <td style={{ padding: '8px 10px', fontWeight: '800' }}>
-                                {typeof rec.grandTotal === 'number' 
+                        (activePersonModal.records?.pis?.length > 0 || activePersonModal.records?.quotes?.length > 0 || activePersonModal.records?.boms?.length > 0) ? (
+                          [...(activePersonModal.records?.boms || []), ...(activePersonModal.records?.pis || []), ...(activePersonModal.records?.quotes || [])].slice(0, 8).map((rec, rIdx) => {
+                            const isBom = Boolean(rec.bomCode || (rec.code && String(rec.code).startsWith('BOM')));
+                            const refNo = rec.bomCode || rec.code || rec.piNo || rec.quoteNo || rec.id;
+                            const amt = isBom 
+                              ? (rec.totalWeight ? `${rec.totalWeight} MT` : (rec.totalAmount ? `₹ ${parseAmt(rec.totalAmount).toLocaleString('en-IN')}` : 'BOM Order'))
+                              : (typeof rec.grandTotal === 'number' 
                                   ? `₹ ${rec.grandTotal.toLocaleString('en-IN')}` 
-                                  : (rec.grandTotal || (rec.amount ? `₹ ${parseAmt(rec.amount).toLocaleString('en-IN')}` : '₹ 0.00'))}
-                              </td>
-                              <td style={{ padding: '8px 10px' }}>
-                                <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: '#DCFCE7', color: '#16A34A' }}>
-                                  {rec.status || 'Active'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
+                                  : (rec.grandTotal || (rec.amount ? `₹ ${parseAmt(rec.amount).toLocaleString('en-IN')}` : '₹ 0.00')));
+                            return (
+                              <tr key={rIdx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                <td style={{ padding: '8px 10px', fontWeight: '800', color: isBom ? '#0284C7' : '#0E7490' }}>
+                                  {refNo} {isBom && <span style={{ fontSize: '8.5px', padding: '1px 4px', backgroundColor: '#E0F2FE', color: '#0369A1', borderRadius: '4px', marginLeft: '4px' }}>BOM</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', fontWeight: '700' }}>{rec.customerName || rec.customer || 'Key Client'}</td>
+                                <td style={{ padding: '8px 10px', fontWeight: '800' }}>{amt}</td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 6px', borderRadius: '6px', backgroundColor: isBom ? '#EFF6FF' : '#DCFCE7', color: isBom ? '#1D4ED8' : '#16A34A' }}>
+                                    {rec.status || 'Active'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
                         ) : (
                           <tr>
                             <td colSpan={4} style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
-                              No Proforma Invoices or Quotes created yet.
+                              No Proforma Invoices, Quotes, or BOM orders created yet.
                             </td>
                           </tr>
                         )
@@ -4403,6 +4816,212 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
                     <Check size={14} /> Save & Apply Target
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SALES REP BOM ORDERS DETAIL MODAL */}
+      {viewingRepBomsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '20px',
+            width: '900px',
+            maxWidth: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+            border: '1px solid #E2E8F0',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 24px',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  backgroundColor: viewingRepBomsModal.avatarBg || '#0E7490',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '15px',
+                  fontWeight: '800'
+                }}>
+                  {viewingRepBomsModal.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                      {viewingRepBomsModal.name}
+                    </h3>
+                    <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '1px 7px', borderRadius: '6px' }}>
+                      {viewingRepBomsModal.code}
+                    </span>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748B' }}>
+                      • {viewingRepBomsModal.role}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                    Total BOM Orders Given: <strong>{viewingRepBomsModal.boms.length} Orders</strong> • Total Value: <strong>{viewingRepBomsModal.totalAmount >= 10000000 ? `₹ ${(viewingRepBomsModal.totalAmount / 10000000).toFixed(2)} Cr` : `₹ ${(viewingRepBomsModal.totalAmount / 100000).toFixed(2)} Lakhs`}</strong> • Total Weight: <strong>{viewingRepBomsModal.totalTonnage.toFixed(1)} MT</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingRepBomsModal(null)}
+                style={{
+                  border: 'none',
+                  backgroundColor: '#F1F5F9',
+                  color: '#64748B',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body: Table of BOMs */}
+            <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
+              {viewingRepBomsModal.boms.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B' }}>
+                  <Boxes size={36} color="#CBD5E1" style={{ marginBottom: '10px' }} />
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>No BOM orders recorded for this sales representative yet</div>
+                  <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '4px' }}>BOMs raised by {viewingRepBomsModal.name} in the BOM Orders view will automatically appear here.</div>
+                </div>
+              ) : (
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700' }}>
+                        <th style={{ padding: '10px 12px' }}>#</th>
+                        <th style={{ padding: '10px 12px' }}>BOM Order No</th>
+                        <th style={{ padding: '10px 12px' }}>Client / Developer</th>
+                        <th style={{ padding: '10px 12px' }}>Date</th>
+                        <th style={{ padding: '10px 12px' }}>Tonnage</th>
+                        <th style={{ padding: '10px 12px' }}>Order Value</th>
+                        <th style={{ padding: '10px 12px' }}>Status</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingRepBomsModal.boms.map((b, idx) => {
+                        const bomAmt = parseAmt(b.totalAmount || b.amount || b.grandTotal || b.value || b.val || 0);
+                        const weight = parseFloat(b.totalWeight || b.weight || 0) || 0;
+                        return (
+                          <tr key={idx} style={{ borderBottom: idx === viewingRepBomsModal.boms.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '10px 12px', color: '#94A3B8', fontWeight: '600' }}>{idx + 1}</td>
+                            <td style={{ padding: '10px 12px', fontWeight: '800', color: '#0E7490' }}>
+                              {b.bomCode || b.code || b.id || `BOM-${idx + 1}`}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: '700', color: '#0F172A' }}>
+                              {b.customer || b.customerName || 'Client'}
+                            </td>
+                            <td style={{ padding: '10px 12px', color: '#64748B' }}>
+                              {b.date || b.createdAt ? new Date(b.date || b.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: '700', color: '#0284C7' }}>
+                              {weight > 0 ? `${weight.toFixed(1)} MT` : '—'}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: '800', color: '#0F172A' }}>
+                              {bomAmt > 0 ? `₹ ${bomAmt.toLocaleString('en-IN')}` : '₹ 0.00'}
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '10px',
+                                fontWeight: '800',
+                                backgroundColor: String(b.status).toLowerCase().includes('production') ? '#EFF6FF' : (String(b.status).toLowerCase().includes('dispatch') || b.invoiceConfirmed ? '#F0FDF4' : '#FFFBEB'),
+                                color: String(b.status).toLowerCase().includes('production') ? '#1D4ED8' : (String(b.status).toLowerCase().includes('dispatch') || b.invoiceConfirmed ? '#15803D' : '#B45309')
+                              }}>
+                                {b.status || 'Active'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => {
+                                  setViewingRepBomsModal(null);
+                                  if (onNavigateTab) {
+                                    onNavigateTab('BOM Orders', null, null, null);
+                                  }
+                                }}
+                                style={{
+                                  border: '1px solid #CBD5E1',
+                                  backgroundColor: '#FFFFFF',
+                                  color: '#0E7490',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '10.5px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Open BOM
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '12px 24px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#F8FAFC'
+            }}>
+              <span style={{ fontSize: '11px', color: '#64748B' }}>
+                Showing all <strong>{viewingRepBomsModal.boms.length}</strong> BOM orders raised by <strong>{viewingRepBomsModal.name}</strong>
+              </span>
+              <button
+                onClick={() => setViewingRepBomsModal(null)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
               </button>
             </div>
           </div>

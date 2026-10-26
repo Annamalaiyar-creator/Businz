@@ -60,11 +60,11 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   showCompanyWebsite: false,
 
   // Company Address & Reg Details
-  companyAddressLine1: '1427, GNT Road, Nagappa Industrial Estate,',
-  companyAddressLine2: 'Puzhal,\nChennai, Tamil Nadu 600066\nIndia',
+  companyAddressLine1: '1427, GNT Road, Nagappa Industrial Estate, Puzhal,',
+  companyAddressLine2: 'Chennai, Tamil Nadu 600066\nIndia',
   companyGstin: '33AAGCV4262N1ZZ',
   companyCin: '',
-  companyUdyam: 'MSME/Udyam No',
+  companyUdyam: '',
   companyPhone: '+91 98847 20789',
   companyEmail: 'sales@vrmstructures.com',
   companyWebsite: 'www.vrmstructures.com',
@@ -308,6 +308,25 @@ export function VRMProformaInvoicePrintSheet({
       showSubtotalSummary: false
     } : {})
   };
+
+  // Ensure company address is strictly formatted into 3 lines:
+  // Line 1: 1427, GNT Road, Nagappa Industrial Estate, Puzhal,
+  // Line 2: Chennai, Tamil Nadu 600066
+  // Line 3: India
+  if (
+    cfg.companyAddressLine1 === '1427, GNT Road, Nagappa Industrial Estate,' ||
+    cfg.companyAddressLine2?.startsWith('Puzhal,\n') ||
+    cfg.companyAddressLine2?.startsWith('Puzhal,')
+  ) {
+    cfg.companyAddressLine1 = '1427, GNT Road, Nagappa Industrial Estate, Puzhal,';
+    cfg.companyAddressLine2 = (cfg.companyAddressLine2 || '')
+      .replace(/^Puzhal,\s*\n?/i, '')
+      .trim();
+    if (!cfg.companyAddressLine2) {
+      cfg.companyAddressLine2 = 'Chennai, Tamil Nadu 600066\nIndia';
+    }
+  }
+
   const accent = cfg.accentColor || '#0E7490';
 
   // Inline Click-to-Edit & Quick-Remove Helper Component
@@ -1348,14 +1367,14 @@ export function VRMProformaInvoicePrintSheet({
                         <div style={{ whiteSpace: 'pre-line' }}>
                           <EditableText
                             value={cfg.companyAddressLine1}
-                            fallback="1427, GNT Road, Nagappa Industrial Estate,"
+                            fallback="1427, GNT Road, Nagappa Industrial Estate, Puzhal,"
                             onSave={(v) => onUpdateSetting?.({ companyAddressLine1: v })}
                           />
                         </div>
                         <div style={{ whiteSpace: 'pre-line' }}>
                           <EditableText
                             value={cfg.companyAddressLine2}
-                            fallback={"Puzhal,\nChennai, Tamil Nadu 600066\nIndia"}
+                            fallback={"Chennai, Tamil Nadu 600066\nIndia"}
                             multiline={true}
                             onSave={(v) => onUpdateSetting?.({ companyAddressLine2: v })}
                           />
@@ -1377,15 +1396,6 @@ export function VRMProformaInvoicePrintSheet({
                             style={{ fontFamily: 'inherit', fontWeight: '700', color: '#0F172A' }}
                           />
                         </div>
-                        {cfg.companyUdyam ? (
-                          <div>
-                            <EditableText
-                              value={cfg.companyUdyam}
-                              fallback="MSME/Udyam No"
-                              onSave={(v) => onUpdateSetting?.({ companyUdyam: v })}
-                            />
-                          </div>
-                        ) : null}
                       </RemovableBlock>
                     )}
                   </div>
@@ -3514,6 +3524,11 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
         if (parsed.bankName === 'HDFC Bank Ltd.' || parsed.bankName === 'HDFC Bank Ltd') parsed.bankName = 'HDFC Bank';
         parsed.showCompanyName = false;
         parsed.showCompanyTagline = false;
+        parsed.companyUdyam = '';
+        if (parsed.companyAddressLine1 === '1427, GNT Road, Nagappa Industrial Estate,' || parsed.companyAddressLine2?.startsWith('Puzhal,') || parsed.companyAddressLine2?.startsWith('Puzhal,\n')) {
+          parsed.companyAddressLine1 = '1427, GNT Road, Nagappa Industrial Estate, Puzhal,';
+          parsed.companyAddressLine2 = (parsed.companyAddressLine2 || '').replace(/^Puzhal,\s*\n?/i, '').trim() || 'Chennai, Tamil Nadu 600066\nIndia';
+        }
         initial = { ...initial, ...parsed };
       }
 

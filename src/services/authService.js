@@ -32,6 +32,14 @@ export const DEFAULT_CORE_EMPLOYEES = [
     password: "12345",
     role: "Sales Head",
     status: "Active"
+  },
+  {
+    employee_code: "CEO-001",
+    employee_name: "Velmurugan Rathinam",
+    email: "ceo@vrmstructures.com",
+    password: "12345",
+    role: "CEO",
+    status: "Active"
   }
 ];
 

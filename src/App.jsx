@@ -339,7 +339,15 @@ function App() {
     const norm = (newRole || '').toLowerCase();
     if (norm.includes('ceo') || norm.includes('md') || norm.includes('managing director')) {
       localStorage.setItem('controlroom_logged_emp_id', 'CEO-001');
-      localStorage.setItem('controlroom_logged_user_name', 'Executive Leadership (CEO)');
+      let ceoName = 'Velmurugan Rathinam';
+      try {
+        const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+        const ceoEmp = storedEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
+        if (ceoEmp && (ceoEmp.employee_name || ceoEmp.name)) {
+          ceoName = ceoEmp.employee_name || ceoEmp.name;
+        }
+      } catch (_) {}
+      localStorage.setItem('controlroom_logged_user_name', ceoName);
     } else if (norm.includes('tech support') || norm.includes('technical support')) {
       localStorage.setItem('controlroom_logged_emp_id', 'TS-VRM001');
       localStorage.setItem('controlroom_logged_user_name', 'Tech Support Specialist');

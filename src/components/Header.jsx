@@ -180,6 +180,23 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
   const storedName = localStorage.getItem('controlroom_logged_user_name');
   let userName = (storedName && storedName !== 'undefined' && storedName !== 'null') ? storedName : '';
 
+  // If storedName was previously 'Executive Leadership (CEO)', heal it to actual CEO person name
+  if ((userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director') && (!userName || userName === 'Executive Leadership (CEO)' || userName === 'CEO')) {
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+      const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
+      const match = allEmps.find(e => e && ((e.employee_code || '').toUpperCase().startsWith('CEO') || e.role === 'CEO' || e.role === 'Managing Director'));
+      if (match && (match.employee_name || match.name)) {
+        userName = match.employee_name || match.name;
+      }
+    } catch(e) {}
+    if (!userName || userName === 'Executive Leadership (CEO)' || userName === 'CEO') {
+      userName = 'Velmurugan Rathinam';
+    }
+    localStorage.setItem('controlroom_logged_user_name', userName);
+  }
+
   // If storedName was previously hardcoded as 'Vijay', heal it from registered employee record if available
   if (userRole === 'Sales Head' && (!userName || userName.toLowerCase() === 'vijay' || userName.toLowerCase() === 'sales' || userName.toLowerCase() === 'sales head')) {
     try {
@@ -194,7 +211,7 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
     } catch(e) {}
   }
 
-  if (!userName) {
+  if (!userName || userName === 'Executive Leadership (CEO)') {
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
@@ -205,9 +222,10 @@ export default function Header({ activeTab, userRole = 'Procurement Admin', onSw
       }
     } catch(e) {}
   }
-  if (!userName) {
+  if (!userName || userName === 'Executive Leadership (CEO)') {
     if (userRole === 'Production Head') userName = 'Senthil Kumar';
-    else if (userRole === 'Technical Administrator' || userRole === 'CEO') userName = 'Annamalaiyar';
+    else if (userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director') userName = 'Velmurugan Rathinam';
+    else if (userRole === 'Technical Administrator') userName = 'Annamalaiyar';
     else if (userRole === 'Dispatch Head') userName = 'Kalpana';
     else if (userRole === 'Floor Supervisor') userName = 'Floor Supervisor';
     else if (userRole === 'Floor Employee') userName = 'Floor Employee';
