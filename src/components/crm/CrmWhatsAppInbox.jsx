@@ -45,10 +45,15 @@ export default function CrmWhatsAppInbox({
     setIsSyncingChats(true);
     try {
       const data = await getWhatsAppChats(currentUserId);
-      if (data?.chats && data.chats.length > 0) {
-        setChatList(data.chats);
-        if (!activeConvId || !data.chats.some(c => c.id === activeConvId)) {
-          setActiveConvId(data.chats[0].id);
+      if (data?.chats && Array.isArray(data.chats)) {
+        if (data.chats.length > 0) {
+          setChatList(data.chats);
+          if (!activeConvId || !data.chats.some(c => c.id === activeConvId)) {
+            setActiveConvId(data.chats[0].id);
+          }
+        } else if (data.isConnected) {
+          // Connected but initial sync still buffering
+          setChatList([]);
         }
       }
     } catch (e) {
@@ -70,14 +75,107 @@ export default function CrmWhatsAppInbox({
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUserId]);
 
   // When WhatsApp connects or user changes, sync real chats
   useEffect(() => {
     if (waSession?.status === 'CONNECTED') {
       syncChatsFromWhatsApp();
     }
-  }, [waSession?.status]);
+  }, [waSession?.status, currentUserId]);
+
+  // Real-time WhatsApp events: incoming messages, background history updates & session changes
+  useEffect(() => {
+    const handleWaMsg = (e) => {
+      const msgData = e.detail;
+      if (!msgData) return;
+      if (msgData.userId && msgData.userId !== currentUserId) return;
+
+      const phone = msgData.from || msgData.senderPhone;
+      if (!phone) return;
+
+      setChatList((prev) => {
+        const cleanP = String(phone).replace(/[^0-9]/g, '');
+        const exists = prev.find(
+          (c) =>
+            String(c.id).replace(/[^0-9]/g, '') === cleanP ||
+            String(c.phone).replace(/[^0-9]/g, '') === cleanP
+        );
+
+        const newMsgItem = {
+          id: msgData.msgId || `MSG-${Date.now()}`,
+          sender: 'customer',
+          senderName: msgData.pushName || exists?.customerName || `Customer +${cleanP}`,
+          text: msgData.text,
+          timestamp: msgData.timestamp || new Date().toISOString(),
+          status: 'delivered'
+        };
+
+        if (exists) {
+          return prev
+            .map((c) => {
+              if (c.id === exists.id) {
+                const msgs = [...(c.messages || []), newMsgItem];
+                msgs.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+                return {
+                  ...c,
+                  timestamp: newMsgItem.timestamp,
+                  unreadCount: c.id === activeConvId ? 0 : (c.unreadCount || 0) + 1,
+                  messages: msgs
+                };
+              }
+              return c;
+            })
+            .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+        } else {
+          const newChat = {
+            id: cleanP,
+            phone: `+${cleanP}`,
+            customerName: msgData.pushName || `Customer +${cleanP}`,
+            companyName: 'WhatsApp Contact',
+            unreadCount: 1,
+            timestamp: newMsgItem.timestamp,
+            messages: [newMsgItem]
+          };
+          return [newChat, ...prev];
+        }
+      });
+    };
+
+    const handleSessionUpdate = (e) => {
+      const statusData = e.detail;
+      if (!statusData) return;
+      if (!statusData.userId || statusData.userId === currentUserId) {
+        setWaSession((prev) => ({ ...(prev || {}), ...statusData }));
+        if (statusData.status === 'CONNECTED') {
+          syncChatsFromWhatsApp();
+        }
+      }
+    };
+
+    const handleChatsUpdated = (e) => {
+      const payload = e.detail;
+      if (!payload) return;
+      if (!payload.userId || payload.userId === currentUserId) {
+        if (Array.isArray(payload.chats) && payload.chats.length > 0) {
+          setChatList(payload.chats);
+          if (!activeConvId || !payload.chats.some((c) => c.id === activeConvId)) {
+            setActiveConvId(payload.chats[0].id);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('controlroom_whatsapp_message', handleWaMsg);
+    window.addEventListener('controlroom_whatsapp_session_update', handleSessionUpdate);
+    window.addEventListener('controlroom_whatsapp_chats_updated', handleChatsUpdated);
+
+    return () => {
+      window.removeEventListener('controlroom_whatsapp_message', handleWaMsg);
+      window.removeEventListener('controlroom_whatsapp_session_update', handleSessionUpdate);
+      window.removeEventListener('controlroom_whatsapp_chats_updated', handleChatsUpdated);
+    };
+  }, [currentUserId, activeConvId]);
 
   const activeConv = chatList.find(c => c.id === activeConvId) || chatList[0];
 
@@ -305,46 +403,97 @@ export default function CrmWhatsAppInbox({
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {filteredConversations.map(conv => {
-            const isCurrent = conv.id === activeConv?.id;
-            const lastMsg = conv.messages?.[conv.messages.length - 1];
-            return (
-              <div
-                key={conv.id}
-                onClick={() => setActiveConvId(conv.id)}
-                style={{
-                  padding: '12px 14px',
-                  borderBottom: '1px solid #F1F5F9',
-                  backgroundColor: isCurrent ? '#F0FDF4' : '#FFFFFF',
-                  cursor: 'pointer',
-                  borderLeft: isCurrent ? '4px solid #16A34A' : '4px solid transparent',
-                  transition: 'background-color 0.15s'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                  <div style={{ fontWeight: '700', fontSize: '13px', color: '#0F172A' }}>
-                    {conv.customerName}
+          {filteredConversations.length === 0 ? (
+            <div style={{ padding: '32px 18px', textAlign: 'center', color: '#64748B' }}>
+              {waSession?.status === 'CONNECTED' ? (
+                <>
+                  <RefreshCw size={24} color="#16A34A" className={isSyncingChats ? 'spin' : ''} style={{ margin: '0 auto 10px' }} />
+                  <div style={{ fontWeight: '800', fontSize: '13px', color: '#0F172A', marginBottom: '4px' }}>
+                    {isSyncingChats ? 'Syncing WhatsApp History...' : 'WhatsApp Connected!'}
                   </div>
-                  <span style={{ fontSize: '10px', color: '#94A3B8' }}>
-                    {lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                  </span>
+                  <div style={{ fontSize: '11px', lineHeight: '1.4', color: '#64748B' }}>
+                    {isSyncingChats
+                      ? 'Downloading conversation history from your phone. Please wait a moment...'
+                      : 'No conversations found yet. Click Sync above or start a New Chat.'}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Smartphone size={24} color="#0E7490" style={{ margin: '0 auto 10px' }} />
+                  <div style={{ fontWeight: '800', fontSize: '13px', color: '#0F172A', marginBottom: '4px' }}>
+                    WhatsApp Not Linked
+                  </div>
+                  <div style={{ fontSize: '11px', lineHeight: '1.4', color: '#64748B', marginBottom: '12px' }}>
+                    Link your WhatsApp to view your chats and send direct messages.
+                  </div>
+                  <button
+                    onClick={() => setIsQrModalOpen(true)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#16A34A',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Link WhatsApp Now
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            filteredConversations.map(conv => {
+              const isCurrent = conv.id === activeConv?.id;
+              const lastMsg = conv.messages?.[conv.messages.length - 1];
+              const msgCount = conv.messages?.length || 0;
+              return (
+                <div
+                  key={conv.id}
+                  onClick={() => setActiveConvId(conv.id)}
+                  style={{
+                    padding: '12px 14px',
+                    borderBottom: '1px solid #F1F5F9',
+                    backgroundColor: isCurrent ? '#F0FDF4' : '#FFFFFF',
+                    cursor: 'pointer',
+                    borderLeft: isCurrent ? '4px solid #16A34A' : '4px solid transparent',
+                    transition: 'background-color 0.15s'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: '700', fontSize: '13px', color: '#0F172A' }}>
+                      {conv.customerName}
+                    </div>
+                    <span style={{ fontSize: '10px', color: '#94A3B8' }}>
+                      {lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                    <span style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600' }}>
+                      {conv.companyName}
+                    </span>
+                    {msgCount > 0 && (
+                      <span style={{ fontSize: '10px', color: '#16A34A', fontWeight: '700' }}>
+                        {msgCount} msg{msgCount > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#64748B',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    marginTop: '2px'
+                  }}>
+                    {lastMsg?.sender === 'agent' ? 'You: ' : ''}{lastMsg?.text || 'No messages yet'}
+                  </div>
                 </div>
-                <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '600' }}>
-                  {conv.companyName}
-                </div>
-                <div style={{
-                  fontSize: '12px',
-                  color: '#64748B',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  marginTop: '4px'
-                }}>
-                  {lastMsg?.sender === 'agent' ? 'You: ' : ''}{lastMsg?.text || 'No messages yet'}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -371,11 +520,16 @@ export default function CrmWhatsAppInbox({
               {activeConv?.customerName?.charAt(0) || 'C'}
             </div>
             <div>
-              <div style={{ fontWeight: '800', fontSize: '14px', color: '#0F172A' }}>
-                {activeConv?.customerName} • {activeConv?.phone}
+              <div style={{ fontWeight: '800', fontSize: '14px', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>{activeConv?.customerName || 'Select Conversation'} • {activeConv?.phone}</span>
+                {activeConv?.messages?.length > 0 && (
+                  <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#DCFCE7', color: '#166534' }}>
+                    {activeConv.messages.length} messages
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: '11px', color: '#64748B' }}>
-                {activeConv?.companyName} • Channel: Meta WhatsApp Business
+                {activeConv?.companyName} • Channel: WhatsApp Companion Sync
               </div>
             </div>
           </div>
@@ -401,6 +555,28 @@ export default function CrmWhatsAppInbox({
             </button>
           </div>
         </div>
+
+        {/* Live WhatsApp Companion Sync Banner */}
+        {waSession?.status === 'CONNECTED' && (
+          <div style={{
+            padding: '7px 16px',
+            backgroundColor: '#F0FDF4',
+            borderBottom: '1px solid #BBF7D0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '11px',
+            color: '#166534'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCheck size={14} color="#16A34A" />
+              <span><strong>Live WhatsApp Connected:</strong> Entire conversation thread with {activeConv?.phone || 'customer'} is archived and synced with your phone.</span>
+            </div>
+            <span style={{ fontSize: '10px', color: '#15803D', fontWeight: '700' }}>
+              {activeConv?.messages?.length || 0} messages synced
+            </span>
+          </div>
+        )}
 
         {/* AI Requirement Extraction Assistant Bar */}
         {aiAnalysis && (
@@ -447,6 +623,17 @@ export default function CrmWhatsAppInbox({
           flexDirection: 'column',
           gap: '12px'
         }}>
+          {(!activeConv?.messages || activeConv.messages.length === 0) && (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94A3B8' }}>
+              <MessageSquare size={32} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
+              <div style={{ fontWeight: '700', fontSize: '14px', color: '#475569', marginBottom: '4px' }}>
+                No Messages in this Conversation Yet
+              </div>
+              <div style={{ fontSize: '12px' }}>
+                Type a message below to start the conversation, or wait for messages from your phone to sync.
+              </div>
+            </div>
+          )}
           {activeConv?.messages?.map(msg => {
             const isMe = msg.sender === 'agent';
             return (

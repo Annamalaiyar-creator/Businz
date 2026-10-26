@@ -130,9 +130,15 @@ export const initRealtimeSync = () => {
             emitStorageUpdate();
           }
 
-          // 9. Instant WhatsApp Messages
+          // 9. Instant WhatsApp Messages, Session Updates & Chats Sync
           if (type === 'whatsapp_message') {
             window.dispatchEvent(new CustomEvent('controlroom_whatsapp_message', { detail: payload }));
+          }
+          if (type === 'whatsapp_session_update') {
+            window.dispatchEvent(new CustomEvent('controlroom_whatsapp_session_update', { detail: payload }));
+          }
+          if (type === 'whatsapp_chats_updated') {
+            window.dispatchEvent(new CustomEvent('controlroom_whatsapp_chats_updated', { detail: payload }));
           }
 
           // 10. Real-time Workflow Notifications (Instant push across different logins / machines)

@@ -7590,6 +7590,9 @@ app.post('/api/whatsapp/multi/connect/:userId', async (req, res) => {
       },
       onStatusChange: (statusData) => {
         broadcastRealtimeEvent('whatsapp_session_update', statusData);
+      },
+      onChatsUpdated: (chatsList) => {
+        broadcastRealtimeEvent('whatsapp_chats_updated', { userId, count: chatsList.length, chats: chatsList });
       }
     });
     res.json({ success: true, ...status });
@@ -8327,6 +8330,9 @@ app.listen(PORT, () => {
     },
     onStatusChange: (statusData) => {
       broadcastRealtimeEvent('whatsapp_session_update', statusData);
+    },
+    onChatsUpdated: (chatsList) => {
+      broadcastRealtimeEvent('whatsapp_chats_updated', { count: chatsList.length, chats: chatsList });
     }
   }).catch(() => {});
 });
