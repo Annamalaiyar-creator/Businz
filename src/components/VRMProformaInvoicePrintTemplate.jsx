@@ -44,7 +44,7 @@ import {
 // Default Template Configuration Settings
 export const DEFAULT_PI_TEMPLATE_SETTINGS = {
   // Theme & Identity
-  accentColor: '#0E7490', // Default VRM Teal
+  accentColor: '#1E2F5B', // Official VRM Blue (from VRM Logo)
   documentTitle: 'Proforma Invoice',
   companyName: 'VRM STRUCTURES INDIA PRIVATE LIMITED',
   companyTagline: '',
@@ -170,7 +170,7 @@ export const DEFAULT_PI_TEMPLATE_SETTINGS = {
 };
 
 const COLOR_PRESETS = [
-  { name: 'VRM Teal', hex: '#0E7490' },
+  { name: 'VRM Blue', hex: '#1E2F5B' },
   { name: 'Royal Navy', hex: '#1E3A8A' },
   { name: 'Tech Cobalt', hex: '#2563EB' },
   { name: 'Emerald Forest', hex: '#059669' },
@@ -327,7 +327,7 @@ export function VRMProformaInvoicePrintSheet({
     }
   }
 
-  const accent = cfg.accentColor || '#0E7490';
+  const accent = cfg.accentColor || '#1E2F5B';
 
   // Inline Click-to-Edit & Quick-Remove Helper Component
   const EditableText = ({
@@ -1343,10 +1343,11 @@ export function VRMProformaInvoicePrintSheet({
               )}
               <div>
                 {cfg.showCompanyName !== false && (
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px', marginBottom: '3px', whiteSpace: 'nowrap' }}>
                     <EditableText
                       value={cfg.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED'}
                       fallback="VRM STRUCTURES INDIA PRIVATE LIMITED"
+                      style={{ whiteSpace: 'nowrap' }}
                       onSave={(v) => onUpdateSetting?.({ companyName: v })}
                       onRemove={() => {
                         onUpdateSetting?.({ showCompanyName: false, companyName: '' });
@@ -1572,7 +1573,7 @@ export function VRMProformaInvoicePrintSheet({
         }}>
           {/* BILL TO */}
           <div style={{ borderRight: '1px solid #CBD5E1' }}>
-            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
+            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: accent, backgroundColor: '#EFF6FF' }}>
               <EditableText
                 value={cfg.billToLabel || 'Bill To'}
                 fallback="Bill To"
@@ -1636,7 +1637,7 @@ export function VRMProformaInvoicePrintSheet({
 
           {/* SHIP TO */}
           <div>
-            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#0E7490', backgroundColor: '#F0FDFA' }}>
+            <div style={{ padding: '6px 14px', borderBottom: '1px solid #E2E8F0', fontWeight: '700', fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.6px', color: accent, backgroundColor: '#EFF6FF' }}>
               <EditableText
                 value={cfg.shipToLabel || 'Ship To'}
                 fallback="Ship To"
@@ -1651,15 +1652,6 @@ export function VRMProformaInvoicePrintSheet({
                   onSave={(v) => onUpdatePiData?.({ shippingName: v })}
                 />
               </div>
-              {(pi.phone || pi.contactPhone) && (
-                <div>
-                  <EditableText
-                    value={(pi.phone || pi.contactPhone || '').toString().replace(/[()]/g, '').trim()}
-                    fallback="9341 5621 2461"
-                    onSave={(v) => onUpdatePiData?.({ phone: v.replace(/[()]/g, '').trim() })}
-                  />
-                </div>
-              )}
               {dStreet ? (
                 <div>
                   <EditableText
@@ -1926,12 +1918,12 @@ export function VRMProformaInvoicePrintSheet({
                             style={{
                               border: '1px solid #CBD5E1',
                               padding: '3px 8px',
-                              backgroundColor: '#F0FDFA',
-                              borderTop: `2px solid ${cfg.accentColor || '#0E7490'}`
+                              backgroundColor: '#EFF6FF',
+                              borderTop: `2px solid ${cfg.accentColor || '#1E2F5B'}`
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                              <span style={{ fontWeight: '800', color: cfg.accentColor || '#0E7490', fontSize: '10px' }}>
+                              <span style={{ fontWeight: '800', color: cfg.accentColor || '#1E2F5B', fontSize: '10px' }}>
                                 <EditableText
                                   value={it.presetName}
                                   fallback="Solar Structure MMS Kit"
@@ -2235,7 +2227,7 @@ export function VRMProformaInvoicePrintSheet({
 
               {/* NOTES / ACCOUNT DETAILS */}
               <div style={{ padding: '8px 14px', borderBottom: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '9px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
                   <EditableText
                     value={cfg.bankHeading || 'Bank & Payment Details'}
                     fallback="Bank & Payment Details"
@@ -2269,7 +2261,7 @@ export function VRMProformaInvoicePrintSheet({
               {/* TERMS & CONDITIONS */}
               {cfg.showTerms && (
                 <div style={{ padding: '8px 14px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '9px', fontWeight: '700', color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>
                     <EditableText
                       value={cfg.termsHeading || 'Terms & Conditions'}
                       fallback="Terms & Conditions"
@@ -2340,9 +2332,9 @@ export function VRMProformaInvoicePrintSheet({
                       </td>
                     </tr>
                   )}
-                  <tr style={{ backgroundColor: '#F0FDFA', borderTop: '2px solid #0E7490', fontWeight: '800' }}>
+                  <tr style={{ backgroundColor: '#EFF6FF', borderTop: `2px solid ${accent}`, fontWeight: '800' }}>
                     <td style={{ padding: '8px 14px', color: '#0F172A', fontSize: '11px' }}>Total</td>
-                    <td style={{ padding: '8px 14px', textAlign: 'right', color: '#0E7490', fontSize: '12.5px' }}>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', color: accent, fontSize: '12.5px' }}>
                       ₹{Math.round(grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -3549,10 +3541,16 @@ export default function VRMProformaInvoicePrintTemplate({ piData, onClose, onSav
           parsed.companyAddressLine1 = '1427, GNT Road, Nagappa Industrial Estate, Puzhal,';
           parsed.companyAddressLine2 = (parsed.companyAddressLine2 || '').replace(/^Puzhal,\s*\n?/i, '').trim() || 'Chennai, Tamil Nadu 600066\nIndia';
         }
+        if (!parsed.accentColor || parsed.accentColor === '#0E7490') {
+          parsed.accentColor = '#1E2F5B';
+        }
         initial = { ...initial, ...parsed };
       }
       initial.companyName = initial.companyName || 'VRM STRUCTURES INDIA PRIVATE LIMITED';
       initial.showCompanyName = true;
+      if (!initial.accentColor || initial.accentColor === '#0E7490') {
+        initial.accentColor = '#1E2F5B';
+      }
 
       // Merge master company branding (logo, stamp, signatory details)
       if (branding) {
