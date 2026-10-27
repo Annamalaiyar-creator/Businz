@@ -1,33 +1,22 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# BUSINZ CRM — CONTROLLED PRODUCTION DEPLOYMENT SCRIPT (RECONCILED BASELINE)
+# BUSINZ CRM — CONTROLLED IN-PLACE PRODUCTION DEPLOYMENT & CUTOVER SCRIPT
 # Target Environment: Hostinger Production VPS (srv2025332 / 187.126.116.199)
 # Production Directory: /var/www/businz
 # Production Port:      5001
 # PM2 Target Process:   businz (businz-dev strictly isolated and untouched)
 # Actual Production Baseline: 04e0a5190ddebddbf8531909fcb64ca114d1832d
 # Production Branch:          feature/crm-lead-management-system
-# Target Release Commit:      8f671fdad48ed0447ff9290d75f975bbb3778a70
+# Target Release Commit:      35a7ee169bcd6cb760360cdc6e641be45c79c07d
 #
-# Verified Lineage:
-# git merge-base --is-ancestor 04e0a51 8f671fd (CONFIRMED YES - Zero divergence)
-#
-# Core Safety Guarantees:
-# 1. Exact Git baseline check against 04e0a51 (hard abort on mismatch)
-# 2. Distinguishes tracked code changes from untracked core dumps and backup files
-# 3. Preserves untracked 5.8 GB core dump and backup files untouched
-# 4. Excludes core dumps from backup archives to prevent disk exhaustion
-# 5. Staged code release & build in isolated directory (runtime data outside git tree)
-# 6. ZERO automatic overwriting of live JSON stores with older backups
-# 7. Bound rollback script locked to exact pre-deployment release and backup
-# 8. Rollback preserves all live JSON records (never extracts old snapshots over new transactions)
-# 9. Atomic frontend asset deployment with backward-compatible chunk retention (no 404s)
-# 10. Pre-existing index detection (drops only newly added indexes on rollback)
-# 11. Dynamic discovery and SHA-256 verification of 100% of server JSON stores
-# 12. Honest authenticated smoke test: verifies genuine session or reports NOT VERIFIED
-# 13. Non-destructive workflow probes for CRM, PI, BOM, Inventory, Dispatch, Accounts
-# 14. Truly read-only validation mode (--validate-only / --dry-run)
-# 15. Gated success declaration (only after health checks and report write pass)
+# Cutover Architecture:
+# - Staged release build in isolated staging directory (/var/backups/businz/releases/...)
+# - Tested, controlled in-place maintenance cutover into /var/www/businz
+# - Controlled maintenance window (~2-5s during PM2 reload). Zero-downtime is NOT claimed.
+# - Complete file synchronization accounting for added, modified, and obsolete files
+# - Active JSON stores, uploads, wa_sessions, core dumps, and .env are 100% preserved
+# - Automated bound rollback triggered if health checks or PM2 fail post-reload
+# - Fail-closed database migrations: aborts immediately on any PostgreSQL error
 # ==============================================================================
 set -Eeuo pipefail
 
@@ -130,6 +119,28 @@ MANDATORY_CORE_STORES=(
   "item_store.json"
   "notifications_store.json"
 )
+
+# ------------------------------------------------------------------------------
+# FAIL-CLOSED POSTGRESQL QUERY HELPER
+# Never masks errors, never defaults to 0 on failure. Aborts if query fails.
+# ------------------------------------------------------------------------------
+run_psql_query() {
+  local sql="$1"
+  local output
+  if ! output=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "${sql}" 2>&1); then
+    echo "❌ FATAL ABORT: PostgreSQL query failed to execute!" >&2
+    echo "SQL:    ${sql}" >&2
+    echo "Output: ${output}" >&2
+    exit 1
+  fi
+  output=$(echo "${output}" | tr -d '[:space:]')
+  if [ -z "${output}" ]; then
+    echo "❌ FATAL ABORT: PostgreSQL query returned an empty result!" >&2
+    echo "SQL:    ${sql}" >&2
+    exit 1
+  fi
+  echo "${output}"
+}
 
 # ------------------------------------------------------------------------------
 # SAFETY TRAP & EXPLICIT ROLLBACK HANDLER
@@ -278,7 +289,7 @@ if ! pg_isready -h localhost -p 5432 -d businz >/dev/null 2>&1; then
   echo "❌ FATAL ABORT: PostgreSQL database 'businz' is not responding on port 5432!"
   exit 1
 fi
-DB_SIZE_MB=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT pg_database_size('businz') / 1048576;")
+DB_SIZE_MB=$(run_psql_query "SELECT pg_database_size('businz') / 1048576;")
 echo "✅ PostgreSQL 'businz' is online (Database size: ${DB_SIZE_MB} MB)."
 
 # 1.7 Dynamic Sizing & Disk Headroom Check (Excluding 5.8 GB core dump)
@@ -298,24 +309,24 @@ if [ "${AVAILABLE_DISK_MB}" -lt "${REQUIRED_HEADROOM_MB}" ]; then
 fi
 echo "✅ Dynamic disk headroom verified (Surplus: $(( AVAILABLE_DISK_MB - REQUIRED_HEADROOM_MB )) MB)."
 
-# 1.8 Record Pre-Existing Indexes Before Migration
-PRE_EXISTING_BOM_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_bom_orders_created_at';" 2>/dev/null || echo 0)
-PRE_EXISTING_LEADS_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_leads_created_at';" 2>/dev/null || echo 0)
-PRE_EXISTING_UNIQUE_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_lead_inactivity_unique_incident';" 2>/dev/null || echo 0)
+# 1.8 Record Pre-Existing Indexes Before Migration (Fail-Closed)
+PRE_EXISTING_BOM_IDX=$(run_psql_query "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_bom_orders_created_at';")
+PRE_EXISTING_LEADS_IDX=$(run_psql_query "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_leads_created_at';")
+PRE_EXISTING_UNIQUE_IDX=$(run_psql_query "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_lead_inactivity_unique_incident';")
 echo "   - idx_bom_orders_created_at pre-existing:           ${PRE_EXISTING_BOM_IDX}"
 echo "   - idx_leads_created_at pre-existing:                ${PRE_EXISTING_LEADS_IDX}"
 echo "   - idx_lead_inactivity_unique_incident pre-existing: ${PRE_EXISTING_UNIQUE_IDX}"
 
-# 1.9 Audit Pre-Existing Duplicate Incident Records (Read-Only)
-INCIDENT_DUPS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+# 1.9 Audit Pre-Existing Duplicate Incident Records (Fail-Closed)
+INCIDENT_DUPS=$(run_psql_query "
   SELECT count(*) FROM (
     SELECT 1 FROM public.lead_inactivity_incidents
     GROUP BY lead_id, incident_type, salesperson_id, assigned_at
     HAVING count(*) > 1
   ) dups;
-" 2>/dev/null || echo 0)
+")
 echo "   - Pre-existing duplicate incident records:          ${INCIDENT_DUPS}"
-if [ "${INCIDENT_DUPS}" -gt 0 ]; then
+if [ "${INCIDENT_DUPS}" -ne 0 ]; then
   echo "❌ FATAL ABORT: Found ${INCIDENT_DUPS} duplicate groups in public.lead_inactivity_incidents!"
   exit 1
 fi
@@ -379,36 +390,86 @@ echo "🛡️ Securing point-in-time recovery archive of live transaction state 
 tar --exclude='core*' --exclude='*.bak' -czf "\${SNAPSHOT_FILE}" -C "\${APP_DIR}/server" \$(cd "\${APP_DIR}/server" && ls -1 *.json uploads wa_sessions 2>/dev/null || true)
 echo "✅ Live recovery archive secured."
 
-# 2. Revert Code Files Cleanly to Baseline Commit (Leaving server/*.json 100% untouched)
-echo "🔄 Reverting code files to baseline commit \${BASELINE_COMMIT}..."
+# 2. Complete Code & File Rollback to Baseline Commit
+echo "🔄 Executing complete rollback of code files to baseline commit \${BASELINE_COMMIT}..."
 cd "\${APP_DIR}"
-git checkout "\${BASELINE_COMMIT}" -- server/*.js server/migrations src package.json
-[ -f "\${APP_DIR}/vite.config.js" ] && git checkout "\${BASELINE_COMMIT}" -- vite.config.js 2>/dev/null || true
-[ -f "\${APP_DIR}/index.html" ] && git checkout "\${BASELINE_COMMIT}" -- index.html 2>/dev/null || true
+
+ROLLBACK_CHANGES_RAW=\$(git diff-tree -r --name-status HEAD "\${BASELINE_COMMIT}")
+
+ROLLBACK_CODE_PATHS=()
+while IFS= read -r line; do
+  [ -z "\${line}" ] && continue
+  status=\$(echo "\${line}" | awk '{print \$1}')
+  filepath=\$(echo "\${line}" | awk '{print \$2}')
+  
+  # STRICT DATA & RUNTIME PROTECTION: Never touch active JSON stores, uploads, sessions, .env, core dumps
+  if [[ "\${filepath}" =~ ^server/.*\.json\$ ]] || \
+     [[ "\${filepath}" =~ ^server/uploads/ ]] || \
+     [[ "\${filepath}" =~ ^server/wa_sessions/ ]] || \
+     [[ "\${filepath}" =~ ^core ]] || \
+     [[ "\${filepath}" =~ \.bak\$ ]] || \
+     [[ "\${filepath}" =~ \.dump\$ ]] || \
+     [ "\${filepath}" = ".env" ]; then
+    continue
+  fi
+  
+  ROLLBACK_CODE_PATHS+=("\${filepath}")
+  
+  if [ "\${status}" = "D" ]; then
+    # File introduced in release that did NOT exist in baseline (e.g. server/memoryDiagnostics.js)
+    if [ -f "\${APP_DIR}/\${filepath}" ]; then
+      echo "   - Removing newly introduced release file: \${filepath}"
+      rm -f "\${APP_DIR}/\${filepath}"
+    fi
+  else
+    # File modified or existed in baseline: check out from baseline
+    git checkout "\${BASELINE_COMMIT}" -- "\${filepath}"
+  fi
+done <<< "\${ROLLBACK_CHANGES_RAW}"
+
+# Advance Git ref back to baseline
 git update-ref "refs/heads/\${BASELINE_BRANCH}" "\${BASELINE_COMMIT}"
 git symbolic-ref HEAD "refs/heads/\${BASELINE_BRANCH}"
 
-# Re-synchronize Git index to baseline without touching active JSON business stores
-CODE_ROLLBACK_PATHS=()
-for path_entry in "server" "src" "package.json" "vite.config.js" "index.html" "dist" "assets" "scripts"; do
-  if git ls-tree --name-only "\${BASELINE_COMMIT}" "\${path_entry}" 2>/dev/null | grep -q .; then
-    if [ "\${path_entry}" = "server" ]; then
-      while IFS= read -r server_file; do
-        [ -z "\${server_file}" ] && continue
-        if [[ "\${server_file}" =~ \.js$ ]] || [[ "\${server_file}" =~ ^server/migrations/ ]]; then
-          CODE_ROLLBACK_PATHS+=("\${server_file}")
-        fi
-      done < <(git ls-tree -r --name-only "\${BASELINE_COMMIT}" server/)
-    else
-      CODE_ROLLBACK_PATHS+=("\${path_entry}")
+if [ \${#ROLLBACK_CODE_PATHS[@]} -gt 0 ]; then
+  git reset "\${BASELINE_COMMIT}" -- "\${ROLLBACK_CODE_PATHS[@]}"
+fi
+
+# Verify consistency of all changed files
+echo "🔍 Verifying complete code rollback consistency..."
+while IFS= read -r line; do
+  [ -z "\${line}" ] && continue
+  status=\$(echo "\${line}" | awk '{print \$1}')
+  filepath=\$(echo "\${line}" | awk '{print \$2}')
+
+  if [[ "\${filepath}" =~ ^server/.*\.json\$ ]] || \
+     [[ "\${filepath}" =~ ^server/uploads/ ]] || \
+     [[ "\${filepath}" =~ ^server/wa_sessions/ ]] || \
+     [[ "\${filepath}" =~ ^core ]] || \
+     [[ "\${filepath}" =~ \.bak\$ ]] || \
+     [[ "\${filepath}" =~ \.dump\$ ]] || \
+     [ "\${filepath}" = ".env" ]; then
+    continue
+  fi
+
+  if [ "\${status}" = "D" ]; then
+    if [ -e "\${APP_DIR}/\${filepath}" ]; then
+      echo "❌ CRITICAL: Rolled-back release file still exists: \${filepath}"
+      exit 1
+    fi
+  else
+    if ! git diff --quiet "\${BASELINE_COMMIT}" -- "\${filepath}"; then
+      echo "❌ CRITICAL: Rolled-back file differs from baseline: \${filepath}"
+      exit 1
+    fi
+    if ! git diff --quiet --cached "\${BASELINE_COMMIT}" -- "\${filepath}"; then
+      echo "❌ CRITICAL: Git index differs from baseline for: \${filepath}"
+      exit 1
     fi
   fi
-done
+done <<< "\${ROLLBACK_CHANGES_RAW}"
 
-if [ \${#CODE_ROLLBACK_PATHS[@]} -gt 0 ]; then
-  git reset "\${BASELINE_COMMIT}" -- "\${CODE_ROLLBACK_PATHS[@]}"
-fi
-echo "✅ Code files and Git index reverted to baseline. Live JSON transactional stores were NOT touched."
+echo "✅ Code files and Git index reverted 100% to baseline \${BASELINE_COMMIT}."
 
 # 3. Atomic Frontend Asset Restoration
 if [ -d "\${EXACT_RECOVERY_DIR}/dist_frontend" ]; then
@@ -673,27 +734,27 @@ if [ ! -f "${UNIQUE_MIGRATION_FILE}" ]; then
 fi
 
 echo "🛡️ [1/2] Auditing and applying lead inactivity unique constraint..."
-# Pre-migration duplicate check
-MIGRATION_DUPS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+# Pre-migration duplicate check (Fail-Closed)
+MIGRATION_DUPS=$(run_psql_query "
   SELECT count(*) FROM (
     SELECT 1 FROM public.lead_inactivity_incidents
     GROUP BY lead_id, incident_type, salesperson_id, assigned_at
     HAVING count(*) > 1
   ) dups;
-" 2>/dev/null || echo 0)
-if [ "${MIGRATION_DUPS}" -gt 0 ]; then
+")
+if [ "${MIGRATION_DUPS}" -ne 0 ]; then
   echo "❌ CRITICAL: Duplicate records detected in public.lead_inactivity_incidents (${MIGRATION_DUPS})! Aborting migration."
   rm -rf "${STAGED_RELEASE_DIR}"
   exit 1
 fi
 
-# Check for any invalid existing index (e.g. from a prior interrupted build)
-INVALID_UNIQUE_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+# Check for any invalid existing index (Fail-Closed)
+INVALID_UNIQUE_IDX=$(run_psql_query "
   SELECT count(*) FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   JOIN pg_index i ON i.indexrelid = c.oid
   WHERE n.nspname = 'public' AND c.relname = 'idx_lead_inactivity_unique_incident' AND i.indisvalid = false;
-" 2>/dev/null || echo 0)
+")
 if [ "${INVALID_UNIQUE_IDX}" -gt 0 ]; then
   echo "⚠️ Detected invalid pre-existing index idx_lead_inactivity_unique_incident. Dropping concurrently..."
   sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -c "DROP INDEX CONCURRENTLY IF EXISTS public.idx_lead_inactivity_unique_incident;"
@@ -703,13 +764,13 @@ fi
 echo "   - Executing ${UNIQUE_MIGRATION_FILE}..."
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -f "${UNIQUE_MIGRATION_FILE}"
 
-# Post-migration index validity check
-UNIQUE_IDX_STATUS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+# Post-migration index validity check (Fail-Closed)
+UNIQUE_IDX_STATUS=$(run_psql_query "
   SELECT i.indisvalid || '|' || i.indisunique FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   JOIN pg_index i ON i.indexrelid = c.oid
   WHERE n.nspname = 'public' AND c.relname = 'idx_lead_inactivity_unique_incident';
-" 2>/dev/null || echo "false|false")
+")
 
 if [ "${UNIQUE_IDX_STATUS}" != "t|t" ]; then
   echo "❌ CRITICAL: Index idx_lead_inactivity_unique_incident is missing, invalid, or non-unique in PostgreSQL! (Status: ${UNIQUE_IDX_STATUS})"
@@ -729,28 +790,39 @@ fi
 echo "🛡️ [2/2] Applying performance optimization indexes..."
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -f "${PERF_MIGRATION_FILE}"
 
-INDEX_CHECK=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+INDEX_CHECK=$(run_psql_query "
   SELECT count(*) FROM pg_indexes 
   WHERE tablename IN ('bom_orders', 'leads') 
   AND indexname IN ('idx_bom_orders_created_at', 'idx_leads_created_at');
-" 2>/dev/null || echo 0)
+")
 if [ "${INDEX_CHECK}" -ne 2 ]; then
   echo "❌ CRITICAL: Performance indexes verification failed! Expected 2 indexes, found ${INDEX_CHECK}."
   rm -rf "${STAGED_RELEASE_DIR}"
   exit 1
 fi
-echo "✅ PostgreSQL performance indexes verified (idx_bom_orders_created_at, idx_leads_created_at)."
+
+VALID_PERF_INDEXES=$(run_psql_query "
+  SELECT count(*) FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_index i ON i.indexrelid = c.oid
+  WHERE n.nspname = 'public' 
+    AND c.relname IN ('idx_bom_orders_created_at', 'idx_leads_created_at')
+    AND i.indisvalid = true;
+")
+if [ "${VALID_PERF_INDEXES}" -ne 2 ]; then
+  echo "❌ CRITICAL: Performance indexes are not valid in pg_index! (Valid found: ${VALID_PERF_INDEXES})"
+  rm -rf "${STAGED_RELEASE_DIR}"
+  exit 1
+fi
+echo "✅ PostgreSQL performance indexes verified (valid=true, count=2)."
 
 # ------------------------------------------------------------------------------
-# STEP 6: CUTOVER CODE & GRACEFUL PM2 SERVICE RELOAD
+# STEP 6: CONTROLLED IN-PLACE CODE SYNCHRONIZATION & PM2 RELOAD
 # (Transactional data in server/*.json and PostgreSQL is preserved untouched)
 # ------------------------------------------------------------------------------
 DEPLOY_PHASE="BUILD"
 echo ""
-echo "=== [Step 6] Cutover Code & Graceful PM2 Service Reload ==="
-
-# 6.1 Safe, Non-Destructive Versioned Release Synchronization (Zero deletions of untracked files or runtime data)
-echo "Deploying verified release codebase into ${APP_DIR}..."
+echo "=== [Step 6] Controlled In-Place Code Synchronization & PM2 Reload ==="
 
 # Pre-cutover verification of untracked runtime artifacts
 PRE_CHECK_CORE=false
@@ -762,29 +834,57 @@ PRE_CHECK_BOM_BAK=false
 PRE_CHECK_PI_BAK=false
 [ -f "${APP_DIR}/server/sales_pi_store.json.bak" ] && PRE_CHECK_PI_BAK=true
 
-# Copy server code files and migrations strictly (excluding all JSON data stores)
-cp -p "${VERSIONED_RELEASE_DIR}"/server/*.js "${APP_DIR}/server/"
-mkdir -p "${APP_DIR}/server/migrations"
-cp -p "${VERSIONED_RELEASE_DIR}"/server/migrations/*.sql "${APP_DIR}/server/migrations/"
+# 6.1 Complete File Synchronization (Accounting for added, modified, and obsolete files)
+echo "Executing complete in-place code synchronization into ${APP_DIR}..."
+cd "${APP_DIR}"
+CHANGED_FILES_RAW=$(git diff-tree -r --name-status "${APPROVED_BASELINE_COMMIT}" "${TARGET_RELEASE_COMMIT}")
 
-# Synchronize frontend source files without deleting any external or runtime files
-rsync -a "${VERSIONED_RELEASE_DIR}/src/" "${APP_DIR}/src/"
-cp -p "${VERSIONED_RELEASE_DIR}/package.json" "${APP_DIR}/package.json"
-cp -p "${VERSIONED_RELEASE_DIR}/vite.config.js" "${APP_DIR}/vite.config.js" 2>/dev/null || true
-cp -p "${VERSIONED_RELEASE_DIR}/index.html" "${APP_DIR}/index.html" 2>/dev/null || true
+DEPLOYED_CODE_PATHS=()
+while IFS= read -r line; do
+  [ -z "${line}" ] && continue
+  status=$(echo "${line}" | awk '{print $1}')
+  filepath=$(echo "${line}" | awk '{print $2}')
+
+  # STRICT DATA & RUNTIME PROTECTION
+  # Never touch or overwrite JSON data stores, uploads, wa_sessions, core dumps, backups, or .env
+  if [[ "${filepath}" =~ ^server/.*\.json$ ]] || \
+     [[ "${filepath}" =~ ^server/uploads/ ]] || \
+     [[ "${filepath}" =~ ^server/wa_sessions/ ]] || \
+     [[ "${filepath}" =~ ^core ]] || \
+     [[ "${filepath}" =~ \.bak$ ]] || \
+     [[ "${filepath}" =~ \.dump$ ]] || \
+     [ "${filepath}" = ".env" ]; then
+    continue
+  fi
+
+  DEPLOYED_CODE_PATHS+=("${filepath}")
+
+  if [ "${status}" = "D" ]; then
+    # Obsolete file removed in target release
+    if [ -f "${APP_DIR}/${filepath}" ]; then
+      echo "   - Removing obsolete release file: ${filepath}"
+      rm -f "${APP_DIR}/${filepath}"
+    fi
+  else
+    # Added or Modified file
+    src_file="${STAGED_RELEASE_DIR}/${filepath}"
+    dst_file="${APP_DIR}/${filepath}"
+    if [ -f "${src_file}" ]; then
+      mkdir -p "$(dirname "${dst_file}")"
+      cp -p "${src_file}" "${dst_file}"
+    fi
+  fi
+done <<< "${CHANGED_FILES_RAW}"
 
 # Deploy frontend distribution assets cleanly with backward-compatible chunk retention
 mkdir -p "${APP_DIR}/dist/assets" "${APP_DIR}/assets"
-cp -p "${VERSIONED_RELEASE_DIR}"/dist/assets/* "${APP_DIR}/dist/assets/"
-cp -p "${VERSIONED_RELEASE_DIR}"/dist/assets/* "${APP_DIR}/assets/" 2>/dev/null || true
+cp -p "${STAGED_RELEASE_DIR}"/dist/assets/* "${APP_DIR}/dist/assets/" 2>/dev/null || true
+cp -p "${STAGED_RELEASE_DIR}"/dist/assets/* "${APP_DIR}/assets/" 2>/dev/null || true
 if [ -d "${EXACT_RECOVERY_DIR}/dist_frontend/assets" ]; then
   cp -rn "${EXACT_RECOVERY_DIR}/dist_frontend/assets"/* "${APP_DIR}/dist/assets/" 2>/dev/null || true
   cp -rn "${EXACT_RECOVERY_DIR}/dist_frontend/assets"/* "${APP_DIR}/assets/" 2>/dev/null || true
 fi
-cp -p "${VERSIONED_RELEASE_DIR}/dist/index.html" "${APP_DIR}/dist/index.html"
-
-# Maintain immutable active release pointer
-ln -sfn "${VERSIONED_RELEASE_DIR}" "${RELEASES_BASE}/current"
+cp -p "${STAGED_RELEASE_DIR}/dist/index.html" "${APP_DIR}/dist/index.html"
 
 # Verify 100% preservation of all untracked artifacts and runtime files
 if [ "${PRE_CHECK_CORE}" = "true" ] && [ ! -f "${APP_DIR}/core.2440327" ]; then
@@ -805,34 +905,52 @@ if [ "${PRE_CHECK_PI_BAK}" = "true" ] && [ ! -f "${APP_DIR}/server/sales_pi_stor
 fi
 echo "✅ Complete codebase deployed. 100% of untracked files, backups, and live JSON transactional stores verified intact."
 
-# 6.2 Advance Git Reference in APP_DIR cleanly (without touching working tree JSON files)
+# 6.2 Advance Git Reference and synchronize index for deployed code files
 cd "${APP_DIR}"
 git update-ref "refs/heads/${APPROVED_BASELINE_BRANCH}" "${TARGET_RELEASE_COMMIT}"
 git symbolic-ref HEAD "refs/heads/${APPROVED_BASELINE_BRANCH}"
 
-# Synchronize Git index for deployed code files (strictly excluding active JSON business stores, uploads, wa_sessions)
-CODE_SYNC_PATHS=()
-for path_entry in "server" "src" "package.json" "vite.config.js" "index.html" "dist" "assets" "scripts"; do
-  if git ls-tree --name-only "${TARGET_RELEASE_COMMIT}" "${path_entry}" 2>/dev/null | grep -q .; then
-    if [ "${path_entry}" = "server" ]; then
-      while IFS= read -r server_file; do
-        [ -z "${server_file}" ] && continue
-        if [[ "${server_file}" =~ \.js$ ]] || [[ "${server_file}" =~ ^server/migrations/ ]]; then
-          CODE_SYNC_PATHS+=("${server_file}")
-        fi
-      done < <(git ls-tree -r --name-only "${TARGET_RELEASE_COMMIT}" server/)
-    else
-      CODE_SYNC_PATHS+=("${path_entry}")
-    fi
-  fi
-done
-
-if [ ${#CODE_SYNC_PATHS[@]} -gt 0 ]; then
-  git reset "${TARGET_RELEASE_COMMIT}" -- "${CODE_SYNC_PATHS[@]}"
+if [ ${#DEPLOYED_CODE_PATHS[@]} -gt 0 ]; then
+  git reset "${TARGET_RELEASE_COMMIT}" -- "${DEPLOYED_CODE_PATHS[@]}"
 fi
 echo "✅ Production Git reference and code index advanced to ${TARGET_RELEASE_COMMIT}."
 
-# 6.3 Graceful PM2 Reload
+# 6.3 Verify complete code deployment and Git metadata consistency
+echo "🔍 Verifying Git commit, index, and deployed code consistency across all release files..."
+while IFS= read -r line; do
+  [ -z "${line}" ] && continue
+  status=$(echo "${line}" | awk '{print $1}')
+  filepath=$(echo "${line}" | awk '{print $2}')
+
+  if [[ "${filepath}" =~ ^server/.*\.json$ ]] || \
+     [[ "${filepath}" =~ ^server/uploads/ ]] || \
+     [[ "${filepath}" =~ ^server/wa_sessions/ ]] || \
+     [[ "${filepath}" =~ ^core ]] || \
+     [[ "${filepath}" =~ \.bak$ ]] || \
+     [[ "${filepath}" =~ \.dump$ ]] || \
+     [ "${filepath}" = ".env" ]; then
+    continue
+  fi
+
+  if [ "${status}" = "D" ]; then
+    if [ -e "${APP_DIR}/${filepath}" ]; then
+      echo "❌ CRITICAL: Obsolete file still exists after deployment: ${filepath}"
+      exit 1
+    fi
+  else
+    if ! git diff --quiet "${TARGET_RELEASE_COMMIT}" -- "${filepath}"; then
+      echo "❌ CRITICAL: Deployed file differs from target release commit: ${filepath}"
+      exit 1
+    fi
+    if ! git diff --quiet --cached "${TARGET_RELEASE_COMMIT}" -- "${filepath}"; then
+      echo "❌ CRITICAL: Git index differs from target release commit for: ${filepath}"
+      exit 1
+    fi
+  fi
+done <<< "${CHANGED_FILES_RAW}"
+echo "✅ Verified 100% consistency across all ${#DEPLOYED_CODE_PATHS[@]} release code files, Git index, and commit."
+
+# 6.4 Graceful PM2 Reload (with restart fallback)
 echo "Reloading PM2 service '${PM2_TARGET}'..."
 if ! pm2 reload "${PM2_TARGET}" --update-env; then
   echo "⚠️ PM2 reload failed! Attempting restart..."
@@ -863,6 +981,34 @@ DEPLOY_PHASE="POST_VERIFY"
 echo ""
 echo "=== [Step 7] Comprehensive Smoke Tests & Business API Verification ==="
 
+probe_endpoint() {
+  local name="$1"
+  local url="$2"
+  local expected_code="$3"
+  local auth_header="${4:-}"
+  
+  local response_file
+  response_file=$(mktemp)
+  local http_code
+  if [ -n "${auth_header}" ]; then
+    http_code=$(curl -s -w "%{http_code}" -H "${auth_header}" -o "${response_file}" "${url}" || echo "000")
+  else
+    http_code=$(curl -s -w "%{http_code}" -o "${response_file}" "${url}" || echo "000")
+  fi
+
+  if [ "${http_code}" != "${expected_code}" ]; then
+    echo "❌ CRITICAL: Smoke test failed for ${name}!"
+    echo "   URL:           ${url}"
+    echo "   Expected HTTP: ${expected_code}"
+    echo "   Received HTTP: ${http_code}"
+    echo "   Response:      $(head -c 200 "${response_file}")"
+    rm -f "${response_file}"
+    exit 1
+  fi
+  echo "   ✓ [${name}] HTTP ${http_code} confirmed (matches expected ${expected_code})."
+  rm -f "${response_file}"
+}
+
 # 7.1 Backend Database Pool & Health Verification
 DB_HEALTH_JSON=$(curl -s "http://127.0.0.1:${PORT}/api/db-status" || echo "{}")
 DB_CONNECTED=$(echo "${DB_HEALTH_JSON}" | jq -r '.connected // false')
@@ -881,75 +1027,43 @@ if [ "${HTTPS_CODE}" != "200" ]; then
 fi
 echo "✅ Public HTTPS domain (${PUBLIC_URL}) returned HTTP 200 OK."
 
-# 7.3 Security Authorization Probes (Confirm 401 is security PASS, not failure)
-echo "Executing security authorization probes..."
-NOTIF_AUTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PORT}/api/crm/leads/notifications")
-if [ "${NOTIF_AUTH_CODE}" != "401" ]; then
-  echo "❌ CRITICAL SECURITY FLAW: /api/crm/leads/notifications allowed unauthenticated access! Code: ${NOTIF_AUTH_CODE}"
-  exit 1
-fi
-echo "   ✓ [Security] /api/crm/leads/notifications strictly enforced HTTP 401 Unauthorized."
-
-STORE_NOTIF_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PORT}/api/store/notifications_store")
-if [ "${STORE_NOTIF_CODE}" != "401" ]; then
-  echo "❌ CRITICAL SECURITY FLAW: /api/store/notifications_store allowed unauthenticated access! Code: ${STORE_NOTIF_CODE}"
-  exit 1
-fi
-echo "   ✓ [Security] /api/store/notifications_store strictly enforced HTTP 401 Unauthorized."
-
-# 7.4 Genuine Authenticated Session Probe (No arbitrary session creation)
-AUTHENTICATED_SMOKE_STATUS="NOT VERIFIED"
-AUTHENTICATED_SMOKE_NOTE="Pre-authenticated test session (BUSINZ_SMOKE_SESSION_ID) not provided"
-GENUINE_SESSION_ID="${BUSINZ_SMOKE_SESSION_ID:-}"
-
-if [ -n "${GENUINE_SESSION_ID}" ]; then
-  echo "Probing authenticated endpoint with provided session..."
-  AUTH_NOTIF_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "x-session-id: ${GENUINE_SESSION_ID}" "http://127.0.0.1:${PORT}/api/crm/leads/notifications")
-  if [ "${AUTH_NOTIF_CODE}" = "200" ]; then
-    AUTHENTICATED_SMOKE_STATUS="PASS"
-    AUTHENTICATED_SMOKE_NOTE="Verified genuine authorized test session (HTTP 200)"
-    echo "   ✓ [Authenticated Session] Verified genuine authorized test session (HTTP 200)."
-  else
-    AUTHENTICATED_SMOKE_STATUS="FAILED"
-    AUTHENTICATED_SMOKE_NOTE="Provided session returned HTTP ${AUTH_NOTIF_CODE}"
-    echo "❌ CRITICAL: Authenticated probe with provided session failed (HTTP ${AUTH_NOTIF_CODE})!"
-    exit 1
-  fi
-else
-  AUTHENTICATED_SMOKE_STATUS="NOT VERIFIED"
-  AUTHENTICATED_SMOKE_NOTE="Pre-authenticated test session (BUSINZ_SMOKE_SESSION_ID) not provided; skipped without fabricating credentials"
-  echo "   ⚠️ [Authenticated Session] NOT VERIFIED: Pre-authenticated test session (BUSINZ_SMOKE_SESSION_ID) not provided. Skipped without fabricating credentials."
-fi
-
-# 7.5 Frontend Static Bundle Delivery Probe
+# 7.3 Frontend Static Bundle Delivery Probe
 FRONTEND_INDEX_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PORT}/")
 if [ "${FRONTEND_INDEX_CODE}" != "200" ]; then
   echo "❌ CRITICAL: Local frontend index delivery probe failed! HTTP Code: ${FRONTEND_INDEX_CODE}"
   exit 1
 fi
-echo "   ✓ [Frontend Delivery] Root index.html successfully served by Node/Express (HTTP 200)."
+echo "✅ Local frontend index.html successfully served (HTTP 200 OK)."
 
-# 7.6 Core Business Workflow Probes (Read-Only)
-probe_endpoint() {
-  local name="$1"
-  local url="$2"
-  local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" "${url}")
-  if [ "${code}" != "200" ]; then
-    echo "❌ CRITICAL: Module smoke test failed for ${name}! (URL: ${url}, HTTP Code: ${code})"
-    exit 1
-  fi
-  echo "   ✓ [${name}] HTTP 200 confirmed."
-}
+# 7.4 Security Authorization Probes (Confirm 401 is security PASS, not failure)
+echo "Executing security authorization probes..."
+probe_endpoint "Lead Notifications Auth Guard"  "http://127.0.0.1:${PORT}/api/crm/leads/notifications" 401
+probe_endpoint "Store Notifications Auth Guard" "http://127.0.0.1:${PORT}/api/store/notifications_store" 401
+probe_endpoint "Diagnostics Auth Guard"         "http://127.0.0.1:${PORT}/api/system/diagnostics/memory" 401
 
+# 7.5 Core Business Workflow Read-Only Probes
 echo "Probing core business workflows (read-only)..."
-probe_endpoint "CRM Leads"          "http://127.0.0.1:${PORT}/api/crm/leads?limit=1"
-probe_endpoint "CRM Customers"      "http://127.0.0.1:${PORT}/api/customers?limit=1"
-probe_endpoint "PI Flow (Sales)"    "http://127.0.0.1:${PORT}/api/store/sales_pi_store"
-probe_endpoint "BOM Flow"           "http://127.0.0.1:${PORT}/api/boms?limit=1"
-probe_endpoint "Inventory Flow"     "http://127.0.0.1:${PORT}/api/raw-materials?limit=1"
-probe_endpoint "Dispatch (DC)"      "http://127.0.0.1:${PORT}/api/store/dc_store"
-probe_endpoint "Accounts (Invoices)" "http://127.0.0.1:${PORT}/api/invoices?limit=1"
+probe_endpoint "CRM Leads API"         "http://127.0.0.1:${PORT}/api/crm/leads?limit=1" 200
+probe_endpoint "CRM Customers API"     "http://127.0.0.1:${PORT}/api/customers?limit=1" 200
+probe_endpoint "PI Flow (Sales)"       "http://127.0.0.1:${PORT}/api/store/sales_pi_store" 200
+probe_endpoint "BOM Flow"              "http://127.0.0.1:${PORT}/api/boms?limit=1" 200
+probe_endpoint "Inventory Flow"        "http://127.0.0.1:${PORT}/api/raw-materials?limit=1" 200
+probe_endpoint "Dispatch (DC)"         "http://127.0.0.1:${PORT}/api/store/dc_store" 200
+probe_endpoint "Accounts (Invoices)"   "http://127.0.0.1:${PORT}/api/invoices?limit=1" 200
+
+# 7.6 Genuine Authenticated Session Probe (Optional)
+AUTHENTICATED_SMOKE_STATUS="NOT VERIFIED"
+AUTHENTICATED_SMOKE_NOTE="Pre-authenticated test session (BUSINZ_SMOKE_SESSION_ID) not provided; skipped without fabricating credentials"
+GENUINE_SESSION_ID="${BUSINZ_SMOKE_SESSION_ID:-}"
+
+if [ -n "${GENUINE_SESSION_ID}" ]; then
+  echo "Probing authenticated endpoint with provided session..."
+  probe_endpoint "Authenticated Lead Notifications" "http://127.0.0.1:${PORT}/api/crm/leads/notifications" 200 "x-session-id: ${GENUINE_SESSION_ID}"
+  AUTHENTICATED_SMOKE_STATUS="PASS"
+  AUTHENTICATED_SMOKE_NOTE="Verified genuine authorized test session (HTTP 200)"
+else
+  echo "   ⚠️ [Authenticated Session] NOT VERIFIED: Pre-authenticated test session (BUSINZ_SMOKE_SESSION_ID) not provided. Skipped without fabricating credentials."
+fi
 
 # --- STEP 8: WRITE FINAL AUDIT REPORT & CONFIRM SUCCESS ---
 DEPLOY_PHASE="REPORTING"

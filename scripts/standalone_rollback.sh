@@ -25,7 +25,13 @@ LATEST_MANIFEST=""
 if [ -z "${EXACT_RECOVERY_DIR}" ]; then
   LATEST_MANIFEST=$(ls -t "${BACKUP_BASE}"/deployment_manifest_*.json 2>/dev/null | head -1 || true)
   if [ -s "${LATEST_MANIFEST}" ]; then
-    EXACT_RECOVERY_DIR=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).recovery_dir);" "${LATEST_MANIFEST}")
+    EXACT_RECOVERY_DIR=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).recovery_dir);" "${LATEST_MANIFEST}" 2>/dev/null || true)
+  fi
+  # Fallback to existing verified production recovery directory
+  if [ -z "${EXACT_RECOVERY_DIR}" ] || [ ! -d "${EXACT_RECOVERY_DIR}" ]; then
+    if [ -d "${BACKUP_BASE}/predeploy_20261027_112307" ]; then
+      EXACT_RECOVERY_DIR="${BACKUP_BASE}/predeploy_20261027_112307"
+    fi
   fi
 fi
 
@@ -48,36 +54,86 @@ echo "🛡️ Securing point-in-time recovery archive of live transaction state 
 tar --exclude='core*' --exclude='*.bak' -czf "${SNAPSHOT_FILE}" -C "${APP_DIR}/server" $(cd "${APP_DIR}/server" && ls -1 *.json uploads wa_sessions 2>/dev/null || true)
 echo "✅ Live recovery archive secured."
 
-# 2. Revert Code Files Cleanly to Baseline Commit (Leaving server/*.json 100% untouched)
-echo "🔄 Reverting code files to baseline commit ${BASELINE_COMMIT}..."
+# 2. Complete Code & File Rollback to Baseline Commit
+echo "🔄 Executing complete rollback of code files to baseline commit ${BASELINE_COMMIT}..."
 cd "${APP_DIR}"
-git checkout "${BASELINE_COMMIT}" -- server/*.js server/migrations src package.json
-[ -f "${APP_DIR}/vite.config.js" ] && git checkout "${BASELINE_COMMIT}" -- vite.config.js 2>/dev/null || true
-[ -f "${APP_DIR}/index.html" ] && git checkout "${BASELINE_COMMIT}" -- index.html 2>/dev/null || true
+
+ROLLBACK_CHANGES_RAW=$(git diff-tree -r --name-status HEAD "${BASELINE_COMMIT}")
+
+ROLLBACK_CODE_PATHS=()
+while IFS= read -r line; do
+  [ -z "${line}" ] && continue
+  status=$(echo "${line}" | awk '{print $1}')
+  filepath=$(echo "${line}" | awk '{print $2}')
+  
+  # STRICT DATA & RUNTIME PROTECTION: Never touch active JSON stores, uploads, sessions, .env, core dumps
+  if [[ "${filepath}" =~ ^server/.*\.json$ ]] || \
+     [[ "${filepath}" =~ ^server/uploads/ ]] || \
+     [[ "${filepath}" =~ ^server/wa_sessions/ ]] || \
+     [[ "${filepath}" =~ ^core ]] || \
+     [[ "${filepath}" =~ \.bak$ ]] || \
+     [[ "${filepath}" =~ \.dump$ ]] || \
+     [ "${filepath}" = ".env" ]; then
+    continue
+  fi
+  
+  ROLLBACK_CODE_PATHS+=("${filepath}")
+  
+  if [ "${status}" = "D" ]; then
+    # File introduced in release that did NOT exist in baseline (e.g. server/memoryDiagnostics.js)
+    if [ -f "${APP_DIR}/${filepath}" ]; then
+      echo "   - Removing newly introduced release file: ${filepath}"
+      rm -f "${APP_DIR}/${filepath}"
+    fi
+  else
+    # File modified or existed in baseline: check out from baseline
+    git checkout "${BASELINE_COMMIT}" -- "${filepath}"
+  fi
+done <<< "${ROLLBACK_CHANGES_RAW}"
+
+# Advance Git ref back to baseline
 git update-ref "refs/heads/${BASELINE_BRANCH}" "${BASELINE_COMMIT}"
 git symbolic-ref HEAD "refs/heads/${BASELINE_BRANCH}"
 
-# Re-synchronize Git index to baseline without touching active JSON business stores
-CODE_ROLLBACK_PATHS=()
-for path_entry in "server" "src" "package.json" "vite.config.js" "index.html" "dist" "assets" "scripts"; do
-  if git ls-tree --name-only "${BASELINE_COMMIT}" "${path_entry}" 2>/dev/null | grep -q .; then
-    if [ "${path_entry}" = "server" ]; then
-      while IFS= read -r server_file; do
-        [ -z "${server_file}" ] && continue
-        if [[ "${server_file}" =~ \.js$ ]] || [[ "${server_file}" =~ ^server/migrations/ ]]; then
-          CODE_ROLLBACK_PATHS+=("${server_file}")
-        fi
-      done < <(git ls-tree -r --name-only "${BASELINE_COMMIT}" server/)
-    else
-      CODE_ROLLBACK_PATHS+=("${path_entry}")
+if [ ${#ROLLBACK_CODE_PATHS[@]} -gt 0 ]; then
+  git reset "${BASELINE_COMMIT}" -- "${ROLLBACK_CODE_PATHS[@]}"
+fi
+
+# Verify consistency of all changed files
+echo "🔍 Verifying complete code rollback consistency..."
+while IFS= read -r line; do
+  [ -z "${line}" ] && continue
+  status=$(echo "${line}" | awk '{print $1}')
+  filepath=$(echo "${line}" | awk '{print $2}')
+
+  if [[ "${filepath}" =~ ^server/.*\.json$ ]] || \
+     [[ "${filepath}" =~ ^server/uploads/ ]] || \
+     [[ "${filepath}" =~ ^server/wa_sessions/ ]] || \
+     [[ "${filepath}" =~ ^core ]] || \
+     [[ "${filepath}" =~ \.bak$ ]] || \
+     [[ "${filepath}" =~ \.dump$ ]] || \
+     [ "${filepath}" = ".env" ]; then
+    continue
+  fi
+
+  if [ "${status}" = "D" ]; then
+    if [ -e "${APP_DIR}/${filepath}" ]; then
+      echo "❌ CRITICAL: Rolled-back release file still exists: ${filepath}"
+      exit 1
+    fi
+  else
+    if ! git diff --quiet "${BASELINE_COMMIT}" -- "${filepath}"; then
+      echo "❌ CRITICAL: Rolled-back file differs from baseline: ${filepath}"
+      exit 1
+    fi
+    if ! git diff --quiet --cached "${BASELINE_COMMIT}" -- "${filepath}"; then
+      echo "❌ CRITICAL: Git index differs from baseline for: ${filepath}"
+      exit 1
     fi
   fi
-done
+done <<< "${ROLLBACK_CHANGES_RAW}"
 
-if [ ${#CODE_ROLLBACK_PATHS[@]} -gt 0 ]; then
-  git reset "${BASELINE_COMMIT}" -- "${CODE_ROLLBACK_PATHS[@]}"
-fi
-echo "✅ Code files and Git index reverted to baseline. Live JSON transactional stores were NOT touched."
+echo "✅ Code files and Git index reverted 100% to baseline ${BASELINE_COMMIT}."
 
 # Verify untracked runtime artifacts are intact
 for protected_file in \
@@ -147,7 +203,7 @@ fi
 #   psql -d businz -f server/migrations/20261027_lead_inactivity_unique_constraint_rollback.sql
 echo "   - Preserving backward-compatible index: idx_lead_inactivity_unique_incident"
 echo "   - Preserving 100% of incident and notification records."
-echo "✅ Database indexes reconciled. Table data and rows remain 100% untouched."
+echo "✅ Database indexes reconciled. Live table data and rows remain 100% untouched."
 
 # 5. Reload PM2 Process 'businz'
 echo "🔄 Reloading PM2 process 'businz'..."
@@ -159,10 +215,13 @@ sleep 3
 
 # 6. Verify Health Post-Rollback
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/db-status || echo "000")
-if [ "${HEALTH}" = "200" ]; then
-  echo "🎉 ROLLBACK SUCCESSFUL: Application restored to baseline ${BASELINE_COMMIT} and confirmed healthy (HTTP 200)."
-  echo "🛡️ Live transactional data was 100% preserved without overwrite."
+FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/ || echo "000")
+NOTIFICATIONS_AUTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/crm/leads/notifications || echo "000")
+
+if [ "${HEALTH}" = "200" ] && [ "${FRONTEND}" = "200" ] && [ "${NOTIFICATIONS_AUTH}" = "401" ]; then
+  echo "🎉 ROLLBACK SUCCESSFUL: Application restored to baseline ${BASELINE_COMMIT} and confirmed healthy (DB: HTTP 200, UI: HTTP 200, Auth Guard: HTTP 401)."
+  echo "🛡️ Live transactional data and database records were 100% preserved without overwrite."
 else
-  echo "🚨 CRITICAL: Application health check returned HTTP ${HEALTH} after rollback!"
+  echo "🚨 CRITICAL: Application health check failed after rollback! (DB: HTTP ${HEALTH}, UI: HTTP ${FRONTEND}, Auth: HTTP ${NOTIFICATIONS_AUTH})"
   exit 1
 fi
