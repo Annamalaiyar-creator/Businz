@@ -74,7 +74,9 @@ import {
   getWaSessionsDir,
   getDataDir,
   isExternalStorageActive,
-  initRuntimeStorage
+  initRuntimeStorage,
+  getMaintenanceFlagPath,
+  isMaintenanceModeActive
 } from './runtimePaths.js';
 import {
   getLeads as getDbLeads,
@@ -1688,12 +1690,16 @@ app.use(cors({
 app.use(express.json({ limit: '150mb' }));
 app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
-// 🔒 CONTROLLED MAINTENANCE WINDOW: WRITE-BLOCKING MIDDLEWARE
-// Prevents concurrent writes during Git operations, backups, and migration tasks.
-global.__BUSINZ_MAINTENANCE_MODE = process.env.BUSINZ_MAINTENANCE_MODE === 'true';
+// 🔒 CONTROLLED MAINTENANCE WINDOW: WRITE-BLOCKING MIDDLEWARE & REST SECURITY
+// Synchronize maintenance mode state from disk flag on startup so protection survives PM2 reload/restart
+global.__BUSINZ_MAINTENANCE_MODE = isMaintenanceModeActive();
+if (global.__BUSINZ_MAINTENANCE_MODE) {
+  console.log('🔒 [Maintenance Mode] Authoritative maintenance flag detected. Starting in PROTECTED MAINTENANCE MODE.');
+}
 
+// 1. General API & Static write-blocking middleware
 app.use((req, res, next) => {
-  if (global.__BUSINZ_MAINTENANCE_MODE) {
+  if (isMaintenanceModeActive()) {
     // Whitelist read-only operations, static assets, and health/maintenance endpoints
     const isReadOnly = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
     const isMaintenanceEndpoint = req.path.startsWith('/api/maintenance') || req.path === '/api/health';
@@ -1712,28 +1718,124 @@ app.use((req, res, next) => {
   next();
 });
 
+// 2. Specific PostgREST legacy /rest/v1 write-blocking guard
+app.all('/rest/v1/*', (req, res, next) => {
+  if (isMaintenanceModeActive()) {
+    const isReadOnly = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+    if (!isReadOnly) {
+      res.setHeader('Retry-After', '30');
+      return res.status(503).json({
+        message: 'Service temporarily in maintenance mode for data protection',
+        code: '503'
+      });
+    }
+  }
+  next();
+});
+
 // Maintenance window status & control endpoints
 app.get('/api/maintenance/status', (req, res) => {
   res.json({
     success: true,
-    maintenance: Boolean(global.__BUSINZ_MAINTENANCE_MODE),
+    maintenance: isMaintenanceModeActive(),
     externalStorage: isExternalStorageActive(),
     dataDir: getDataDir(),
     timestamp: new Date().toISOString()
   });
 });
 
-app.post('/api/maintenance/toggle', (req, res) => {
+app.post('/api/maintenance/toggle', async (req, res) => {
   const { enabled, secret } = req.body || {};
-  const expectedSecret = process.env.BUSINZ_ADMIN_SECRET || 'businz_maint_key_2026';
-  if (secret && secret !== expectedSecret) {
-    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  const headerKey = req.headers['x-maintenance-key'] || req.headers['x-admin-key'];
+  const providedKey = (typeof secret === 'string' && secret.trim().length > 0)
+    ? secret.trim()
+    : ((typeof headerKey === 'string' && headerKey.trim().length > 0) ? headerKey.trim() : null);
+
+  let isAuthorized = false;
+  let authMethod = '';
+
+  // 1. Check deployment environment key (BUSINZ_MAINTENANCE_KEY or BUSINZ_ADMIN_SECRET or SUPABASE_SERVICE_ROLE_KEY)
+  const envKey = process.env.BUSINZ_MAINTENANCE_KEY || process.env.BUSINZ_ADMIN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (providedKey && envKey && providedKey === envKey) {
+    isAuthorized = true;
+    authMethod = 'deployment-env-key';
   }
-  global.__BUSINZ_MAINTENANCE_MODE = Boolean(enabled);
-  console.log(`🔒 [Maintenance Mode] Write-blocking set to: ${global.__BUSINZ_MAINTENANCE_MODE}`);
+
+  // 2. Check token from authoritative maintenance.flag file
+  if (!isAuthorized && providedKey) {
+    try {
+      const flagPath = getMaintenanceFlagPath();
+      if (fs.existsSync(flagPath)) {
+        const flagRaw = fs.readFileSync(flagPath, 'utf8');
+        const flagJson = JSON.parse(flagRaw);
+        if (flagJson?.token && typeof flagJson.token === 'string' && flagJson.token.length >= 16 && flagJson.token === providedKey) {
+          isAuthorized = true;
+          authMethod = 'flag-token';
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Check for authenticated administrative user session
+  if (!isAuthorized) {
+    try {
+      const session = await getVerifiedUserSession(req);
+      if (session && session.valid && ['Technical Administrator', 'Super Admin', 'Director', 'CEO', 'Admin'].includes(session.role)) {
+        isAuthorized = true;
+        authMethod = `admin-session (${session.user || session.empCode})`;
+      }
+    } catch (_) {}
+  }
+
+  // Strictly reject unauthorized requests (missing secret, incorrect secret, or unauthenticated session)
+  if (!isAuthorized) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Valid deployment key or administrative session required to toggle maintenance mode'
+    });
+  }
+
+  const shouldEnable = Boolean(enabled);
+  global.__BUSINZ_MAINTENANCE_MODE = shouldEnable;
+  const flagPath = getMaintenanceFlagPath();
+
+  if (shouldEnable) {
+    try {
+      const flagData = {
+        active: true,
+        activatedAt: new Date().toISOString(),
+        authMethod,
+        token: (providedKey && typeof providedKey === 'string' && providedKey.length >= 16) ? providedKey : undefined
+      };
+      fs.writeFileSync(flagPath, JSON.stringify(flagData, null, 2), 'utf8');
+      try { fs.chmodSync(flagPath, 0o600); } catch (_) {}
+    } catch (writeErr) {
+      console.warn('[Maintenance Flag Warning]: Failed to persist flag file:', writeErr.message);
+    }
+    console.log(`🔒 [Maintenance Mode] Activated by ${authMethod}. Authoritative flag persisted at ${flagPath}.`);
+  } else {
+    try {
+      if (fs.existsSync(flagPath)) {
+        fs.unlinkSync(flagPath);
+      }
+      const rootFlag = path.resolve(process.cwd(), 'maintenance.flag');
+      if (fs.existsSync(rootFlag)) {
+        fs.unlinkSync(rootFlag);
+      }
+      const srvFlag = path.resolve(__dirname, 'maintenance.flag');
+      if (fs.existsSync(srvFlag)) {
+        fs.unlinkSync(srvFlag);
+      }
+    } catch (unlinkErr) {
+      console.warn('[Maintenance Flag Warning]: Failed to remove flag file:', unlinkErr.message);
+    }
+    console.log(`🔓 [Maintenance Mode] Deactivated by ${authMethod}. Authoritative flag removed.`);
+  }
+
   res.json({
     success: true,
-    maintenance: Boolean(global.__BUSINZ_MAINTENANCE_MODE),
+    maintenance: isMaintenanceModeActive(),
+    authMethod,
     timestamp: new Date().toISOString()
   });
 });
@@ -8927,6 +9029,7 @@ app.get('/api/integrations/indiamart/logs', async (req, res) => {
 // Automatic 24h & 48h Inactivity Background Checker (Runs 5s after startup and 5m after each completion)
 setTimeout(async () => {
   try {
+    if (isMaintenanceModeActive()) return;
     await checkAndProcessLeadInactivity({ source: 'startup' });
   } catch (err) {
     console.warn('[Initial Lead Inactivity Check Error]:', err.message);
@@ -8937,7 +9040,9 @@ let inactivityTimer = null;
 function scheduleNextInactivityCheck() {
   inactivityTimer = setTimeout(async () => {
     try {
-      await checkAndProcessLeadInactivity({ source: 'scheduler' });
+      if (!isMaintenanceModeActive()) {
+        await checkAndProcessLeadInactivity({ source: 'scheduler' });
+      }
     } catch (err) {
       console.warn('[Background Lead Inactivity Check Error]:', err.message);
     } finally {
@@ -9085,6 +9190,10 @@ app.post('/api/system/backup/restore', async (req, res) => {
 // 6. Automated periodic backup (every 24 hours)
 setInterval(async () => {
   try {
+    if (isMaintenanceModeActive()) {
+      console.log('[Automated Backup] Maintenance mode active; skipping 24h scheduled snapshot.');
+      return;
+    }
     console.log('[Automated Backup] Running 24-hour scheduled snapshot...');
     await createFullBackup({
       supabaseClient: supabase,

@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { getStoreFilePath } from './runtimePaths.js';
+import { getStoreFilePath, isMaintenanceModeActive } from './runtimePaths.js';
 import { pool, query } from './db.js';
 import { recordJobStart, recordJobEnd, recordJobOverlap } from './memoryDiagnostics.js';
 
@@ -1088,6 +1088,9 @@ export function getInactivityEngineStatus() {
  */
 export async function checkAndProcessLeadInactivity(options = {}) {
   const source = options.source || 'scheduled';
+  if (isMaintenanceModeActive()) {
+    return { skipped: true, reason: 'MAINTENANCE_MODE', source };
+  }
   if (isInactivityCheckRunning) {
     const elapsedSinceStart = lastInactivityCheckStartedAt ? (Date.now() - lastInactivityCheckStartedAt) : 0;
     // Bounded execution check: strictly prevent any second job while active job is within normal window

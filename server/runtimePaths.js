@@ -64,6 +64,42 @@ export function isExternalStorageActive() {
 }
 
 /**
+ * Resolves the maintenance flag file location.
+ * Checks external persistent storage directory, current working directory, and server directory.
+ */
+export function getMaintenanceFlagPath() {
+  if (isExternalStorageActive()) {
+    return path.join(getDataDir(), 'maintenance.flag');
+  }
+  const rootFlag = path.resolve(process.cwd(), 'maintenance.flag');
+  const serverFlag = path.resolve(__dirname, 'maintenance.flag');
+  if (fs.existsSync(rootFlag)) return rootFlag;
+  if (fs.existsSync(serverFlag)) return serverFlag;
+  return rootFlag;
+}
+
+/**
+ * Authoritative check for maintenance mode.
+ * Survives process restarts by reading the disk flag.
+ */
+export function isMaintenanceModeActive() {
+  if (global.__BUSINZ_MAINTENANCE_MODE === true) return true;
+  if (process.env.BUSINZ_MAINTENANCE_MODE === 'true') return true;
+  try {
+    const flagPath = getMaintenanceFlagPath();
+    if (fs.existsSync(flagPath)) {
+      const stats = fs.statSync(flagPath);
+      if (stats.isFile()) return true;
+    }
+    const cwdFlag = path.resolve(process.cwd(), 'maintenance.flag');
+    if (fs.existsSync(cwdFlag) && fs.statSync(cwdFlag).isFile()) return true;
+    const srvFlag = path.resolve(__dirname, 'maintenance.flag');
+    if (fs.existsSync(srvFlag) && fs.statSync(srvFlag).isFile()) return true;
+  } catch (_) {}
+  return false;
+}
+
+/**
  * Resolves the root data directory.
  */
 export function getDataDir() {

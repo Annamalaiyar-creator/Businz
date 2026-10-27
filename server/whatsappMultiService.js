@@ -10,7 +10,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
-import { getWaSessionsDir } from './runtimePaths.js';
+import { getWaSessionsDir, isMaintenanceModeActive } from './runtimePaths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -141,6 +141,9 @@ function loadUserChatsFromDisk(userId) {
 }
 
 function saveUserChatsToDisk(userId, chatsMap) {
+  if (isMaintenanceModeActive()) {
+    return;
+  }
   try {
     const p = getChatsCachePath(userId);
     const obj = Object.fromEntries(chatsMap);
