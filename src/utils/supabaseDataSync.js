@@ -1386,9 +1386,15 @@ export async function fetchCloudStore(storeKey, fallbackData = []) {
 
   // 1. Fetch instantly from local server endpoint /api/store/:key first
   try {
+    const sessionId = (typeof localStorage !== 'undefined')
+      ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
+      : '';
+    const headers = {};
+    if (sessionId) headers['x-session-id'] = sessionId;
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`/api/store/${storeKey}`, { signal: controller.signal }).catch(() => null);
+    const res = await fetch(`/api/store/${storeKey}`, { headers, signal: controller.signal }).catch(() => null);
     clearTimeout(timeoutId);
     if (res && res.ok) {
       const json = await res.json();

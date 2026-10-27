@@ -1255,9 +1255,15 @@ export async function syncCloudNotifications() {
 
     let cloudNotifs = [];
     try {
+      const sessionId = (typeof localStorage !== 'undefined')
+        ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
+        : '';
+      const headers = {};
+      if (sessionId) headers['x-session-id'] = sessionId;
+
       const controller = new AbortController();
       const tId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(url, { headers, signal: controller.signal });
       clearTimeout(tId);
       if (res && res.ok) {
         const json = await res.json();

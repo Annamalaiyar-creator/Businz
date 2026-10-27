@@ -28,6 +28,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.development.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const BASE_URL = 'http://127.0.0.1:5001';
+const TEST_SESSION_ID = `SES_TEST_AUDIT_PHASE4_${Date.now()}`;
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/businz_dev',
@@ -39,7 +40,10 @@ function request(path, options = {}) {
     const url = new URL(path, BASE_URL);
     const reqOptions = {
       method: options.method || 'GET',
-      headers: options.headers || {},
+      headers: {
+        'x-session-id': TEST_SESSION_ID,
+        ...(options.headers || {})
+      },
       timeout: options.timeout || 10000,
     };
 
@@ -122,6 +126,19 @@ async function runAudit() {
   console.log('========================================================================');
   console.log('🛡️ BUSINZ PHASE 4: FINAL INTEGRATION, SECURITY & DURABILITY AUDIT');
   console.log('========================================================================\n');
+
+  // Register verified session for Phase 4 audit
+  await request('/api/sessions/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: TEST_SESSION_ID,
+      email: 'ceo@vrmstructures.com',
+      empCode: 'CEO-001',
+      role: 'CEO',
+      user: 'Velmurugan Rathinam'
+    })
+  });
 
   let passed = 0;
   let total = 0;

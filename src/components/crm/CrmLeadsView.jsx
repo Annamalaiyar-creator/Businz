@@ -177,8 +177,14 @@ export default function CrmLeadsView({
   const fetchNotifications = async () => {
     if (!loggedInEmpId) return;
     try {
+      const sessionId = (typeof localStorage !== 'undefined')
+        ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
+        : '';
+      const headers = { 'x-user-emp-id': loggedInEmpId };
+      if (sessionId) headers['x-session-id'] = sessionId;
+
       const res = await fetch(`/api/crm/leads/notifications?employeeCode=${encodeURIComponent(loggedInEmpId)}`, {
-        headers: { 'x-user-emp-id': loggedInEmpId }
+        headers
       });
       const json = await res.json();
       if (json?.success && Array.isArray(json.notifications)) {

@@ -2461,6 +2461,69 @@ app.post('/api/sessions/revoke', (req, res) => {
   res.json({ success: true });
 });
 
+/**
+ * 🔒 Verified Server-Side User Session Resolution
+ * Validates request session against in-memory active sessions or database registry.
+ * Derives user ID, employee code, role, and email strictly server-side.
+ */
+export async function getVerifiedUserSession(req) {
+  const sessionId = req.headers['x-session-id'] ||
+    (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].slice(7) : null) ||
+    req.cookies?.['controlroom_device_session_id'] ||
+    req.cookies?.['businz_device_session_id'] ||
+    req.body?.sessionId ||
+    req.query?.sessionId;
+
+  // Check admin key header for automated internal test suites
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey && process.env.SUPABASE_SERVICE_ROLE_KEY && adminKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      valid: true,
+      user: 'System Admin',
+      empCode: 'ADMIN-001',
+      role: 'Technical Administrator',
+      email: 'admin@vrmstructures.com'
+    };
+  }
+
+  if (!sessionId) {
+    return { valid: false, error: 'Unauthorized: Active Businz session required (x-session-id)' };
+  }
+
+  // 1. Check in-memory active session map (instant sub-millisecond lookup)
+  if (activeSessionsMap.has(sessionId)) {
+    const s = activeSessionsMap.get(sessionId);
+    if (s && s.status === 'active') {
+      return {
+        valid: true,
+        sessionId,
+        user: s.user || s.displayName || s.email,
+        email: s.email,
+        empCode: s.empCode || s.employee_code || s.code || 'EMP',
+        role: s.role || 'Employee'
+      };
+    }
+    if (s && s.status === 'revoked') {
+      return { valid: false, error: 'Unauthorized: Session has been revoked' };
+    }
+  }
+
+  // 2. Persistent session verification
+  const sessionResult = await validateBusinzSession(sessionId);
+  if (sessionResult && sessionResult.valid) {
+    return {
+      valid: true,
+      sessionId,
+      user: sessionResult.user || 'Active User',
+      email: sessionResult.email,
+      empCode: sessionResult.empCode || sessionResult.employee_code || 'EMP',
+      role: sessionResult.role || 'Employee'
+    };
+  }
+
+  return { valid: false, error: sessionResult?.error || 'Unauthorized: Invalid or expired session' };
+}
+
 app.get('/api/store/:key', async (req, res) => {
   const { key } = req.params;
   const employeeFilter = req.query.employee;
@@ -2473,19 +2536,65 @@ app.get('/api/store/:key', async (req, res) => {
       return res.json({ success: true, data: dbRes.rows });
     }
     if (key === 'notifications_store') {
+      const session = await getVerifiedUserSession(req);
+      if (!session || !session.valid) {
+        return res.status(401).json({
+          success: false,
+          error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+        });
+      }
+
+      const userRole = String(session.role || '').trim();
+      const userRoleLower = userRole.toLowerCase();
+      const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator'].some(r => userRoleLower.includes(r));
+
+      // Client requested a specific role filter
+      if (req.query.role) {
+        const reqRoleLower = String(req.query.role).trim().toLowerCase();
+        // If non-executive tries to query an executive or different department's notifications
+        if (!isExecutive && !reqRoleLower.includes(userRoleLower) && reqRoleLower !== 'all') {
+          return res.status(403).json({
+            success: false,
+            error: `Forbidden: Role "${userRole}" is not authorized to access notifications targeted to "${req.query.role}".`
+          });
+        }
+      }
+
       const fullList = await getDatabaseStore('notifications_store');
       const list = Array.isArray(fullList) ? fullList : [];
       const total = list.length;
 
+      // Scoping logic:
+      // If executive: can view all notifications (or filter by req.query.role if provided)
+      // If non-executive: strictly scoped to notifications targeting their verified session role OR 'All'
+      let scopedList = list;
+      if (!isExecutive) {
+        scopedList = scopedList.filter(n => {
+          if (!n) return false;
+          const roles = Array.isArray(n.targetRoles) ? n.targetRoles : (n.role ? [n.role] : ['All']);
+          return roles.some(r => {
+            const rLower = String(r).toLowerCase().trim();
+            return rLower === 'all' || rLower.includes(userRoleLower) || userRoleLower.includes(rLower);
+          });
+        });
+      } else if (req.query.role) {
+        const reqRole = String(req.query.role).trim().toLowerCase();
+        scopedList = scopedList.filter(n => {
+          if (!n) return false;
+          const roles = Array.isArray(n.targetRoles) ? n.targetRoles : (n.role ? [n.role] : ['All']);
+          return roles.some(r => String(r).toLowerCase().includes(reqRole) || r === 'All');
+        });
+      }
+
       // Incremental sync via ?sinceId= (returns newer notifications ahead of sinceId)
       if (req.query.sinceId) {
-        const sinceIdx = list.findIndex(n => n && (n.id === req.query.sinceId));
-        const newerSlice = sinceIdx > 0 ? list.slice(0, sinceIdx) : (sinceIdx === 0 ? [] : list.slice(0, 50));
+        const sinceIdx = scopedList.findIndex(n => n && (n.id === req.query.sinceId));
+        const newerSlice = sinceIdx > 0 ? scopedList.slice(0, sinceIdx) : (sinceIdx === 0 ? [] : scopedList.slice(0, 50));
         return res.json({
           success: true,
           mode: 'incremental',
           sinceId: req.query.sinceId,
-          total,
+          total: scopedList.length,
           count: newerSlice.length,
           data: newerSlice
         });
@@ -2495,41 +2604,31 @@ app.get('/api/store/:key', async (req, res) => {
       if (req.query.since) {
         const sinceTime = new Date(req.query.since).getTime();
         const newerSlice = !isNaN(sinceTime)
-          ? list.filter(n => n && n.createdAt && new Date(n.createdAt).getTime() > sinceTime)
-          : list.slice(0, 50);
+          ? scopedList.filter(n => n && n.createdAt && new Date(n.createdAt).getTime() > sinceTime)
+          : scopedList.slice(0, 50);
         return res.json({
           success: true,
           mode: 'incremental',
           since: req.query.since,
-          total,
+          total: scopedList.length,
           count: newerSlice.length,
           data: newerSlice
         });
       }
 
-      // Filter by role if requested
-      let filtered = list;
-      if (req.query.role) {
-        const reqRole = String(req.query.role).trim().toLowerCase();
-        filtered = filtered.filter(n => {
-          if (!n) return false;
-          const roles = Array.isArray(n.targetRoles) ? n.targetRoles : (n.role ? [n.role] : ['All']);
-          return roles.some(r => String(r).toLowerCase().includes(reqRole) || r === 'All');
-        });
-      }
-
       // Filter by unread if requested
+      let filtered = scopedList;
       if (req.query.unread === 'true') {
         filtered = filtered.filter(n => n && Boolean(n.unread));
       }
 
-      // Explicit ?all=true returns all records without pagination (e.g. for complete export/audit)
+      // Explicit ?all=true returns all permitted records without pagination
       if (req.query.all === 'true') {
         return res.json({
           success: true,
           page: 1,
           limit: filtered.length,
-          total,
+          total: scopedList.length,
           filteredTotal: filtered.length,
           totalPages: 1,
           hasMore: false,
@@ -2547,7 +2646,7 @@ app.get('/api/store/:key', async (req, res) => {
         success: true,
         page,
         limit,
-        total,
+        total: scopedList.length,
         filteredTotal: filtered.length,
         totalPages: Math.ceil(filtered.length / limit),
         hasMore: startIndex + limit < filtered.length,
@@ -2634,6 +2733,16 @@ app.post('/api/store/:key', async (req, res) => {
     : rawBody;
   if (!isDbConnected()) {
     return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot persist store "${key}".` });
+  }
+
+  if (key === 'notifications_store') {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
   }
 
   return enqueueStoreOperation(key, async () => {
@@ -8222,10 +8331,36 @@ app.get(['/api/crm/leads', '/api/leads'], async (req, res) => {
 // Lead Notifications (Independent per-recipient read status)
 app.get('/api/crm/leads/notifications', async (req, res) => {
   try {
-    const employeeCode = req.headers['x-user-emp-id'] || req.query.employeeCode || '';
-    if (!employeeCode) return res.json({ success: true, notifications: [] });
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
 
-    const notifications = await getNotificationsForEmployee(employeeCode);
+    const callerRole = String(session.role || '').toLowerCase().trim();
+    const callerEmpCode = String(session.empCode || '').trim();
+    const requestedEmpCode = String(req.query.employeeCode || req.headers['x-user-emp-id'] || '').trim();
+
+    const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator', 'tech support', 'technical support'].some(r => callerRole.includes(r));
+
+    let effectiveEmpCode = callerEmpCode;
+    if (requestedEmpCode && requestedEmpCode !== callerEmpCode) {
+      if (!isExecutive) {
+        return res.status(403).json({
+          success: false,
+          error: `Forbidden: User with role "${session.role}" cannot access notifications for employee "${requestedEmpCode}".`
+        });
+      }
+      effectiveEmpCode = requestedEmpCode;
+    }
+
+    if (!effectiveEmpCode) {
+      return res.json({ success: true, count: 0, notifications: [], data: [] });
+    }
+
+    const notifications = await getNotificationsForEmployee(effectiveEmpCode);
     res.json({ success: true, count: notifications.length, notifications, data: notifications });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -8234,9 +8369,33 @@ app.get('/api/crm/leads/notifications', async (req, res) => {
 
 app.post('/api/crm/leads/notifications/:id/read', async (req, res) => {
   try {
+    const session = await getVerifiedUserSession(req);
+    if (!session || !session.valid) {
+      return res.status(401).json({
+        success: false,
+        error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+      });
+    }
+
     const { id } = req.params;
-    const employeeCode = req.headers['x-user-emp-id'] || req.body.employeeCode || '';
-    const result = await markNotificationRead(id, employeeCode);
+    const callerRole = String(session.role || '').toLowerCase().trim();
+    const callerEmpCode = String(session.empCode || '').trim();
+    const requestedEmpCode = String(req.body.employeeCode || req.headers['x-user-emp-id'] || '').trim();
+
+    const isExecutive = ['ceo', 'md', 'managing director', 'technical administrator'].some(r => callerRole.includes(r));
+
+    let effectiveEmpCode = callerEmpCode;
+    if (requestedEmpCode && requestedEmpCode !== callerEmpCode) {
+      if (!isExecutive) {
+        return res.status(403).json({
+          success: false,
+          error: `Forbidden: Cannot mark notification as read for employee "${requestedEmpCode}".`
+        });
+      }
+      effectiveEmpCode = requestedEmpCode;
+    }
+
+    const result = await markNotificationRead(id, effectiveEmpCode);
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

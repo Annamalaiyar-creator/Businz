@@ -2,13 +2,17 @@ import http from 'http';
 import assert from 'assert';
 
 const BASE_URL = 'http://127.0.0.1:5001';
+const TEST_SESSION_ID = `SES_TEST_PHASE2_${Date.now()}`;
 
 function request(path, options = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
     const reqOptions = {
       method: options.method || 'GET',
-      headers: options.headers || {},
+      headers: {
+        'x-session-id': TEST_SESSION_ID,
+        ...(options.headers || {})
+      },
       timeout: options.timeout || 10000,
     };
 
@@ -46,6 +50,19 @@ async function runPhase2Tests() {
   console.log('===============================================================');
   console.log('   BUSINZ Phase 2: Notification Optimization Automated Verification');
   console.log('===============================================================\n');
+
+  // Register verified session for test suite
+  await request('/api/sessions/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: TEST_SESSION_ID,
+      email: 'ceo@vrmstructures.com',
+      empCode: 'CEO-001',
+      role: 'CEO',
+      user: 'Velmurugan Rathinam'
+    })
+  });
 
   const report = {
     totalTests: 0,
