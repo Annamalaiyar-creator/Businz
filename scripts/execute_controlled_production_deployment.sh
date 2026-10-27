@@ -31,17 +31,74 @@
 # ==============================================================================
 set -Eeuo pipefail
 
-APP_DIR="/var/www/businz"
-BACKUP_BASE="/var/backups/businz"
+APP_DIR="${BUSINZ_APP_DIR:-/var/www/businz}"
+BACKUP_BASE="${BUSINZ_BACKUP_BASE:-/var/backups/businz}"
 RELEASE_SCRIPTS_DIR="${BACKUP_BASE}/release_scripts"
-PORT="5001"
-PUBLIC_URL="https://businz.com"
+PORT="${BUSINZ_PORT:-5001}"
+PUBLIC_URL="${BUSINZ_PUBLIC_URL:-https://businz.com}"
 
 APPROVED_BASELINE_COMMIT="04e0a5190ddebddbf8531909fcb64ca114d1832d"
 APPROVED_BASELINE_BRANCH="feature/crm-lead-management-system"
-TARGET_RELEASE_COMMIT="${1:-}"
-if [ -z "${TARGET_RELEASE_COMMIT}" ] || [[ "${TARGET_RELEASE_COMMIT}" =~ ^-- ]]; then
-  TARGET_RELEASE_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo '09fd03a')"
+
+APPROVED_RELEASE_TARGETS=(
+  "35a7ee169bcd6cb760360cdc6e641be45c79c07d"
+)
+if [ -n "${BUSINZ_APPROVED_TARGET:-}" ]; then
+  APPROVED_RELEASE_TARGETS+=("${BUSINZ_APPROVED_TARGET}")
+fi
+
+VALIDATE_ONLY=false
+TARGET_RELEASE_COMMIT=""
+
+for arg in "$@"; do
+  case "${arg}" in
+    --validate-only|--dry-run)
+      VALIDATE_ONLY=true
+      ;;
+    -h|--help)
+      echo "BUSINZ Controlled Production Deployment"
+      echo "Usage: $0 [--validate-only|--dry-run] <TARGET_RELEASE_COMMIT>"
+      echo "Options:"
+      echo "  --validate-only, --dry-run   Perform non-destructive preflight verification only"
+      exit 0
+      ;;
+    *)
+      if [ -z "${TARGET_RELEASE_COMMIT}" ]; then
+        TARGET_RELEASE_COMMIT="${arg}"
+      else
+        echo "❌ FATAL ERROR: Unexpected extra argument: ${arg}"
+        echo "Usage: $0 [--validate-only|--dry-run] <TARGET_RELEASE_COMMIT>"
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+if [ -z "${TARGET_RELEASE_COMMIT}" ]; then
+  echo "❌ FATAL ABORT: Missing required target release commit argument!"
+  echo "Usage: $0 [--validate-only|--dry-run] <TARGET_RELEASE_COMMIT>"
+  exit 1
+fi
+
+if [[ ! "${TARGET_RELEASE_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "❌ FATAL ABORT: Malformed target release commit: '${TARGET_RELEASE_COMMIT}'"
+  echo "Expected a 40-character hexadecimal Git commit SHA."
+  exit 1
+fi
+TARGET_RELEASE_COMMIT=$(echo "${TARGET_RELEASE_COMMIT}" | tr '[:upper:]' '[:lower:]')
+
+IS_APPROVED=false
+for app_commit in "${APPROVED_RELEASE_TARGETS[@]}"; do
+  if [ "${TARGET_RELEASE_COMMIT}" = "${app_commit}" ]; then
+    IS_APPROVED=true
+    break
+  fi
+done
+
+if [ "${IS_APPROVED}" != "true" ]; then
+  echo "❌ FATAL ABORT: Commit '${TARGET_RELEASE_COMMIT}' is NOT in the approved target releases list!"
+  echo "Approved target: ${APPROVED_RELEASE_TARGETS[*]}"
+  exit 1
 fi
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -52,13 +109,6 @@ STAGED_RELEASE_DIR="${VERSIONED_RELEASE_DIR}"
 MANIFEST_FILE="${BACKUP_BASE}/deployment_manifest_${TIMESTAMP}.json"
 STANDALONE_ROLLBACK_SCRIPT="${RELEASE_SCRIPTS_DIR}/standalone_rollback_${TIMESTAMP}.sh"
 RESULT_FILE="${APP_DIR}/PRODUCTION_DEPLOYMENT_RESULT.md"
-
-VALIDATE_ONLY=false
-for arg in "$@"; do
-  if [ "${arg}" = "--validate-only" ] || [ "${arg}" = "--dry-run" ]; then
-    VALIDATE_ONLY=true
-  fi
-done
 
 DEPLOY_PHASE="PREFLIGHT"
 DEPLOYMENT_SUCCESS=false
@@ -249,10 +299,26 @@ fi
 echo "✅ Dynamic disk headroom verified (Surplus: $(( AVAILABLE_DISK_MB - REQUIRED_HEADROOM_MB )) MB)."
 
 # 1.8 Record Pre-Existing Indexes Before Migration
-PRE_EXISTING_BOM_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_bom_orders_created_at';")
-PRE_EXISTING_LEADS_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_leads_created_at';")
-echo "   - idx_bom_orders_created_at pre-existing: ${PRE_EXISTING_BOM_IDX}"
-echo "   - idx_leads_created_at pre-existing:      ${PRE_EXISTING_LEADS_IDX}"
+PRE_EXISTING_BOM_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_bom_orders_created_at';" 2>/dev/null || echo 0)
+PRE_EXISTING_LEADS_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_leads_created_at';" 2>/dev/null || echo 0)
+PRE_EXISTING_UNIQUE_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = 'idx_lead_inactivity_unique_incident';" 2>/dev/null || echo 0)
+echo "   - idx_bom_orders_created_at pre-existing:           ${PRE_EXISTING_BOM_IDX}"
+echo "   - idx_leads_created_at pre-existing:                ${PRE_EXISTING_LEADS_IDX}"
+echo "   - idx_lead_inactivity_unique_incident pre-existing: ${PRE_EXISTING_UNIQUE_IDX}"
+
+# 1.9 Audit Pre-Existing Duplicate Incident Records (Read-Only)
+INCIDENT_DUPS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+  SELECT count(*) FROM (
+    SELECT 1 FROM public.lead_inactivity_incidents
+    GROUP BY lead_id, incident_type, salesperson_id, assigned_at
+    HAVING count(*) > 1
+  ) dups;
+" 2>/dev/null || echo 0)
+echo "   - Pre-existing duplicate incident records:          ${INCIDENT_DUPS}"
+if [ "${INCIDENT_DUPS}" -gt 0 ]; then
+  echo "❌ FATAL ABORT: Found ${INCIDENT_DUPS} duplicate groups in public.lead_inactivity_incidents!"
+  exit 1
+fi
 
 if [ "${VALIDATE_ONLY}" = "true" ]; then
   echo ""
@@ -316,9 +382,33 @@ echo "✅ Live recovery archive secured."
 # 2. Revert Code Files Cleanly to Baseline Commit (Leaving server/*.json 100% untouched)
 echo "🔄 Reverting code files to baseline commit \${BASELINE_COMMIT}..."
 cd "\${APP_DIR}"
-git checkout "\${BASELINE_COMMIT}" -- server/index.js server/db.js server/leadManagementService.js src/ package.json
-git update-ref refs/heads/\${BASELINE_BRANCH} "\${BASELINE_COMMIT}"
-echo "✅ Code files reverted to baseline. Live JSON transactional stores were NOT touched."
+git checkout "\${BASELINE_COMMIT}" -- server/*.js server/migrations src package.json
+[ -f "\${APP_DIR}/vite.config.js" ] && git checkout "\${BASELINE_COMMIT}" -- vite.config.js 2>/dev/null || true
+[ -f "\${APP_DIR}/index.html" ] && git checkout "\${BASELINE_COMMIT}" -- index.html 2>/dev/null || true
+git update-ref "refs/heads/\${BASELINE_BRANCH}" "\${BASELINE_COMMIT}"
+git symbolic-ref HEAD "refs/heads/\${BASELINE_BRANCH}"
+
+# Re-synchronize Git index to baseline without touching active JSON business stores
+CODE_ROLLBACK_PATHS=()
+for path_entry in "server" "src" "package.json" "vite.config.js" "index.html" "dist" "assets" "scripts"; do
+  if git ls-tree --name-only "\${BASELINE_COMMIT}" "\${path_entry}" 2>/dev/null | grep -q .; then
+    if [ "\${path_entry}" = "server" ]; then
+      while IFS= read -r server_file; do
+        [ -z "\${server_file}" ] && continue
+        if [[ "\${server_file}" =~ \.js$ ]] || [[ "\${server_file}" =~ ^server/migrations/ ]]; then
+          CODE_ROLLBACK_PATHS+=("\${server_file}")
+        fi
+      done < <(git ls-tree -r --name-only "\${BASELINE_COMMIT}" server/)
+    else
+      CODE_ROLLBACK_PATHS+=("\${path_entry}")
+    fi
+  fi
+done
+
+if [ \${#CODE_ROLLBACK_PATHS[@]} -gt 0 ]; then
+  git reset "\${BASELINE_COMMIT}" -- "\${CODE_ROLLBACK_PATHS[@]}"
+fi
+echo "✅ Code files and Git index reverted to baseline. Live JSON transactional stores were NOT touched."
 
 # 3. Atomic Frontend Asset Restoration
 if [ -d "\${EXACT_RECOVERY_DIR}/dist_frontend" ]; then
@@ -361,11 +451,23 @@ if [ "\${PRE_EXISTING_LEADS_IDX}" -eq 0 ]; then
 else
   echo "   - Preserving pre-existing index: idx_leads_created_at"
 fi
+
+# Backward-compatible database schema policy:
+# Purely additive changes (such as 'idx_lead_inactivity_unique_incident') are preserved during ordinary code rollback.
+# Dropping the unique index is NOT performed automatically because baseline 04e0a51 also requires idempotency
+# on (lead_id, incident_type, salesperson_id, assigned_at) and dropping it risks re-introducing PostgreSQL 42P10 errors.
+# Dedicated database rollback requires explicit manual execution of the rollback migration script:
+#   psql -d businz -f server/migrations/20261027_lead_inactivity_unique_constraint_rollback.sql
+echo "   - Preserving backward-compatible index: idx_lead_inactivity_unique_incident"
+echo "   - Preserving 100% of incident and notification records."
 echo "✅ Database indexes reconciled. Live table data and rows remain 100% untouched."
 
 # 5. Reload PM2 Process 'businz'
 echo "🔄 Reloading PM2 process 'businz'..."
-pm2 reload businz --update-env
+if ! pm2 reload businz --update-env; then
+  echo "⚠️ PM2 reload failed, attempting restart..."
+  pm2 restart businz --update-env
+fi
 sleep 3
 
 # 6. Verify Health Post-Rollback
@@ -556,32 +658,88 @@ fi
 echo "✅ Staged production bundle compiled (${ASSETS_COUNT} JS assets)."
 
 # ------------------------------------------------------------------------------
-# STEP 5: SAFE DATABASE PERFORMANCE INDEX MIGRATION
+# STEP 5: SAFE DATABASE UNIQUE CONSTRAINT & PERFORMANCE INDEX MIGRATIONS
 # ------------------------------------------------------------------------------
 DEPLOY_PHASE="MIGRATION"
 echo ""
-echo "=== [Step 5] Applying PostgreSQL Performance Indexes with ON_ERROR_STOP=1 ==="
+echo "=== [Step 5] Applying PostgreSQL Database Migrations ==="
 
-MIGRATION_FILE="${STAGED_RELEASE_DIR}/server/migrations/20261027_phase3_performance_indexes.sql"
-if [ ! -f "${MIGRATION_FILE}" ]; then
-  echo "❌ CRITICAL: Migration file ${MIGRATION_FILE} not found in release tree!"
+# 5.1 Lead Inactivity Unique Index Migration
+UNIQUE_MIGRATION_FILE="${STAGED_RELEASE_DIR}/server/migrations/20261027_lead_inactivity_unique_constraint.sql"
+if [ ! -f "${UNIQUE_MIGRATION_FILE}" ]; then
+  echo "❌ CRITICAL: Migration file ${UNIQUE_MIGRATION_FILE} not found in release tree!"
   rm -rf "${STAGED_RELEASE_DIR}"
   exit 1
 fi
 
-sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -f "${MIGRATION_FILE}"
+echo "🛡️ [1/2] Auditing and applying lead inactivity unique constraint..."
+# Pre-migration duplicate check
+MIGRATION_DUPS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+  SELECT count(*) FROM (
+    SELECT 1 FROM public.lead_inactivity_incidents
+    GROUP BY lead_id, incident_type, salesperson_id, assigned_at
+    HAVING count(*) > 1
+  ) dups;
+" 2>/dev/null || echo 0)
+if [ "${MIGRATION_DUPS}" -gt 0 ]; then
+  echo "❌ CRITICAL: Duplicate records detected in public.lead_inactivity_incidents (${MIGRATION_DUPS})! Aborting migration."
+  rm -rf "${STAGED_RELEASE_DIR}"
+  exit 1
+fi
+
+# Check for any invalid existing index (e.g. from a prior interrupted build)
+INVALID_UNIQUE_IDX=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+  SELECT count(*) FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_index i ON i.indexrelid = c.oid
+  WHERE n.nspname = 'public' AND c.relname = 'idx_lead_inactivity_unique_incident' AND i.indisvalid = false;
+" 2>/dev/null || echo 0)
+if [ "${INVALID_UNIQUE_IDX}" -gt 0 ]; then
+  echo "⚠️ Detected invalid pre-existing index idx_lead_inactivity_unique_incident. Dropping concurrently..."
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -c "DROP INDEX CONCURRENTLY IF EXISTS public.idx_lead_inactivity_unique_incident;"
+fi
+
+# Execute migration outside transaction block (CREATE UNIQUE INDEX CONCURRENTLY cannot run inside a transaction)
+echo "   - Executing ${UNIQUE_MIGRATION_FILE}..."
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -f "${UNIQUE_MIGRATION_FILE}"
+
+# Post-migration index validity check
+UNIQUE_IDX_STATUS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
+  SELECT i.indisvalid || '|' || i.indisunique FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_index i ON i.indexrelid = c.oid
+  WHERE n.nspname = 'public' AND c.relname = 'idx_lead_inactivity_unique_incident';
+" 2>/dev/null || echo "false|false")
+
+if [ "${UNIQUE_IDX_STATUS}" != "t|t" ]; then
+  echo "❌ CRITICAL: Index idx_lead_inactivity_unique_incident is missing, invalid, or non-unique in PostgreSQL! (Status: ${UNIQUE_IDX_STATUS})"
+  rm -rf "${STAGED_RELEASE_DIR}"
+  exit 1
+fi
+echo "✅ PostgreSQL unique index verified (idx_lead_inactivity_unique_incident: valid=true, unique=true)."
+
+# 5.2 Performance Indexes Migration
+PERF_MIGRATION_FILE="${STAGED_RELEASE_DIR}/server/migrations/20261027_phase3_performance_indexes.sql"
+if [ ! -f "${PERF_MIGRATION_FILE}" ]; then
+  echo "❌ CRITICAL: Migration file ${PERF_MIGRATION_FILE} not found in release tree!"
+  rm -rf "${STAGED_RELEASE_DIR}"
+  exit 1
+fi
+
+echo "🛡️ [2/2] Applying performance optimization indexes..."
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -f "${PERF_MIGRATION_FILE}"
 
 INDEX_CHECK=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d businz -t -A -c "
   SELECT count(*) FROM pg_indexes 
   WHERE tablename IN ('bom_orders', 'leads') 
   AND indexname IN ('idx_bom_orders_created_at', 'idx_leads_created_at');
-")
+" 2>/dev/null || echo 0)
 if [ "${INDEX_CHECK}" -ne 2 ]; then
   echo "❌ CRITICAL: Performance indexes verification failed! Expected 2 indexes, found ${INDEX_CHECK}."
   rm -rf "${STAGED_RELEASE_DIR}"
   exit 1
 fi
-echo "✅ PostgreSQL performance indexes verified in database (idx_bom_orders_created_at, idx_leads_created_at)."
+echo "✅ PostgreSQL performance indexes verified (idx_bom_orders_created_at, idx_leads_created_at)."
 
 # ------------------------------------------------------------------------------
 # STEP 6: CUTOVER CODE & GRACEFUL PM2 SERVICE RELOAD
@@ -651,12 +809,35 @@ echo "✅ Complete codebase deployed. 100% of untracked files, backups, and live
 cd "${APP_DIR}"
 git update-ref "refs/heads/${APPROVED_BASELINE_BRANCH}" "${TARGET_RELEASE_COMMIT}"
 git symbolic-ref HEAD "refs/heads/${APPROVED_BASELINE_BRANCH}"
-git reset "${TARGET_RELEASE_COMMIT}" -- server/*.js server/migrations/*.sql src package.json 2>/dev/null || true
-echo "✅ Production Git reference advanced to ${TARGET_RELEASE_COMMIT}."
+
+# Synchronize Git index for deployed code files (strictly excluding active JSON business stores, uploads, wa_sessions)
+CODE_SYNC_PATHS=()
+for path_entry in "server" "src" "package.json" "vite.config.js" "index.html" "dist" "assets" "scripts"; do
+  if git ls-tree --name-only "${TARGET_RELEASE_COMMIT}" "${path_entry}" 2>/dev/null | grep -q .; then
+    if [ "${path_entry}" = "server" ]; then
+      while IFS= read -r server_file; do
+        [ -z "${server_file}" ] && continue
+        if [[ "${server_file}" =~ \.js$ ]] || [[ "${server_file}" =~ ^server/migrations/ ]]; then
+          CODE_SYNC_PATHS+=("${server_file}")
+        fi
+      done < <(git ls-tree -r --name-only "${TARGET_RELEASE_COMMIT}" server/)
+    else
+      CODE_SYNC_PATHS+=("${path_entry}")
+    fi
+  fi
+done
+
+if [ ${#CODE_SYNC_PATHS[@]} -gt 0 ]; then
+  git reset "${TARGET_RELEASE_COMMIT}" -- "${CODE_SYNC_PATHS[@]}"
+fi
+echo "✅ Production Git reference and code index advanced to ${TARGET_RELEASE_COMMIT}."
 
 # 6.3 Graceful PM2 Reload
 echo "Reloading PM2 service '${PM2_TARGET}'..."
-pm2 reload "${PM2_TARGET}" --update-env
+if ! pm2 reload "${PM2_TARGET}" --update-env; then
+  echo "⚠️ PM2 reload failed! Attempting restart..."
+  pm2 restart "${PM2_TARGET}" --update-env
+fi
 sleep 5
 
 POST_PM2_DATA=$(pm2 jlist 2>/dev/null | jq -r --arg n "${PM2_TARGET}" '.[] | select(.name == $n) // empty')

@@ -13,9 +13,9 @@
 # ==============================================================================
 set -Eeuo pipefail
 
-APP_DIR="/var/www/businz"
-BACKUP_BASE="/var/backups/businz"
-PORT="5001"
+APP_DIR="${BUSINZ_APP_DIR:-/var/www/businz}"
+BACKUP_BASE="${BUSINZ_BACKUP_BASE:-/var/backups/businz}"
+PORT="${BUSINZ_PORT:-5001}"
 BASELINE_COMMIT="04e0a5190ddebddbf8531909fcb64ca114d1832d"
 BASELINE_BRANCH="feature/crm-lead-management-system"
 
@@ -51,10 +51,33 @@ echo "✅ Live recovery archive secured."
 # 2. Revert Code Files Cleanly to Baseline Commit (Leaving server/*.json 100% untouched)
 echo "🔄 Reverting code files to baseline commit ${BASELINE_COMMIT}..."
 cd "${APP_DIR}"
-git checkout "${BASELINE_COMMIT}" -- server/index.js server/db.js server/leadManagementService.js server/bomDocumentService.js server/backupEngine.js server/runtimePaths.js server/memoryDiagnostics.js server/whatsappMultiService.js server/migrations src/ package.json 2>/dev/null || true
+git checkout "${BASELINE_COMMIT}" -- server/*.js server/migrations src package.json
+[ -f "${APP_DIR}/vite.config.js" ] && git checkout "${BASELINE_COMMIT}" -- vite.config.js 2>/dev/null || true
+[ -f "${APP_DIR}/index.html" ] && git checkout "${BASELINE_COMMIT}" -- index.html 2>/dev/null || true
 git update-ref "refs/heads/${BASELINE_BRANCH}" "${BASELINE_COMMIT}"
 git symbolic-ref HEAD "refs/heads/${BASELINE_BRANCH}"
-echo "✅ Code files reverted to baseline. Live JSON transactional stores were NOT touched."
+
+# Re-synchronize Git index to baseline without touching active JSON business stores
+CODE_ROLLBACK_PATHS=()
+for path_entry in "server" "src" "package.json" "vite.config.js" "index.html" "dist" "assets" "scripts"; do
+  if git ls-tree --name-only "${BASELINE_COMMIT}" "${path_entry}" 2>/dev/null | grep -q .; then
+    if [ "${path_entry}" = "server" ]; then
+      while IFS= read -r server_file; do
+        [ -z "${server_file}" ] && continue
+        if [[ "${server_file}" =~ \.js$ ]] || [[ "${server_file}" =~ ^server/migrations/ ]]; then
+          CODE_ROLLBACK_PATHS+=("${server_file}")
+        fi
+      done < <(git ls-tree -r --name-only "${BASELINE_COMMIT}" server/)
+    else
+      CODE_ROLLBACK_PATHS+=("${path_entry}")
+    fi
+  fi
+done
+
+if [ ${#CODE_ROLLBACK_PATHS[@]} -gt 0 ]; then
+  git reset "${BASELINE_COMMIT}" -- "${CODE_ROLLBACK_PATHS[@]}"
+fi
+echo "✅ Code files and Git index reverted to baseline. Live JSON transactional stores were NOT touched."
 
 # Verify untracked runtime artifacts are intact
 for protected_file in \
@@ -128,7 +151,10 @@ echo "✅ Database indexes reconciled. Table data and rows remain 100% untouched
 
 # 5. Reload PM2 Process 'businz'
 echo "🔄 Reloading PM2 process 'businz'..."
-pm2 reload businz --update-env
+if ! pm2 reload businz --update-env; then
+  echo "⚠️ PM2 reload failed, attempting restart..."
+  pm2 restart businz --update-env
+fi
 sleep 3
 
 # 6. Verify Health Post-Rollback
